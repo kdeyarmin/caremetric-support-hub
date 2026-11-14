@@ -1184,8 +1184,8 @@ plan, ad copy and replies (a request about both products carries both). Each pro
 reader and why it matters, stay inside what the catalog says (plan and module labels), never present public data as confirmed referrals,
 a tool as making anyone compliant or survey-ready, or a readiness score as a prediction, never promise savings, and quote none of its
 percentages. Each agent's checks allow the numbers a catalog states for text about its own product only; a catalog vouches for no claim.
-Prompt versions: `content.4`, `outreach.5`, `sales.5`, `social-plan.7`, `social-ads.5`, `social-reply.4`, `creative-concept.7`,
-`creative-variants.7`, `google-search.1`, `research.1`, the growth writer's `growth.8` (`growth.8-r` for its one repair pass and
+Prompt versions: `content.4`, `outreach.5`, `sales.5`, `social-plan.7`, `social-ads.5`, `social-reply.4`, `creative-concept.8`,
+`creative-variants.8`, `google-search.1`, `research.1`, the growth writer's `growth.8` (`growth.8-r` for its one repair pass and
 `growth.8-mN` when it writes with the owner-approved memo N), `growth-fit.3` and `sales-playbook.3`.
 
 **The bigger picture, the founder and plain words (owner direction 2026-11-12).** Every writer on the team reads the fact sheet, so the
@@ -1194,8 +1194,10 @@ owner's direction lives there (`server/agents/content/facts.mjs`, docs/GTM_FACTS
 - **CareMetric Intel is a whole marketing workspace, and email is never the point of it.** The fact sheet gives Intel's bigger picture,
   everything it does in each of the eleven areas its features page publishes, who uses it and for what, and "How to present it": never
   describe Intel as an email tool, never lead with emailing referral sources, never make email the whole subject of anything, and cover
-  the whole range across the team's work. The catalog guidance says the same, the Creative Director never leads a brief with the email
-  campaigns pillar, and the sales playbook's value points name the whole workspace.
+  the whole range across the team's work. Intel is not a compliance product either (owner direction 2026-11-14): its expense tracking
+  is a small part of the workspace, and nothing leads with compliance, the Stark limit or expenses. The catalog guidance says the same,
+  the Creative Director never leads a brief with the email campaigns or expenses pillar, and the sales playbook's value points name the
+  whole workspace.
 - **The founder's story.** The fact sheet carries the founder's story in the owner's own words. Prospect outreach (the Marketing Manager)
   and the Content Marketer's partnership pitches are written in the founder's first person, touch 1 tells the story in one or two
   sentences, and prospect outreach is signed with the founder's name and title. The story is told only about Intel, with no results,

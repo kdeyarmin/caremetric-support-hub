@@ -145,12 +145,15 @@ export function catalogNumbers(product) {
 /**
  * Pillars that are one part of the product and never what a brief leads with. Owner direction 2026-11-12: sending emails to referral
  * sources is not the point of Intel and is never the whole focus (facts.mjs, `present`), so its email campaigns pillar is not a lead.
+ * Owner direction 2026-11-14: Intel is a marketing workspace, not a compliance product, and its expense tracking (spend in view of policy
+ * and the Stark limit) is a small part of it, so its expenses pillar is not a lead either. Field activity, which logs expenses among much
+ * else, still leads.
  */
-const supportingAreas = { 'caremetric-intel': /\bemail campaigns\b/i };
+const supportingAreas = { 'caremetric-intel': /\bemail campaigns\b|\bexpenses, mileage\b/i };
 
 /**
  * The "why it matters" pillar a planned brief leads with: the one its plan text is about (the most specific match: a later pillar's words,
- * such as expenses or competitors, win over the general ones), else the next in turn this plan has not used, so a run of plans covers
+ * such as competitors, win over the general ones), else the next in turn this plan has not used, so a run of plans covers
  * everything the product does. A supporting pillar (`supportingAreas`) never leads, even when the plan text names it. Null for a product
  * without a catalog.
  */

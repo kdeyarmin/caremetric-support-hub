@@ -18,8 +18,8 @@ import { offerFor } from './offers.mjs';
 import { placementsFor, videoLengths, videoPlacement } from './specs.mjs';
 import { themeFor } from './themes.mjs';
 
-export const conceptPromptVersion = 'creative-concept.7';
-export const variantsPromptVersion = 'creative-variants.7';
+export const conceptPromptVersion = 'creative-concept.8';
+export const variantsPromptVersion = 'creative-variants.8';
 export const hooks = Object.freeze(['problem', 'proof', 'offer', 'curiosity', 'demo']);
 const labels = ['A', 'B', 'C', 'D', 'E'];
 
@@ -74,19 +74,48 @@ export function segmentFor(product, text = '', turn = 0, used = new Set()) {
 }
 const lowerFirst = value => value.charAt(0).toLowerCase() + value.slice(1);
 
-const craft = `How good ad creative works here:
-- Clear before clever. A stranger scrolling past must understand the headline and the primary text in two seconds, with no other context and without the picture. The headline is a plain statement or question about the reader's work that makes sense on its own ("Plan the week's visits around the accounts that need them"), never a slogan, a pun, a string of fragments or a phrase that needs the image to explain it. The primary text says, in complete sentences, who it is for, what the product does and why that matters. Every line follows the fact sheet's "How everything must read"; code refuses empty buzzwords, strings of fragments and overlong sentences.
-- One idea per asset. The headline is the hook and must work alone in under two seconds; the primary text earns the click; the call to action is two or three words.
-- Hooks: "problem" names a likely problem of the organization as a question; "proof" shows one concrete capability or fact from the fact sheet; "offer" leads with the free trial or the Founders Sale exactly as written; "curiosity" opens a loop the landing page closes, without clickbait; "demo" shows what the product does on screen (pair it with the screenshot layout when a screenshot is available).
+/**
+ * Flat lines beside better ones on the same facts, each stopping the reader a different way, shown to the model as the bar for its copy
+ * (owner direction 2026-11-14: the creative was accurate and plain but weak as marketing, and it must catch the eye at once).
+ * copy.test.mjs holds every better line to the same copy rules the drafts meet.
+ */
+export const craftExamples = Object.freeze([
+  Object.freeze({ product: 'carebase', move: 'drop the reader into a moment they know', flat: 'CareBase keeps your survey documents in one place.',
+    headline: 'The surveyor is here. Is your binder?',
+    primaryText: 'Skip the scramble. Survey Day Mode puts the entrance-conference checklist, latest binder and on-shift roster on one screen.' }),
+  Object.freeze({ product: 'caremetric-intel', move: 'ask the question they already ask themselves', flat: 'CareMetric Intel helps you manage your referral sources.',
+    headline: 'Who actually sends you referrals?',
+    primaryText: 'See which calls and visits lead somewhere. Intel ties each one to the referrals your team records.' }),
+  Object.freeze({ product: 'caremetric-intel', move: 'tell them to stop what wastes their week', flat: 'Intel helps your team plan its visits.',
+    headline: 'Stop guessing which offices to visit',
+    primaryText: 'Give every visit a reason before anyone gets in the car. Intel builds your team a focused list of referral sources.' }),
+]);
+
+const craft = `How great ad creative works here:
+- Stop the scroll first. The headline is drawn large on the image and opens every video as moving text, so it is all most people will ever read: under a second, with a thumb already moving. It has to jolt the right reader into thinking "that's us" or "wait, what?" before they scroll on. A headline that only describes the product is invisible, however accurate it is.
+- Short hits harder: the fewer the words, the bigger the type. Aim for three to seven words, and make the first two or three carry the punch.
+- Ways to stop the right reader (pick the one that fits the angle, and use a different one in each variant): drop them into a moment they know from their own week; ask the question they already ask themselves about their work; name the frustration out loud; draw a sharp contrast; tell them to stop doing the thing that wastes their time.
+- Never open the headline or the primary text with CareMetric, the product's name, a feature's name or a line that could open any software ad ("Introducing...", "Software for...", "Manage your..."). The hook comes first; the product arrives as the answer.
+- The kicker, the small line above the headline, can call out who the ad is for by their work ("For personal care home administrators"), so the headline can spend every word on the hook.
+- The first sentence of the primary text is the second hook: the feed shows only its start before "See more", so it keeps the tension the headline opened. A video's first beat does the same; the product arrives once the reader is hooked.
+- Start from the reader, not the product. Picture the person the brief names in a real moment of their work: the Monday planning meeting, the drive between offices, the numbers the owner wants by Friday, the binder before a survey. Name what their team wants or what slows their work down, in their own words, then show how the product gets them there. Benefit first, feature second: the feature is the reason to believe.
+- Be specific and vivid. A concrete picture of their work beats any adjective. The real names of real things (a surveyor, a binder, a referral source, a discharge planner, a territory) beat categories (documentation, stakeholders, operations).
+- Sound like a confident peer who knows their work, not a brochure. Speak to "you" and "your team". Use strong, plain verbs: see, know, plan, open, find, stop, keep. Vary the rhythm: a short sentence lands hard after a longer one.
+- Stopping power never excuses confusion. A stranger must understand the headline on its own, at a glance, without the picture or any other context. A pun, an inside joke, a vague slogan ("Care, simplified") or a string of fragments ("Territory. Clarity. Growth.") stops nobody. Every line follows the fact sheet's "How everything must read"; code refuses its empty words, three one- or two-word sentences in a row and any sentence over 30 words, so make the copy land inside those limits.
+- Flat against better, on the same facts (write your own lines; never reuse these):
+${craftExamples.map(item => `  To ${item.move}. Flat: "${item.flat}" Better: the headline "${item.headline}" with the primary text "${item.primaryText}"`).join('\n')}
+- One idea per asset. The primary text earns the click in complete sentences: hook first, then the product as the way there through one concrete feature, then a next step that feels easy. The call to action is two to four words that say what happens next.
+- Hooks: "problem" opens on a frustration the reader's team knows from its own week, as a pointed question or a moment they recognize, then shows the way out; "proof" turns one concrete capability or fact from the fact sheet into what it lets the reader do, said so it lands as news; "offer" leads with the free trial or the Founders Sale exactly as written, and says what the reader can do with it first; "curiosity" opens a loop the landing page closes, with a surprising but true angle on the reader's work, never clickbait; "demo" shows the product at work on screen (pair it with the screenshot layout when a screenshot is available).
 - Layouts: headline (a strong line and a supporting line), stat (one number from the fact sheet, its label and its source), screenshot (a product screenshot in a window frame; only with a screenshot id from the request), quote (a short line attributed to CareMetric or the product), offer (the offer card; only when the request names an offer), checklist (three to five short capabilities), split (landscape placements: headline on a color block, support beside it).
 - Lengths: headline up to 40 characters for Meta and Google (Google allows 30 at most), 70 for LinkedIn and YouTube; primary text 90 to 125 characters for Meta, up to 150 for LinkedIn, 90 for Google; description up to 30 characters. A video's beats are three to eight short lines of up to 60 characters, read on screen in order; the last one leads to the call to action.
 - Write for the brand voice in the request, and in the product's brand theme (brandTheme): every asset is drawn in that theme's own colors, type and logo, so the words should suit it. CareMetric Intel's theme is Emberline, and its tagline "Set your marketing on FIRE!" may be used exactly as written; CareBase's theme is calm and plain, with no tagline.
-- Sell what the product does, one thing per asset, and why it matters to this audience. The product's own catalog follows these instructions: for CareMetric Intel every published feature by area, why each part matters, the data behind it (what is included, its source, the decision it helps make and its limit), each care setting and the manager view; for CareMetric CareBase every capability by module, why it matters, the tools that set it apart, a resident's record from inquiry to move-out, what each role sees and does, and each chapter's requirements. Pick one feature or capability (or one kind of data) and show the decision it helps make or the work it saves, in those terms; when the brief names a feature focus, lead with it. Across a brief's variants, show different features rather than the same one reworded. Plain specifics beat broad claims: "track each physician against the Stark annual limit", "import referrals from your EMR's reports as CSV", "open Survey Day Mode when the surveyor walks in", "a binder PDF built from your live records".
-- Stay inside what the catalog says. ${catalogGuidance} For Intel, the free trial includes everything Pro does, in one county; results come from what the team records or imports; the expense tools support a compliance program and are not legal advice.
+- Sell one thing the product does per asset, and what it means to this audience. The product's own catalog follows these instructions: for CareMetric Intel every published feature by area, why each part matters, the data behind it (what is included, its source, the decision it helps make and its limit), each care setting and the manager view; for CareMetric CareBase every capability by module, why it matters, the tools that set it apart, a resident's record from inquiry to move-out, what each role sees and does, and each chapter's requirements. Pick one feature or capability (or one kind of data) and sell the decision it helps make or the work it saves, from the reader's side of the desk; when the brief names a feature focus, lead with it. Across a brief's variants, show different features rather than the same one reworded. Plain specifics are your reasons to believe, and they beat broad claims: "a planned day with a reason for each stop", "import referrals from your EMR's reports as CSV", "open Survey Day Mode when the surveyor walks in", "a binder PDF built from your live records".
+- Stay inside what the catalog says. ${catalogGuidance} For Intel, the free trial includes everything Pro does, in one county; results come from what the team records or imports. Intel is a marketing workspace, not a compliance product: never lead with compliance, the Stark limit or expense tracking, and never sell Intel as a compliance tool. Its expense tools are a small part of it (they support a compliance program and are not legal advice); when spend comes up, show it as part of the field work it serves.
 - Learn from the learnings: lean toward what won, away from what lost, and never repeat a recent headline.
-- When the request has "data", the asset is a county snapshot: one public figure about one county, drawn with the stat layout. Code prints the figure, its label and its source exactly as "data" gives them, whatever the overlay says. Write the headline and the text around it: why that number matters to a home health agency or hospice in that county, and that the free county report shows the rest of the county's market. Write no number, share, year or amount yourself, never say the figure is about the reader's own agency, and never call it a ranking or a score.`;
+- When the request has "data", the asset is a county snapshot: one public figure about one county, drawn with the stat layout. Code prints the figure, its label and its source exactly as "data" gives them, whatever the overlay says. Write the headline and the text around it: why that number matters to a home health agency or hospice in that county, and that the free county report shows the rest of the county's market. Write no number, share, year or amount yourself, never say the figure is about the reader's own agency, and never call it a ranking or a score.
+- Before you answer, write at least five headlines on different angles and keep the one that would stop a busy reader mid-scroll. Then reread every line as that reader: would they stop, and would they understand it at once? If a headline could open any software ad, or a line reads like a product manual, a feature list or a slogan, rewrite it.`;
 
-export const conceptSystem = `You are the Creative Director at CareMetric, a small company that makes software for healthcare and senior-care organizations. You turn a marketing brief into one ad concept and its final copy. CareMetric's owner approves every asset before it runs; code checks every word either way.
+export const conceptSystem = `You are the Creative Director at CareMetric, a small company that makes software for healthcare and senior-care organizations. You write like a seasoned direct-response copywriter who knows these organizations' work from the inside. You turn a marketing brief into one ad concept and its final copy. CareMetric's owner approves every asset before it runs; code checks every word either way.
 
 Who sees the ads (the fact sheet's "who it is for"):
 - CareMetric CareBase: ${lowerFirst(audienceFor('carebase'))}.
@@ -96,13 +125,13 @@ ${craft}
 
 ${rules}
 
-Answer with one JSON object and nothing else: concept (bigIdea, angle, visualDirection, landingPageId from the request's pages) and hero, the final copy: hook, layout, headline, primaryText, description, cta, altText (one plain sentence describing the image) and overlay (kicker, stat, statLabel, statSource, quote, quoteSource, offerLine, checklist, screenshotId, beats; leave a field empty when the layout does not use it).
+Answer with one JSON object and nothing else: concept (bigIdea, the one insight about the reader's work the ad turns on, in a sentence and never just a feature's name; angle; visualDirection; landingPageId from the request's pages) and hero, the final copy: hook, layout, headline, primaryText, description, cta, altText (one plain sentence describing the image) and overlay (kicker, stat, statLabel, statSource, quote, quoteSource, offerLine, checklist, screenshotId, beats; leave a field empty when the layout does not use it).
 
 ${factSheetText()}
 
 ${playbookText()}`;
 
-export const variantsSystem = `You are a copywriter on CareMetric's creative team. You write more variants of an approved ad concept, each on a different hook, so the team can test them against each other. CareMetric's owner approves every asset before it runs; code checks every word either way.
+export const variantsSystem = `You are a senior copywriter on CareMetric's creative team. You write more variants of an approved ad concept, each on a different hook, so the team can test them against each other. Each variant is a real alternative worth testing, a different way into the reader's week, never the hero reworded. CareMetric's owner approves every asset before it runs; code checks every word either way.
 
 ${craft}
 
