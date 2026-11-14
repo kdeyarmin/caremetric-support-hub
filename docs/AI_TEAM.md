@@ -121,7 +121,7 @@ metadata, run summaries or task payloads.
 ### Autonomy steps: a supervised week, then on its own
 
 The owner hands kinds of work over to the team one at a time (`supabase/migrations/20261104220000_agent_autonomy.sql`,
-`private.agent_autonomy_steps`). Four ship, all off: **Account emails** (the Account Manager's four templates), **Support
+`private.agent_autonomy_steps`). Four ship, all off: **Account emails** (the Account Manager's first four templates; never the cancellation or ended-trial check-in), **Support
 answers**, **Article publishing** and **Offers**; **Sales follow-ups** and **Cold email** (the Marketing Manager's, see
 [Customer growth](CUSTOMER_GROWTH.md#sales-follow-ups-and-capped-cold-email)) are added, also off, by
 `20261105150000_growth_autonomy.sql`. Each step lists which agents it changes and what it adds to their
@@ -788,7 +788,7 @@ it cannot use falls back to the default.
 ### Customer emails
 
 A trial that hears nothing leaks: CareBase and Intel trials (30 days each) start through the Hub's billing, and
-a CareBase trial without a card cancels silently. The Account Manager proposes four short, fixed emails to the
+a CareBase trial without a card cancels silently. The Account Manager proposes short, fixed emails to the
 billing contact of a trial or a new paying account (task `accounts.lifecycle`, every morning at 08:20 Eastern).
 They are written once, in `server/agents/accounts/lifecycle.mjs`, use no model, and go out only after the owner
 approves the exact text on the Team screen, or, for an agent on **Act**, when the owner listed the template.
@@ -799,6 +799,13 @@ approves the exact text on the Team screen, or, for an agent on **Act**, when th
 | Setup help | Days 3 to 6 of a trial, only while the product has reported no positive usage for the account (a report of zero is not usage) | An offer of help with setup, and the help link |
 | Trial check-in | When 5 days or fewer (and more than 2) are left in a trial | A personal check-in asking whether anything is in the way. It says it is not a billing notice |
 | Testimonial request | 45 to 60 days after the account's first paid invoice for the product, on any subscription it has had for it, with no open high or urgent case | Would they share a sentence or two: their words are used only with their permission, in the form they approve, with or without their name, and a reply is how they say yes |
+| Cancellation check-in | A trial or a paid plan the customer has set to cancel (however long it was paid for) | Thanks for using the product, and what did not work, by reply; the help link. No offer, price or call |
+| Ended-trial check-in | A trial that ended in the last 14 days with no payment ever made for the product (its subscription canceled, expired or paused) | Thanks for trying it, what got in the way, by reply, and help to pick up where they left off; the help link |
+
+The last two are proposed only while **Settings → Customer growth → Win-back and cancellation emails** is on (off until
+you turn it on) and the database declares `platform.agents.lifecycle-save.v1` (`20261113300000_lifecycle_save.sql`). They
+are never approved on their own: the autonomy step's list of templates does not include them. Payment failures stay with
+Stripe's own emails.
 
 They are warm and short, in the branded layout and in the theme of the product's own app (`server/email-layout.mjs`),
 so a customer's emails from the Hub look like the ones the app sends: Intel's are in its Emberline theme (the Intel
@@ -816,8 +823,8 @@ surveyor). None offers a time to meet: help comes by reply and through the produ
 never duplicated: the check-in never mentions a card, a price, an invoice or a date.
 
 **Who gets one.** The run reads one server-only operation, `private.agent_lifecycle_snapshot`: per account and
-product, a live trial or a live paid subscription on an account that first paid for the product at most 90 days ago
-(live-mode Stripe records only, by the Billing screen's mode rule, so nothing at all while the verified mode is
+product, a live trial or a live paid subscription on an account that first paid for the product at most 90 days ago,
+a trial or paid plan set to cancel, or a trial that ended unpaid in the last 14 days (live-mode Stripe records only, by the Billing screen's mode rule, so nothing at all while the verified mode is
 test). The first payment is the earliest paid invoice of any live subscription the account ever had for the
 product, cancelled ones included, so replacing a subscription neither postpones the testimonial request nor makes an
 established account look new. For each it returns the tenant's slug and name, the product, the subscription's

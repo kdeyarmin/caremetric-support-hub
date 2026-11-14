@@ -56,13 +56,54 @@ describe('which email an account is due', () => {
     expect(dueTemplates(paying({ openUrgentCases: 1 }), now)).toEqual([]);
   });
 
-  it('sends nothing to an account that is cancelling, past due, or on a product without customer emails', () => {
-    expect(dueTemplates(trial({ cancelling: true }), now)).toEqual([]);
-    expect(dueTemplates(paying({ cancelling: true }), now)).toEqual([]);
+  it('sends a cancelling account only the cancellation check-in, and nothing to one past due or on a product without customer emails', () => {
+    expect(dueTemplates(trial({ cancelling: true }), now)).toEqual(['cancel_save']);
+    expect(dueTemplates(paying({ cancelling: true }), now)).toEqual(['cancel_save']);
+    expect(dueTemplates(paying({ cancelling: true, firstPaidAt: ago(50) }), now)).toEqual(['cancel_save'], 'never a testimonial request to a leaving customer');
+    expect(dueTemplates(trial({ status: 'past_due', cancelling: true }), now)).toEqual([]);
+    // A subscription that has not ended its trial yet, or never had one, is not an ended trial.
     for (const status of ['past_due', 'unpaid', 'paused', 'canceled', 'incomplete']) expect(dueTemplates(trial({ status }), now), status).toEqual([]);
     expect(dueTemplates(trial({ product: 'breathe' }), now)).toEqual([]);
     expect(dueTemplates(trial({ product: 'constructor' }), now)).toEqual([]);
     expect(dueTemplates(null, now)).toEqual([]);
+  });
+});
+
+describe('the cancellation and win-back emails', () => {
+  const ended = (over = {}) => trial({ status: 'canceled', trialStart: ago(35), trialEnd: ago(5), ...over });
+  it('checks in once a trial has ended unpaid, within 14 days', () => {
+    for (const status of ['canceled', 'incomplete_expired', 'paused']) expect(dueTemplates(ended({ status }), now), status).toEqual(['trial_ended']);
+    expect(dueTemplates(ended({ trialEnd: ago(13.9) }), now)).toEqual(['trial_ended']);
+    expect(dueTemplates(ended({ trialEnd: ago(14) }), now)).toEqual([], 'after 14 days the moment has passed');
+    expect(dueTemplates(ended({ trialEnd: ahead(1) }), now)).toEqual([], 'cancelled during its trial: not ended yet');
+    expect(dueTemplates(ended({ firstPaidAt: ago(40) }), now)).toEqual([], 'a customer who paid is not a lost trial');
+    expect(dueTemplates(ended({ trialEnd: null }), now)).toEqual([]);
+  });
+  it('is planned only when the run may send them', () => {
+    const accounts = [trial({ tenant: 'a-leaving', cancelling: true }), ended({ tenant: 'b-ended' })];
+    expect(planEmails(accounts, now).candidates).toEqual([]);
+    expect(planEmails(accounts, now, { save: true }).candidates.map(entry => `${entry.fact.tenant}:${entry.template}`)).toEqual(['a-leaving:cancel_save', 'b-ended:trial_ended']);
+    expect(planEmails([trial({ tenant: 'c', cancelling: true, emails: emails({ cancel_save: 'rejected' }) })], now, { save: true }).candidates).toEqual([], 'once per account and product');
+  });
+  it('still fits only while the plan is still being cancelled, or the trial is still ended and unpaid', () => {
+    expect(stillApplies('cancel_save', trial({ cancelling: true }))).toBe(true);
+    expect(stillApplies('cancel_save', paying({ cancelling: true }))).toBe(true);
+    expect(stillApplies('cancel_save', trial())).toBe(false, 'the customer changed their mind');
+    expect(stillApplies('trial_ended', ended())).toBe(true);
+    expect(stillApplies('trial_ended', trial())).toBe(false, 'a new trial started');
+    expect(stillApplies('trial_ended', paying())).toBe(false, 'they subscribed');
+    expect(stillApplies('trial_ended', null)).toBe(false, 'past the 14 days the facts no longer list the account');
+  });
+  it('asks what got in the way, by reply, with no price, offer or call', () => {
+    const words = template => lifecycleWording(lifecycleInput(trial({ product: 'caremetric-intel', productName: 'CareMetric Intel' }), template));
+    expect(words('cancel_save')).toContain('has chosen to end its CareMetric Intel plan');
+    expect(words('cancel_save')).toContain('would you tell us what did not work?');
+    expect(words('trial_ended')).toContain('Your CareMetric Intel trial for Maple Grove Senior Living has ended.');
+    expect(words('trial_ended')).toContain('Would you tell us what got in the way?');
+    for (const template of ['cancel_save', 'trial_ended']) {
+      expect(words(template)).not.toMatch(/\$|%|Founders Sale|\bcall\b|demo|meeting|discount/i);
+      expect(words(template)).toContain('https://www.caremetricintel.com/Help');
+    }
   });
 });
 
@@ -140,6 +181,7 @@ describe('the emails', () => {
     expect(subjects).toEqual({
       welcome: 'Welcome to CareMetric CareBase', setup_nudge: 'Need a hand getting set up in CareMetric CareBase?',
       trial_checkin: 'How is your CareMetric CareBase trial going?', testimonial_ask: 'Would you share a sentence about CareMetric CareBase?',
+      cancel_save: 'Before your CareMetric CareBase plan ends', trial_ended: 'Thank you for trying CareMetric CareBase',
     });
     const words = template => lifecycleWording(lifecycleInput(trial({ product: 'caremetric-intel', productName: 'CareMetric Intel' }), template));
     expect(words('welcome')).toContain('1. Open Setup from the Dashboard and name your agency.');
@@ -242,8 +284,9 @@ describe('the sent email', () => {
       expect(email.html).toContain(`<a href="${unsubscribeUrl}" target="_blank"`);
       expect(email.html).toContain(`>${unsubscribeLabel}</a>`);
       expect(email.html).toContain(escapeHtml(postal));
-      // The first two emails link to the product's getting-started help as a button; the check-in and the testimonial request do not.
-      expect(email.html.includes(`href="${lifecycleProducts[input.product].helpUrl}"`), input.template).toBe(['welcome', 'setup_nudge'].includes(input.template));
+      // The first two emails and the cancellation and win-back emails link to the product's help as a button; the check-in and the
+      // testimonial request do not.
+      expect(email.html.includes(`href="${lifecycleProducts[input.product].helpUrl}"`), input.template).toBe(['welcome', 'setup_nudge', 'cancel_save', 'trial_ended'].includes(input.template));
     }
   });
 

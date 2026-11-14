@@ -82,6 +82,7 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Customer growth | Find prospects from the Medicare roster; States to prospect in; Most roster agencies to look up a day | Prospecting from Intel's roster of home health agencies and hospices |
 | Customer growth | Follow up website leads by email | County report, contact and savings-model leads get a two-email follow-up, after your approval |
 | Customer growth | Days before asking again | When a "not now" or a silent prospect is asked once more (at least 30) |
+| Customer growth | Win-back and cancellation emails | The Account Manager proposes, for your approval, one email when a trial ends unpaid and one when a plan is set to cancel |
 | Customer growth | Finding people's addresses; Most address checks a day | Named decision-makers from the CMS owners file, the NPI registry and their own websites; an address they publish, or one their mail server confirms; every address waits for your review |
 | Customer growth | Research prospects with web search; Most prospects to research a day; Most to spend researching one prospect | Deeper research within a cost ceiling |
 | Customer growth | Write from what is working | Drafts use the weekly memo you approve on Growth |

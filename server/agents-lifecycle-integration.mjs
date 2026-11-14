@@ -448,6 +448,33 @@ try {
   await removeAccounts(bulk);
   tenants.splice(tenants.indexOf(bulk[0]), bulk.length);
 
+  // ---- Cancellation and win-back (20261113300000_lifecycle_save.sql): only with the owner's switch on, always for approval -------------
+  await makeAccount('leaving', { subscriptions: [{ status: 'active', started: 200, ends: -170, paid: 170, cancelling: true }] });
+  await makeAccount('ended', { subscriptions: [{ status: 'canceled', started: 35, ends: -5 }] });
+  await makeAccount('longended', { subscriptions: [{ status: 'canceled', started: 60, ends: -30 }] });
+  const saveFacts = Object.fromEntries(mine((await call('private.agent_lifecycle_snapshot', [500, null, null])).accounts).map(entry => [entry.tenant, entry]));
+  assert.deepEqual([saveFacts[slugs.leaving]?.cancelling, saveFacts[slugs.ended]?.status, saveFacts[slugs.longended]], [true, 'canceled', undefined],
+    'a long-paid plan being cancelled and a trial that ended 5 days ago are in the facts; one that ended a month ago is not');
+  assert.deepEqual(Object.keys(saveFacts[slugs.ended].emails).sort(), ['cancel_save', 'setup_nudge', 'testimonial_ask', 'trial_checkin', 'trial_ended', 'welcome']);
+  await fire();
+  assert.ok(!(await emailActions()).some(action => ['cancel_save', 'trial_ended'].includes(action.input.template)), 'nothing is proposed while the switch is off');
+  const saveRun = await ownerCall('hub.request_agent_task', ['account_manager', 'accounts.lifecycle']);
+  const [saveClaim] = await call('private.agent_task_claim', [1, 600]);
+  assert.equal(saveClaim.id, saveRun.id);
+  const saveHandler = lifecycleHandlers({ store: team.store, features: new Set(features), lifecycle: { ...customerEmail, publicOrigin: origin, saveEmails: () => true } })['accounts.lifecycle'];
+  const saveHandled = await saveHandler(saveClaim, { now: () => new Date() });
+  await team.store.finish(saveClaim.id, 'done', { result: saveHandled.result, attempt: saveClaim.attempts });
+  for (const [key, template] of [['cancelling', 'cancel_save'], ['leaving', 'cancel_save'], ['ended', 'trial_ended']]) {
+    const action = await actionFor(key);
+    assert.deepEqual([action?.input.template, action?.status], [template, 'proposed'], `${key}: ${template}, for the owner's approval`);
+    assert.equal(action.preview, lifecyclePreview(action.input, { postalAddress: postal }));
+  }
+  const beforeSave = sent.length;
+  assert.equal((await approve('leaving')).status, 'executed');
+  assert.equal(sent.length, beforeSave + 1);
+  assert.deepEqual([sent.at(-1).to, sent.at(-1).subject], [canary('leaving'), 'Before your CareMetric CareBase plan ends'], 'sent once, to that account');
+  tokens.push(new RegExp(`^${origin}/api/email/unsubscribe/([0-9a-f]{64})$`).exec(sent.at(-1).unsubscribeUrl)[1]);
+
   // ---- No address is anywhere but the fake sender's captured messages -------------------------------------------------------------------
   const everything = JSON.stringify([
     await rows('select to_jsonb(t) as r from private.agent_tasks t'), await rows('select to_jsonb(r) as r from private.agent_runs r'),
@@ -455,7 +482,7 @@ try {
     await rows('select to_jsonb(e) as r from private.agent_lifecycle_emails e'), await rows("select to_jsonb(e) as r from private.audit_events e where action like 'agent.%'"),
     logs, texts, ownerMail,
   ]);
-  for (const key of ['welcome', 'setup', 'checkin', 'testimonial', 'refused', 'silent', 'crash', 'replay', 'autowelcome', 'autosetup', 'autooff', 'noemail', 'unsubscribed', 'paged', 'zerousage']) {
+  for (const key of ['welcome', 'setup', 'checkin', 'testimonial', 'refused', 'silent', 'crash', 'replay', 'autowelcome', 'autosetup', 'autooff', 'noemail', 'unsubscribed', 'paged', 'zerousage', 'leaving', 'ended', 'longended']) {
     assert.ok(!everything.includes(canary(key)), `${key}'s address appears in no agent table, ledger, audit event, log line or alert`);
   }
   for (const secret of [contactName, `cus_lc${run}`, `sub_lc${run}`, ...tokens]) assert.ok(!everything.includes(secret), `${secret.slice(0, 18)}… is kept nowhere`);

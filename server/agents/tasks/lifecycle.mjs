@@ -1,8 +1,9 @@
 /**
  * `accounts.lifecycle`: the Account Manager's customer emails, every morning at 08:20 Eastern. It reads the server-only facts of
  * the trials and new paying accounts (names, dates and flags: never an address), 200 at a time and up to 2,000, works out which of
- * the four fixed emails each account and product is due (accounts/lifecycle.mjs), and proposes each one to the owner with its
- * exact text as the preview. Every page is planned together, so newer trials can never hide an older account whose email is due.
+ * the fixed emails each account and product is due (accounts/lifecycle.mjs), and proposes each one to the owner with its
+ * exact text as the preview. The cancellation and win-back emails are planned only while the database declares their feature and
+ * Settings → Customer growth → "Win-back and cancellation emails" is on. Every page is planned together, so newer trials can never hide an older account whose email is due.
  * It uses no model and sends nothing itself: an approved email is sent by its executor (accounts/executor.mjs).
  *
  * - Each email is proposed at most once per account and product, ever: the database keys it by its period
@@ -18,7 +19,8 @@
  * The run finishes once it has proposed: the proposals wait on the Team screen, and the next morning's run is not held back by them.
  * The task result and the run summary carry counts and template names only, never an account name.
  */
-import { lifecycleFeature, lifecycleInput, lifecyclePreview, lifecycleReadiness, lifecycleTemplates, planEmails, proposalLimit, templateWords } from '../accounts/lifecycle.mjs';
+import { lifecycleFeature, lifecycleInput, lifecyclePreview, lifecycleReadiness, lifecycleSaveFeature, lifecycleTemplates, planEmails, proposalLimit, saveTemplates, templateWords } from '../accounts/lifecycle.mjs';
+import { live } from '../../live.mjs';
 import { plural, recordRun } from './shared.mjs';
 
 export { lifecycleFeature };
@@ -27,8 +29,11 @@ export const pageSize = 200;
 export const pageLimit = 10;
 const missingWords = { mail: 'no SendGrid sender', postal_address: 'no postal address (Settings → Email)', public_origin: 'no bare https public origin (HUB_PUBLIC_ORIGIN)' };
 
-const declared = features => (features instanceof Set ? features.has(lifecycleFeature) : Array.isArray(features) && features.includes(lifecycleFeature));
-const counted = list => Object.fromEntries(lifecycleTemplates.map(template => [template, list.filter(entry => entry.template === template).length]));
+const has = (features, feature) => (features instanceof Set ? features.has(feature) : Array.isArray(features) && features.includes(feature));
+const declared = features => has(features, lifecycleFeature);
+// The templates a run may plan: the cancellation and win-back emails only with their feature and the owner's switch on.
+const planned = save => lifecycleTemplates.filter(template => save || !saveTemplates.includes(template));
+const counted = (list, save) => Object.fromEntries(planned(save).map(template => [template, list.filter(entry => entry.template === template).length]));
 const listed = byTemplate => lifecycleTemplates.filter(template => byTemplate[template] > 0).map(template => `${byTemplate[template]} ${templateWords[template]}`).join(', ');
 
 /** Registered only when the database declares the feature, so a Hub whose database lacks the migration still starts and the schedule stays due. */
@@ -59,11 +64,12 @@ export function lifecycleHandlers({ store, features = null, lifecycle = {}, log 
 
   async function emails(task, { now = () => new Date(), signal } = {}) {
     const moment = now();
+    const save = has(features, lifecycleSaveFeature) && live(lifecycle.saveEmails) === true;
     const facts = await readFacts(signal);
-    const { candidates, skipped } = planEmails(facts.accounts, moment);
+    const { candidates, skipped } = planEmails(facts.accounts, moment, { save });
     const chosen = candidates.slice(0, proposalLimit);
     const base = {
-      mode: facts.mode, read: facts.accounts.length, due: candidates.length, byTemplate: counted(chosen), deferred: candidates.length - chosen.length + skipped.sameAccount,
+      mode: facts.mode, read: facts.accounts.length, due: candidates.length, byTemplate: counted(chosen, save), deferred: candidates.length - chosen.length + skipped.sameAccount,
       noAddress: skipped.noAddress, suppressed: skipped.suppressed, truncated: facts.truncated,
     };
     const finish = async (result, summary, { outcome = 'completed', errorCode = null } = {}) => {
@@ -116,7 +122,7 @@ export function lifecycleHandlers({ store, features = null, lifecycle = {}, log 
       made.push({ template });
       if (proposal?.status === 'auto_approved') autoApproved += 1;
     }
-    const result = { ...base, outcome: 'proposed', proposed, autoApproved, alreadyProposed, byTemplate: counted(made) };
+    const result = { ...base, outcome: 'proposed', proposed, autoApproved, alreadyProposed, byTemplate: counted(made, save) };
     return finish(result, proposed === 0
       ? `No new customer email was proposed: ${plural(alreadyProposed, 'email')} had been proposed already.${tail}`
       : `Proposed ${plural(proposed, 'customer email')} (${listed(result.byTemplate)})${autoApproved ? `; ${autoApproved} approved on ${autoApproved === 1 ? 'its' : 'their'} own, by the templates you listed` : ' for your approval'}.${tail}`);
