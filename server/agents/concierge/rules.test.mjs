@@ -135,6 +135,50 @@ describe('a reply with the original email quoted under it', () => {
     for (const words of ['Please update the credit card on our account.', 'I have no credit card on file. How do I pay?', 'There is no credit card charge on my statement, but you sent a receipt.'])
       expect(categorize({ text: words }).category, words).toBe('billing');
   });
+  it('keeps card-management requests during a trial as billing in the subject or body', () => {
+    for (const request of [
+      'How do I update my credit card during the free trial?',
+      'Please change the credit card for my trial.',
+      'Please try another credit card.',
+      'I have no credit card on file during my free trial.',
+      'Please update the credit card required for my trial.',
+    ]) {
+      expect(withoutTrialPhrase(request)).toBe(request);
+      for (const message of [{ text: request }, { subject: request, text: 'Please help.' }])
+        expect(categorize(message)).toEqual({ category: 'billing', reasons: ['billing.invoice'] });
+      expect(category(`I am out of the office. ${request}`)).toBe('billing');
+    }
+  });
+  it('neutralizes old and new disclosures without hiding adjacent card requests', () => {
+    const request = 'Please change the credit card for my trial.';
+    for (const disclosure of [
+      'You can try CareMetric Intel free for 30 days, no credit card needed.',
+      'A 30-day free trial with no credit card.',
+      'The free trial needs no credit card.',
+      'A 30-day free trial (credit card required; canceling before it ends avoids any charge).',
+      'A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.',
+    ]) {
+      for (const original of [disclosure, `> ${disclosure}`, `-----Original Message-----\n${disclosure}`]) {
+        expect(category(`Tell me more about the free trial.\n\n${original}`)).toBe('sales');
+        expect(category(`${request}\n\n${original}`)).toBe('billing');
+        expect(category(`See below.\n\n${original}\n\n${request}`)).toBe('billing');
+        expect(category(original, request)).toBe('billing');
+      }
+      // Both card occurrences share a sentence; only the disclosure may be neutralized.
+      const adjacent = `${disclosure.replace(/\.$/, '')}; ${request}`;
+      expect(withoutTrialPhrase(adjacent)).toContain(request);
+      expect(category(adjacent)).toBe('billing');
+      expect(category(`I am out of the office. ${adjacent}`)).toBe('billing');
+    }
+  });
+  it('preserves urgent priority and machine labels for trial card requests', () => {
+    const request = 'Please change the credit card for my trial.';
+    for (const [urgent, expected] of [['Our account was hacked.', 'security'], ['My attorney will contact you.', 'legal'], ['The site is down.', 'outage']])
+      expect(category(`${request}\n> ${urgent}`, 'Automatic reply: trial')).toBe(expected);
+    for (const subject of ['Automatic reply: trial', 'Out of office: trial', 'Undeliverable: trial'])
+      expect(category(request, subject)).toBe('auto_reply');
+    expect(category(`From: MAILER-DAEMON@example.test\n${request}`)).toBe('auto_reply');
+  });
   it('drops only marked quotes and the line that introduces them', () => {
     expect(ownWords(`${quoted}\n\nPlease refund my invoice.`)).toBe('Please refund my invoice.');
     expect(ownWords(`Above.\n\nOn Tue, Nov 10, 2026 Kevin wrote:\n${quoted}\n\nBelow.`)).toBe('Above.\n\n\nBelow.');
