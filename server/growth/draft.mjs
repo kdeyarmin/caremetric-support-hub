@@ -142,20 +142,21 @@ export const problemHints=Object.freeze({
   other_product_price:'Mention only this product\'s own prices, or none.',
 });
 /**
- * The experiment arms a message is written under, as short codes (growth_messages.arms): its length (the existing control/concise split)
+ * The experiment arms a message is written under, as short codes (growth_messages.arms): its length (control/concise, or noncomparative report-led copy)
  * and, when the product policy runs experiments, the part of the product it leads with and the subject's style, each chosen by a stable
  * hash of the organization. The trigger is what the draft is answering (a website request, a re-ask, a public record or the web) and is
- * always recorded. Nothing here is text from the message or the prospect.
+ * always recorded. length_basis distinguishes applied treatments from legacy growth.11 labels at learning time.
+ * Nothing here is text from the message or the prospect.
  */
-export function messageArms(o, sources) {
+export function messageArms(o, sources, { reportLed = false } = {}) {
   const hash=createHash('sha256').update(String(o.organization_id??o.id)).digest();
   const experiment=o.policy?.experiment_enabled===true;
-  const length=experiment && hash[0]%2 ? 'concise':'control';
+  const length=reportLed?'report':experiment && hash[0]%2 ? 'concise':'control';
   const record=(sources??[]).map(source=>String(source.claim??'')).join('\n');
   const trigger=o.memory?.lead?'inbound':o.memory?.reengagedAt?`reask_${/^[a-z_]{1,20}$/.test(o.memory.reengageReason??'')?o.memory.reengageReason:'later'}`
     :/newly listed by CMS|Newly certified/.test(record)?'new_agency':/change of ownership recorded/.test(record)?'new_owner':/CMS Provider of Services file/.test(record)?'cms_record':'web';
   const angles=experimentAngles[o.product]??[];
-  return {length,trigger,...(experiment&&angles.length?{angle:angles[hash[1]%angles.length],subject:hash[2]%2?'question':'plain'}:{})};
+  return {length,length_basis:'applied_v1',trigger,...(experiment&&angles.length?{angle:angles[hash[1]%angles.length],subject:hash[2]%2?'question':'plain'}:{})};
 }
 
 /**
@@ -189,7 +190,8 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   // A re-ask counts touches from when it began; a website lead follows its own sequence.
   const sent=Math.max(0,Number(o.touches??0)-(reask?Number(o.memory?.touchesBefore??0):0));
   const outreachTouch=Math.min(sent+1,sequencePlan.length);
-  const arms=messageArms(o,sources);
+  const reportLed=work.kind==='outreach'&&o.product==='caremetric-intel'&&outreachTouch===1&&!reask&&!lead;
+  const arms=messageArms(o,sources,{reportLed});
   const variant=arms.length;
   const armTag=work.kind==='outreach'?[arms.trigger,arms.angle,arms.subject].filter(Boolean).join('-').replace(/_/g,'-').slice(0,60):null;
   const tags=work.kind==='outreach'?linkTags.growthOutreach(o.product,reask?Number(o.touches??0)+1:outreachTouch,armTag):linkTags.accountEmail(o.product,work.kind);
@@ -208,7 +210,6 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   const outreach=work.kind==='outreach';
   const touch=outreach?outreachTouch:null;
   // The first cold email to a CareMetric Intel prospect is built around a market report (owner direction 2026-11-15).
-  const reportLed=outreach&&o.product==='caremetric-intel'&&touch===1&&!reask&&!lead;
   const input={
     kind:work.kind, product:product.name, style:reportLed?'Keep the body under one hundred seventy words.':variant==='concise'?'Keep the body under eighty words.':'Keep the body under one hundred twenty words.',
     approvedClaim:approved, links:[...draftLinks(o.product),...(offered?[{label:offered.label,url:offered.url}]:[])], nextStep:book?.nextStep??null,

@@ -15,7 +15,7 @@
  * feed signature and a report link can never stand in for each other. Claims: { v: 1, c: CCN, s: "hha" | "hospice", e: expiry in
  * Unix seconds, r: the opportunity id }. A test pins the same vector as Intel's.
  */
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export const reportKeyLabel = 'caremetric.agency-report.v1';
 export const reportOrigin = 'https://www.caremetricintel.com';
@@ -58,6 +58,19 @@ export function reportLinks({ key = null, now = () => Date.now() } = {}) {
   const configured = typeof key === 'string' && key.length >= 32;
   return {
     configured,
+    // Rendering only: drafting still allows exactly the report issued for that opportunity.
+    accepts(url) {
+      if (!configured || typeof url !== 'string') return false;
+      const match = /^https:\/\/www\.caremetricintel\.com\/report\/([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{22})$/.exec(url);
+      if (!match) return false;
+      try {
+        const claims = JSON.parse(Buffer.from(match[1], 'base64url').toString('utf8'));
+        if (claims.v !== 1 || claims.e <= Math.floor(now() / 1000)) return false;
+        const expected = reportToken({ ccn: claims.c, setting: claims.s ?? null, expires: claims.e, ref: claims.r ?? null }, key);
+        const token = `${match[1]}.${match[2]}`;
+        return token.length === expected.length && timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+      } catch { return false; }
+    },
     linkFor(opportunity) {
       if (!configured || opportunity?.product !== 'caremetric-intel') return null;
       const agency = rosterAgency(opportunity.evidence);

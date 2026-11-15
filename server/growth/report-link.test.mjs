@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { reportLinkDays, reportLinks, reportToken, rosterAgency } from './report-link.mjs';
+import { growthEmail, growthExecutors } from './worker.mjs';
 import { draftMessage, draftProblem } from './draft.mjs';
 
 const key = 'k'.repeat(40);
@@ -77,6 +78,8 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     expect(input.touchPlan).toMatch(/credit card is required to start the trial/);
     expect(input.touchPlan).toMatch(/Never call it risk-free/);
     expect(input.style).toMatch(/one hundred seventy words/);
+    expect(draft.arms.length).toBe('report');
+    expect(draft.variant).toBe('report');
     // "Risk-free" is refused, as is "no credit card".
     expect(await draftMessage({ opportunity, work, task: {}, model: reply(body.replace('Try it free for 30 days.', 'Try it risk-free for 30 days.')), report: link })).toBeNull();
     expect(await draftMessage({ opportunity, work, task: {}, model: reply(body.replace('A credit card is required to start the trial, and canceling before it ends means no charge', 'No credit card needed')), report: link })).toBeNull();
@@ -95,4 +98,27 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     await draftMessage({ opportunity: { ...web, touches: 1 }, work, task: {}, model: second });
     expect(JSON.parse(second.run.mock.calls[0][1].user).touchPlan).toMatch(/different angle/);
   });
+});
+
+
+it('renders signed report links in actual outgoing HTML without widening the draft allowlist', async () => {
+  const reports = reportLinks({ key });
+  const link = reports.linkFor({ id: 'o1', product: 'caremetric-intel', evidence: [roster()] });
+  const render = (url, product = 'caremetric-intel', verifier = reports) => growthEmail({ product, subject: 'Report', body: `Your report:\n${url}`, reports: verifier,
+    postalAddress: '', unsubscribeUrl: 'https://hub.example/u/test' }).html;
+  expect(render(link.url)).toContain(`href="${link.url}"`);
+  for (const url of [link.url + '?next=https://evil.example', link.url + '#fragment', link.url.replace('www.caremetricintel.com', 'evil.example'),
+    link.url.replace('https:', 'http:'), link.url.replace('/report/', '/report/../'), link.url.slice(0, -4) + 'AAAA',
+    'https://www.caremetricintel.com/report/arbitrary',
+    `https://www.caremetricintel.com/report/${reportToken({ ccn: '397001', expires: 1 }, key)}`]) {
+    expect(render(url)).not.toContain(`href="${url.replaceAll('&', '&amp;')}"`);
+  }
+  expect(render(link.url, 'carebase')).not.toContain(`href="${link.url}"`);
+  expect(render(link.url, 'caremetric-intel', reportLinks())).not.toContain(`href="${link.url}"`);
+  const mail = { configured: true, send: vi.fn(async () => ({ delivery: 'sent', id: 'sent' })) };
+  const growth = { configured: () => true, reports, unsubscribeToken: () => 'u', store: {
+    claim: vi.fn(async () => ({ send: true, product: 'caremetric-intel', subject: 'Report', body: link.url, workId: 'w', id: 'm', to: 'test@example.org' })), finish: vi.fn(),
+  } };
+  await growthExecutors({ growth, mail, publicOrigin: 'https://hub.example', postalAddress: '' })['growth.message']({ input: { messageId: 'm' }, id: 'a' });
+  expect(mail.send.mock.calls[0][0].html).toContain(`href="${link.url}"`);
 });
