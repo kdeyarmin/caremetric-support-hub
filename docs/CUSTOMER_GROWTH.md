@@ -272,6 +272,12 @@ shared secret (`HUB_INTEL_FEED_SECRET`), under a label of its own. Intel verifie
 `server/routes/agencyReport.ts`; protocol in Intel's `docs/HUB_MARKETING_FEED.md`, "Agency report links"). A link lives 150 days. It
 names the agency, never a person, and carries the opportunity's id as its reference.
 
+A draft carries the link only once Intel has answered it with the PDF (`checkedLinkFor`: one GET with a 20-second timeout; the
+answer is kept per agency for 12 hours when the report opens and an hour when it doesn't). An agency certified after CMS's newest
+post-acute file gets its county's report built around it, saying CMS hasn't published its own patients yet. One Medicare's
+directory doesn't list yet has no report, so its email offers the market review page instead of a link that opens to "No report for
+this link".
+
 **The first email is built around the report** (owner direction 2026-11-15; `reportTouchAngle` and `reviewTouchAngle` in
 `playbook.mjs`, `growth.11`). It goes to the agency's best contact: a named owner, administrator or marketing leader when the team
 found one, else the role address, and, as separate emails, the other decision-makers there (see
