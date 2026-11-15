@@ -22,6 +22,22 @@ describe('agent store', () => {
     ]);
   });
 
+  it('re-checks a hand-over and reserves a live campaign\'s share only when the database declares the hand-over', async () => {
+    expect(harness().store.actionTrusted).toBeUndefined();
+    expect(harness().store.adsLaunchReserve).toBeUndefined();
+    const calls = [];
+    const pool = { connect: async () => ({ query: async (sql, args) => { if (/^select/.test(sql)) { calls.push([sql, args]); return { rows: [{ result: true }] }; } return { rows: [] }; }, release() {} }) };
+    const store = sqlAgentStore(pool, { handover: true });
+    expect(await store.actionTrusted('a1', 3)).toBe(true);
+    await store.adsLaunchReserve('a1', 3, 1000, 500, 14);
+    await store.adsLaunchRelease('a1', 3);
+    expect(calls).toEqual([
+      ['select private.agent_action_trusted($1, $2) as result', ['a1', 3]],
+      ['select private.ads_launch_reserve($1, $2, $3, $4, $5) as result', ['a1', 3, 1000, 500, 14]],
+      ['select private.ads_launch_release($1, $2) as result', ['a1', 3]],
+    ]);
+  });
+
   it('reads the Monday scorecard\'s setting and figures only when the database declares the scorecard', async () => {
     expect(harness().store.individualReports).toBeUndefined();
     expect(harness().store.scorecardFacts).toBeUndefined();

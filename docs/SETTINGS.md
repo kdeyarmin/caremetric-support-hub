@@ -85,13 +85,13 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Customer growth | Follow up website leads by email | County report, contact and savings-model leads get a two-email follow-up, after your approval |
 | Customer growth | Days before asking again | When a "not now" or a silent prospect is asked once more (at least 30) |
 | Customer growth | Win-back and cancellation emails | The Account Manager proposes, for your approval, one email when a trial ends unpaid and one when a plan is set to cancel |
-| Customer growth | Finding people's addresses; Most address checks a day | Named decision-makers from the CMS owners file, the NPI registry and their own websites; an address they publish, or one their mail server confirms; every address waits for your review |
+| Customer growth | Finding people's addresses; Most address checks a day | Named decision-makers from the CMS owners file, the NPI registry and their own websites; an address they publish, or one their mail server confirms; every address waits for your review until you hand "Named people's email addresses" over on the AI team page |
 | Customer growth | Research prospects with web search; Most prospects to research a day; Most to spend researching one prospect | Deeper research within a cost ceiling |
-| Customer growth | Write from what is working | Drafts use the weekly memo you approve on Growth |
+| Customer growth | Write from what is working | Drafts use the weekly memo you approve on Growth, or each new memo at once after you hand "Learning memo" over on the AI team page |
 | Creative | County snapshots a week | Images of one public number for a county your prospects are in (0 turns them off) |
 | Social media | Post about new CMS data and observances | The weekly plan may write one post about a new release or an observance |
-| Social media | Write posts for my LinkedIn profile; Posts for my profile a week | Posts in your voice, each approved by you |
-| Paid ads | Most to spend on new campaigns a month | New LinkedIn, Meta and Google search campaigns are proposed only while it is set |
+| Social media | Write posts for my LinkedIn profile; Posts for my profile a week | Posts in your voice, each approved by you until you hand "Founder posts" over on the AI team page |
+| Paid ads | Most to spend on new campaigns a month | New LinkedIn, Meta and Google search campaigns are proposed only while it is set; after you hand "Ad campaign launch" over, the campaigns that start on their own share it and never pass it together |
 | Paid ads | Meta retargeting audience; Meta Pixel (dataset) id; LinkedIn conversion rule id | Where new Meta campaigns aim and where leads are reported |
 | Paid ads | Report leads to the ad platforms | Hashed-email lead reports to the platform whose ad was clicked |
 | Paid ads | Google Ads customer id; Google Ads manager account id; Google Ads OAuth client id; Google Ads API version | The Google Ads API |

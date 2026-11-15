@@ -294,17 +294,29 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
     // An image is the base ad's image hash or, for an approved Creative Director asset, its address (Meta fetches it: link_data.picture).
     /**
      * A new campaign and its ad set, both PAUSED: traffic to the landing page, shown only to the retargeting audience (website visitors),
-     * with the approved daily budget on the ad set. The owner starts it in Ads Manager or by approving an ad into it.
+     * with the approved daily budget on the ad set. The owner starts it in Ads Manager or by approving an ad into it. `endAt` (a launch
+     * the owner handed over) ends the ad set then, so it can never spend past its month.
      */
-    async createCampaign({ name, dailyBudgetCents, audienceId }, { signal } = {}) {
+    async createCampaign({ name, dailyBudgetCents, audienceId, endAt = null }, { signal } = {}) {
       if (!configured.ads) throw failure('meta_not_configured');
       if (!Number.isInteger(dailyBudgetCents) || dailyBudgetCents < 100 || !/^[0-9]{5,30}$/.test(String(audienceId ?? ''))) throw failure('meta_invalid_request');
+      const end = endAt === null ? null : Date.parse(endAt);
+      if (end !== null && !(Number.isFinite(end) && end > Date.now())) throw failure('meta_invalid_request');
       const campaign = await post(`act_${account}/campaigns`, { name: name.slice(0, 100), objective: 'OUTCOME_TRAFFIC', status: 'PAUSED',
         special_ad_categories: [], is_adset_budget_sharing_enabled: false }, { signal });
       const adset = await post(`act_${account}/adsets`, { name: name.slice(0, 100), campaign_id: campaign.id, status: 'PAUSED', daily_budget: dailyBudgetCents,
         billing_event: 'IMPRESSIONS', optimization_goal: 'LINK_CLICKS', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', destination_type: 'WEBSITE',
-        targeting: { custom_audiences: [{ id: String(audienceId) }], geo_locations: { countries: ['US'] } } }, { signal });
+        targeting: { custom_audiences: [{ id: String(audienceId) }], geo_locations: { countries: ['US'] } }, ...(end === null ? {} : { end_time: Math.floor(end / 1000) }) }, { signal });
       return { campaignId: String(campaign.id ?? ''), adsetId: String(adset.id ?? '') };
+    },
+
+    /** Starts a campaign created paused, once its first ad is in it: the ad set, then the campaign. Used only for a launch the owner handed over. */
+    async startCampaign({ campaignId, adsetId }, { signal } = {}) {
+      if (!configured.ads) throw failure('meta_not_configured');
+      if (!metaId(String(campaignId ?? '')) || !metaId(String(adsetId ?? ''))) throw failure('meta_invalid_request');
+      await post(adsetId, { status: 'ACTIVE' }, { signal });
+      await post(campaignId, { status: 'ACTIVE' }, { signal });
+      return { started: true };
     },
 
     /** One lead from a Meta ad click, reported to the Pixel's dataset by a hashed email and the click (Conversions API). */

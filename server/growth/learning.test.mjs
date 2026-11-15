@@ -65,6 +65,10 @@ describe('the weekly memo task', () => {
     expect(s.learningPropose.mock.calls[0][0]).toBe('caremetric-intel');
     expect(s.learningPropose.mock.calls[0][1]).toContain('Shorter, please.');
     expect(result).toEqual({ products: { 'caremetric-intel': { proposed: true, version: 2, lines: 1, sent: 0 } } });
+    // Handed over (the owner's "Learning memo" step): the database uses the memo at once and says so.
+    const used = store({ learningPropose: vi.fn(async () => ({ proposed: true, version: 3, activated: true })) });
+    expect((await handler({ store: used })({ sourceKind: 'schedule' }, { now: monday })).result)
+      .toEqual({ products: { 'caremetric-intel': { proposed: true, version: 3, activated: true, lines: 1, sent: 0 } } });
     const quiet = store({ learningFacts: vi.fn(async () => facts({ sent: 12 })) });
     expect((await handler({ store: quiet })({ sourceKind: 'schedule' }, { now: monday })).result)
       .toEqual({ products: { 'caremetric-intel': { proposed: false, reason: 'too_little', sent: 12 } } });

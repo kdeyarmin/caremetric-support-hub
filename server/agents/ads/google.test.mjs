@@ -61,6 +61,20 @@ describe('the Google search plan', () => {
     expect(googleAdsClient({ customerId: '1234567890' }).configured).toBe(false);
   });
 
+  it('creates a campaign the owner handed over running, with its last day, and refuses one without a last day before asking Google', async () => {
+    const fetchImpl = vi.fn(async url => (String(url).includes('oauth2') ? new Response(JSON.stringify({ access_token: 'ya29.token' }))
+      : new Response(JSON.stringify({ mutateOperationResponses: [{}, { campaignResult: { resourceName: 'customers/1234567890/campaigns/56' } }] }))));
+    const client = googleAdsClient({ clientId: 'client.apps', clientSecret: 'secret-0123456789', refreshToken: '1//refresh-token-0123456789', customerId: '1234567890', fetchImpl });
+    const checked = checkGooglePlan(plan(), { factsKey: 'intel' }).plan;
+    const campaign = { name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/county-report', plan: checked };
+    expect(await client.createSearchCampaign({ ...campaign, live: true, endDate: '2026-11-30' })).toEqual({ campaign: 'customers/1234567890/campaigns/56' });
+    const operations = JSON.parse(fetchImpl.mock.calls[1][1].body).mutateOperations;
+    expect(operations[1].campaignOperation.create).toMatchObject({ status: 'ENABLED', endDateTime: '2026-11-30 23:59:59' });
+    expect(operations[0].campaignBudgetOperation.create.amountMicros).toBe('10000000');
+    await expect(client.createSearchCampaign({ ...campaign, live: true })).rejects.toMatchObject({ code: 'google_invalid_request' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('signs in as the Hub\'s service account when no refresh token is set, and sends no retired developer token', async () => {
     const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     const serviceAccount = JSON.stringify({ type: 'service_account', private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }),

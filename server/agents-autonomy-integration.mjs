@@ -43,10 +43,12 @@ try {
   await admin.query("update private.agent_autonomy_steps set requires_feature = 'platform.agents.never-declared.v1' where category = 'offers'");
   const declared = new Set((await row('select hub.get_backend_contract() as c')).c.features);
   const steps = await ownerCall('hub.get_agent_autonomy', []);
-  // Later features add their own steps; each starts off.
+  // Later features add their own steps; each starts off, except the four the owner handed over on 2026-11-15
+  // (20261115200000_autonomy_handover.sql), which ship held. None ships automatic.
   const firstFour = ['account_emails', 'articles', 'offers', 'support_answers'];
+  const heldAtFirst = ['ad_campaigns', 'founder_posts', 'learning_memo', 'named_contacts'];
   assert.deepEqual(steps.filter(item => firstFour.includes(item.category)).map(item => [item.category, item.status]), firstFour.map(category => [category, 'off']));
-  assert.ok(steps.every(item => item.status === 'off'), 'every step starts off');
+  assert.ok(steps.every(item => item.status === (heldAtFirst.includes(item.category) ? 'held' : 'off')), 'every step starts off, or held');
   for (const item of steps) assert.equal(item.ready, item.category !== 'offers' && declared.has(seedSteps.find(seed => seed.category === item.category).requires_feature), item.category);
   assert.equal(steps.find(item => item.category === 'account_emails').ready, true);
 

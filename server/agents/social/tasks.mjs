@@ -26,9 +26,10 @@ import { screenIdentifiers } from '../concierge/screen.mjs';
 import { dueMoment, heldForScorecard, heldResult, permanent, plural, recordRun, when } from '../tasks/shared.mjs';
 import { playbookFor } from '../../growth/playbook.mjs';
 import {
-  adPromptVersion, adSchema, adSystem, checkSocialText, planPromptVersion, planSchema, planSystem, replyPromptVersion, replySchema, replySystem,
+  adCopyFromCreative, adImagePlacements, adPromptVersion, adSchema, adSystem, checkSocialText, planPromptVersion, planSchema, planSystem, replyPromptVersion, replySchema, replySystem,
   replyUserMessage, socialLinks, socialProducts, tagSocialLink, tagSocialText, withHashtags,
 } from './content.mjs';
+import { trustedWith } from '../handover.mjs';
 import { evaluateAds, rankPosts, rulesVersion } from './rules.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { untaggedUrl } from '../links.mjs';
@@ -70,7 +71,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
   // Approved Creative Director images and videos, served from the Hub under each asset's public token (only while it is approved or live), so Meta and
   // LinkedIn can fetch them. Without the Creative Director, or without an https public origin, nothing changes.
   const assetOrigin = /^https:\/\//i.test(publicOrigin ?? '') ? publicOrigin.replace(/\/+$/, '') : null;
-  const imagePlacements = { meta: ['meta.feed_square', 'meta.feed_portrait'], linkedin: ['linkedin.single_image', 'linkedin.square'] };
+  const imagePlacements = adImagePlacements;
   const videosOn = typeof store.socialVideoStage === 'function';
   // 16:9 comes only from the owner's own finished videos (Creative → Add a finished video); Instagram takes Reels, so vertical only.
   const videoPlacements = { facebook: ['meta.video_square', 'meta.video_portrait', 'meta.video_vertical', 'meta.video_landscape'], instagram: ['meta.video_vertical'],
@@ -163,7 +164,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     for (const product of offered) for (const platform of ['meta', 'linkedin']) creativeImages[`${product}:${platform}`] = await approvedImages(product, platform, true);
     const anyMetaCreative = offered.some(product => creativeImages[`${product}:meta`].some(asset => asset.kind === 'static' || videoPlacements.instagram.includes(asset.placement)));
     const counts = { facebook: meta.configured.pages ? weekly.facebook : 0, instagram: meta.configured.instagram && (images().length || anyMetaCreative) ? weekly.instagram : 0, linkedin: weekly.linkedin,
-      // Settings → Social media → Write posts for my LinkedIn profile: the founder's own posts, each approved by the owner (never automatically).
+      // Settings → Social media → Write posts for my LinkedIn profile: the founder's own posts, each approved by the owner until the owner hands
+      // founder posts over on the AI team page (then the database approves them on its own and they publish at their slot).
       ...(settings.founderPosts === true && settings.founderPostsPerWeek > 0 ? { founder: Math.min(settings.founderPostsPerWeek, 5) } : {}) };
     let posts = [];
     let performance = metaPosts() || li.configured.page ? 'read' : 'not_connected';
@@ -193,6 +195,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const rejected = {};
     const linkedin = [];
     const founder = [];
+    // Founder posts handed over (the owner's "Founder posts" step): they publish at their slot without waiting. Wording only; the database decides.
+    const founderOnItsOwn = trustedWith(task.agent, 'social.founder_post');
     let proposed = 0, dataPosts = 0, founderPosts = 0;
     for (const draft of result.output.posts ?? []) {
       signal?.throwIfAborted();
@@ -212,7 +216,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
         const founderTarget = `founder:${week}:${founderPosts}`;
         if (targets.has(`social.founder_post:${founderTarget}`)) continue;
         const founderProposal = await propose(task, { kind: 'social.founder_post', targetKind: 'social_item', targetId: founderTarget,
-          preview: `Post for your own LinkedIn profile (${productNames[draft.product]}), to publish ${when(founderSlot)} once you approve it:\n\n${founderChecked.text}`,
+          preview: `Post for your own LinkedIn profile (${productNames[draft.product]}), to publish ${when(founderSlot)} ${founderOnItsOwn ? 'on its own (you handed founder posts over)' : 'once you approve it'}:\n\n${founderChecked.text}`,
           input: { product: draft.product, pillar: draft.pillar, message: founderChecked.text, scheduledFor: founderSlot } });
         if (!founderProposal) break;
         if (founderProposal.created !== false) { await store.socialSchedule(founderProposal.id, null); proposed += 1; }
@@ -290,7 +294,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       { type: 'paragraph', text: proposed ? 'Approve each post in the AI team. An approved post waits for its time slot.' : 'No post is waiting: the accounts are not connected, or no draft passed the checks.' },
       ...(performance === 'read' ? [] : [{ type: 'paragraph', text: performance === 'not_connected' ? 'No social account is connected, so this plan could not learn from past posts.' : `Some past posts could not be read (${performance.replaceAll('_', ' ')}).` }]),
       ...linkedin.flatMap((post, index) => [{ type: 'paragraph', text: `LinkedIn post ${index + 1} (${productNames[post.product]}, ${post.pillar})` }, { type: 'message', text: post.text }]),
-      ...(founder.length ? [{ type: 'paragraph', text: 'Posts for your own LinkedIn profile, to copy and post yourself (save your personal LinkedIn token on the connection card and they wait for your approval instead):' }] : []),
+      ...(founder.length ? [{ type: 'paragraph', text: `Posts for your own LinkedIn profile, to copy and post yourself (save your personal LinkedIn token on the connection card and they ${founderOnItsOwn ? 'publish at their time slots on their own instead' : 'wait for your approval instead'}):` }] : []),
       ...founder.flatMap((post, index) => [{ type: 'paragraph', text: `Your post ${index + 1} (${productNames[post.product]})` }, { type: 'message', text: post.text }]),
       ...(/^https:\/\//i.test(publicOrigin ?? '') && proposed ? [{ type: 'button', label: 'Open the AI team', url: `${publicOrigin.replace(/\/+$/, '')}/admin/team` }] : []),
     ];
@@ -525,12 +529,10 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const adset = overview.adsets.find(item => item.id === rec.adsetId);
     const linkedinAd = source.platform === 'linkedin';
     for (const asset of assets) {
-      // Each platform's own lengths: LinkedIn creative is written longer than a Meta headline allows.
-      const parts = [checkSocialText(asset.primaryText, { surface: 'ad_message', product }), checkSocialText(asset.headline, { surface: linkedinAd ? 'ad_linkedin_headline' : 'ad_headline', product }),
-        checkSocialText(asset.description || asset.headline, { surface: linkedinAd ? 'ad_linkedin_description' : 'ad_description', product })];
-      if (parts.some(part => !part.ok) || parts[0].text.length < 60 || !/^https:\/\//.test(asset.landingUrl ?? '') || !checkSocialText(`Start here: ${asset.landingUrl}`, { surface: 'facebook', product }).ok) continue;
-      const [message, headline, description] = parts.map(part => part.text);
-      const callToAction = /\b(?:trial|sign ?up|start)\b/i.test(asset.cta ?? '') ? 'SIGN_UP' : 'LEARN_MORE';
+      // Each platform's own lengths: LinkedIn creative is written longer than a Meta headline allows (content.mjs adCopyFromCreative).
+      const copy = adCopyFromCreative(asset, { product, linkedin: linkedinAd });
+      if (!copy) continue;
+      const { message, headline, description, callToAction } = copy;
       const name = `${adset?.name ?? 'Ad set'} · creative ${asset.id.slice(0, 8)} · ${today}`;
       const proposal = await store.proposeAction({ taskId: task.id, kind: 'social.ad_create', targetKind: 'social_adset', targetId: `${source.key(rec.adsetId)}:${today}:c`,
         preview: `New ${source.name} ad for "${adset?.name ?? rec.adsetId}" (${rec.reason}) from approved creative ${asset.id}. It runs inside the ${linkedinAd ? 'campaign' : 'ad set'}'s existing budget.\n\n${linkedinAd ? 'Post text' : 'Primary text'}: ${message}\nHeadline: ${headline}\nDescription: ${description}\n${linkedinAd ? '' : `Button: ${callToAction === 'SIGN_UP' ? 'Sign up' : 'Learn more'}\n`}Link: ${asset.landingUrl}\nImage: ${asset.url}`.slice(0, 6000),

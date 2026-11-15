@@ -30,6 +30,10 @@ describe("AI team display", () => {
     expect(taskLabel("growth.evaluate")).toBe("Check the outreach guardrails");
     expect(stepHelpText("cold_email")).toMatch(/role address on the business's own website.*at most 10 a day unless you change "Most cold emails a day" in Settings, each business once, never a text/);
     expect(stepHelpText("sales_followups")).toMatch(/unsubscribe link/);
+    expect(stepHelpText("named_contacts")).toMatch(/publishes the address or its mail server confirms it.*never kept.*imported lists still wait for you/);
+    expect(stepHelpText("learning_memo")).toMatch(/as if you had chosen "Use this memo"/);
+    expect(stepHelpText("ad_campaigns")).toMatch(/creative you already approved.*"Most to spend on new campaigns a month" and "Most any ad may spend per day".*ends with its month/);
+    expect(stepHelpText("founder_posts")).toMatch(/Without your personal LinkedIn token they are still emailed/);
     expect(stepHelpText("something_new")).toBe("");
   });
 

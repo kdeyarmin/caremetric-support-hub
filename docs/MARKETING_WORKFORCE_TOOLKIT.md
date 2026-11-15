@@ -102,3 +102,11 @@ prospect research with web search (`prospect_deep_research`), posts for your own
 images (`county_snapshots`), new paid campaigns (`paid_campaigns`) and leads reported to the ad platforms (`ad_conversions`). Each
 row names the setting or secret still missing. The morning brief's watchdog quotes the first missing step when an agent goes quiet.
 What each does and the order to turn them on: [AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md).
+
+## Added 2026-11-15
+
+Four autonomy steps, all shipped held, let the owner stop approving named people's email addresses, the learning memo, the monthly ad
+campaigns and the posts for his own LinkedIn profile (see [Four more hand-overs](AI_TEAM.md#four-more-hand-overs-owner-decision-2026-11-15)).
+With **Ad campaign launch** automatic, the team does create and start the month's campaigns, with their first ad from approved
+creative and within the owner's monthly number ([Social media](SOCIAL_MEDIA.md#new-campaigns-launched-on-their-own-2026-11-15)); until then a
+new campaign starts paused with no ads, as step 3 above describes.

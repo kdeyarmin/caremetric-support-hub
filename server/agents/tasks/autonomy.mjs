@@ -23,6 +23,10 @@ export const autonomyWords = Object.freeze({
   offers: 'the Account Manager makes offers from your menu without asking you, within the menu\'s caps.',
   sales_followups: 'the Marketing Manager sends its follow-ups and replies to people who contacted CareMetric or that you added without asking you, within each product\'s daily limit and touch cap.',
   cold_email: 'the Marketing Manager sends first emails to businesses found online without asking you: only to the public role address on the business\'s own website, at most 10 a day unless you change "Most cold emails a day" in Settings, each business once, never a text, each with an unsubscribe link and your postal address.',
+  named_contacts: 'the Marketing Manager permits the work address of a prospect\'s decision-maker for outreach without your review when the agency publishes it or its mail server confirms it. Guesses nothing confirmed are never kept, imported lists still wait for you, and unsubscribes and opt-outs still win.',
+  learning_memo: 'the Marketing Manager uses its Monday memo for new outreach drafts as soon as it is written, as if you had chosen "Use this memo".',
+  ad_campaigns: 'the Social Media Manager starts the monthly campaigns without asking you, each LinkedIn or Meta one with its first ad from creative you already approved, all within your monthly number and daily ad-set limit, each ending with its month.',
+  founder_posts: 'the Social Media Manager publishes the posts for your personal LinkedIn profile at their time slots without asking you, once they pass the fact-sheet checks.',
 });
 const words = step => autonomyWords[step.category] ?? `${step.label.toLowerCase()} run without asking you.`;
 const undo = 'To keep approving each one yourself, choose Keep approving next to it on';

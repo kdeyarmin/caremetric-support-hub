@@ -31,6 +31,13 @@ publishes and, if the owner allows it, asks the agency's mail server which of th
 | Paid ads | Once a month per product: a LinkedIn campaign (draft), a Meta retargeting campaign (paused) and a Google search campaign (paused, or emailed as a Google Ads Editor file until the API is set up). A new LinkedIn or Meta campaign starts with no ads: you add its first ad in the platform's ad manager, from your approved creative, and the daily ad review proposes more once one is running. Leads from a Meta or LinkedIn ad click can be reported back to that platform by a hashed work email. Growth's roster panel downloads the LinkedIn company-list file | Paid ads → Most to spend on new campaigns a month, Report leads to the ad platforms |
 | The team itself | Tasks run side by side (a slow one no longer stalls the rest); the morning brief and Monday scorecard name quiet agents, failing or stuck work and a stalled funnel stage, with the likely cause; a step is handed over only with at least ten of your decisions and at most a fifth turned down | AI team → Tasks at once, Days before an idle agent is flagged |
 
+**Update 2026-11-15.** Four of the approvals above can now be handed over, each by its own autonomy step on the AI team page, all
+shipped held ([AI_TEAM.md](AI_TEAM.md#four-more-hand-overs-owner-decision-2026-11-15)): **Named people's email addresses** (a
+published or mail-server-confirmed address is permitted without review), **Learning memo** (used as soon as it is written), **Ad
+campaign launch** (the monthly campaigns start live, LinkedIn and Meta with their first ad from approved creative, together within
+"Most to spend on new campaigns a month", each ending with its month; see
+[SOCIAL_MEDIA.md](SOCIAL_MEDIA.md#new-campaigns-launched-on-their-own-2026-11-15)) and **Founder posts** (published at their time slots).
+
 Intel's side: the marketing feed gained `include` details on the roster, `agency_facts`, `releases`, `observances` and a short source
 line per county figure; public website sessions record the outreach email tag they came from; lead forms keep ad click IDs (Intel
 `docs/HUB_MARKETING_FEED.md`, `docs/WEBSITE_SESSION_METRICS.md`).

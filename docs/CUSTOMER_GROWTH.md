@@ -241,6 +241,16 @@ and list imports (`growth.people`), research with web search (`growth.research`)
 [AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md). Every draft records the experiment arms it was written under
 (`growth_messages.arms`, short codes only) and the memo version it used (`memo_version`), and links carry the arms in `utm_content`.
 
+### The learning memo without "Use this memo" (2026-11-15)
+
+Each Monday's memo used to wait for the owner to choose "Use this memo" on Growth. The autonomy step **Learning memo**
+(`learning_memo`, AI team page; it ships held, see [Four more hand-overs](AI_TEAM.md#four-more-hand-overs-owner-decision-2026-11-15))
+hands that choice over: while it is automatic, a new memo is used at once (`private.growth_learning_propose`), the product's earlier
+memo retires, and the audit row is the one the owner's choice writes (`growth.memo_activated`, with approval `automatic`). A memo
+the same as one still waiting is used rather than written again. The memo is still written by code from the team's own counts and the
+owner's notes, only while Settings → Customer growth → "Write from what is working" is on, and the Growth screen still shows each one
+with its status ("In use", "Replaced").
+
 ## Each agency's own market report
 
 Owner decision 2026-11-15: every agency the team writes to gets a free market report of its own. Intel draws the report from public CMS
@@ -277,9 +287,8 @@ The email may hold three questions and two links, in up to 170 words. "Risk-free
 (`https://www.caremetricintel.com/market-review`, `intel-market-review`) in place of its own link: any agency gets its full report
 there by entering its CCN. Later touches follow the sequence plan, and the second may point to the report again. The writer never
 states a figure from the report: the reader opens it to see them. CareMetric's own agency (`ownAgencies` in `roster.mjs`) is never a
-prospect. The link check accepts that one report link for that
-one draft, and no other agency's. A prospect found only on the web, with no roster record, gets no report link, and its emails are
-as before. The report's trial link carries `utm_content=agency-report`, so the Monday scorecard counts the visits it brings.
+prospect. The link check accepts that one report link for that one draft, and no other agency's. The report's trial link carries
+`utm_content=agency-report`, so the Monday scorecard counts the visits it brings.
 
 ## Finding decision-makers and their addresses
 
@@ -304,6 +313,15 @@ owner decision 2026-11-13, replacing Apollo). It needs no paid service and no ke
 - **Every address waits for you** on Growth → Decision-makers to review, which shows how it was found (with the page that publishes
   it) and nothing is sent to it until you permit it. Never a personal address on another domain, never a phone number, never an
   unsubscribed address.
+- **Unless you hand it over.** The owner decided on 2026-11-15 to stop reviewing these one by one: the autonomy step **Named
+  people's email addresses** (`named_contacts`, AI team page; it ships held, see
+  [Four more hand-overs](AI_TEAM.md#four-more-hand-overs-owner-decision-2026-11-15)). While it is automatic, an address the agency
+  publishes on its own site, or that its mail server confirmed, is permitted for outreach on its own and becomes the contact of the
+  business's opportunities that were never emailed, exactly as **Permit** does, audited as `growth.person_permitted` with approval
+  `automatic` (`private.growth_person_address`). What stays the same: a guess nothing confirmed is never kept at all; a list you
+  import still waits for you; an unsubscribed address is refused; and an address still waits for you when a contact at the business
+  opted out, or the business said "not interested" or "not now". Emailing the person is still cold email: it waits for you unless
+  **Cold email** is handed over too, and always counts against "Most cold emails a day".
 
 Checking needs outbound connections to mail servers (port 25), which Railway allows on its Pro plan only. Elsewhere the check finds
 every server unreachable, rests for six hours, and the AI team page's "Named decision-makers" row and the Growth screen say so;

@@ -245,4 +245,26 @@ describe('the founder\'s own posts', () => {
     const unconnected = socialExecutors({ meta: metaOf(), linkedin: linkedinOf(), settings: {}, now, log: () => {} });
     await expect(unconnected['social.founder_post'](action())).rejects.toMatchObject({ code: 'linkedin_not_configured' });
   });
+
+  it('publishes one approved automatically only while the owner has handed founder posts over, checked just before it goes', async () => {
+    const linkedin = linkedinOf({ configured: { page: true, ads: true, member: true }, publishMemberPost: vi.fn(async () => ({ id: 'urn:li:share:7300000000000000002' })) });
+    const action = over => ({ id: 'a2', kind: 'social.founder_post', input, agentKey: 'social_manager', targetId: 'founder:2026-11-09:2', autoApproved: true, execution: 4, ...over });
+    // The database has the hand-over and still trusts the Social Media Manager with founder posts: it publishes, at its slot, the checked words.
+    const trusted = { actionTrusted: vi.fn(async () => true) };
+    const handedOver = socialExecutors({ meta: metaOf(), linkedin, settings: {}, now, log: () => {}, store: trusted, handover: true });
+    expect(await handedOver['social.founder_post'](action())).toEqual({ published: true, id: 'urn:li:share:7300000000000000002', founder: true });
+    expect(trusted.actionTrusted).toHaveBeenCalledWith('a2', 4);
+    await expect(handedOver['social.founder_post'](action({ input: { ...input, scheduledFor: '2026-11-11T12:50:00Z' } }))).rejects.toMatchObject({ code: 'action_deferred' });
+    await expect(handedOver['social.founder_post'](action({ input: { ...input, message: 'Book a call with me today.' } }))).rejects.toMatchObject({ code: 'invalid_post' });
+    // Held again (or paused, or off Act) since it was approved: it waits for the owner instead of publishing.
+    const held = socialExecutors({ meta: metaOf(), linkedin, settings: {}, now, log: () => {}, store: { actionTrusted: vi.fn(async () => false) }, handover: true });
+    await expect(held['social.founder_post'](action())).rejects.toMatchObject({ code: 'approval_required' });
+    // Without the hand-over in the database, or without a way to check it, nothing approved automatically is published.
+    await expect(socialExecutors({ meta: metaOf(), linkedin, settings: {}, now, log: () => {}, store: trusted })['social.founder_post'](action())).rejects.toMatchObject({ code: 'approval_required' });
+    await expect(socialExecutors({ meta: metaOf(), linkedin, settings: {}, now, log: () => {}, handover: true })['social.founder_post'](action())).rejects.toMatchObject({ code: 'approval_required' });
+    expect(linkedin.publishMemberPost).toHaveBeenCalledTimes(1);
+    // Without the founder's personal token it is not published at all (the weekly plan emails such posts to copy instead).
+    const unconnected = socialExecutors({ meta: metaOf(), linkedin: linkedinOf(), settings: {}, now, log: () => {}, store: trusted, handover: true });
+    await expect(unconnected['social.founder_post'](action())).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+  });
 });
