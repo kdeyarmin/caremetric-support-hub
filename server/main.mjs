@@ -33,6 +33,7 @@ import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
 import { intelFeedReader } from './growth/intel-feed.mjs';
+import { reportLinks } from './growth/report-link.mjs';
 import { npiRegistry } from './growth/npi-registry.mjs';
 import { mailboxChecker } from './growth/mailbox.mjs';
 import { growthSender } from './growth/sender.mjs';
@@ -104,7 +105,9 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   // Deeper research with web tools (Settings → Customer growth → Research prospects with web search).
   deepResearch:{enabled:setting('growth.deep_research'),perDay:setting('growth.deep_research_per_day'),cents:setting('growth.deep_research_cents')},
   // The weekly "what is working" memo, used in drafts once the owner approves it (Settings → Customer growth → Write from what is working).
-  learning:{enabled:setting('growth.learning_memo')},importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
+  learning:{enabled:setting('growth.learning_memo')},
+  // Each Medicare roster agency's free market report on Intel, linked in its outreach (growth/report-link.mjs; the feed's shared secret).
+  reports:reportLinks({key:process.env.HUB_INTEL_FEED_SECRET}),importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
   sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});
 // Cold email and sales follow-ups may come from their own address (Settings → Email → Growth email sender, normally on a subdomain), so
 // prospecting can never hurt the support address's reputation. Replies still go to the support inbox. Unset: the support sender.

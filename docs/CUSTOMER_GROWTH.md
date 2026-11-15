@@ -241,6 +241,30 @@ and list imports (`growth.people`), research with web search (`growth.research`)
 [AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md). Every draft records the experiment arms it was written under
 (`growth_messages.arms`, short codes only) and the memo version it used (`memo_version`), and links carry the arms in `utm_content`.
 
+## Each agency's own market report
+
+Owner decision 2026-11-15: every agency the team writes to gets a free market report of its own. Intel draws the report from public CMS
+and Census data, with nothing about any patient:
+
+- the agency's Medicare patients, and its share and rank among the agencies located in its county and its state;
+- the county's largest agencies, with the agency highlighted among them;
+- the county's demand: beneficiaries, residents aged 65 and over and their growth since 2020, and home health or hospice use;
+- the hospitals the county's residents use, and the physicians Intel ranks highest as referral sources;
+- the agency's public CMS ratings;
+- three moves the figures point to, and the trial with its true terms (a credit card is required to start, and canceling before the
+  trial ends avoids any charge).
+
+The link is `https://www.caremetricintel.com/report/<token>`. The Hub signs it (`server/growth/report-link.mjs`) for each CareMetric
+Intel prospect whose evidence carries its Medicare roster record, which holds the agency's CCN. The key comes from the marketing feed's
+shared secret (`HUB_INTEL_FEED_SECRET`), under a label of its own. Intel verifies the link and serves the PDF (Intel
+`server/routes/agencyReport.ts`; protocol in Intel's `docs/HUB_MARKETING_FEED.md`, "Agency report links"). A link lives 150 days. It
+names the agency, never a person, and carries the opportunity's id as its reference.
+
+In the first touch, the report link is the next step in place of the trial. The second touch may point to it again. The writer never
+states a figure from the report: the reader opens it to see them (`growth.10`). The link check accepts that one report link for that
+one draft, and no other agency's. A prospect found only on the web, with no roster record, gets no report link, and its emails are
+as before. The report's trial link carries `utm_content=agency-report`, so the Monday scorecard counts the visits it brings.
+
 ## Finding decision-makers and their addresses
 
 The Hub finds the people who decide at its best prospects itself (`growth.people`, every half hour, a few businesses at a time;
