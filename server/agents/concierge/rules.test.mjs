@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { categorize, ownWords, withoutTrialPhrase } from './rules.mjs';
+import { intelReviewedFacts, trialCardTerms } from '../content/facts.mjs';
+import { salesPlaybook, reportTouchAngle, reviewTouchAngle } from '../../growth/playbook.mjs';
 
 const category = (text, subject = null) => categorize({ text, subject }).category;
 
@@ -169,6 +171,41 @@ describe('a reply with the original email quoted under it', () => {
       expect(withoutTrialPhrase(adjacent)).toContain(request);
       expect(category(adjacent)).toBe('billing');
       expect(category(`I am out of the office. ${adjacent}`)).toBe('billing');
+    }
+  });
+  it('recognizes every current playbook and fact-sheet disclosure in an unmarked reply', () => {
+    const book = salesPlaybook['caremetric-intel'];
+    const disclosures = [
+      ...book.valuePoints,
+      ...book.objections.map(objection => objection.answer),
+      ...intelReviewedFacts.offers,
+      trialCardTerms,
+      reportTouchAngle,
+      reviewTouchAngle,
+      // docs/INTEL_MARKETING_PLAYBOOK.md trial terms and the site wording cited in docs/GTM_FACTS.md.
+      '30-day free trial, one county, 3 marketer seats and 1 manager seat. A credit card is required to start it, and the plan chosen at sign-up bills automatically when it ends unless canceled first.',
+      'Credit card required · Cancel before trial end to avoid charges',
+    ].filter(disclosure => /credit card/i.test(disclosure));
+    expect(disclosures.length).toBeGreaterThanOrEqual(9);
+    const request = 'Please change the credit card for my trial.';
+    for (const disclosure of disclosures) {
+      expect(withoutTrialPhrase(disclosure), disclosure).not.toMatch(/credit card/i);
+      expect(category(`Tell me more about the free trial.\n\n-----Original Message-----\n${disclosure}`), disclosure).toBe('sales');
+      for (const text of [`${request}\n${disclosure}`, `${disclosure}\n${request}`, `${disclosure}; ${request}`, `I am out of the office. ${request}\n${disclosure}`])
+        expect(category(text), text).toBe('billing');
+      expect(category(disclosure, request)).toBe('billing');
+    }
+  });
+  it('does not treat card-management wording inside a trial clause as a disclosure', () => {
+    for (const text of [
+      'A free trial (please update my credit card).',
+      'A free trial on one county (change the credit card required for it).',
+      'A free trial on one county, my credit card is required to be updated.',
+      'My free trial has ended. A credit card is required to start it again; please change mine.',
+      'Please change the credit card required to start the trial.',
+    ]) {
+      expect(withoutTrialPhrase(text)).toBe(text);
+      expect(category(text)).toBe('billing');
     }
   });
   it('preserves urgent priority and machine labels for trial card requests', () => {
