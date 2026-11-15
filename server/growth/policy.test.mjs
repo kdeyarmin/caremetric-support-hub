@@ -21,6 +21,11 @@ describe('growth lifecycle decisions',()=>{
   for(const kind of ['reply','not_now','negative_reply','positive_reply','meeting_booked','trial_started'])expect(planOpportunity({...prospect,events:[{kind,occurred_at:days(0)}]},now)).toEqual([]);
   expect(planOpportunity({...prospect,touches:3},now)).toEqual([]);
  });
+ it('plans no more outreach once anyone at the organization opted out or complained (20261115230000_growth_colleagues.sql)',()=>{
+  const prospect={...base,stage:'contacted',owner_agent:'marketing_manager',touches:1};
+  expect(planOpportunity({...prospect,outreach_stopped:false},now).map(t=>t.kind)).toEqual(['outreach']);
+  expect(planOpportunity({...prospect,outreach_stopped:true},now)).toEqual([]);
+ });
  it('never upsells while support or cancellation is unresolved',()=>{
   const o={...base,stage:'paying',activated_at:days(-5),events:[{kind:'active',occurred_at:days(0)},{kind:'expansion_interest',occurred_at:days(0)},{kind:'support_blocked',occurred_at:days(-1)}]};
   expect(planOpportunity(o,now).map(t=>t.kind)).toEqual(['support']);

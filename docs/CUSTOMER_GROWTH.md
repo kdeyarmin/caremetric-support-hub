@@ -84,8 +84,10 @@ the owner, model-written or not.
   `growth.evaluate` task records one for each product every morning at 06:40 Eastern and warns the owner if it fails.
 - **Cold email caps.** A cap on cold emails per Eastern day across both products, however each was approved: ten, unless you set
   Settings → Customer growth → "Most cold emails a day" (1 to 100; `20261112120000_growth_cold_email_cap.sql`). Follow-up touches
-  count toward it, and each product's own daily limit on the Growth page still applies beneath it. One business is
-  contacted once (one contact, one opportunity, up to the policy's touch cap); a customer's organization is never cold-emailed;
+  count toward it, and so does every copy of a touch to another decision-maker at the business; each product's own daily limit on
+  the Growth page still applies beneath it. One business is contacted once (one opportunity and one sequence, up to the policy's
+  touch cap, to its contact and to the other decision-makers there you permitted, see
+  [Several decision-makers at one organization](#several-decision-makers-at-one-organization)); a customer's organization is never cold-emailed;
   cold email never rides the product policy's template autonomy. Every email carries the unsubscribe link and the postal
   address, and the existing per-contact gap, suppression list, touch cap and per-product daily limit still apply.
 - **Product policies** no longer overwrite the agents' lists: turning template sending on adds `growth.message`, turning it off
@@ -326,6 +328,44 @@ owner decision 2026-11-13, replacing Apollo). It needs no paid service and no ke
 Checking needs outbound connections to mail servers (port 25), which Railway allows on its Pro plan only. Elsewhere the check finds
 every server unreachable, rests for six hours, and the AI team page's "Named decision-makers" row and the Growth screen say so;
 choose "Addresses businesses publish on their own websites" to stop trying.
+
+## Several decision-makers at one organization
+
+Owner decision 2026-11-15: the Marketing Manager's cold outreach reaches several decision-makers at the same agency (owner,
+administrator, managers and marketing leaders), not one inbox. Each touch to an organization goes to its contact and, as separate
+emails, to the other decision-makers there, up to Settings → Customer growth → "Most people to email at one organization" (1 to 5;
+three until you save a number, the contact included; 1 turns it off) (`20261115230000_growth_colleagues.sql`, gate
+`20261115230100_growth_colleagues_contract.sql`, feature `platform.agents.growth-colleagues.v1`).
+
+- **Separate emails, never CC or BCC.** Each person gets the touch's approved subject and words, the same draft and so the same agency
+  report link (it is signed per opportunity), with their own greeting by name, their own opt-out link and their own checks when the
+  email is claimed. Nothing new is written by the model: each copy is a message of its own (`growth_messages.primary_message_id` names
+  the touch it copies) and goes through every step a message goes through.
+- **Who.** People at the same organization other than its contact, permitted by you and verified within 90 days, not unsubscribed,
+  with a name or a role: a decision-maker the Hub found (Decision-makers to review) or one on a list you imported. Never a generic
+  mailbox (info@, office@, intake@ and the like are only ever a business's contact), and never a person who wrote in or that you typed
+  in as a contact: those are sales follow-ups, not cold email. Best first: owner (or founder, president, CEO), administrator (or
+  executive director), business development or marketing, then other managers and directors.
+- **One sequence per organization.** Touches are still counted on the opportunity: three emails to three people are one touch, and
+  the touch cap, the re-ask and the "what is working" counts read touches. Touch 1 goes to the people chosen when it is sent; touch 2
+  and every later touch (a re-ask included) go only to the people who received the touch before, so nobody joins a sequence half way.
+  The touch's next step and its due date come from the contact's email only. Colleagues get the same touch the same day, a little
+  after the contact: the next fifteen-minute sweep records and proposes each one.
+- **Every one counts.** Each copy counts toward "Most cold emails a day" and the product's daily limit, waits the policy's minimum gap
+  (72 hours by default) between emails to its own address, and is approved exactly as the contact's email is: on its own while the Cold email step is
+  handed over (the agent active, on Act, the daily guardrail check passed), otherwise by you in Team, where the proposal says
+  "Also to <name> (<role>)". Lowering the number holds back copies not yet sent.
+- **Stop rules cover the whole organization.** A reply from anyone there stops everyone's emails (the reply reading already counts
+  another mailbox at the business). An opt-out or a spam complaint from anyone there cancels every unsent email to everyone at the
+  organization and stops its cold outreach for good; the person who opted out is suppressed as before. A hard bounce of the
+  contact's address stops everyone there, as it stopped the sequence before; a colleague whose address bounces is opted out (a hard
+  bounce) or simply dropped from later touches (a soft one), and the others go on.
+- **On the Growth screen** each touch in an opportunity's message history says how many people it went to and lists each with the
+  state of their own email; a copy whose delivery is unconfirmed is reconciled on its own.
+
+The people finder still looks for one address per business (the person whose title decides most), before its first email. The
+others come from lists you import, each waiting for you on Decision-makers to review like any found address. Permit them before the
+business's first email: a person permitted later joins no sequence already under way.
 
 ## Canonical Intel activity and verified billing conversions
 

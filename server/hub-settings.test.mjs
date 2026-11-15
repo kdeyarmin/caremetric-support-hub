@@ -43,6 +43,16 @@ describe('the settings catalog', () => {
   });
 });
 
+describe('the number of people to email at one organization (20261115230000_growth_colleagues.sql)', () => {
+  it('is a setting from the start, 1 to 5, three until the owner saves one', () => {
+    const people = entry('growth.people_per_organization');
+    expect([people.group, people.kind, people.input, people.default, people.env]).toEqual(['growth', 'number', 'number', 3, null]);
+    expect([0, 1, 3, 5, 6, 2.5, '3'].map(value => people.valid(value))).toEqual([false, true, true, true, false, false, false]);
+    expect(people.label).toBe('Most people to email at one organization');
+    expect(people.help).toMatch(/as its own email.*Most cold emails a day/);
+  });
+});
+
 describe('reading the old Railway variables', () => {
   it('reads each variable exactly as the server did before settings', () => {
     expect(settingFromEnv(entry('support.chat'), { HUB_CHAT_ENABLED: 'true' })).toBe(true);

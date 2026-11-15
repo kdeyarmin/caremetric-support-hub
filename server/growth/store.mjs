@@ -18,6 +18,9 @@ export function growthStore(pool) {
     autoQualify:limit=>server('private.growth_auto_qualify',[limit]),
     // One re-ask after not now or a silent sequence (20261113172000_growth_reengage.sql).
     reengage:limit=>server('private.growth_reengage',[limit]),
+    // Each cold touch also to the organization's other decision-makers (20261115230000_growth_colleagues.sql).
+    colleagueCandidates:limit=>server('private.growth_colleague_candidates',[limit]),
+    colleagueDraft:(primaryId,contactId,unsubscribeHash)=>server('private.growth_colleague_draft',[primaryId,contactId,unsubscribeHash]),
     manage:(token,operation,data)=>withSession(pool,token,db=>run(db,'hub.growth_manage',[operation,data])),
     snapshot:(offset=0)=>server('private.growth_snapshot',[offset]),
     event:(product,data)=>server('private.growth_record_event',[product,data]),

@@ -32,6 +32,15 @@ async function pipelineItems(growth,signal) {
 export const growthAutonomyFeature='platform.agents.growth-autonomy.v1';
 /** One re-ask and the experiment arms (20261113172000_growth_reengage.sql). */
 export const growthReengageFeature='platform.agents.growth-reengage.v1';
+/** Each cold touch also to the other decision-makers at the organization (20261115230000_growth_colleagues.sql). */
+export const growthColleaguesFeature='platform.agents.growth-colleagues.v1';
+// Colleague emails recorded and proposed on one sweep at most: a few touches' worth, so a sweep never spends its time on them.
+export const colleagueLimit=20;
+/**
+ * What a colleague's own opt-out link is signed for: its touch's work and its person, so each person's link is their own and stays the
+ * same across retries. The claim returns the same text as `unsubscribeKey` (a primary contact's is the work alone, as before).
+ */
+export const colleagueUnsubscribeKey=(workId,contactId)=>`${workId}:${contactId}`;
 // Businesses the contact finder reads per discovery run (the most the database hands out at once), how many it reads at the same
 // time (each is a different business's website), how many more it reads on each fifteen-minute pipeline sweep so a day's
 // discoveries are all read the same day, and opportunities qualified per pass.
@@ -77,6 +86,8 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   if(!growth)return {};
   const autonomy=declared(features);
   const reengaging=features instanceof Set?features.has(growthReengageFeature):Array.isArray(features)&&features.includes(growthReengageFeature);
+  const colleagues=(features instanceof Set?features.has(growthColleaguesFeature):Array.isArray(features)&&features.includes(growthColleaguesFeature))
+    &&typeof growth.store.colleagueCandidates==='function';
   // The owner-approved learning memo (learning.mjs), while Settings → Customer growth → "Write from what is working" is on.
   const learning=(features instanceof Set?features.has(growthLearningFeature):Array.isArray(features)&&features.includes(growthLearningFeature))
     &&typeof growth.store.learningActive==='function';
@@ -111,6 +122,26 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           catch(error) {if(error?.code!=='22023')throw error;}
         }
       }
+    }
+    return counts;
+  }
+  /**
+   * The same touch to the other decision-makers at each organization a cold touch reached in the last 48 hours: the database chooses
+   * them (permitted named people there, best role first, within Settings → Customer growth → Most people to email at one organization,
+   * and after touch 1 only those who received the touch before) and records each as its own email, a copy of the touch's approved words.
+   * Each is proposed like any message, so the cold-email hand-over decides whether it waits for the owner, and the send claim checks
+   * each person again. Only counts are returned: never an address.
+   */
+  async function prepareColleagues(task,marketedList,{signal}) {
+    const counts={proposed:0,skipped:0};
+    for(const item of await growth.store.colleagueCandidates(colleagueLimit)) {
+      signal?.throwIfAborted();
+      if(!markets(marketedList,item.product)){counts.skipped++;continue;}
+      let saved;
+      try {saved=await growth.store.colleagueDraft(item.primaryId,item.contactId,growth.hash(growth.unsubscribeToken(colleagueUnsubscribeKey(item.workId,item.contactId))));}
+      catch(error) {if(error?.code!=='22023'&&error?.code!=='40001')throw error; counts.skipped++; continue;}
+      if(saved?.id&&saved.status==='draft'&&!saved.actionId){await growth.store.propose(task.id,saved.id);counts.proposed++;}
+      else counts.skipped++;
     }
     return counts;
   }
@@ -187,12 +218,15 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
         }
       }
     }
+    // The touches sent since the last sweep go to the organization's other decision-makers too.
+    let colleagueEmails=0;
+    if(prospecting&&colleagues&&growth.signingReady&&!spent())colleagueEmails=(await prepareColleagues(task,marketedList,{signal})).proposed;
     // A few more discovered businesses' websites are read on every sweep, so a day's discoveries all get a contact search and a home
     // page summary the same day. No search provider is called here: only the business's own site is read.
     let contacts=null;
     if(prospecting&&growth.contacts?.configured&&typeof growth.store.contactCandidates==='function'&&!spent())contacts=await findContacts(sweepContactLimit,productsByDomain,{signal,spent});
     if(planned && notifier)await notifier.send({severity:'info',subject:'Customer growth work is ready',body:`${planned} follow-up tasks reviewed; ${drafted} message drafts prepared. Open Growth to review next actions.`,dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
-    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(reengaged?{reengaged}:{}),...(contacts?.searched?{contacts}:{})}};
+    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(reengaged?{reengaged}:{}),...(colleagueEmails?{colleagues:colleagueEmails}:{}),...(contacts?.searched?{contacts}:{})}};
   }
   async function discover(task,{signal,now=()=>new Date()}={}) {
     if(!growth.research?.configured)return {result:{skipped:'research_not_configured'}};
@@ -404,8 +438,8 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {
       if(finalRefusals.has(claimed.status))throw Object.assign(new Error('The message was not sent.'),{code:claimed.status});
       return {delivery:claimed.status};
     }
-    // The work ID is read from the claim, so the exact link is stable across retries.
-    const token=growth.unsubscribeToken(claimed.workId);
+    // The work ID (with a colleague's own person, `unsubscribeKey`) is read from the claim, so the exact link is stable across retries.
+    const token=growth.unsubscribeToken(claimed.unsubscribeKey??claimed.workId);
     if(claimed.unsubscribeHash && growth.hash(token)!==claimed.unsubscribeHash){await growth.store.finish(claimed.id,'failed',null);throw Object.assign(new Error('Regenerate the message after signing configuration changed'),{code:'unsubscribe_key_changed'});}
     const link=`${publicOrigin.replace(/\/+$/,'')}${growthOptOutPath}${token}`;
     const email=growthEmail({product:claimed.product,purpose:claimed.purpose,subject:claimed.subject,body:claimed.body,postalAddress:live(postalAddress),unsubscribeUrl:link,

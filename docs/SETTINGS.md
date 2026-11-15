@@ -50,6 +50,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Text messages | Twilio sending number | `HUB_TWILIO_FROM_NUMBER` |
 | Customer growth | Send growth email | `HUB_GROWTH_SEND_ENABLED` |
 | Customer growth | Most cold emails a day | none: a setting from the start |
+| Customer growth | Most people to email at one organization | none: a setting from the start (three, the contact included, until you save a number; [Customer growth](CUSTOMER_GROWTH.md#several-decision-makers-at-one-organization)) |
 | Billing | Customers can buy subscriptions | `HUB_CUSTOMER_PURCHASING_ENABLED` |
 | Billing | Keep Stripe in step with Intel's prices | `HUB_APP_CATALOG_SYNC` (`off` meant switched off) |
 | Billing | Stripe customer portal configuration | `STRIPE_PORTAL_CONFIGURATION_ID` |
