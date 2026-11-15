@@ -68,6 +68,22 @@ describe('Intel marketing feed reader', () => {
     await expect(reader(huge).roster({ states: ['PA'] })).rejects.toMatchObject({ code: 'feed_response_too_large' });
   });
 
+  it('asks which CCN each web-found agency is, and reads the answer', async () => {
+    const candidates = [{ key: 'org-1', name: 'Valley Hospice', domain: 'valleyhospice.org', state: 'PA', city: 'Philadelphia', phones: ['2155550199'] },
+      { key: 'org-2', name: 'Somewhere Home Health', state: 'PA', phones: [] }];
+    const fetchImpl = answer({ contract: 'caremetric.marketing-feed.v1', action: 'agency_match', period: '2026Q3', source_line: 's', matches: [
+      { key: 'org-1', ccn: '391501', matched_by: 'phone', reason: null, agency: item('391501', { quality: null, volume: null }) },
+      { key: 'org-2', ccn: null, matched_by: null, reason: 'not_found', agency: null }] });
+    const result = await reader(fetchImpl).agencyMatch({ candidates });
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual({ action: 'agency_match', candidates });
+    expect(init.headers['X-CareMetric-Signature']).toBe(leadSignature(key, '1794225600', init.body));
+    expect(result.matches[0]).toMatchObject({ key: 'org-1', ccn: '391501', matched_by: 'phone', agency: { ccn: '391501', setting: 'hospice' } });
+    expect(result.matches[1]).toEqual({ key: 'org-2', ccn: null, matched_by: null, reason: 'not_found', agency: null });
+    await expect(reader(answer({ contract: 'caremetric.marketing-feed.v1', action: 'agency_match', period: '2026Q3', source_line: 's',
+      matches: [{ key: 'org-1', ccn: '391501', matched_by: 'guess', reason: null, agency: null }] })).agencyMatch({ candidates })).rejects.toMatchObject({ code: 'feed_response_invalid' });
+  });
+
   it('reads county figures', async () => {
     const fetchImpl = answer({ contract: 'caremetric.marketing-feed.v1', action: 'county_figures', source_line: 's', not_found: [],
       counties: [{ county_fips: '42003', county_name: 'Allegheny', state: 'PA', figures: [{ key: 'medicare_beneficiaries', label: 'Medicare beneficiaries',

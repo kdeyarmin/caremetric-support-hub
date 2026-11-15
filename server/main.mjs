@@ -96,7 +96,9 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
   chatEnabled:setting('support.chat')});
 // The Medicare roster from Intel's signed marketing feed (Settings → Customer growth; the shared secret HUB_INTEL_FEED_SECRET in Railway).
 const roster={feed:intelFeedReader({features,enabled:setting('growth.roster'),key:process.env.HUB_INTEL_FEED_SECRET}),
-  states:setting('growth.roster_states'),daily:setting('growth.roster_daily_resolutions')};
+  states:setting('growth.roster_states'),daily:setting('growth.roster_daily_resolutions'),
+  // Web-found prospects matched to their Medicare record each day, so each gets its own market report (growth/agency-match.mjs).
+  matchDaily:setting('growth.roster_match_daily')};
 // Decision-makers and their work addresses, found by the Hub itself: the NPI registry, the business's own website and, when the owner
 // chooses it, the business's own mail server (Settings → Customer growth → Finding people's addresses). No key: nothing to set in Railway.
 const people={mode:setting('growth.enrichment_provider'),registry:npiRegistry(),

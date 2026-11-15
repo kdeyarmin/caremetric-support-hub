@@ -40,6 +40,10 @@ export function growthStore(pool) {
     rosterNext:(limit,daily)=>server('private.growth_roster_next',[limit,daily]),
     rosterResolved:(ccn,data)=>server('private.growth_roster_resolved',[ccn,data]),
     roster:(token,offset=0)=>withSession(pool,token,db=>run(db,'hub.growth_roster',[offset])),
+    // Web-found prospects matched to their Medicare record (20261115233000_growth_roster_match.sql). node-pg sends the outcome object
+    // as JSON.
+    matchNext:(limit,daily)=>server('private.growth_roster_match_next',[limit,daily]),
+    matchRecord:(org,data)=>server('private.growth_roster_match_record',[org,data]),
     // The roster's agencies for LinkedIn's company list (20261113230000_ads_buildout.sql).
     rosterCompanies:token=>withSession(pool,token,db=>run(db,'hub.growth_roster_companies',[])),
     // Decision-makers and imported lists (20261113180000_growth_people.sql).

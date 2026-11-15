@@ -190,7 +190,7 @@ const taskLabels: Record<string, string> = {
   "growth.leads": "Look for new leads", "growth.followup": "Chase unanswered leads", "growth.weekly": "Weekly growth report",
   "accounts.lifecycle": "Customer emails", "autonomy.graduate": "Hand over work after its supervised week", "accounts.offers": "Offers from your menu",
   "growth.pipeline": "Review sales pipeline", "growth.success": "Review customer success", "growth.discovery": "Discover prospective organizations", "growth.content": "Propose product content",
-  "growth.evaluate": "Check the outreach guardrails",
+  "growth.evaluate": "Check the outreach guardrails", "growth.match": "Match web prospects to their Medicare record",
   "sales.reply": "Answer a prospect", "sales.review": "Weekly pipeline review",
   "social.plan": "Weekly social plan", "social.inbox": "Look for new comments and messages", "social.interaction": "Answer a comment or message",
   "social.ads": "Daily ad review", "social.report": "Weekly social report",

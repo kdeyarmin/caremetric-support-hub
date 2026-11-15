@@ -1,6 +1,6 @@
 /**
- * Intel's marketing feed (Intel docs/HUB_MARKETING_FEED.md): the Medicare roster of home health agencies and hospices, and headline
- * county figures, read server to server. Public CMS and Census data only; Intel never sends customer data through it.
+ * Intel's marketing feed (Intel docs/HUB_MARKETING_FEED.md): the Medicare roster of home health agencies and hospices, headline
+ * county figures, and the CCN of an agency found on the web (agency_match), read server to server. Public CMS and Census data only; Intel never sends customer data through it.
  *
  * - One fixed HTTPS address (Intel's production site), no redirects, a bounded response, checked with zod. Unknown fields Intel adds
  *   later are dropped, so a newer Intel never breaks this reader.
@@ -54,6 +54,12 @@ const observancesSchema = z.object({ contract: z.literal(intelFeedContract), act
 const countySchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('county_figures'), source_line: z.string().max(1000),
   counties: z.array(z.object({ county_fips: z.string().regex(/^\d{5}$/), county_name: z.string().max(200), state: z.string().max(2), figures: z.array(figure).max(40) })).max(50),
   not_found: z.array(z.string()).max(50) });
+
+// agency_match (Intel docs/HUB_MARKETING_FEED.md): each candidate's CCN with how it matched, and the agency as a roster item, or why
+// there is none.
+const matchSchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('agency_match'), period: z.string().regex(/^\d{4}Q[1-4]$/).nullable(),
+  source_line: z.string().max(1000), matches: z.array(z.object({ key: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/), ccn: z.string().regex(/^[0-9A-Z]{6}$/).nullable(),
+    matched_by: z.enum(['phone', 'name_place']).nullable(), reason: z.string().regex(/^[a-z_]{1,40}$/).nullable(), agency: item.nullable() })).max(25) });
 
 async function readJson(response) {
   const declared = Number(response.headers?.get?.('content-length'));
@@ -119,6 +125,11 @@ export function intelFeedReader({ features = null, enabled = false, key = '', fe
     releases: ({ sinceDays = 30, signal } = {}) => call({ action: 'releases', since_days: sinceDays }, releasesSchema, { signal }),
     /** Healthcare observances starting in the next `days` days, from Intel's fixed calendar. */
     observances: ({ days = 45, signal } = {}) => call({ action: 'observances', days }, observancesSchema, { signal }),
+    /**
+     * For up to 25 agencies found on the web ({ key, name, state, city?, zip?, phones?, domain? }), the home health or hospice CCN each
+     * one is, by a number it publishes or its name and place, or none. The numbers go to Intel in this request only.
+     */
+    agencyMatch: ({ candidates, signal } = {}) => call({ action: 'agency_match', candidates }, matchSchema, { signal }),
     /** Up to 25 agencies' owners (CMS All Owners), HHVBP score and Hospice Care Index, for research only. */
     agencyFacts: ({ ccns, signal } = {}) => call({ action: 'agency_facts', ccns }, factsSchema, { signal }),
   };

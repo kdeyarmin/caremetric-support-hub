@@ -292,6 +292,43 @@ states a figure from the report: the reader opens it to see them. CareMetric's o
 prospect. The link check accepts that one report link for that one draft, and no other agency's. The report's trial link carries
 `utm_content=agency-report`, so the Monday scorecard counts the visits it brings.
 
+**Prospects found on the web get their own report too** (`growth.match`, every hour; `server/growth/agency-match.mjs`,
+`20261115233000_growth_roster_match.sql`). A prospect found by web search has no roster record and so no CCN. The Marketing Manager
+finds it:
+
+1. The database hands out up to ten CareMetric Intel prospects an hour that the Marketing Manager owns in an open prospecting stage
+   (identified, researched, qualified, contacted) and that have no roster record yet, best fit first, within Settings → Customer
+   growth → **Most web prospects to match a day** (40; 0 stops matching). Matching uses Intel's feed, so it runs while **Find
+   prospects from the Medicare roster** is on; it needs no states and no web search.
+2. The contact finder reads each one's own website (the usual contact pages, robots.txt honoured) for the telephone numbers it
+   publishes (call links first, never a fax) and its postal address. Where the site gives no address, the place comes from the Hub's
+   own evidence on the prospect: an address in its search snippet or home page summary, else the state of the discovery market it
+   names (where discovery searched), else the one state it names. A market is where the team searched, not where the agency is, so it
+   gives a state and no city: such a prospect can be matched only by a number it publishes. A prospect nothing places in a state is
+   not sent.
+3. One signed request to Intel's marketing feed (`agency_match`, Intel's `docs/HUB_MARKETING_FEED.md`) asks which home health or
+   hospice CCN each one is. Intel matches by a published local number that the agency's Care Compare record lists in the same state,
+   backed by its name or domain; or by name and place, when the distinctive words of the names agree (legal forms, business words,
+   setting words and the place's own name aside, with "home care" never taken for "home health") and the agency is the only one of
+   that name in its state, in the same city or ZIP code. A wrong match would send one agency another agency's report, so Intel
+   answers none when two agencies tie, a number and a name point two ways, or the evidence is thin, and the Hub takes only what it
+   answers.
+4. A match is saved exactly as the roster saves an agency (`rosterRow`: its public record as a dated claim, its size and position as
+   a research-only line) and attached to the prospect's organization, so `rosterAgency` reads its CCN and the next draft links its own
+   report. CareMetric's own agency (CCN 398009, `ownAgencies`) is never attached, nor one CMS shows closed, one already tied to
+   another organization, or one the roster is looking up at that moment.
+
+No match: the prospect is tried again in 30 days, then every 90 (a website may add its address; CMS publishes a new quarter); one the
+website or the feed could not answer, in an hour. Until then its emails offer the market report page, as before. The telephone
+numbers go to Intel in the one request and nowhere else: they are never stored, logged, written into evidence or shown to a model.
+A matched agency's record is observed again whenever the weekly roster read covers its state. The Growth screen's roster list shows a
+matched agency with its organization, as it shows one the roster resolved.
+
+To release it, apply `20261115233000_growth_roster_match.sql` and then `20261115233100_growth_roster_match_contract.sql`, which
+checks the table is closed, the two functions are the Hub server's alone and save through the roster's own functions, the setting
+exists and the task is scheduled, before it declares `platform.agents.growth-roster-match.v1`. The server registers `growth.match`
+only once the database declares it. `server/agents-growth-roster-match-integration.mjs` runs it through the real roles in CI.
+
 ## Finding decision-makers and their addresses
 
 The Hub finds the people who decide at its best prospects itself (`growth.people`, every half hour, a few businesses at a time;

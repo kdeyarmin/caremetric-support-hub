@@ -118,6 +118,8 @@ export const settingsCatalog = Object.freeze([
     label: 'States to prospect in', help: 'Two-letter state codes, one per line (PA, OH, …), at most 60. Empty: the roster is not read.' },
   { key: 'growth.roster_daily_resolutions', group: 'growth', kind: 'number', input: 'number', default: 25, min: 0, max: 200, unit: 'agencies', env: null, valid: wholeNumber(0, 200),
     label: 'Most roster agencies to look up a day', help: 'Each look-up is one web search and a read of the agency\'s own site (0 to 200 per Eastern day). 25 a day is about 750 searches a month on your search plan. 0 stops looking up.' },
+  { key: 'growth.roster_match_daily', group: 'growth', kind: 'number', input: 'number', default: 40, min: 0, max: 200, unit: 'prospects', env: null, valid: wholeNumber(0, 200),
+    label: 'Most web prospects to match a day', help: 'Agencies found on the web are matched to their Medicare record through Intel, by a phone number on their own website or their name and place, so each gets its own market report (0 to 200 per Eastern day). Only a certain match is kept. Runs while Find prospects from the Medicare roster is on; uses no web search. 0 stops matching.' },
   { key: 'growth.inbound_followup', group: 'growth', kind: 'flag', input: 'toggle', default: false, env: null,
     label: 'Follow up website leads by email', help: 'A county report, contact, savings model or newsletter request becomes a qualified prospect, and the Marketing Manager drafts a short follow-up to the person who asked (for your approval until you hand it over). A trial sign-up stops cold email to its business at once. Off: leads are counted and alerted as before.' },
   { key: 'growth.save_emails', group: 'growth', kind: 'flag', input: 'toggle', default: false, env: null,
