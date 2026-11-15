@@ -189,7 +189,7 @@ export const salesPlaybook = deepFreeze({
       `A ${facts.intel.trialDays}-day free trial (credit card required; canceling before it ends avoids any charge).`,
     ],
     nextStep: { label: 'Start a CareMetric Intel free trial', url: pageUrl('intel-home') },
-    pages: ['intel-home', 'intel-how-it-works', 'intel-county-report', 'intel-pricing', 'intel-resources', 'intel-targeted-marketing', 'intel-territory-analysis', 'intel-referral-measurement', 'intel-manager-playbook'],
+    pages: ['intel-home', 'intel-how-it-works', 'intel-market-review', 'intel-county-report', 'intel-pricing', 'intel-resources', 'intel-targeted-marketing', 'intel-territory-analysis', 'intel-referral-measurement', 'intel-manager-playbook'],
     qualifyingQuestions: [
       'Which counties or service areas does your team cover today?',
       'How many marketers or liaisons do you have, and how do they track visits and follow-ups?',
@@ -224,6 +224,17 @@ export const sequencePlan = deepFreeze([
   { touch: 3, angle: 'A short, polite close-the-loop note: ask whether the topic is a priority this year or whether someone else handles it. Make it easy to say "not now". No new pitch.' },
 ]);
 export const touchAngle = touch => sequencePlan[Math.min(Math.max(Number(touch) || 1, 1), sequencePlan.length) - 1].angle;
+
+/**
+ * The first email to a CareMetric Intel prospect, built around a market report (owner direction 2026-11-15): make the reader ask
+ * themselves how well they know their own market, hand them a report that shows it, and invite them to the trial. `reportTouchAngle`
+ * is for an agency whose own report the draft links to; `reviewTouchAngle` for one without a roster record, which gets the page where
+ * any agency's report is emailed to it. Questions are for the reader to answer for themselves, never claims about them.
+ */
+const reportQuestions = 'Then ask two or three short questions the reader can answer for themselves, such as whether the agency is getting its share of the referrals in its county, whether its team knows every referral source in its territory (the hospitals, physicians and facilities), and how much it knows about the competitors it meets at those sources. Questions only: never claim to know the answers.';
+const reportClose = `Then ask how much the agency could grow if its owner, managers and marketing team worked from the most current market intelligence, and say in one plain sentence how CareMetric Intel makes targeted marketing sharper (from the fact sheet's "Everything it does"). End with the ${facts.intel.trialDays}-day free trial as the way to see every source in their territory: say in one plain clause that a credit card is required to start the trial and that canceling before it ends means no charge, then the trial link on its own line. Never call it risk-free.`;
+export const reportTouchAngle = `First email, built around the agency's own market report. Introduce yourself with the founder's story in one or two sentences. ${reportQuestions} Then say you put together a free market report for the agency from public Medicare data, showing where it stands in its county, who leads the county and the hospitals and physicians who refer the most, and ask them to review it with their managers and marketing team; the report link goes on its own line. ${reportClose} This email may hold up to three questions and two links (the report, then the trial), within one hundred seventy words.`;
+export const reviewTouchAngle = `First email, built around a free market report the agency can get for itself. Introduce yourself with the founder's story in one or two sentences. ${reportQuestions} Then say that any agency can get a free market report from public Medicare data, showing where it stands in its county, who leads the county and the hospitals and physicians who refer the most, by entering its CMS certification number on the market report page, and suggest they review it with their managers and marketing team; that page's link goes on its own line. ${reportClose} This email may hold up to three questions and two links (the market report page, then the trial), within one hundred seventy words.`;
 
 /** Follow-ups to a person who asked for something on the website (a county report, a savings model, a newsletter or a contact form). */
 export const inboundSequence = deepFreeze([

@@ -260,8 +260,24 @@ shared secret (`HUB_INTEL_FEED_SECRET`), under a label of its own. Intel verifie
 `server/routes/agencyReport.ts`; protocol in Intel's `docs/HUB_MARKETING_FEED.md`, "Agency report links"). A link lives 150 days. It
 names the agency, never a person, and carries the opportunity's id as its reference.
 
-In the first touch, the report link is the next step in place of the trial. The second touch may point to it again. The writer never
-states a figure from the report: the reader opens it to see them (`growth.10`). The link check accepts that one report link for that
+**The first email is built around the report** (owner direction 2026-11-15; `reportTouchAngle` and `reviewTouchAngle` in
+`playbook.mjs`, `growth.11`). It goes to the agency's best contact: a named owner, administrator or marketing leader when the team
+found one, else the role address.
+
+1. It opens with the founder's story in one or two sentences.
+2. It asks two or three questions the reader answers for themselves: is the agency getting its share of the county's referrals, does
+   its team know every referral source in its territory, and how well does it know its competitors there.
+3. It links the agency's own report and asks them to review it with their managers and marketing team.
+4. It asks how much they could grow working from the most current market intelligence, and how Intel sharpens targeted marketing.
+5. It ends with the 30-day free trial and its terms in one plain clause: a credit card is required to start, and canceling before the
+   trial ends means no charge.
+
+The email may hold three questions and two links, in up to 170 words. "Risk-free" is refused (`guarantee`), as is "no credit card"
+(`trial_terms`). An Intel prospect with no roster record gets the same email with the market report page
+(`https://www.caremetricintel.com/market-review`, `intel-market-review`) in place of its own link: any agency gets its full report
+there by entering its CCN. Later touches follow the sequence plan, and the second may point to the report again. The writer never
+states a figure from the report: the reader opens it to see them. CareMetric's own agency (`ownAgencies` in `roster.mjs`) is never a
+prospect. The link check accepts that one report link for that
 one draft, and no other agency's. A prospect found only on the web, with no roster record, gets no report link, and its emails are
 as before. The report's trial link carries `utm_content=agency-report`, so the Monday scorecard counts the visits it brings.
 
