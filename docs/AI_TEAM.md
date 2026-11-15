@@ -124,7 +124,8 @@ The owner hands kinds of work over to the team one at a time (`supabase/migratio
 `private.agent_autonomy_steps`). Four ship, all off: **Account emails** (the Account Manager's first four templates; never the cancellation or ended-trial check-in), **Support
 answers**, **Article publishing** and **Offers**; **Sales follow-ups** and **Cold email** (the Marketing Manager's, see
 [Customer growth](CUSTOMER_GROWTH.md#sales-follow-ups-and-capped-cold-email)) are added, also off, by
-`20261105150000_growth_autonomy.sql`. Each step lists which agents it changes and what it adds to their
+`20261105150000_growth_autonomy.sql`; later agents add their own, and the four the owner handed over on 2026-11-15 ship held
+(see [Four more hand-overs](#four-more-hand-overs-owner-decision-2026-11-15)). Each step lists which agents it changes and what it adds to their
 auto-approval lists (`auto_send_templates` for the account emails, `auto_approve_kinds` for the others: `communication.answer`
 for support answers, `content.publish` for articles, `offer.apply` for offers, and the trust values `growth.sales_followup` and
 `growth.cold_email`, which the growth operations read, for the Marketing Manager's two steps); only migrations write that list.
@@ -144,8 +145,39 @@ stays on the support address (see [A separate sender for prospecting](CUSTOMER_G
 - **Keep approving** (hold) takes the step's values back off the lists, leaving anything another automatic step or the
   owner added, and keeps the agent proposing that work. **Make automatic now** skips the rest of the week.
 - A step whose code is not on the Hub yet (its feature is not declared: `platform.agents.concierge-autosend.v1`,
-  `platform.agents.content-autopublish.v1`, `platform.agents.offers.v1`, `platform.agents.growth-autonomy.v1`) can be supervised but not made automatic; a
+  `platform.agents.content-autopublish.v1`, `platform.agents.offers.v1`, `platform.agents.growth-autonomy.v1`,
+  `platform.agents.autonomy-handover.v1`) can be supervised but not made automatic; a
   supervised step past its date switches as soon as the code arrives. The screen says so next to it.
+
+#### Four more hand-overs (owner decision 2026-11-15)
+
+The owner is CareMetric's only person, so he chose to stop approving four more kinds of work one by one
+(`20261115200000_autonomy_handover.sql`, gate `20261115200100_autonomy_handover_contract.sql`, feature
+`platform.agents.autonomy-handover.v1`). The four steps ship **held**: nothing changes until each is switched to automatic, on the
+Team screen ("Make automatic now") or, by the engineer deploying it for him, in SQL:
+
+```sql
+select private.agent_autonomy_apply('named_contacts', 'automatic', null, 'owner_decision_2026_11_15');
+select private.agent_autonomy_apply('learning_memo', 'automatic', null, 'owner_decision_2026_11_15');
+select private.agent_autonomy_apply('ad_campaigns', 'automatic', null, 'owner_decision_2026_11_15');
+select private.agent_autonomy_apply('founder_posts', 'automatic', null, 'owner_decision_2026_11_15');
+```
+
+Each call sets the agent to Act, adds the step's values to its list and writes an `agent.autonomy_step` audit row; **Keep approving**
+takes them back off. These steps ask for no minimum of the owner's decisions (`min_reviewed` 0): two of them create no actions to
+count, and the owner handed all four over without a supervised week, so the morning brief does not flag them every day.
+
+| Step (category) | What it adds | What happens on its own |
+| --- | --- | --- |
+| **Named people's email addresses** (`named_contacts`) | `growth.named_contact` on the Marketing Manager (a trust value) | A decision-maker's work address that the agency publishes on its own site, or that its mail server confirmed, is permitted for outreach instead of waiting on Growth → Decision-makers to review. Guesses nothing confirmed are never kept, imported lists still wait, an unsubscribed address is still refused, and a business with a contact who opted out, or that said "not interested" or "not now", still waits for the owner. Emailing the person is still cold email, under the **Cold email** step and its caps. See [Customer growth](CUSTOMER_GROWTH.md#finding-decision-makers-and-their-addresses). |
+| **Learning memo** (`learning_memo`) | `growth.learning_memo` on the Marketing Manager (a trust value) | The Monday memo is used for new drafts as soon as it is written, as if the owner had chosen "Use this memo", audited the same way (`growth.memo_activated`, approval `automatic`). "Write from what is working" must still be on. |
+| **Ad campaign launch** (`ad_campaigns`) | `social.campaign_create` and `social.google_campaign` on the Social Media Manager | The monthly campaigns start live: a LinkedIn or Meta campaign with its first ad from creative the owner already approved, a Google search campaign through the Google Ads API. They share "Most to spend on new campaigns a month", each reserves its daily budget for the rest of its month in the database first, none passes "Most any ad may spend per day", and each ends with its month. Without fitting approved creative, with too little of the month's number left, on the month's last day, or without the Google Ads API, a campaign is created paused (or emailed) as before. See [Social media](SOCIAL_MEDIA.md#new-campaigns-launched-on-their-own-2026-11-15). |
+| **Founder posts** (`founder_posts`) | `social.founder_post` on the Social Media Manager | Posts for the founder's own LinkedIn profile publish at their time slots. Without his personal LinkedIn token they are still emailed to copy. |
+
+The database used to refuse any automatic approval of a campaign or a founder post. That refusal is now a trigger
+(`agent_actions_handover_guard`) that admits one only while the matching step is automatic, and an automatically approved campaign or
+founder post is checked again just before it is carried out (`private.agent_action_trusted`: the agent still active, on Act and
+trusted with the kind, and the step still automatic), so pausing the agent or choosing Keep approving stops what is already queued.
 
 The steps table is closed to every role. The server reads due steps and switches one through `private.agent_autonomy_due()`
 , `private.agent_autonomy_graduate(text)` and `private.agent_autonomy_announced(text, timestamptz)` (Hub server only); the owner
@@ -1013,7 +1045,9 @@ Its six action kinds are `social.post`, `social.reply`, `social.moderate`, `soci
 `social.ad_budget`. Three autonomy steps, all off, hand over posts, replies (with hiding spam) and ad tuning (pausing and new ads inside
 existing budgets). A budget change is never automatic: the database refuses an automatically approved one and so does the executor.
 Nor is deleting a LinkedIn comment (LinkedIn has no "hide"): the executor refuses an automatically approved deletion, and once replies
-are handed over such a comment is left for the owner.
+are handed over such a comment is left for the owner. Two later steps, held until the owner switches them, hand over the monthly
+campaigns (launched live within the owner's monthly number) and the posts for the founder's own LinkedIn profile (see
+[Four more hand-overs](#four-more-hand-overs-owner-decision-2026-11-15)); an existing ad set's budget is still never raised on its own.
 Comments and messages reach the model only while "Let agents send customer messages to the AI" is on in Settings → AI team,
 and no other person's words are stored. Setup,
 the ad rules, the checks and the Meta and LinkedIn permissions are in [Social media](SOCIAL_MEDIA.md).

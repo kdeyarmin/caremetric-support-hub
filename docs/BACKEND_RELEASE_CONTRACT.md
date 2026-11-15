@@ -167,6 +167,18 @@ with the agent row held and keeps the ten-a-day and once-per-business cold email
 agent's list, and the two steps and the daily evaluation schedule exist. Each test fails closed. The Hub server registers the
 contact finder, qualification and evaluation only when the feature is declared.
 
+`20261115200100_autonomy_handover_contract.sql` declares `platform.agents.autonomy-handover.v1` only after the autonomy, growth
+autonomy, learning memo, people finder, founder post, paid ads and watchdog features are declared, the four steps
+(`named_contacts`, `learning_memo`, `ad_campaigns`, `founder_posts`) exist requiring it with exactly their values, the campaign and
+founder post checks keep their agent and target rules while the `agent_actions_handover_guard` trigger admits an automatic approval
+of those kinds only while the matching step is automatic, `private.agent_action_trusted`, `private.ads_launch_reserve`,
+`private.ads_launch_release`, `private.growth_person_address`, `private.growth_learning_propose` and `private.social_schedule` are
+security definers with a pinned empty search path executable by `hub_app_server` alone, the launch reservations are closed to every
+role, a reservation reads the owner's monthly number and daily ad-set limit, a named person's address is permitted on its own only
+under the hand-over and never past an unsubscribe or an opt-out, a memo is used on its own only under the hand-over, and a founder
+post handed back keeps its approval. Each test fails closed. Declaring it changes nothing by itself: the steps ship held. The Hub
+server launches campaigns live and publishes automatically approved founder posts only when the feature is declared.
+
 `20261106220100_learning_media_import_contract.sql` declares `learning.media-import.v1` only after `learning.runtime.v1`,
 `learning.media.v1` and `app.sms.v1` are declared, the staged-import table exists with row level security and is closed to every
 browser, service and server role, the seven import operations are security definers with a pinned empty search path executable by

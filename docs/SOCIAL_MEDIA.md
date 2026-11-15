@@ -40,11 +40,52 @@ through its API, so the image is uploaded with the post. New ad copy reuses appr
   post to approve, with no text or link. Instagram publishes a STORIES container; the Page uploads the photo unpublished and posts it
   as a photo story. A story shows for 24 hours.
 - **Your own LinkedIn profile** (Settings → Social media → Write posts for my LinkedIn profile): a few posts a week in your voice, each
-  a `social.founder_post` you approve one by one; the database refuses an automatic approval. With your personal token on the LinkedIn
+  a `social.founder_post` you approve one by one, until you hand them over (below). With your personal token on the LinkedIn
   card (scopes `openid`, `profile`, `w_member_social`) an approved post publishes as you, at its time slot like a Page post (an
   approved post waits for its slot, and one started early is handed back to wait); without it the drafts are emailed to copy.
   Nothing sends messages, connection requests or comments.
 - **New campaigns and lead reports**: see Settings → Paid ads and [AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md).
+
+### Founder posts on their own (2026-11-15)
+
+The owner chose to stop approving his own profile's posts one by one. The autonomy step **Founder posts** (`founder_posts`, AI team
+page; it ships held, see [Four more hand-overs](AI_TEAM.md#four-more-hand-overs-owner-decision-2026-11-15)) adds `social.founder_post`
+to the Social Media Manager's list. While it is automatic:
+
+- Each post that passes the fact-sheet checks is approved by the database on its own and published through the same executor at its
+  time slot; the proposal says "on its own (you handed founder posts over)". One started early is handed back and keeps its automatic
+  approval.
+- Just before it publishes, the executor checks the hand-over again (`private.agent_action_trusted`): the Social Media Manager still
+  active, on Act and trusted with founder posts, and the step still automatic. A pause, a lower level or **Keep approving** stops any
+  post already queued, which then fails as "approval required".
+- Without your personal LinkedIn token the posts are still emailed for you to copy, as before.
+- While the step is held, the database still refuses an automatic approval of a founder post (`agent_actions_handover_guard`).
+
+### New campaigns launched on their own (2026-11-15)
+
+Once a month per marketed product, `ads.plan` proposes a LinkedIn campaign, a Meta retargeting campaign and a Google search campaign
+(`server/agents/ads/index.mjs`). Each waits for your approval and is created paused (LinkedIn as a draft) with no ads, and you add the
+first ad in the platform's ad manager. The autonomy step **Ad campaign launch** (`ad_campaigns`, AI team page; it ships held) adds
+`social.campaign_create` and `social.google_campaign` to the Social Media Manager's list. While it is automatic:
+
+- **The first ad comes from creative you already approved.** The plan picks, for each LinkedIn or Meta campaign, the first approved
+  Creative Director image for that product and platform whose words pass that platform's ad checks (the same rule the daily ad review
+  uses, `adCopyFromCreative`), and shows it in the proposal. At launch the campaign is created paused (a draft on LinkedIn), the ad is
+  put in through the daily ad review's own `social.ad_create` path (its checks, and marking the creative live), and only then is the
+  campaign started (the ad set, then the campaign on Meta; the group, then the campaign on LinkedIn). A Google search campaign starts
+  with the responsive search ad the plan wrote and code checked against the fact sheet.
+- **Spending stays within your numbers.** The campaigns starting on their own share "Most to spend on new campaigns a month": each
+  gets a thirtieth of its share a day, never above "Most any ad may spend per day". Before it is created, each reserves its daily budget
+  for the rest of the month in the database (`private.ads_launch_reserve`, table `private.ads_launch_reservations`, closed to every
+  role), lowered to what the month's number has left; every campaign launched this way ends on the month's last day. No budget is ever
+  raised: an ad set's budget increase still waits for you.
+- **Where launching live is not possible, it falls back to the way before**, and you are told why: no approved creative that fits, the
+  creative no longer approved, too little of the month's number left, the month's last day, or (for Google) the Google Ads API not set
+  up, in which case the campaign is emailed as a Google Ads Editor file, paused. If Google refuses to create it running, it is created
+  paused. If the first ad is refused, the campaign stays paused and its share is given back. If starting it is not confirmed, you are
+  asked to look; its budget and end date bound it either way.
+- **Checked again when carried out**: as for founder posts, a campaign approved automatically goes ahead only while the hand-over
+  still stands, and an owner's approval of a campaign still creates it paused.
 
 ## Approved video posts
 
