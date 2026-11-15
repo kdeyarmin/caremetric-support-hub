@@ -50,25 +50,57 @@ export function rosterAgency(evidence) {
   return null;
 }
 
+/** How long the answer to "does this agency's report open?" is kept: a report that opens, and one that doesn't (Intel's data may change). */
+export const reportOpensMs = 12 * 3_600_000;
+export const reportMissingMs = 3_600_000;
+const reportCheckTimeoutMs = 20_000;
+
 /**
  * The report links the Marketing Manager may offer. `linkFor(opportunity)` is `{ label, url }` for a CareMetric Intel prospect whose
- * evidence carries its Medicare roster record, or null (another product, no record, no secret).
+ * evidence carries its Medicare roster record, or null (another product, no record, no secret). `checkedLinkFor(opportunity)` is the
+ * same link only once Intel has answered it with the PDF: an agency Intel has no report for (one Medicare's directory doesn't list
+ * yet) gets null, so its email offers the market review page instead of a link that opens "No report for this link". The answer is
+ * kept per agency (`reportOpensMs`, `reportMissingMs`); a timeout or a refused request counts as no report.
  */
-export function reportLinks({ key = null, now = () => Date.now() } = {}) {
+export function reportLinks({ key = null, now = () => Date.now(), fetchImpl = globalThis.fetch } = {}) {
   const configured = typeof key === 'string' && key.length >= 32;
+  const opened = new Map();
+  async function opens(ccn, url, signal) {
+    const known = opened.get(ccn);
+    if (known && now() - known.at < (known.ok ? reportOpensMs : reportMissingMs)) return known.ok;
+    let ok = false;
+    try {
+      const timeout = AbortSignal.timeout(reportCheckTimeoutMs);
+      const response = await fetchImpl(url, { method: 'GET', redirect: 'error', headers: { accept: 'application/pdf' },
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+      ok = response.status === 200 && /application\/pdf/i.test(response.headers.get('content-type') ?? '');
+      try { await response.body?.cancel(); } catch { /* The answer is already known. */ }
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      ok = false;
+    }
+    opened.set(ccn, { ok, at: now() });
+    return ok;
+  }
+  function linkFor(opportunity) {
+    if (!configured || opportunity?.product !== 'caremetric-intel') return null;
+    const agency = rosterAgency(opportunity.evidence);
+    if (!agency) return null;
+    const ref = refPattern.test(String(opportunity.id ?? '')) ? String(opportunity.id) : null;
+    const expires = Math.floor(now() / 1000) + reportLinkDays * 86_400;
+    const name = String(opportunity.name ?? '').trim();
+    return {
+      label: `Free market report${name ? ` for ${name.slice(0, 120)}` : ''}`,
+      url: `${reportOrigin}/report/${reportToken({ ...agency, expires, ref }, key)}`,
+    };
+  }
   return {
     configured,
-    linkFor(opportunity) {
-      if (!configured || opportunity?.product !== 'caremetric-intel') return null;
-      const agency = rosterAgency(opportunity.evidence);
-      if (!agency) return null;
-      const ref = refPattern.test(String(opportunity.id ?? '')) ? String(opportunity.id) : null;
-      const expires = Math.floor(now() / 1000) + reportLinkDays * 86_400;
-      const name = String(opportunity.name ?? '').trim();
-      return {
-        label: `Free market report${name ? ` for ${name.slice(0, 120)}` : ''}`,
-        url: `${reportOrigin}/report/${reportToken({ ...agency, expires, ref }, key)}`,
-      };
+    linkFor,
+    async checkedLinkFor(opportunity, { signal } = {}) {
+      const link = linkFor(opportunity);
+      if (!link) return null;
+      return (await opens(rosterAgency(opportunity.evidence).ccn, link.url, signal)) ? link : null;
     },
   };
 }
