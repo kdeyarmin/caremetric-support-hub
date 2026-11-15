@@ -229,6 +229,9 @@ jobs:
           node server/agents-creative-data-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-creative-data-integration.mjs
+          node server/agents-autonomy-handover-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/agents-autonomy-handover-integration.mjs
       - name: Export, lose and restore disposable Hub data
         env:
           HUB_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres

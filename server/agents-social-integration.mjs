@@ -24,6 +24,8 @@ const original = await row("select status, autonomy, config from private.agents 
 assert.ok(original, 'The Social Media Manager is seeded');
 const tasks = [];
 let videoBrief = null;
+// The owner who approves the founder post below: an owner's approval records who decided (decided_by).
+const owner = randomUUID();
 async function runningTask(agent, kind) {
   const created = await row("insert into private.agent_tasks (agent_key, kind, request_key, status, claimed_at, lease_until, attempts) values ($1, $2, $3, 'running', now(), now() + interval '10 minutes', 1) returning id", [agent, kind, `social-it-${run}-${tasks.length}`]);
   tasks.push(created.id);
@@ -61,13 +63,15 @@ try {
   assert.equal(await store.socialSchedule(founderPost.id, null), true, 'A founder post is held');
   const founderHeld = await row('select not_before from private.agent_actions where id = $1', [founderPost.id]);
   assert.ok(Math.abs(founderHeld.not_before.getTime() - Date.parse(later)) < 1000, 'until its time slot');
-  await admin.query("update private.agent_actions set status = 'approved', decided_at = now() where id = $1", [founderPost.id]);
+  await admin.query('insert into auth.users (id, email, is_anonymous) values ($1, $2, false)', [owner, `social-it-owner-${run}@test.invalid`]);
+  await admin.query("update private.agent_actions set status = 'approved', decided_at = now(), decided_by = $2 where id = $1", [founderPost.id, owner]);
   assert.equal(await store.beginExecution(founderPost.id), null, 'An approved founder post does not publish before its slot');
   await admin.query('update private.agent_actions set not_before = null where id = $1', [founderPost.id]);
   const founderExecution = await store.beginExecution(founderPost.id);
   assert.ok(founderExecution, 'It starts once nothing holds it');
   assert.equal(await store.deferExecution(founderPost.id, founderExecution.execution, 'social.founder_post'), true, 'An early start is handed back');
   const founderBack = await row('select status, not_before from private.agent_actions where id = $1', [founderPost.id]);
+  // The owner approved it, so it goes back to approved (one approved automatically under the owner's hand-over keeps that instead).
   assert.equal(founderBack.status, 'approved');
   assert.ok(founderBack.not_before.getTime() > Date.now() + 3_600_000, 'with its hold restored');
 
@@ -128,5 +132,6 @@ try {
   await admin.query('delete from private.agent_actions where task_id = any($1::uuid[])', [tasks]);
   await admin.query('delete from private.agent_tasks where id = any($1::uuid[])', [tasks]);
   await admin.query("update private.agents set status = $1, autonomy = $2, config = $3 where key = 'social_manager'", [original.status, original.autonomy, original.config]);
+  await admin.query('delete from auth.users where id = $1', [owner]);
   await Promise.all([pool.end(), admin.end()]);
 }

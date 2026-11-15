@@ -68,7 +68,20 @@ const marketingConnectionContracts=await Promise.all([
   ['platform.agents.growth-soft-bounce.v1','20261113280100_growth_soft_bounce_contract.sql'],
   ['platform.agents.growth-people-finder.v1','20261113290100_growth_people_finder_contract.sql'],
   ['platform.agents.lifecycle-save.v1','20261113300100_lifecycle_save_contract.sql'],
+  ['platform.agents.autonomy-handover.v1','20261115200100_autonomy_handover_contract.sql'],
 ].map(async([feature,file])=>({feature,sql:await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8')})));
+// The owner's 2026-11-15 hand-over (20261115200000_autonomy_handover.sql) lifted two refusals the founder post and paid ads gates read
+// when they were declared: any automatic approval of those kinds, and any autonomy step naming a founder post. Their replays run against
+// that earlier state, restored only inside the rolled-back replay below; the hand-over migration (idempotent) is applied again before
+// its own gate is replayed.
+const handoverMigration=await readFile(new URL('../supabase/migrations/20261115200000_autonomy_handover.sql',import.meta.url),'utf8');
+const beforeHandover=`delete from private.agent_autonomy_steps where requires_feature='platform.agents.autonomy-handover.v1';
+alter table private.agent_actions drop constraint agent_actions_founder_post_check, add constraint agent_actions_founder_post_check check (
+  kind <> 'social.founder_post' or coalesce(agent_key = 'social_manager' and target_kind = 'social_item' and target_id ~ '^founder:[0-9]{4}-[0-9]{2}-[0-9]{2}:[1-5]$'
+    and status <> 'auto_approved', false));
+alter table private.agent_actions drop constraint agent_actions_campaign_check, add constraint agent_actions_campaign_check check (
+  kind not in ('social.campaign_create', 'social.google_campaign') or coalesce(agent_key = 'social_manager' and target_kind = 'social_item'
+    and target_id ~ '^(meta|linkedin|google):(carebase|caremetric-intel):[0-9]{4}-[0-9]{2}$' and status <> 'auto_approved', false));`;
 const diagnosticSupportContract=diagnosticSupportMigration.slice(diagnosticSupportMigration.indexOf('do $$ declare contract'));
 assert.ok(selfServiceContract.startsWith('-- Contract publication is last:'),'Recognize the self-service contract declaration');
 const structureMigration=await readFile(new URL('../supabase/migrations/20260911202823_learning_structure_backend_contract.sql',import.meta.url),'utf8');
@@ -348,6 +361,8 @@ try {
     assert.deepEqual(await readContract(),latest,'The Creative Director declaration is idempotent');
     const expected={...latest,features:[...latest.features]};
     for(const entry of marketingConnectionContracts) {
+      if(entry.feature==='platform.agents.founder-posts.v1') await client.query(beforeHandover);
+      if(entry.feature==='platform.agents.autonomy-handover.v1') await client.query(handoverMigration);
       expected.features.push(entry.feature);
       await client.query(entry.sql);
       assert.deepEqual(await readContract(),expected,`${entry.feature} adds only its own feature`);

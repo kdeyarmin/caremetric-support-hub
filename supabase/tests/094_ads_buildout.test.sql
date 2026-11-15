@@ -17,7 +17,7 @@ select lives_ok($$insert into private.agent_actions(agent_key, kind, target_kind
   values ('social_manager', 'social.campaign_create', 'social_item', 'linkedin:caremetric-intel:2026-11', 'A campaign.', 'proposed')$$, 'A new campaign waits for the owner');
 select throws_ok($$insert into private.agent_actions(agent_key, kind, target_kind, target_id, preview, status)
   values ('social_manager', 'social.google_campaign', 'social_item', 'google:caremetric-intel:2026-11', 'A campaign.', 'auto_approved')$$, '23514', null,
-  'A new campaign is never approved automatically');
+  'A new campaign is not approved automatically while the owner has not handed campaigns over');
 select ok(not bool_or(has_function_privilege(r, 'private.ads_conversion_candidates(text,integer)', 'execute')), 'Only the Hub server reads leads to report')
   from unnest(array['anon', 'authenticated', 'service_role']) r;
 select ok(hub.get_backend_contract() -> 'features' ? 'platform.agents.ads.v1', 'The paid ads feature is declared');
