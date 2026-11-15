@@ -34,6 +34,25 @@ it('keeps evidence and message history when the selected organization is clicked
  expect(screen.getByText(/Verified organization source/)).toBeTruthy();
  expect(screen.getByText(/Existing message history/)).toBeTruthy();
 });
+it('shows who received each touch: separate emails to the contact and the other decision-makers, each with its own state',async()=>{
+ const item={...opportunity('opportunity-2','Colleague Agency'),product:'caremetric-intel',stage:'contacted'};
+ const recipients=[{id:'m-1',name:'',role:'Public business address',email:'info@agency.example',status:'delivered',primary:true},
+  {id:'m-2',name:'Owen Owner',role:'Owner',email:'owen@agency.example',status:'accepted',primary:false},
+  {id:'m-3',name:'Ann Admin',role:'Administrator',email:'ann@agency.example',status:'unknown',primary:false}];
+ const detail={evidence:[],events:[],messages:[{id:'m-1',subject:'Your county\'s referrals',body:'The approved words.',status:'delivered',model_generated:true,variant:'control',recipients},
+  {id:'m-0',subject:'An older touch',body:'Before colleagues.',status:'delivered',model_generated:false,variant:'control'}]};
+ const request=vi.fn(async(_url:unknown,init:RequestInit)=>new Response(JSON.stringify(JSON.parse(String(init.body)).operation==='detail'?detail:{...empty,total:1,items:[item]})));
+ vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:'Colleague Agency'}));
+ expect(await screen.findByText(/Your county's referrals · delivered · 3 people/)).toBeTruthy();
+ expect(screen.getByText(/Sent as separate emails to 3 people/)).toBeTruthy();
+ expect(screen.getByText(/Owen Owner \(Owner\) · owen@agency.example · accepted/)).toBeTruthy();
+ expect(screen.getByText(/Public business address · info@agency.example · delivered · first contact/)).toBeTruthy();
+ // A colleague's unconfirmed email is reconciled on its own.
+ expect(screen.getAllByRole('button',{name:'Record verified outcome'})).toHaveLength(1);
+ // A touch from before colleague emails shows as it did.
+ expect(screen.getByText('An older touch · delivered')).toBeTruthy();
+});
 it('shows both priority products and paused readiness without inventing a pipeline', async () => {
   vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(empty))));
   render(<MemoryRouter><Growth/></MemoryRouter>);

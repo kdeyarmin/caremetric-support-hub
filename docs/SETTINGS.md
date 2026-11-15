@@ -50,6 +50,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Text messages | Twilio sending number | `HUB_TWILIO_FROM_NUMBER` |
 | Customer growth | Send growth email | `HUB_GROWTH_SEND_ENABLED` |
 | Customer growth | Most cold emails a day | none: a setting from the start |
+| Customer growth | Most people to email at one organization | none: a setting from the start (three, the contact included, until you save a number; [Customer growth](CUSTOMER_GROWTH.md#several-decision-makers-at-one-organization)) |
 | Billing | Customers can buy subscriptions | `HUB_CUSTOMER_PURCHASING_ENABLED` |
 | Billing | Keep Stripe in step with Intel's prices | `HUB_APP_CATALOG_SYNC` (`off` meant switched off) |
 | Billing | Stripe customer portal configuration | `STRIPE_PORTAL_CONFIGURATION_ID` |
@@ -82,6 +83,7 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | AI team | Tasks at once | How many agent tasks run side by side (default 3) |
 | AI team | Days before an idle agent is flagged | When the morning brief names a quiet agent (default 3) |
 | Customer growth | Find prospects from the Medicare roster; States to prospect in; Most roster agencies to look up a day | Prospecting from Intel's roster of home health agencies and hospices |
+| Customer growth | Most web prospects to match a day | Agencies found on the web matched to their Medicare record, so each gets its own market report (default 40; needs the roster switch) |
 | Customer growth | Follow up website leads by email | County report, contact and savings-model leads get a two-email follow-up, after your approval |
 | Customer growth | Days before asking again | When a "not now" or a silent prospect is asked once more (at least 30) |
 | Customer growth | Win-back and cancellation emails | The Account Manager proposes, for your approval, one email when a trial ends unpaid and one when a plan is set to cancel |

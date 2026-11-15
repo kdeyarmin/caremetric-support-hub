@@ -299,6 +299,8 @@ const discoveryGrid = deepFreeze({
     places: intelMarkets,
   },
 });
+/** The places a product's discovery searches ("Cleveland Ohio"), in grid order: where a web-found prospect was most likely found. */
+export const discoveryPlaces = product => [...(discoveryGrid[product]?.places ?? [])];
 /** Searches per product per day. Each is one call to the search provider; the daily discovery run paces them a second apart. */
 export const discoveryQueriesPerDay = 6;
 /** Result pages a search provider serves for one query (the first and the four after it). */

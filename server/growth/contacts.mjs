@@ -19,6 +19,10 @@
  * it is, exactly as it keeps a search result's snippet. A summary that seems to hold a personal identifier is dropped. Page text is
  * never logged.
  *
+ * `listing` reads the same pages for what a business publishes about reaching it, so the Marketing Manager can find a web-found
+ * agency's Medicare record (agency-match.mjs): the telephone numbers (never a fax), the postal addresses and the home page's title.
+ * The numbers are handed to the caller only, which sends them in one request to Intel's feed and keeps none of them.
+ *
  * `team` reads the same way, for the people step (server/growth/people.mjs; owner decision 2026-11-13, named people): the people the
  * business's own pages name with a title that decides, and the personal addresses those pages publish on its exact domain. At most
  * six pages: the home page, the pages it links to that name people (team, leadership, about), then the usual ones. A published
@@ -31,6 +35,7 @@ import { Readable } from 'node:stream';
 import { analyzeHtml } from '../agents/seo/html.mjs';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import { phonesIn } from './roster.mjs';
+import { matchPhoneLimit, pageText, placesIn, publishedPhones } from './agency-match.mjs';
 import { teamLinks, teamPeople } from './team.mjs';
 
 /** The role local parts the database admits for a found contact (growth_contacts_role_address_check), in order of preference. */
@@ -324,6 +329,31 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
   }
 
   /**
+   * What the business publishes about reaching it, from the usual contact pages (each allowed by robots.txt): its telephone numbers
+   * as ten digits, call links first and never one written after "fax" (at most six), its postal addresses ({ city, state, zip }, at
+   * most five) and its home page's title. Reading stops once it has six numbers and an address. Nothing is stored or logged here.
+   */
+  async function listing(domain, { signal } = {}) {
+    const host = String(domain ?? '').toLowerCase();
+    if (!domainPattern.test(host) || host.length > 253) return { phones: [], places: [], title: null, read: 0 };
+    const site = siteOf(host, signal);
+    const phones = [], places = [];
+    let title = null, read = 0;
+    for (const path of contactPaths) {
+      signal?.throwIfAborted();
+      if (!(await site.may(path))) continue;
+      const page = await site.read(path);
+      read += 1;
+      if (!page) continue;
+      if (path === '/') { try { title = analyzeHtml(page.text, page.url).title ?? null; } catch { title = null; } }
+      for (const phone of publishedPhones(page.text)) if (!phones.includes(phone)) phones.push(phone);
+      places.push(...placesIn(pageText(page.text)));
+      if (phones.length >= matchPhoneLimit && places.length) break;
+    }
+    return { phones: phones.slice(0, matchPhoneLimit), places: places.slice(0, 5), title: title ? title.slice(0, 200) : null, read };
+  }
+
+  /**
    * Who leads the business, from its own site: the people its pages name with a title that decides ({ name, title, sourceUrl }) and
    * the people's addresses its pages publish on its domain ({ email, sourceUrl }). The home page first, then the pages it links to
    * that name people (team, leadership, about), then the usual ones; at most `teamPageLimit` pages, each allowed by robots.txt.
@@ -357,5 +387,5 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
     return { people: [...people.values()].slice(0, 10), addresses: [...addresses.values()].slice(0, 20) };
   }
 
-  return { configured: true, find, team };
+  return { configured: true, find, team, listing };
 }

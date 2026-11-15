@@ -18,6 +18,9 @@ export function growthStore(pool) {
     autoQualify:limit=>server('private.growth_auto_qualify',[limit]),
     // One re-ask after not now or a silent sequence (20261113172000_growth_reengage.sql).
     reengage:limit=>server('private.growth_reengage',[limit]),
+    // Each cold touch also to the organization's other decision-makers (20261115230000_growth_colleagues.sql).
+    colleagueCandidates:limit=>server('private.growth_colleague_candidates',[limit]),
+    colleagueDraft:(primaryId,contactId,unsubscribeHash)=>server('private.growth_colleague_draft',[primaryId,contactId,unsubscribeHash]),
     manage:(token,operation,data)=>withSession(pool,token,db=>run(db,'hub.growth_manage',[operation,data])),
     snapshot:(offset=0)=>server('private.growth_snapshot',[offset]),
     event:(product,data)=>server('private.growth_record_event',[product,data]),
@@ -37,6 +40,10 @@ export function growthStore(pool) {
     rosterNext:(limit,daily)=>server('private.growth_roster_next',[limit,daily]),
     rosterResolved:(ccn,data)=>server('private.growth_roster_resolved',[ccn,data]),
     roster:(token,offset=0)=>withSession(pool,token,db=>run(db,'hub.growth_roster',[offset])),
+    // Web-found prospects matched to their Medicare record (20261115233000_growth_roster_match.sql). node-pg sends the outcome object
+    // as JSON.
+    matchNext:(limit,daily)=>server('private.growth_roster_match_next',[limit,daily]),
+    matchRecord:(org,data)=>server('private.growth_roster_match_record',[org,data]),
     // The roster's agencies for LinkedIn's company list (20261113230000_ads_buildout.sql).
     rosterCompanies:token=>withSession(pool,token,db=>run(db,'hub.growth_roster_companies',[])),
     // Decision-makers and imported lists (20261113180000_growth_people.sql).

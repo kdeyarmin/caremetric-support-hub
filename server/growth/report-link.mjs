@@ -5,8 +5,9 @@
  * its residents use, the physicians Intel ranks highest as referral sources, its public ratings and three moves the figures point to.
  *
  * The link names the agency by its CMS certification number, which the Medicare roster's public record on the opportunity carries
- * (roster.mjs `rosterClaim`: "... (CCN 397001) is a Medicare-certified home health agency ..."). A prospect found on the web, with no
- * such record, gets no link. The email never states a figure from the report; the reader opens it.
+ * (roster.mjs `rosterClaim`: "... (CCN 397001) is a Medicare-certified home health agency ..."). A prospect found on the web gets the
+ * same record once growth.match finds its CCN through Intel (agency-match.mjs); until then it gets no link. The email never states a
+ * figure from the report; the reader opens it.
  *
  * The token is Intel's format (Intel `server/lib/agencyReportToken.ts`, `docs/HUB_MARKETING_FEED.md` "Agency report links"):
  * base64url(JSON claims) "." base64url(first 16 bytes of HMAC-SHA256(key, base64url(JSON claims))), where key is

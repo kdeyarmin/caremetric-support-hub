@@ -214,6 +214,9 @@ jobs:
           node server/agents-growth-roster-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-growth-roster-integration.mjs
+          node server/agents-growth-roster-match-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/agents-growth-roster-match-integration.mjs
           node server/agents-growth-inbound-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-growth-inbound-integration.mjs
@@ -223,6 +226,9 @@ jobs:
           node server/agents-growth-people-finder-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-growth-people-finder-integration.mjs
+          node server/agents-growth-colleagues-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/agents-growth-colleagues-integration.mjs
           node server/agents-growth-learning-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-growth-learning-integration.mjs

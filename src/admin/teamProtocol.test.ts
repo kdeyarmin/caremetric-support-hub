@@ -29,6 +29,7 @@ describe("AI team display", () => {
     expect(["growth.leads", "growth.followup", "growth.weekly", "probe.forms"].map(taskLabel)).toEqual(["Look for new leads", "Chase unanswered leads", "Weekly growth report", "Lead form check"]);
     expect(taskLabel("growth.evaluate")).toBe("Check the outreach guardrails");
     expect(stepHelpText("cold_email")).toMatch(/role address on the business's own website.*at most 10 a day unless you change "Most cold emails a day" in Settings, each business once, never a text/);
+    expect(stepHelpText("cold_email")).toMatch(/separate emails to the other decision-makers you permitted there, up to "Most people to email at one organization"/);
     expect(stepHelpText("sales_followups")).toMatch(/unsubscribe link/);
     expect(stepHelpText("named_contacts")).toMatch(/publishes the address or its mail server confirms it.*never kept.*imported lists still wait for you/);
     expect(stepHelpText("learning_memo")).toMatch(/as if you had chosen "Use this memo"/);

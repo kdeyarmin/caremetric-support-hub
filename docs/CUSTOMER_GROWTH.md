@@ -84,8 +84,10 @@ the owner, model-written or not.
   `growth.evaluate` task records one for each product every morning at 06:40 Eastern and warns the owner if it fails.
 - **Cold email caps.** A cap on cold emails per Eastern day across both products, however each was approved: ten, unless you set
   Settings → Customer growth → "Most cold emails a day" (1 to 100; `20261112120000_growth_cold_email_cap.sql`). Follow-up touches
-  count toward it, and each product's own daily limit on the Growth page still applies beneath it. One business is
-  contacted once (one contact, one opportunity, up to the policy's touch cap); a customer's organization is never cold-emailed;
+  count toward it, and so does every copy of a touch to another decision-maker at the business; each product's own daily limit on
+  the Growth page still applies beneath it. One business is contacted once (one opportunity and one sequence, up to the policy's
+  touch cap, to its contact and to the other decision-makers there you permitted, see
+  [Several decision-makers at one organization](#several-decision-makers-at-one-organization)); a customer's organization is never cold-emailed;
   cold email never rides the product policy's template autonomy. Every email carries the unsubscribe link and the postal
   address, and the existing per-contact gap, suppression list, touch cap and per-product daily limit still apply.
 - **Product policies** no longer overwrite the agents' lists: turning template sending on adds `growth.message`, turning it off
@@ -272,7 +274,8 @@ names the agency, never a person, and carries the opportunity's id as its refere
 
 **The first email is built around the report** (owner direction 2026-11-15; `reportTouchAngle` and `reviewTouchAngle` in
 `playbook.mjs`, `growth.11`). It goes to the agency's best contact: a named owner, administrator or marketing leader when the team
-found one, else the role address.
+found one, else the role address, and, as separate emails, the other decision-makers there (see
+[Several decision-makers at one organization](#several-decision-makers-at-one-organization)).
 
 1. It opens with the founder's story in one or two sentences.
 2. It asks two or three questions the reader answers for themselves: is the agency getting its share of the county's referrals, does
@@ -289,6 +292,44 @@ there by entering its CCN. Later touches follow the sequence plan, and the secon
 states a figure from the report: the reader opens it to see them. CareMetric's own agency (`ownAgencies` in `roster.mjs`) is never a
 prospect. The link check accepts that one report link for that one draft, and no other agency's. The report's trial link carries
 `utm_content=agency-report`, so the Monday scorecard counts the visits it brings.
+
+**Prospects found on the web get their own report too** (`growth.match`, every hour; `server/growth/agency-match.mjs`,
+`20261115233000_growth_roster_match.sql`). A prospect found by web search has no roster record and so no CCN. The Marketing Manager
+finds it:
+
+1. The database hands out up to ten CareMetric Intel prospects an hour that the Marketing Manager owns in an open prospecting stage
+   (identified, researched, qualified, contacted) and that have no roster record yet, best fit first, within Settings → Customer
+   growth → **Most web prospects to match a day** (40; 0 stops matching). Matching uses Intel's feed, so it runs while **Find
+   prospects from the Medicare roster** is on; it needs no states and no web search.
+2. The contact finder reads each one's own website (the usual contact pages, robots.txt honoured) for the telephone numbers it
+   publishes (call links first, never a fax) and its postal address. Where the site gives no address, the place comes from the Hub's
+   own evidence on the prospect: an address in its search snippet or home page summary, else the state of the discovery market it
+   names (where discovery searched), else the one state it names. A market is where the team searched, not where the agency is, so it
+   gives a state and no city: such a prospect can be matched only by a number it publishes. A prospect nothing places in a state is
+   not sent.
+3. One signed request to Intel's marketing feed (`agency_match`, Intel's `docs/HUB_MARKETING_FEED.md`) asks which home health or
+   hospice CCN each one is. Intel matches by a published local number that the agency's Care Compare record lists in the same state,
+   backed by its name or domain; or by name and place, when the distinctive words of the names agree (legal forms, business words,
+   setting words and the place's own name aside, with "home care" never taken for "home health") and the agency is the only one of
+   that name in its state, in the same city or ZIP code. A wrong match would send one agency another agency's report, so Intel
+   answers none when two agencies tie, a number and a name point two ways, or the evidence is thin, and the Hub takes only what it
+   answers.
+4. A match is saved exactly as the roster saves an agency (`rosterRow`: its public record as a dated claim, its size and position as
+   a research-only line) and attached to the prospect's organization, so `rosterAgency` reads its CCN and the next draft links its own
+   report. CareMetric's own agency (CCN 398009, `ownAgencies`) is never attached, nor one CMS shows closed, one already tied to
+   another organization, or one the roster is looking up at that moment.
+
+No match: the prospect is tried again in 30 days, then every 90 (a website may add its address; CMS publishes a new quarter); one the
+website or the feed could not answer, in an hour. A website whose read failed (a timeout, a refused connection) is tried again in an
+hour for the first three attempts, then on the 30 and 90-day schedule. Until then its emails offer the market report page, as before. The telephone
+numbers go to Intel in the one request and nowhere else: they are never stored, logged, written into evidence or shown to a model.
+A matched agency's record is observed again whenever the weekly roster read covers its state. The Growth screen's roster list shows a
+matched agency with its organization, as it shows one the roster resolved.
+
+To release it, apply `20261115233000_growth_roster_match.sql` and then `20261115233100_growth_roster_match_contract.sql`, which
+checks the table is closed, the two functions are the Hub server's alone and save through the roster's own functions, the setting
+exists and the task is scheduled, before it declares `platform.agents.growth-roster-match.v1`. The server registers `growth.match`
+only once the database declares it. `server/agents-growth-roster-match-integration.mjs` runs it through the real roles in CI.
 
 ## Finding decision-makers and their addresses
 
@@ -326,6 +367,47 @@ owner decision 2026-11-13, replacing Apollo). It needs no paid service and no ke
 Checking needs outbound connections to mail servers (port 25), which Railway allows on its Pro plan only. Elsewhere the check finds
 every server unreachable, rests for six hours, and the AI team page's "Named decision-makers" row and the Growth screen say so;
 choose "Addresses businesses publish on their own websites" to stop trying.
+
+## Several decision-makers at one organization
+
+Owner decision 2026-11-15: the Marketing Manager's cold outreach reaches several decision-makers at the same agency (owner,
+administrator, managers and marketing leaders), not one inbox. Each touch to an organization goes to its contact and, as separate
+emails, to the other decision-makers there, up to Settings → Customer growth → "Most people to email at one organization" (1 to 5;
+three until you save a number, the contact included; 1 turns it off) (`20261115230000_growth_colleagues.sql`, gate
+`20261115230100_growth_colleagues_contract.sql`, feature `platform.agents.growth-colleagues.v1`).
+
+- **Separate emails, never CC or BCC.** Each person gets the touch's approved subject and words, the same draft and so the same agency
+  report link (it is signed per opportunity), with their own greeting by name, their own opt-out link and their own checks when the
+  email is claimed. Nothing new is written by the model: each copy is a message of its own (`growth_messages.primary_message_id` names
+  the touch it copies) and goes through every step a message goes through.
+- **Who.** People at the same organization other than its contact, permitted (by you, or on their own while **Named people's email
+  addresses** is handed over) and verified within 90 days, not unsubscribed,
+  with a name or a role: a decision-maker the Hub found (Decision-makers to review) or one on a list you imported. Never a generic
+  mailbox (info@, office@, intake@ and the like are only ever a business's contact), and never a person who wrote in or that you typed
+  in as a contact: those are sales follow-ups, not cold email. Best first: owner (or founder, president, CEO), administrator (or
+  executive director), business development or marketing, then other managers and directors.
+- **One sequence per organization.** Touches are still counted on the opportunity: three emails to three people are one touch, and
+  the touch cap, the re-ask and the "what is working" counts read touches. Touch 1 goes to the people chosen when it is sent; touch 2
+  and every later touch (a re-ask included) go only to the people who received the touch before, so nobody joins a sequence half way.
+  The touch's next step and its due date come from the contact's email only. Colleagues get the same touch the same day, a little
+  after the contact: the next fifteen-minute sweep records and proposes each one.
+- **Every one counts.** Each copy counts toward "Most cold emails a day" and the product's daily limit, waits the policy's minimum gap
+  (72 hours by default) between emails to its own address, and is approved exactly as the contact's email is: on its own while the Cold email step is
+  handed over (the agent active, on Act, the daily guardrail check passed), otherwise by you in Team, where the proposal says
+  "Also to <name> (<role>)". Lowering the number holds back copies not yet sent.
+- **Stop rules cover the whole organization.** A reply from anyone there stops everyone's emails (the reply reading already counts
+  another mailbox at the business). An opt-out or a spam complaint from anyone there cancels every unsent email to everyone at the
+  organization and stops its cold outreach for good; the person who opted out is suppressed as before. A request to stop written in
+  a reply ("please remove me") stops the organization the same way, also after a "not now" reply would otherwise let it be reopened
+  later (`private.growth_outreach_stopped`: someone there who is opted out and has written to us). A hard bounce of the
+  contact's address stops everyone there, as it stopped the sequence before; a colleague whose address bounces is opted out (a hard
+  bounce) or simply dropped from later touches (a soft one), and the others go on.
+- **On the Growth screen** each touch in an opportunity's message history says how many people it went to and lists each with the
+  state of their own email; a copy whose delivery is unconfirmed is reconciled on its own.
+
+The people finder still looks for one address per business (the person whose title decides most), before its first email. The
+others come from lists you import, each waiting for you on Decision-makers to review like any found address. Permit them before the
+business's first email: a person permitted later joins no sequence already under way.
 
 ## Canonical Intel activity and verified billing conversions
 

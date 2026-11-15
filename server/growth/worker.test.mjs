@@ -1,5 +1,5 @@
-import {it,expect,vi} from 'vitest';
-import {assessLimit,assessRetryMs,contactSearchConcurrency,contactSearchLimit,growthDay,growthEmail,growthExecutors,growthHandlers,sweepContactLimit,workBudgetMs} from './worker.mjs';
+import {describe,it,expect,vi} from 'vitest';
+import {assessLimit,assessRetryMs,colleagueLimit,colleagueUnsubscribeKey,contactSearchConcurrency,contactSearchLimit,growthColleaguesFeature,growthDay,growthEmail,growthExecutors,growthHandlers,sweepContactLimit,workBudgetMs} from './worker.mjs';
 import {discoveryQueriesPerDay} from './playbook.mjs';
 import {growthLearningFeature} from './learning.mjs';
 const base={id:'opp',product:'carebase',stage:'qualified',owner_agent:'marketing_manager',internal:false,next_at:'2026-01-01T00:00:00Z',touches:0,work:[],events:[],eligibility:'review'};
@@ -400,4 +400,64 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  expect(off.store.learningActive).not.toHaveBeenCalled();
  expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.11');
  expect(off.store.draft.mock.calls[0][2].memoVersion).toBeUndefined();
+});
+
+describe('each cold touch to the organization\'s other decision-makers (20261115230000_growth_colleagues.sql)',()=>{
+ const features=new Set(['platform.agents.growth-autonomy.v1',growthColleaguesFeature]);
+ const fixture=()=>{
+  const store={snapshot:vi.fn(async()=>({total:0,items:[]})),autoQualify:vi.fn(async()=>({qualified:0})),propose:vi.fn(async()=>({id:'action'})),
+   colleagueCandidates:vi.fn(async()=>[{primaryId:'touch',workId:'work',contactId:'owner',product:'caremetric-intel'},{primaryId:'touch',workId:'work',contactId:'admin',product:'caremetric-intel'},
+    {primaryId:'pilot',workId:'work-2',contactId:'other',product:'carebase'},{primaryId:'touch',workId:'work',contactId:'waiting',product:'caremetric-intel'}]),
+   colleagueDraft:vi.fn(async(primary,contact)=>contact==='waiting'?{created:false,id:'m-waiting',status:'proposed',actionId:'a'}:{created:true,id:`m-${contact}`,status:'draft',actionId:null})};
+  return {store,growth:{store,signingReady:true,hash:value=>`hash(${value})`,unsubscribeToken:key=>`token-${key}`}};
+ };
+ const sweep=(growth,{autonomy='act',kind='growth.pipeline',on=features}={})=>growthHandlers({growth,features:on,marketed:['caremetric-intel']})[kind]({id:'task',agent:{autonomy},kind});
+ it('records each person as their own email with their own signed opt-out and proposes it like any message',async()=>{
+  const {store,growth}=fixture();
+  expect((await sweep(growth)).result).toMatchObject({colleagues:2});
+  expect(store.colleagueCandidates).toHaveBeenCalledWith(colleagueLimit);
+  // A product the owner is not marketing is left alone; one already proposed is not proposed again.
+  expect(store.colleagueDraft.mock.calls).toEqual([['touch','owner','hash(token-work:owner)'],['touch','admin','hash(token-work:admin)'],['touch','waiting','hash(token-work:waiting)']]);
+  expect(store.propose.mock.calls).toEqual([['task','m-owner'],['task','m-admin']]);
+  expect(colleagueUnsubscribeKey('work','owner')).not.toBe(colleagueUnsubscribeKey('work','admin'));
+  expect(JSON.stringify((await sweep(fixture().growth)).result)).not.toContain('@');
+ });
+ it('only with the feature, the signing key and a level above Observe, and only on the Marketing Manager\'s sweep',async()=>{
+  const {store,growth}=fixture();
+  await sweep(growth,{autonomy:'observe'});
+  await sweep({...growth,signingReady:false});
+  await sweep(growth,{on:new Set(['platform.agents.growth-autonomy.v1'])});
+  await sweep(growth,{kind:'growth.success'});
+  expect(store.colleagueCandidates).not.toHaveBeenCalled();
+  expect((await sweep(growth)).result.colleagues).toBe(2);
+ });
+ it('a person who stopped being eligible since the list was read is skipped, and the sweep goes on',async()=>{
+  const {store,growth}=fixture();
+  store.colleagueDraft.mockImplementation(async(primary,contact)=>contact==='owner'?Promise.reject(Object.assign(new Error('Changed'),{code:'40001'}))
+   :contact==='admin'?{created:false,reason:'not_chosen'}:{created:false,id:'m-waiting',status:'proposed',actionId:'a'});
+  expect((await sweep(growth)).result.colleagues).toBeUndefined();
+  expect(store.propose).not.toHaveBeenCalled();
+  store.colleagueDraft.mockRejectedValue(new Error('database down'));
+  await expect(sweep(growth)).rejects.toThrow('database down');
+ });
+ it('sends a colleague\'s email with that person\'s own opt-out link and greeting, and the touch\'s approved words',async()=>{
+  const claimed={send:true,to:'owen.owner@agency.example',id:'m-owner',workId:'work',unsubscribeKey:'work:owner',unsubscribeHash:'hash(token-work:owner)',colleague:true,
+   subject:'Your county\'s referrals',body:'The approved words.',product:'caremetric-intel',purpose:'marketing',contactName:'Owen Owner',sourceKind:'enriched'};
+  const store={claim:vi.fn(async()=>claimed),finish:vi.fn()};
+  const growth={store,configured:()=>true,hash:value=>`hash(${value})`,unsubscribeToken:key=>`token-${key}`},mail={configured:true,send:vi.fn(async()=>({delivery:'sent',id:'provider'}))};
+  const exec=growthExecutors({growth,mail,publicOrigin:'https://hub.example.org',postalAddress:'CareMetric, 1 Main St'})['growth.message'];
+  expect(await exec({id:'a',input:{messageId:'m-owner'}})).toEqual({delivery:'accepted'});
+  const sent=mail.send.mock.calls[0][0];
+  expect([sent.to,sent.messageId,sent.unsubscribeUrl]).toEqual(['owen.owner@agency.example','m-owner','https://hub.example.org/api/growth/preferences/token-work:owner']);
+  expect(sent.text).toMatch(/^Hello Owen,/m); expect(sent.text).toContain('The approved words.');
+  expect(store.finish).toHaveBeenCalledWith('m-owner','accepted','provider');
+  // A claim that names no key (a database before this feature) signs the work alone, as before.
+  store.claim.mockResolvedValue({...claimed,unsubscribeKey:undefined,unsubscribeHash:'hash(token-work)'});
+  await exec({id:'a',input:{messageId:'m-owner'}});
+  expect(mail.send.mock.calls[1][0].unsubscribeUrl).toBe('https://hub.example.org/api/growth/preferences/token-work');
+  // A key the hash does not match is never sent.
+  store.claim.mockResolvedValue({...claimed,unsubscribeHash:'hash(token-work)'});
+  await expect(exec({id:'a',input:{messageId:'m-owner'}})).rejects.toMatchObject({code:'unsubscribe_key_changed'});
+  expect(mail.send).toHaveBeenCalledTimes(2);
+ });
 });
