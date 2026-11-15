@@ -160,4 +160,23 @@ describe('new campaigns and lead reports', () => {
     expect(JSON.parse(seen[2][1].get('data'))[0]).toEqual({ event_name: 'Lead', event_time: 1794225600, event_id: 'l1', action_source: 'website',
       user_data: { em: [hash], fbc: 'fb.1.1794139200000.IwAR0abc' } });
   });
+
+  it('ends the ad set of a campaign the owner handed over with its month, and starts the ad set then the campaign once its ad is in', async () => {
+    const seen = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      const path = new URL(url).pathname;
+      seen.push([path, new URLSearchParams(init.body)]);
+      return new Response(JSON.stringify(path.endsWith('/campaigns') ? { id: '601' } : path.endsWith('/adsets') ? { id: '602' } : { success: true }), { status: 200 });
+    });
+    const meta = client(fetchImpl);
+    const endAt = '2099-12-01T04:59:59.000Z';
+    expect(await meta.createCampaign({ name: 'Intel retargeting', dailyBudgetCents: 1500, audienceId: '1234567', endAt })).toEqual({ campaignId: '601', adsetId: '602' });
+    expect(Object.fromEntries(seen[1][1])).toMatchObject({ status: 'PAUSED', daily_budget: '1500', end_time: '4099784399' });
+    expect(seen[0][1].get('status')).toBe('PAUSED');
+    await expect(meta.createCampaign({ name: 'x', dailyBudgetCents: 1500, audienceId: '1234567', endAt: '2020-01-01T00:00:00Z' })).rejects.toMatchObject({ code: 'meta_invalid_request' });
+    expect(await meta.startCampaign({ campaignId: '601', adsetId: '602' })).toEqual({ started: true });
+    expect(seen.slice(2).map(([path, params]) => [path, params.get('status')])).toEqual([['/v23.0/602', 'ACTIVE'], ['/v23.0/601', 'ACTIVE']]);
+    await expect(meta.startCampaign({ campaignId: 'act_1', adsetId: '602' })).rejects.toMatchObject({ code: 'meta_invalid_request' });
+    expect(seen).toHaveLength(4);
+  });
 });

@@ -16,6 +16,10 @@
  *      made-up mailbox and accept the guess. One check a business, reserved in the database under the owner's daily number
  *      (Most address checks a day) before it is made.
  *    Either way the address is recorded for the owner's review: nothing is sent to it until the owner permits it on the Growth screen.
+ *    Once the owner hands named people's email addresses over (the "Named people's email addresses" autonomy step,
+ *    20261115200000_autonomy_handover.sql), the database permits such an address on its own instead (it is one the business published or
+ *    its mail server confirmed: nothing else ever reaches it), unless a contact at the business opted out or the business said "not
+ *    interested" or "not now". Writing to the person is still cold email, under its own step and caps.
  *
  * Never a personal address on another domain, a phone number, or an address the business did not publish or its mail server did not
  * confirm. Only counts are returned.
@@ -120,7 +124,7 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
       try { for (const agency of (await feed.agencyFacts({ ccns, signal })).agencies) factsByCcn.set(agency.ccn, agency); }
       catch (error) { if (signal?.aborted) throw error; }
     }
-    const counts = { searched: 0, people: 0, found: 0, published: 0, verified: 0, noCredit: 0, unreachable: 0 };
+    const counts = { searched: 0, people: 0, found: 0, published: 0, verified: 0, permitted: 0, noCredit: 0, unreachable: 0 };
     for (const org of candidates) {
       signal?.throwIfAborted();
       if (clock() - started > startBudgetMs) break;
@@ -161,7 +165,11 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
       if (!found || !personId) continue;
       try {
         const saved = await growth.store.personAddress(personId, found.email, chosen.name, found.how, found.sourceUrl);
-        if (saved?.found) { counts.found++; counts[found.how === 'published' ? 'published' : 'verified']++; }
+        if (saved?.found) {
+          counts.found++; counts[found.how === 'published' ? 'published' : 'verified']++;
+          // Permitted on its own under the owner's hand-over; otherwise it waits on the Growth screen.
+          if (saved.eligibility === 'permitted') counts.permitted++;
+        }
       } catch (error) { if (error?.code !== '22023') throw error; }
     }
     return { result: counts };

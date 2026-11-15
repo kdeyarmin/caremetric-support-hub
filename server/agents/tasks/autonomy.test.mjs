@@ -117,6 +117,13 @@ describe('autonomy.graduate', () => {
     expect(message.body).toContain(autonomyWords.offers);
   });
 
+  it('words the four steps the owner handed over on 2026-11-15 in plain sentences, with the safeguards that stay', () => {
+    expect(autonomyWords.named_contacts).toMatch(/publishes it or its mail server confirms it.*Guesses nothing confirmed are never kept.*unsubscribes and opt-outs still win/);
+    expect(autonomyWords.learning_memo).toContain('as if you had chosen "Use this memo"');
+    expect(autonomyWords.ad_campaigns).toMatch(/first ad from creative you already approved.*within your monthly number and daily ad-set limit.*ending with its month/);
+    expect(autonomyWords.founder_posts).toContain('pass the fact-sheet checks');
+  });
+
   it('names the AI team page when the server has no public address', async () => {
     const store = { autonomyDue: vi.fn(async () => ({ due: [], announce: [], soon: [step('offers', 'Offers', '2026-11-12T15:00:00+00:00')] })), autonomyGraduate: vi.fn(), autonomyAnnounced: vi.fn() };
     const notifier = { send: vi.fn(async () => [{ channel: 'email', delivery: 'sent' }]) };

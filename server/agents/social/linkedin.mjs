@@ -470,21 +470,25 @@ export function linkedinClient({
     /**
      * A new campaign group and campaign, both DRAFT (not running): website visits, automated bidding, the approved daily budget, and the
      * audience: people in the United States working in Hospitals and Health Care, at manager level or above. The owner reviews the
-     * targeting (a state, a matched company list) in Campaign Manager and starts it there.
+     * targeting (a state, a matched company list) in Campaign Manager and starts it there. `endAt` (a launch the owner handed over) ends
+     * both then, so they can never spend past their month.
      */
-    async createCampaign({ name, dailyBudgetCents, currency = 'USD', startAt }, { signal } = {}) {
+    async createCampaign({ name, dailyBudgetCents, currency = 'USD', startAt, endAt = null }, { signal } = {}) {
       needAds();
       if (!Number.isInteger(dailyBudgetCents) || dailyBudgetCents < 1000 || !/^[A-Z]{3}$/.test(currency)) throw failure('linkedin_invalid_request');
       const start = Number.isFinite(Date.parse(startAt ?? '')) ? Date.parse(startAt) : Date.now() + 86_400_000;
+      const end = endAt === null ? null : Date.parse(endAt);
+      if (end !== null && !(Number.isFinite(end) && end > start)) throw failure('linkedin_invalid_request');
+      const runSchedule = end === null ? { start } : { start, end };
       const group = await call('POST', `adAccounts/${account}/adCampaignGroups`, { signal, auth: adsAuth, body: {
-        account: accountUrn, name: name.slice(0, 100), status: 'DRAFT', runSchedule: { start } } });
+        account: accountUrn, name: name.slice(0, 100), status: 'DRAFT', runSchedule } });
       const groupId = bareId(group.id, /^urn:li:sponsoredCampaignGroup:/);
       if (!groupId) throw failure('linkedin_unconfirmed');
       const amount = (dailyBudgetCents / 100).toFixed(2);
       const campaign = await call('POST', `adAccounts/${account}/adCampaigns`, { signal, auth: adsAuth, body: {
         account: accountUrn, campaignGroup: `urn:li:sponsoredCampaignGroup:${groupId}`, name: name.slice(0, 100), status: 'DRAFT', type: 'SPONSORED_UPDATES',
         objectiveType: 'WEBSITE_VISIT', costType: 'CPM', optimizationTargetType: 'MAX_CLICK', dailyBudget: { amount, currencyCode: currency },
-        locale: { country: 'US', language: 'en' }, offsiteDeliveryEnabled: false, runSchedule: { start },
+        locale: { country: 'US', language: 'en' }, offsiteDeliveryEnabled: false, runSchedule,
         targetingCriteria: { include: { and: [
           { or: { 'urn:li:adTargetingFacet:locations': ['urn:li:geo:103644278'] } },
           { or: { 'urn:li:adTargetingFacet:industries': ['urn:li:industry:14'] } },
@@ -492,6 +496,16 @@ export function linkedinClient({
         ] } },
       } });
       return { campaignGroupId: groupId, campaignId: bareId(campaign.id, /^urn:li:sponsoredCampaign:/) ?? '' };
+    },
+
+    /** Starts a draft campaign group and campaign once the campaign's first ad is in it: the group, then the campaign. Used only for a launch the owner handed over. */
+    async startCampaign({ campaignGroupId, campaignId: id }, { signal } = {}) {
+      needAds();
+      if (!numeric(String(campaignGroupId ?? '')) || !numeric(String(id ?? ''))) throw failure('linkedin_invalid_request');
+      const active = { signal, auth: adsAuth, headers: { 'X-RestLi-Method': 'PARTIAL_UPDATE' }, body: { patch: { $set: { status: 'ACTIVE' } } } };
+      await call('POST', `adAccounts/${account}/adCampaignGroups/${campaignGroupId}`, active);
+      await call('POST', `adAccounts/${account}/adCampaigns/${id}`, active);
+      return { started: true };
     },
 
     /** One lead from a LinkedIn ad click, reported to the conversion rule by a hashed email and the click ID (Conversions API). */

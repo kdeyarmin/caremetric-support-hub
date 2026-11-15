@@ -14,7 +14,7 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, ads = false, watchdog = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, ads = false, watchdog = false, handover = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -28,6 +28,13 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
       socialOpenTargets: () => call('private.social_open_targets'),
       /** Holds a proposed or approved post until its `scheduledFor`. */
       socialSchedule: (actionId, execution = null) => call('private.social_schedule', [actionId, execution]),
+    } : {}),
+    // The owner's 2026-11-15 hand-over (20261115200000_autonomy_handover.sql): an automatic approval re-checked when it is carried out, and
+    // a live campaign's share of the month's number reserved before it is launched (and given back when it is not).
+    ...(handover ? {
+      actionTrusted: (actionId, execution) => call('private.agent_action_trusted', [actionId, execution]),
+      adsLaunchReserve: (actionId, execution, dailyCents, leastCents, days) => call('private.ads_launch_reserve', [actionId, execution, dailyCents, leastCents, days]),
+      adsLaunchRelease: (actionId, execution) => call('private.ads_launch_release', [actionId, execution]),
     } : {}),
     ...(socialVideo ? {
       /** Durable upload/publish intent, fenced by the current action execution and its approved video asset. */

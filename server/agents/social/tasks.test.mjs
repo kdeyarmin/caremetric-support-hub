@@ -546,7 +546,22 @@ describe('posts for the founder\'s own profile', () => {
     const founder = h.store.proposeAction.mock.calls.map(([item]) => item).filter(item => item.kind === 'social.founder_post');
     expect(founder.map(item => [item.targetKind, item.targetId])).toEqual([['social_item', 'founder:2026-11-09:1'], ['social_item', 'founder:2026-11-09:2']]);
     expect(founder[0].input).toMatchObject({ product: 'caremetric-intel', message: `${texts[0]}\n\n#HomeHealth` });
+    expect(founder[0].preview).toContain('once you approve it');
     expect(done.result.founder).toBe(2);
+  });
+
+  it('says a post publishes on its own once the owner has handed founder posts over, and still emails them without the founder\'s token', async () => {
+    const handedOver = { autonomy: 'act', config: { auto_approve_kinds: ['social.founder_post'] } };
+    const h = setup();
+    await h.handlers['social.plan'](task('social.plan', { agent: handedOver }), { now });
+    const founder = h.store.proposeAction.mock.calls.map(([item]) => item).filter(item => item.kind === 'social.founder_post');
+    expect(founder).toHaveLength(2);
+    expect(founder[0].preview).toContain('on its own (you handed founder posts over)');
+    expect(founder[0].preview).not.toContain('once you approve it');
+    const unconnected = setup({ member: false });
+    await unconnected.handlers['social.plan'](task('social.plan', { agent: handedOver }), { now });
+    expect(unconnected.store.proposeAction.mock.calls.some(([item]) => item.kind === 'social.founder_post')).toBe(false);
+    expect(JSON.stringify(unconnected.sent[0].blocks)).toContain('they publish at their time slots on their own instead');
   });
 
   it('emails them to copy without the founder\'s own token, and writes none while the setting is off', async () => {

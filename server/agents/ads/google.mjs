@@ -84,7 +84,8 @@ export const adwordsScope = 'https://www.googleapis.com/auth/adwords';
 
 /**
  * The Google Ads API: an access token, and one atomic mutate that creates a PAUSED search campaign (its budget, United States targeting,
- * negative keywords, one ad group with its keywords and the responsive search ad). Nothing runs until the owner enables it in Google Ads.
+ * negative keywords, one ad group with its keywords and the responsive search ad). Nothing runs until the owner enables it in Google Ads,
+ * unless the owner handed ad campaign launch over: then it is created ENABLED and ends with its month.
  *
  * The token comes from an OAuth client's refresh token when all three are set, else from the Hub's Google service account
  * (`serviceAccount`, the HUB_SEARCH_CONSOLE_CREDENTIALS key) added as a Standard user in Google Ads, which needs no refresh token. API
@@ -115,14 +116,20 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
   }
   return {
     configured, auth,
-    /** Creates the campaign PAUSED in one mutate; returns its resource name. */
-    async createSearchCampaign({ name, dailyBudgetCents, finalUrl, plan }, { signal } = {}) {
+    /**
+     * Creates the campaign PAUSED in one mutate; returns its resource name. `live` (a launch the owner handed over) creates it ENABLED with
+     * its last day `endDate` (YYYY-MM-DD, the account's time zone), so it can never spend past its month; the mutate is atomic, so a
+     * refusal creates nothing.
+     */
+    async createSearchCampaign({ name, dailyBudgetCents, finalUrl, plan, live = false, endDate = null }, { signal } = {}) {
       if (!configured) throw failure('google_not_configured');
+      if (live && !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(endDate ?? '')) throw failure('google_invalid_request');
       const base = `customers/${customer}`;
       const budget = `${base}/campaignBudgets/-1`, campaign = `${base}/campaigns/-2`, adGroup = `${base}/adGroups/-3`;
       const mutateOperations = [
         { campaignBudgetOperation: { create: { resourceName: budget, name: `${name} budget`.slice(0, 250), amountMicros: String(dailyBudgetCents * 10_000), deliveryMethod: 'STANDARD', explicitlyShared: false } } },
-        { campaignOperation: { create: { resourceName: campaign, name: name.slice(0, 250), status: 'PAUSED', advertisingChannelType: 'SEARCH', campaignBudget: budget, maximizeClicks: {},
+        { campaignOperation: { create: { resourceName: campaign, name: name.slice(0, 250), status: live ? 'ENABLED' : 'PAUSED', advertisingChannelType: 'SEARCH', campaignBudget: budget, maximizeClicks: {},
+          ...(live ? { endDateTime: `${endDate} 23:59:59` } : {}),
           networkSettings: { targetGoogleSearch: true, targetSearchNetwork: false, targetContentNetwork: false, targetPartnerSearchNetwork: false },
           containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING' } } },
         { campaignCriterionOperation: { create: { campaign, location: { geoTargetConstant: 'geoTargetConstants/2840' } } } },

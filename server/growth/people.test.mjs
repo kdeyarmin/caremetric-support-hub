@@ -36,12 +36,12 @@ describe('choosing the person to write to', () => {
   });
 });
 
-function setup({ mode = 'verify', team = { people: [], addresses: [] }, officials = [], check = { result: 'verified', email: 'jane.doe@valleyhospice.org' }, reserve = true, feed = undefined, available = true, featureSet = features } = {}) {
+function setup({ mode = 'verify', team = { people: [], addresses: [] }, officials = [], check = { result: 'verified', email: 'jane.doe@valleyhospice.org' }, reserve = true, feed = undefined, available = true, featureSet = features, saved = { found: true, contactId: 'c1' } } = {}) {
   const store = {
     peopleCandidates: vi.fn(async () => [candidate]),
     peopleRecord: vi.fn(async (_org, people) => people.map((person, i) => ({ id: `person-${i}`, source: person.source }))),
     enrichmentReserve: vi.fn(async () => reserve),
-    personAddress: vi.fn(async () => ({ found: true, contactId: 'c1' })),
+    personAddress: vi.fn(async () => saved),
   };
   const registry = { officials: vi.fn(async () => officials) };
   const mailbox = { check: vi.fn(async () => check), available: () => available };
@@ -59,7 +59,7 @@ describe('growth.people', () => {
   it('records who CMS, the NPI registry and the website name, and keeps an address the business publishes, free', async () => {
     const { store, registry, mailbox, run } = setup({ team: { people: team.people.slice(0, 1), addresses: [{ email: 'jdoe@valleyhospice.org', sourceUrl: 'https://valleyhospice.org/team' }] },
       officials: [{ name: 'Sam Lee', title: 'Owner', source: 'npi_registry', sourceUrl: 'https://npiregistry.cms.hhs.gov/provider-view/1578017406' }] });
-    expect((await run()).result).toEqual({ searched: 1, people: 3, found: 1, published: 1, verified: 0, noCredit: 0, unreachable: 0 });
+    expect((await run()).result).toEqual({ searched: 1, people: 3, found: 1, published: 1, verified: 0, permitted: 0, noCredit: 0, unreachable: 0 });
     expect(registry.officials).toHaveBeenCalledWith(agency, expect.anything());
     expect(store.peopleRecord.mock.calls[0][1]).toEqual([
       { name: 'Jane Doe', title: 'Administrator', source: 'website', sourceUrl: 'https://valleyhospice.org/team' },
@@ -79,6 +79,19 @@ describe('growth.people', () => {
     expect(guesses).toContain('jane.doe@valleyhospice.org');
     expect(guesses).toHaveLength(6);
     expect(store.personAddress).toHaveBeenCalledWith('person-0', 'jane.doe@valleyhospice.org', 'Jane Doe', 'mail_server', null);
+  });
+
+  it('counts an address the database permitted on its own under the owner\'s hand-over, and one waiting for the owner as before', async () => {
+    // The hand-over is decided in the database (20261115200000_autonomy_handover.sql); the task only records what it found and counts the answer.
+    const handedOver = setup({ team, saved: { found: true, contactId: 'c1', eligibility: 'permitted' } });
+    expect((await handedOver.run()).result).toMatchObject({ found: 1, verified: 1, permitted: 1 });
+    expect(handedOver.store.personAddress).toHaveBeenCalledWith('person-0', 'jane.doe@valleyhospice.org', 'Jane Doe', 'mail_server', null);
+    const waiting = setup({ team, saved: { found: true, contactId: 'c1', eligibility: 'review' } });
+    expect((await waiting.run()).result).toMatchObject({ found: 1, permitted: 0 });
+    // A guess the mail server did not confirm never reaches the database, hand-over or not.
+    const unconfirmed = setup({ team, check: { result: 'catch_all' }, saved: { found: true, contactId: 'c1', eligibility: 'permitted' } });
+    expect((await unconfirmed.run()).result).toMatchObject({ found: 0, permitted: 0 });
+    expect(unconfirmed.store.personAddress).not.toHaveBeenCalled();
   });
 
   it('keeps nothing the mail server did not confirm, and counts a server it could not reach', async () => {

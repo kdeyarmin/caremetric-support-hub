@@ -9,6 +9,8 @@
  *    objection only after three replies raised it, a check only after five drafts failed it. With nothing to say, nothing is proposed.
  * 3. The memo is proposed. It is used only after the owner chooses "Use this memo" on the Growth screen, as a second cached block after
  *    the drafting instructions (draft.mjs), and each draft written with it records its version, so a memo is judged by its replies.
+ *    Once the owner hands the learning memo over (the "Learning memo" autonomy step, 20261115200000_autonomy_handover.sql), the database
+ *    uses a new memo at once, as if the owner had chosen it, with the same audit row; the result says so (`activated`).
  */
 import { live } from '../live.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
@@ -111,7 +113,7 @@ export function learningHandlers({ growth, features = null, marketed = null, ena
       if (!memo.text) { out[product] = { proposed: false, reason: 'too_little', sent: memo.stats.sent }; continue; }
       const saved = await growth.store.learningPropose(product, memo.text, memo.stats);
       out[product] = { proposed: saved?.proposed === true, ...(saved?.version ? { version: saved.version } : {}), ...(saved?.reason ? { reason: saved.reason } : {}),
-        lines: memo.lines.length, sent: memo.stats.sent };
+        ...(saved?.activated === true ? { activated: true } : {}), lines: memo.lines.length, sent: memo.stats.sent };
     }
     return { result: { products: out } };
   }

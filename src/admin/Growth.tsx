@@ -105,7 +105,7 @@ function LearningPanel({revision,onSave}:{revision:number;onSave:(op:string,data
  useEffect(()=>{const c=new AbortController();void growthPost('learning',{},learningSchema,c.signal).then(d=>{if(!c.signal.aborted){setData(d);setFailure('');}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'The memos could not be loaded.');});return()=>c.abort();},[revision]);
  return <section className="panel" aria-labelledby="growth-learning-title"><h2 id="growth-learning-title">What is working</h2>
   {failure&&<p>{failure}</p>}{!data&&!failure&&<p role="status">Loading the memos…</p>}
-  {data&&<><p>Each Monday the Marketing Manager writes a short memo from 90 days of its own counts: replies by message type, the objections replies raised, the checks drafts failed and your notes on drafts you turned down. A memo shapes new outreach drafts only after you choose to use it.</p>
+  {data&&<><p>Each Monday the Marketing Manager writes a short memo from 90 days of its own counts: replies by message type, the objections replies raised, the checks drafts failed and your notes on drafts you turned down. A memo shapes new outreach drafts only after you choose to use it, or as soon as it is written once you hand the learning memo over on the AI team page.</p>
   {!data.services.enabled&&<p role="status">To start: turn on Settings → Customer growth → Write from what is working.</p>}
   {data.memos.length?data.memos.map(m=><article key={m.id}><h3>{names[m.product]} · memo {m.version} · {memoStatus[m.status]??m.status}</h3>
    <p><small>Written {new Date(m.createdAt).toLocaleDateString()} from {m.stats.sent??0} emails and {m.stats.replied??0} replies</small></p>

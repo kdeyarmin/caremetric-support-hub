@@ -23,7 +23,7 @@ const failure = code => Object.assign(new Error('The social action was not carri
 const deferred = () => Object.assign(new Error('The post waits for its time slot.'), { code: 'action_deferred' });
 const ctas = new Set(['LEARN_MORE', 'SIGN_UP']);
 
-export function socialExecutors({ meta, linkedin = null, settings = {}, notifier = null, now = () => new Date(), log = line => console.warn(line), creative = null, store = null, publicOrigin = null }) {
+export function socialExecutors({ meta, linkedin = null, settings = {}, notifier = null, now = () => new Date(), log = line => console.warn(line), creative = null, store = null, publicOrigin = null, handover = false }) {
   // A post or ad made from approved Creative Director creative marks the asset live; a failure to record that never fails the publish.
   const markLive = async (input, id) => {
     if (!creative?.live || !/^[0-9a-f-]{36}$/.test(input?.creativeAssetId ?? '')) return;
@@ -84,16 +84,21 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       return { published: true, id: published.id };
     },
 
-    // A post on the founder's own LinkedIn profile: always approved by the owner (the database refuses an automatic approval).
+    // A post on the founder's own LinkedIn profile: approved by the owner, or approved automatically while the owner has handed founder
+    // posts over (the database admits that only while the step is automatic). An automatic approval is checked again just before it publishes.
     'social.founder_post': async execution => {
       const input = execution.input ?? {};
-      if (execution.autoApproved === true) throw failure('approval_required');
+      if (execution.autoApproved === true && !handover) throw failure('approval_required');
       if (!li.configured?.member || typeof li.publishMemberPost !== 'function') throw failure('linkedin_not_configured');
       const due = Date.parse(input.scheduledFor ?? '');
       if (Number.isFinite(due) && due - now().getTime() > 2 * 60_000) throw deferred();
       const extraLinks = String(input.message ?? '').match(/https:\/\/[^\s]+/g) ?? [];
       const checked = checkSocialText(input.message, { surface: 'linkedin', product: input.product ?? null, extraLinks });
       if (!checked.ok || checked.text !== input.message) throw failure('invalid_post');
+      // Paused, moved off Act or "Keep approving" since it was approved: it no longer goes out on its own.
+      if (execution.autoApproved === true && !(typeof store?.actionTrusted === 'function' && await store.actionTrusted(execution.id, execution.execution ?? null) === true)) {
+        throw failure('approval_required');
+      }
       const published = await careful(execution, () => li.publishMemberPost({ message: input.message }));
       return { published: true, id: published.id, founder: true };
     },

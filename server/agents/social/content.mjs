@@ -216,6 +216,24 @@ export const tagSocialText = (text, { platform, product, content, paid = false }
 /** A product link tagged for a post or an ad on `platform`; any other address is returned as it is. */
 export const tagSocialLink = (url, options) => (url ? tagSocialText(url, options) : url);
 
+/** The approved Creative Director image placements an ad may use on each ad platform. */
+export const adImagePlacements = Object.freeze({ meta: Object.freeze(['meta.feed_square', 'meta.feed_portrait']), linkedin: Object.freeze(['linkedin.single_image', 'linkedin.square']) });
+
+/**
+ * An ad's copy from one piece of approved creative: its primary text, headline and description through the checks for that platform's
+ * lengths (LinkedIn's or Meta's), its landing page checked as a product link, and its button. Null when any part fails, so creative that
+ * no longer passes is never used. The daily ad review and the paid ads plan both make ads from approved creative this way.
+ */
+export function adCopyFromCreative(asset, { product, linkedin = false }) {
+  const parts = [checkSocialText(asset?.primaryText, { surface: 'ad_message', product }),
+    checkSocialText(asset?.headline, { surface: linkedin ? 'ad_linkedin_headline' : 'ad_headline', product }),
+    checkSocialText(asset?.description || asset?.headline, { surface: linkedin ? 'ad_linkedin_description' : 'ad_description', product })];
+  if (parts.some(part => !part.ok) || parts[0].text.length < 60 || !/^https:\/\//.test(asset?.landingUrl ?? '')
+    || !checkSocialText(`Start here: ${asset.landingUrl}`, { surface: 'facebook', product }).ok) return null;
+  const [message, headline, description] = parts.map(part => part.text);
+  return { message, headline, description, link: asset.landingUrl, callToAction: /\b(?:trial|sign ?up|start)\b/i.test(asset.cta ?? '') ? 'SIGN_UP' : 'LEARN_MORE' };
+}
+
 /** A post's full text: the body, then its hashtags on their own line. Hashtags that are not plain words are dropped. */
 export function withHashtags(text, hashtags = []) {
   const tags = [...new Set((Array.isArray(hashtags) ? hashtags : []).map(tag => String(tag).replace(/^#/, '').trim()).filter(tag => /^[A-Za-z][A-Za-z0-9]{1,29}$/.test(tag)))];

@@ -49,7 +49,7 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
     ], '/admin/growth');
   const addressMode = live(growth?.people?.mode);
   add('decision_makers', 'Named decision-makers', ['marketing_manager'],
-    'Finds the owner, administrator or business development lead at your best prospects from the CMS owners file, the NPI registry and their own websites, and their work address: one the business publishes or, if you choose, one its mail server confirms. Every address waits for your review on Growth.', [
+    'Finds the owner, administrator or business development lead at your best prospects from the CMS owners file, the NPI registry and their own websites, and their work address: one the business publishes or, if you choose, one its mail server confirms. Every address waits for your review on Growth, until you hand named people\'s email addresses over.', [
       [has(features, 'platform.agents.growth-people.v1'), schemaStep('decision-makers')],
       [has(features, 'platform.agents.growth-people-finder.v1'), schemaStep('people finder')],
       [addressMode !== 'verify' || growth?.people?.mailbox?.configured === true, 'Configure an HTTPS public origin: the Hub introduces itself to mail servers by its name.'],
@@ -163,7 +163,7 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
   const li = socialWork?.linkedin?.configured ?? {};
   const adsSettings = adsWork?.config?.() ?? {};
   add('founder_posts', 'Posts for your own LinkedIn profile', ['social_manager'],
-    'Writes a few posts a week in your voice for your personal LinkedIn profile. You approve each one; none is ever published automatically. Without your personal token they are emailed for you to copy.', [
+    'Writes a few posts a week in your voice for your personal LinkedIn profile. You approve each one until you hand founder posts over; then they publish at their time slots on their own. Without your personal token they are emailed for you to copy.', [
       [has(features, 'platform.agents.founder-posts.v1'), schemaStep('founder posts')],
       [socialSettings.settings?.founderPosts === true, 'Turn on Settings → Social media → Write posts for my LinkedIn profile.'],
       [li.member === true, 'Save your personal LinkedIn access token on the LinkedIn connection card (Settings → Social media), or copy the posts from the weekly plan email.'],
@@ -176,7 +176,7 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [live(growth?.roster?.feed)?.configured === true || growth?.roster?.feed?.configured === true, 'Set up Intel\'s marketing feed (Settings → Customer growth → Find prospects from the Medicare roster, and HUB_INTEL_FEED_SECRET).'],
     ]);
   add('paid_campaigns', 'New paid campaigns', ['social_manager'],
-    'Proposes, once a month, a LinkedIn campaign, a Meta retargeting campaign and a Google search campaign. Each is created paused after you approve it, within your monthly number.', [
+    'Proposes, once a month, a LinkedIn campaign, a Meta retargeting campaign and a Google search campaign. Each is created paused after you approve it, within your monthly number; once you hand ad campaign launch over they start on their own with your approved creative, together within that number.', [
       [has(features, 'platform.agents.ads.v1'), schemaStep('paid ads')],
       [(adsSettings.monthlyBudgetCents ?? 0) > 0, 'Set Settings → Paid ads → Most to spend on new campaigns a month.'],
       [li.ads === true || meta.ads === true, 'Connect a LinkedIn or Meta ad account (Settings → Social media).'],

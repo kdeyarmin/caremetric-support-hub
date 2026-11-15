@@ -16,6 +16,7 @@ import { linkedinClient } from './linkedin.mjs';
 import { metaClient } from './meta.mjs';
 import { socialHandlers } from './tasks.mjs';
 import { live, rebuilt } from '../../live.mjs';
+import { handoverDeclared } from '../handover.mjs';
 
 export const socialFeature = 'platform.agents.social.v1';
 export const socialDeclared = features => (features instanceof Set ? features.has(socialFeature) : Array.isArray(features) && features.includes(socialFeature));
@@ -71,6 +72,7 @@ export function socialTeam({ social = null, features = null, fetchImpl = fetch, 
       sources: () => [{ name: 'Meta', client: meta, on: meta.configured?.ads }, { name: 'LinkedIn', client: linkedin, on: linkedin.configured?.ads }].filter(source => source.on === true),
     },
     handlers: ({ store, notifier, model, customerTextToAi, publicOrigin, marketed = null, log, creative = null, feed = null }) => socialHandlers({ store, notifier, model, meta, linkedin, settings, imageUrls, customerTextToAi, publicOrigin, marketed, log, creative, feed }),
-    executors: ({ notifier, log, creative = null, store = null, publicOrigin = null }) => socialExecutors({ meta, linkedin, settings, notifier, log, creative, store, publicOrigin }),
+    // Founder posts approved automatically (the owner's hand-over) are carried out only when the database declares it.
+    executors: ({ notifier, log, creative = null, store = null, publicOrigin = null }) => socialExecutors({ meta, linkedin, settings, notifier, log, creative, store, publicOrigin, handover: handoverDeclared(features) }),
   };
 }

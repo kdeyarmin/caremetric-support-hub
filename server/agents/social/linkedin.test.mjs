@@ -433,4 +433,27 @@ describe('new campaigns and lead reports on LinkedIn', () => {
     expect(JSON.parse(calls[2][1].body)).toEqual({ conversion: 'urn:lla:llaPartnerConversion:123456', conversionHappenedAt: 1794225600000, eventId: 'l2',
       user: { userIds: [{ idType: 'SHA256_EMAIL', idValue: hash }, { idType: 'LINKEDIN_FIRST_PARTY_ADS_TRACKING_UUID', idValue: '0f1e2d3c-1234-4abc-8def-001122334455' }] } });
   });
+
+  it('ends a campaign the owner handed over with its month, and starts the group then the campaign once its ad is in', async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      calls.push([url, init]);
+      const id = url.endsWith('/adCampaignGroups') ? 'urn:li:sponsoredCampaignGroup:701' : url.endsWith('/adCampaigns') ? 'urn:li:sponsoredCampaign:702' : null;
+      return new Response(id ? '{}' : null, { status: id ? 201 : 204, headers: id ? { 'x-restli-id': id } : {} });
+    });
+    const li = linkedinClient({ adsToken: 'AQV-ads-token-0123456789abc', adAccountId: '5080001', fetchImpl });
+    const startAt = '2026-11-16T15:20:00.000Z', endAt = '2026-12-01T04:59:59.000Z';
+    expect(await li.createCampaign({ name: 'Intel prospecting', dailyBudgetCents: 1500, startAt, endAt })).toEqual({ campaignGroupId: '701', campaignId: '702' });
+    const schedule = { start: Date.parse(startAt), end: Date.parse(endAt) };
+    expect(JSON.parse(calls[0][1].body)).toMatchObject({ status: 'DRAFT', runSchedule: schedule });
+    expect(JSON.parse(calls[1][1].body)).toMatchObject({ status: 'DRAFT', runSchedule: schedule, dailyBudget: { amount: '15.00', currencyCode: 'USD' } });
+    await expect(li.createCampaign({ name: 'x', dailyBudgetCents: 1500, startAt, endAt: startAt })).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
+    expect(await li.startCampaign({ campaignGroupId: '701', campaignId: '702' })).toEqual({ started: true });
+    expect(calls.slice(2).map(([url, init]) => [url, init.headers['X-RestLi-Method'], JSON.parse(init.body)])).toEqual([
+      ['https://api.linkedin.com/rest/adAccounts/5080001/adCampaignGroups/701', 'PARTIAL_UPDATE', { patch: { $set: { status: 'ACTIVE' } } }],
+      ['https://api.linkedin.com/rest/adAccounts/5080001/adCampaigns/702', 'PARTIAL_UPDATE', { patch: { $set: { status: 'ACTIVE' } } }],
+    ]);
+    await expect(li.startCampaign({ campaignGroupId: 'urn:li:x', campaignId: '702' })).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
+    expect(calls).toHaveLength(4);
+  });
 });
