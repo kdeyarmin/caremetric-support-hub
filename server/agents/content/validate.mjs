@@ -177,6 +177,11 @@ const companyEmail = /^(?:hello|support)@caremetric\.ai$/i;
  * Problems in text that would be published or sent. `product` is the product key it is about (carebase, intel, advisors);
  * `numbers` is the set of numbers-with-units it may state (null skips that check).
  */
+// Intel trials need a card and bill automatically unless canceled (facts.mjs `trialCardTerms`, since 2026-11-14). Copy about Intel may
+// never say otherwise; CareBase trials are unchanged, so this reads only copy that is about Intel.
+const noCardTrial = /\b(?:no|without(?: a| any)?)\s+(?:credit\s+)?card\b|\bcard\s+(?:is\s+)?not\s+(?:required|needed)\b|\bno\s+payment\s+(?:details|information|method)\b/i;
+const aboutIntel = /\b(?:caremetric\s+)?intel\b/i;
+
 export function textProblems(value, { product = null, numbers = null, percents = null } = {}) {
   const text = String(value ?? '');
   const reasons = new Set();
@@ -187,6 +192,7 @@ export function textProblems(value, { product = null, numbers = null, percents =
   if (competitorPattern.test(text)) reasons.add('competitor_named');
   if ((product === 'carebase' || /\bcarebase\b/i.test(text)) && proveWords.test(text)) reasons.add('prove_word');
   if (forbiddenTerms.test(text)) reasons.add('vocabulary');
+  if ((product === 'intel' || (product !== 'carebase' && aboutIntel.test(text))) && noCardTrial.test(text)) reasons.add('trial_terms');
   if (screenIdentifiers(text).flagged || namedPerson.test(text)) reasons.add('personal_information');
   if ([...text.matchAll(honorificName)].some(match => match[0].split(/[\s.]+/).slice(1).filter(Boolean).some(word => !sheet().words.has(word)))) reasons.add('personal_information');
   if ((text.match(emailPattern) ?? []).some(address => !companyEmail.test(address)) || new RegExp(phoneNumber.source).test(text)) reasons.add('contact_detail');

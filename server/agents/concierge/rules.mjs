@@ -101,13 +101,14 @@ export function ownWords(text) {
   return kept.join('\n').trim() || whole;
 }
 
-const trialPhrase = 'no credit card';
+const trialPhrase = 'credit card';
 /**
- * `text` with the company's own words about its free trial ("a 30-day free trial with no credit card") made neutral. The fact sheet
- * and the sales playbook say it in every outreach email, and a mail program that quotes the original with no mark puts it under the
- * prospect's answer. Only that phrase, and only in a sentence about trying the product free, is set aside: "I have no credit card on
- * file" and "please update our credit card" are still billing. Found with indexOf and judged on a bounded stretch of its own
- * sentence, so a long message costs no more than its length.
+ * `text` with the company's own words about its free trial made neutral: "a 30-day free trial with no credit card" (what outreach said
+ * until 2026-11-14) and "a 30-day free trial (credit card required ...)" (what it says since Intel trials began to need a card). The fact
+ * sheet and the sales playbook say one or the other in outreach emails, and a mail program that quotes the original with no mark puts it
+ * under the prospect's answer. "credit card" is set aside only in a sentence about trying the product free, so "I have no credit card on
+ * file" and "please update our credit card" are still billing. Found with indexOf and judged on a bounded stretch of its own sentence, so
+ * a long message costs no more than its length.
  */
 export function withoutTrialPhrase(text) {
   const source = String(text ?? '');
@@ -121,7 +122,9 @@ export function withoutTrialPhrase(text) {
     const sentenceEnd = after.search(/[.!?\n]/);
     const sentence = `${before.slice(sentenceStart + 1)} ${sentenceEnd === -1 ? after : after.slice(0, sentenceEnd)}`;
     const ours = /\b(?:trial|try|free)\b/.test(sentence);
-    out += source.slice(from, at) + (ours ? 'no card' : source.slice(at, at + trialPhrase.length));
+    // "no credit card" reads "no card", as it always has; "credit card required" reads "card required".
+    const no = ours && at - 3 >= from && lower.slice(at - 3, at) === 'no ';
+    out += source.slice(from, no ? at - 3 : at) + (ours ? (no ? 'no card' : 'card') : source.slice(at, at + trialPhrase.length));
     from = at + trialPhrase.length;
   }
   return out + source.slice(from);

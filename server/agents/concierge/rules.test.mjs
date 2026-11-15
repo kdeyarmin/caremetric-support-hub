@@ -118,7 +118,7 @@ describe('a reply with the original email quoted under it', () => {
   it('is not a billing matter because the company\'s own email is under it, so a prospect\'s answer reaches sales', () => {
     for (const reply of replies) expect(categorize({ text: reply, subject: 'Re: A question' }), reply.slice(40, 90)).toMatchObject({ category: 'sales' });
     // Nor is the company's own trial sentence, quoted with a mark, with none, or on its own.
-    for (const words of ['A 30-day free trial with no credit card.', 'The free trial needs no credit card.', outreach, quoted])
+    for (const words of ['A 30-day free trial with no credit card.', 'The free trial needs no credit card.', 'A 30-day free trial (credit card required; canceling before it ends avoids any charge).', 'A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.', outreach, quoted])
       expect(categorize({ text: words }).category, words).not.toBe('billing');
   });
   it('still reads billing and cancellation wherever the sender wrote them, and every urgent kind in the quote', () => {
@@ -149,6 +149,9 @@ describe('a reply with the original email quoted under it', () => {
   });
   it('sets aside only the company\'s own trial phrase, in its own sentence', () => {
     expect(withoutTrialPhrase('A 30-day free trial with no credit card.')).toBe('A 30-day free trial with no card.');
+    expect(withoutTrialPhrase('Try it free for 30 days. A credit card is required to start the trial.')).toBe('Try it free for 30 days. A card is required to start the trial.');
+    expect(withoutTrialPhrase('Try it free. Our credit card was charged twice.')).toBe('Try it free. Our credit card was charged twice.');
+    expect(withoutTrialPhrase('A free trial, credit card required.')).toBe('A free trial, card required.');
     expect(withoutTrialPhrase('Try it free for 30 days, No Credit Card needed. Our credit card was charged twice.')).toBe('Try it free for 30 days, no card needed. Our credit card was charged twice.');
     expect(withoutTrialPhrase('I have no credit card on file. Is the trial free?')).toBe('I have no credit card on file. Is the trial free?');
     expect(withoutTrialPhrase('Nothing here.')).toBe('Nothing here.');
