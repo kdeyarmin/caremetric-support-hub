@@ -274,7 +274,8 @@ names the agency, never a person, and carries the opportunity's id as its refere
 
 **The first email is built around the report** (owner direction 2026-11-15; `reportTouchAngle` and `reviewTouchAngle` in
 `playbook.mjs`, `growth.11`). It goes to the agency's best contact: a named owner, administrator or marketing leader when the team
-found one, else the role address.
+found one, else the role address, and, as separate emails, the other decision-makers there (see
+[Several decision-makers at one organization](#several-decision-makers-at-one-organization)).
 
 1. It opens with the founder's story in one or two sentences.
 2. It asks two or three questions the reader answers for themselves: is the agency getting its share of the county's referrals, does
@@ -378,7 +379,8 @@ three until you save a number, the contact included; 1 turns it off) (`202611152
   report link (it is signed per opportunity), with their own greeting by name, their own opt-out link and their own checks when the
   email is claimed. Nothing new is written by the model: each copy is a message of its own (`growth_messages.primary_message_id` names
   the touch it copies) and goes through every step a message goes through.
-- **Who.** People at the same organization other than its contact, permitted by you and verified within 90 days, not unsubscribed,
+- **Who.** People at the same organization other than its contact, permitted (by you, or on their own while **Named people's email
+  addresses** is handed over) and verified within 90 days, not unsubscribed,
   with a name or a role: a decision-maker the Hub found (Decision-makers to review) or one on a list you imported. Never a generic
   mailbox (info@, office@, intake@ and the like are only ever a business's contact), and never a person who wrote in or that you typed
   in as a contact: those are sales follow-ups, not cold email. Best first: owner (or founder, president, CEO), administrator (or
