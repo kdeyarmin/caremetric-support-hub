@@ -91,13 +91,19 @@ language sql immutable set search_path = '' as $$
     else 5 end;
 $$;
 
--- Whether an organization asked growth email to stop: an opt-out or a complaint from anyone there, on any outreach email.
+-- Whether an organization asked growth email to stop: an opt-out or a complaint from anyone there, on any outreach email, or a
+-- request to stop written in an email to us. growth_inquiry reads one in a reply and opts the sender out without a delivery event,
+-- so someone there who is opted out and has written to us counts too. A hard bounce alone opts a person out without them writing,
+-- and never stops the organization.
 create or replace function private.growth_outreach_stopped(p_org uuid) returns boolean
 language sql stable set search_path = '' as $$
   select exists (select 1 from private.growth_delivery_events d join private.growth_messages x on x.id = d.message_id
     join private.growth_opportunities y on y.id = x.opportunity_id
-    where y.organization_id = p_org and x.purpose = 'marketing' and d.kind in ('complaint', 'unsubscribe'));
+    where y.organization_id = p_org and x.purpose = 'marketing' and d.kind in ('complaint', 'unsubscribe'))
+  or exists (select 1 from private.growth_contacts c where c.organization_id = p_org and c.eligibility = 'opted_out'
+    and exists (select 1 from private.communications m where m.channel = 'email' and lower(btrim(m.contact_email)) = c.email));
 $$;
+create index if not exists communications_contact_email on private.communications (lower(btrim(contact_email))) where channel = 'email';
 
 -- Why a sent touch may not (or not yet) go to colleagues, or null when it may. 'unresolved': its own delivery is still unknown.
 create or replace function private.growth_colleague_primary(p_primary uuid) returns text

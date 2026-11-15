@@ -69,6 +69,10 @@ begin
     or position('coalesce(m.work_id,(select x.work_id from private.growth_messages x where x.id=m.primary_message_id))' in pg_get_functiondef('private.growth_maintenance_before_lifecycle()'::regprocedure)) = 0 then
     raise exception 'An opt-out, a complaint or a primary contact''s hard bounce must stop the organization''s unsent outreach' using errcode = '55000';
   end if;
+  if position('private.communications' in pg_get_functiondef('private.growth_outreach_stopped(uuid)'::regprocedure)) = 0
+    or position('growth_delivery_events' in pg_get_functiondef('private.growth_outreach_stopped(uuid)'::regprocedure)) = 0 then
+    raise exception 'A request to stop, by link or written in a reply, must stop the organization''s cold outreach' using errcode = '55000';
+  end if;
   if position('hub.authorize_app_admin()' in pg_get_functiondef('hub.growth_detail(uuid)'::regprocedure)) = 0
     or position('recipients' in pg_get_functiondef('hub.growth_detail(uuid)'::regprocedure)) = 0
     or has_function_privilege('anon', 'hub.growth_detail(uuid)', 'execute') then

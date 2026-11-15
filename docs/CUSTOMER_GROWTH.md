@@ -320,7 +320,8 @@ finds it:
    another organization, or one the roster is looking up at that moment.
 
 No match: the prospect is tried again in 30 days, then every 90 (a website may add its address; CMS publishes a new quarter); one the
-website or the feed could not answer, in an hour. Until then its emails offer the market report page, as before. The telephone
+website or the feed could not answer, in an hour. A website whose read failed (a timeout, a refused connection) is tried again in an
+hour for the first three attempts, then on the 30 and 90-day schedule. Until then its emails offer the market report page, as before. The telephone
 numbers go to Intel in the one request and nowhere else: they are never stored, logged, written into evidence or shown to a model.
 A matched agency's record is observed again whenever the weekly roster read covers its state. The Growth screen's roster list shows a
 matched agency with its organization, as it shows one the roster resolved.
@@ -396,7 +397,9 @@ three until you save a number, the contact included; 1 turns it off) (`202611152
   "Also to <name> (<role>)". Lowering the number holds back copies not yet sent.
 - **Stop rules cover the whole organization.** A reply from anyone there stops everyone's emails (the reply reading already counts
   another mailbox at the business). An opt-out or a spam complaint from anyone there cancels every unsent email to everyone at the
-  organization and stops its cold outreach for good; the person who opted out is suppressed as before. A hard bounce of the
+  organization and stops its cold outreach for good; the person who opted out is suppressed as before. A request to stop written in
+  a reply ("please remove me") stops the organization the same way, also after a "not now" reply would otherwise let it be reopened
+  later (`private.growth_outreach_stopped`: someone there who is opted out and has written to us). A hard bounce of the
   contact's address stops everyone there, as it stopped the sequence before; a colleague whose address bounces is opted out (a hard
   bounce) or simply dropped from later touches (a soft one), and the others go on.
 - **On the Growth screen** each touch in an opportunity's message history says how many people it went to and lists each with the

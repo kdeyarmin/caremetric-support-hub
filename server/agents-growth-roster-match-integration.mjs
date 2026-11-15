@@ -111,6 +111,15 @@ try {
   const again = ours(await store.matchNext(25, 200));
   assert.deepEqual(again.map(item => item.organizationId), [next]);
   assert.ok((await match(next)).attempts > m.attempts);
+  // A website that could not be read waits an hour for its first three attempts, then a month like any other reason.
+  await admin.query('update private.growth_roster_matches set attempts=2 where organization_id=$1', [next]);
+  assert.deepEqual(await store.matchRecord(next, { outcome: 'unmatched', reason: 'site_unreadable' }), { matched: false, reason: 'site_unreadable' });
+  assert.ok(new Date((await match(next)).retry_after) - Date.now() < 3_700_000);
+  await reclaim(next);
+  await admin.query('update private.growth_roster_matches set attempts=3 where organization_id=$1', [next]);
+  await store.matchRecord(next, { outcome: 'unmatched', reason: 'site_unreadable' });
+  assert.ok(new Date((await match(next)).retry_after) - Date.now() > 29 * 86_400_000);
+  await reclaim(next);
   await store.matchRecord(next, { outcome: 'unmatched', reason: 'not_found' });
 
   // ---- 7. The daily number ---------------------------------------------------------------------------------------------------

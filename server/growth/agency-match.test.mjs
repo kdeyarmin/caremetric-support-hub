@@ -177,6 +177,15 @@ describe('growth.match', () => {
     expect(store.matchRecord).toHaveBeenCalledWith('org-5', { outcome: 'unmatched', reason: 'retry' });
   });
 
+  it('hands a prospect whose website could not be read out again, instead of asking Intel without its numbers', async () => {
+    const { store, contacts, feed, run } = setup();
+    contacts.listing.mockImplementation(async domain => { if (domain === 'sunrisehh.com') throw new Error('timeout'); return { phones: [], places: [], title: null, read: 0 }; });
+    const { result } = await run();
+    expect(store.matchRecord).toHaveBeenCalledWith('org-1', { outcome: 'unmatched', reason: 'site_unreadable' });
+    expect(feed.agencyMatch.mock.calls.flatMap(([arg]) => arg.candidates).map(c => c.key)).not.toContain('org-1');
+    expect(result.unmatched.site_unreadable).toBe(1);
+  });
+
   it('does nothing in Observe, without the feed or the feature, when Intel is not marketed, or with a daily number of 0', async () => {
     expect((await setup().run({ id: 't', agent: { autonomy: 'observe' } })).result).toEqual({ skipped: 'observe_only' });
     const unconfigured = setup();

@@ -94,7 +94,8 @@ end; $$;
 
 -- Server: what matching one prospect found.
 --   {"outcome":"matched","method":"phone"|"name_place","period":"2026Q3","row":{...the roster row for the CCN (roster.mjs rosterRow)}}
---   {"outcome":"unmatched","reason":"ambiguous"}   tried again in 30 days, then every 90; "retry": in an hour
+--   {"outcome":"unmatched","reason":"ambiguous"}   tried again in 30 days, then every 90; "retry": in an hour;
+--   "site_unreadable" (the website's read failed): in an hour for the first three attempts, then as any other reason
 create or replace function private.growth_roster_match_record(p_org uuid, p_data jsonb) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare m private.growth_roster_matches%rowtype; t private.growth_roster_targets%rowtype; g private.growth_organizations%rowtype;
@@ -142,7 +143,8 @@ begin
   end if;
  end if;
  update private.growth_roster_matches set status = 'unmatched', reason = v_reason, ccn = null, method = null, updated_at = now(),
-   retry_after = now() + case when v_reason = 'retry' then interval '1 hour' when m.attempts <= 1 then interval '30 days' else interval '90 days' end
+   retry_after = now() + case when v_reason = 'retry' or (v_reason = 'site_unreadable' and m.attempts < 3) then interval '1 hour'
+     when m.attempts <= 1 then interval '30 days' else interval '90 days' end
   where organization_id = p_org;
  return jsonb_build_object('matched', false, 'reason', v_reason);
 end; $$;

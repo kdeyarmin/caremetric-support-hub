@@ -204,20 +204,23 @@ export function matchHandlers({ growth, features = null, marketed = null, clock 
       if (saved?.matched) { counts.matched++; counts[data.method === 'phone' ? 'byPhone' : 'byName']++; }
       else { const reason = saved?.reason ?? data.reason ?? 'not_found'; counts.unmatched[reason] = (counts.unmatched[reason] ?? 0) + 1; }
     };
-    // Each prospect's own website, a few at a time. One the run has no time left for is handed out again in an hour.
+    // Each prospect's own website, a few at a time. One the run has no time left for is handed out again in an hour, and so is one
+    // whose read failed (a timeout, a refused connection): that says nothing about the agency, so it isn't put off for a month.
     const started = clock();
+    const unread = Symbol('unread');
     const listings = new Map();
     for (const group of batches(prospects, matchSiteConcurrency)) {
       signal?.throwIfAborted();
       if (clock() - started > startBudgetMs) break;
       const read = await Promise.all(group.map(async prospect => {
-        try { return await growth.contacts.listing(prospect.domain, { signal }); } catch (error) { if (signal?.aborted) throw error; return null; }
+        try { return await growth.contacts.listing(prospect.domain, { signal }); } catch (error) { if (signal?.aborted) throw error; return unread; }
       }));
       group.forEach((prospect, index) => listings.set(prospect.organizationId, read[index]));
     }
     const asked = new Map();
     for (const prospect of prospects) {
       if (!listings.has(prospect.organizationId)) { await record(prospect, { outcome: 'unmatched', reason: 'retry' }); continue; }
+      if (listings.get(prospect.organizationId) === unread) { await record(prospect, { outcome: 'unmatched', reason: 'site_unreadable' }); continue; }
       const candidate = matchCandidate(prospect, listings.get(prospect.organizationId));
       if (!candidate) { await record(prospect, { outcome: 'unmatched', reason: 'no_place' }); continue; }
       asked.set(candidate.key, { prospect, candidate });

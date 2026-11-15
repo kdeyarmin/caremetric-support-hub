@@ -1,6 +1,6 @@
 -- Each cold touch also to the other decision-makers at the organization (20261115230000_growth_colleagues.sql).
 begin;
-select plan(43);
+select plan(45);
 
 -- ---- The owner's number, the order of decision-makers, generic addresses ----------------------------------------------------------
 select is((select kind from private.hub_settings where key = 'growth.people_per_organization'), 'number', 'The number of people is a number setting');
@@ -144,6 +144,14 @@ select private.growth_delivery_event('colleague:hard', id, 'bounced', now(), tru
 select is((select eligibility from private.growth_contacts where id = 'e1030000-0000-4000-8000-000000000012'), 'opted_out', 'A colleague''s hard bounce opts that person out');
 select is((select count(*)::integer from private.growth_messages where opportunity_id = 'e1030000-0000-4000-8000-000000000020' and status in ('draft', 'proposed')), 2,
   'and stops nobody else''s email');
+select ok(not private.growth_outreach_stopped('e1030000-0000-4000-8000-000000000001'), 'A hard bounce is not a request to stop');
+-- What growth_inquiry leaves when a colleague writes "please remove me": the person opted out, and their email in Communications.
+savepoint reply_opt_out;
+insert into private.communications(channel, source_system, source_key, subject, contact_email)
+  values ('email', 'hub.email', 'colleague-reply-opt-out', 'Re: Your market report', 'Owen.Owner@colleague-agency.example.test');
+update private.growth_contacts set eligibility = 'opted_out', version = version + 1 where id = 'e1030000-0000-4000-8000-000000000013';
+select ok(private.growth_outreach_stopped('e1030000-0000-4000-8000-000000000001'), 'A request to stop written in a reply stops the organization, as its link does');
+rollback to savepoint reply_opt_out;
 select private.growth_unsubscribe(unsubscribe_hash) from private.growth_messages
  where primary_message_id = 'e1030000-0000-4000-8000-000000000050' and contact_id = 'e1030000-0000-4000-8000-000000000013';
 select is((select eligibility from private.growth_contacts where id = 'e1030000-0000-4000-8000-000000000013'), 'opted_out', 'Each colleague''s own link opts that person out');

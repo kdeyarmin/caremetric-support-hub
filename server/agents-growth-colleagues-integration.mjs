@@ -42,6 +42,7 @@ const task = async () => {
 const opportunityOf = async domain => row('select o.* from private.growth_opportunities o join private.growth_organizations g on g.id=o.organization_id where g.domain=$1', [domain]);
 const contactOf = async email => row('select * from private.growth_contacts where email=$1', [email]);
 const messageOf = async id => row('select * from private.growth_messages where id=$1', [id]);
+const stopped = async org => (await row('select private.growth_outreach_stopped($1) as stopped', [org])).stopped;
 const touchesOf = async opportunityId => {
   for (let offset = 0; ; offset += 100) {
     const page = await store.snapshot(offset);
@@ -213,6 +214,22 @@ try {
   const [bouncedColleague] = await colleaguesOf(bouncedTouch.id);
   await store.delivery(`colleague-hard:${run}`, bouncedTouch.id, 'bounced', new Date().toISOString());
   assert.equal((await messageOf(bouncedColleague.id)).status, 'cancelled', 'the first contact\'s hard bounce cancels the colleague\'s waiting email');
+  // A request to stop written in a reply (what growth_inquiry leaves: the sender opted out and their email in Communications) stops
+  // the organization for good, as the link does: a later touch to the first contact, still permitted, is refused.
+  const wrote = await prospect('colleague-wrote-stop');
+  await person(wrote.org, wrote.domain, 'owen.owner', 'Owen Owner', 'Owner');
+  const wroteTouch = await touch(wrote, 'outreach:0');
+  assert.equal((await claim(wroteTouch)).send, true); await store.finish(wroteTouch.id, 'accepted', 'p');
+  assert.equal(await stopped(wrote.org), false);
+  await admin.query("insert into private.communications(channel,source_system,source_key,subject,contact_email) values('email','hub.email',$1,'Re: Your market report',$2)",
+    [`colleague-wrote:${run}`, `Owen.Owner@${wrote.domain}`]);
+  await admin.query("update private.growth_contacts set eligibility='opted_out',version=version+1 where email=$1", [`owen.owner@${wrote.domain}`]);
+  assert.equal(await stopped(wrote.org), true, 'a request to stop written in a reply stops the organization');
+  await admin.query("update private.growth_messages set attempted_at=attempted_at-interval '4 days' where id=$1", [wroteTouch.id]);
+  assert.deepEqual(await claim(await touch(wrote, 'outreach:1')), { send: false, status: 'cancelled' }, 'and the first contact gets no later touch');
+  // A hard bounce alone opts a person out without them writing, and stops nobody else.
+  await admin.query("update private.growth_contacts set eligibility='opted_out',version=version+1 where email=$1", [`owen.owner@${bounced.domain}`]);
+  assert.equal(await stopped(bounced.org), false);
   // An opt-out by anyone there cancels everyone's unsent email and stops the organization's cold outreach for good.
   const pending = await touch(agency, 'outreach:2');
   await store.unsubscribe(signing.hash(signing.unsubscribeToken(colleagueUnsubscribeKey(second.work, touch2[0].contact_id))));
@@ -240,6 +257,7 @@ try {
       rewrite('private.growth_snapshot(integer)', ' and m.primary_message_id is null) as touches', ') as touches'),
       rewrite('private.growth_finish_message(uuid,text,text)', ' and m.primary_message_id is null;', ';'),
       rewrite('private.growth_delivery_event(text,uuid,text,timestamptz,boolean)', "y.organization_id=v_org and x.purpose='marketing' and x.status in ('draft','proposed')", "false"),
+      rewrite('private.growth_outreach_stopped(uuid)', "exists (select 1 from private.communications m where m.channel = 'email' and lower(btrim(m.contact_email)) = c.email)", 'false'),
     ]) {
       await client.query('begin');
       try { await client.query(drift); await assert.rejects(client.query(gate), refused('55000'), drift); }
