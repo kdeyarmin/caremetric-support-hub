@@ -64,7 +64,7 @@ Never add the agency's name, its results, any number or years, or a superlative.
 | Pro | $1,999 per month | $1,665 per month ($19,980 per year) | Up to 3 states, 25 seats, 10 branches, forecasting, book balance, white-label reports |
 | Enterprise | Custom | Annual, from about $3,500 per month | Larger footprints and other care settings by agreement |
 
-- 30-day free trial, no credit card, one county, 3 marketer seats and 1 manager seat. It does not turn into a paid plan by itself.
+- 30-day free trial, one county, 3 marketer seats and 1 manager seat. A credit card is required to start it, and the plan chosen at sign-up bills automatically when it ends unless canceled first.
 - Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service, applied automatically. Extra seats,
   branches, states, taxes and custom contracts are excluded.
 - Free onboarding on every plan. Annual billing saves about 17%.
@@ -148,7 +148,7 @@ each theme and how prominently:
 | 7 | Hospital partnership and TEAM | Trella, Salesforce, Definitive | Outcomes packet PDF, TEAM hospital flags and target list, Hospice Care Index and home health value-based purchasing scores | **Lead for hospital-facing agencies.** |
 | 8 | Goals, coaching and contests | Outfield, Isoratec, Trella | Monthly goals and leaderboard, team review of a marketer's week, ride-along coaching, Monday digest | **Support** for managers. Reward activity, never referral counts. |
 | 9 | Mileage, expenses and spend compliance | Trella, Isoratec | Stark annual limit per physician, per-person meal values, policy flags, approvals, reimbursement records, mileage log | **Mention only, inside field work.** Never leads (owner direction 2026-11-14). Never "keeps you compliant". |
-| 10 | Easy to evaluate and buy | Few: most say "request a demo" and quote privately | Prices on the website, a 30-day trial with no card, free onboarding, the Founders Sale | **Support** in every message as the next step. |
+| 10 | Easy to evaluate and buy | Few: most say "request a demo" and quote privately | Prices on the website, a 30-day trial (card required, cancel any time before it ends), free onboarding, the Founders Sale | **Support** in every message as the next step. |
 
 **Two things Intel cannot match and must not imply:** licensed claims data that infers which physician sent which patient to which
 agency, and dozens of live EHR connections. Intel's honest counter is clearly sourced public data, the agency's own recorded referrals,

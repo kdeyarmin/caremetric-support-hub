@@ -264,3 +264,14 @@ describe('plain language (owner direction 2026-11-12)', () => {
     expect(unclearCopy(`${Array.from({ length: 31 }, () => 'word').join(' ')}.`)).toEqual(['long_sentence']);
   });
 });
+
+describe('Intel trial terms', () => {
+  it('refuses copy about Intel that says its trial needs no card, and keeps the true terms', () => {
+    for (const text of ['Try it free for 30 days, no credit card.', 'Start a free trial with no card required.', 'The trial needs no payment details.', 'A credit card is not required for the trial.'])
+      expect(textProblems(text, { product: 'intel' }), text).toContain('trial_terms');
+    expect(textProblems('CareMetric Intel is free for 30 days without a credit card.')).toContain('trial_terms');
+    expect(textProblems('A 30-day free trial. A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.', { product: 'intel' })).not.toContain('trial_terms');
+    // CareBase trials are unchanged.
+    expect(textProblems('Try it free with no credit card.', { product: 'carebase' })).not.toContain('trial_terms');
+  });
+});

@@ -111,6 +111,7 @@ const factSheetCodes = {
   voice_claim: 'describes AI that uses voice or the phone', call_offer: 'offers a call, meeting or demo as a step', ai_mention: 'mentions AI or how it was written',
   prove_word: 'uses "prove", "proof" or "evidence" about CareBase', vocabulary: 'uses words outside the fixed vocabulary (ALR, auditor)',
   contact_detail: 'carries an email address or phone number', personal_information: 'appears to carry personal information',
+  trial_terms: 'says the Intel trial needs no credit card (it needs one, and bills automatically unless canceled)',
 };
 
 /**

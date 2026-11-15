@@ -211,8 +211,11 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   (briefs, supported reporting questions, drafted outreach) are text.
 - **The bigger picture** (owner direction 2026-11-12; `bigPicture`, `capabilities`, `whoUses` and `present` in `facts.mjs`, written
   from Intel's own /features page and home page with no numbers): see "CareMetric Intel: the bigger picture" below.
-- **Trial:** a **30-day** free trial with no credit card, covering 3 marketer seats + 1 manager, 1 branch, home health and
-  hospice, 1 county (`TRIAL_DAYS = 30`, the `trial` plan; owner decision 2026-11-12, it was 14 days). It does not turn into a paid subscription by itself.
+- **Trial:** a **30-day** free trial covering 3 marketer seats + 1 manager, 1 branch, home health and hospice, 1 county
+  (`TRIAL_DAYS = 30`, the `trial` plan; owner decision 2026-11-12, it was 14 days). **A credit card is required to start the
+  trial**, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then (Hub billing
+  since 2026-11-14, [Platform billing](PLATFORM_BILLING.md); Intel's site: "Credit card required · Cancel before trial end to avoid
+  charges"). Never write "no credit card" for Intel (`trialCardTerms` in `facts.mjs`).
 
 Plans (Intel's `src/lib/planCatalog.ts`). Annual billing saves about 17%. **Onboarding is free on every plan.**
 Intel publishes these figures at `https://www.caremetricintel.com/api/billing/catalog`; once the Hub has read it, the AI team

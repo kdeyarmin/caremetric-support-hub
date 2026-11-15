@@ -103,7 +103,7 @@ describe('sales playbook', () => {
     for (const text of [
       'Hold a meeting with your staff each month.', 'Schedule a meeting with your team to review drills.', 'Reply to this email with any question.',
       'CareMetric does not do live demos or sales calls.', 'We don\'t offer a live demo, but the walkthrough shows every step.',
-      'Pick a time each month to review training records.', 'Start a free trial with no credit card.', 'Use the chat on our website.',
+      'Pick a time each month to review training records.', 'Start a free trial; a credit card is required.', 'Use the chat on our website.',
       'Meeting the annual training requirement takes planning.', 'Hold a short meeting with your staff each month to review training.', 'A brief note: the trial covers one county.', 'No call needed: start the free trial.', '', null,
     ]) expect(offersMeeting(text), String(text)).toBe(false);
   });

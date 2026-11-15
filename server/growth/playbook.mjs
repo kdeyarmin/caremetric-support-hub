@@ -10,7 +10,7 @@
  */
 import { founder, products as facts, productPages } from '../agents/content/facts.mjs';
 
-export const playbookVersion = 'sales-playbook.3';
+export const playbookVersion = 'sales-playbook.4';
 
 /**
  * How CareMetric sells (owner decision 2026-11-08): entirely self-serve. Nobody offers a demo, a sales call or a meeting. A prospect gets
@@ -186,7 +186,7 @@ export const salesPlaybook = deepFreeze({
       'A marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place.',
       'One workspace for the whole marketing job: territory research, focused referral lists, account relationships, planned visits, expenses and recorded results. Email campaigns are one part of it, never the point (fact sheet, "How to present it").',
       'Plans from Starter (3 marketer seats + 1 manager) to Pro, with annual billing saving about 17%.',
-      `A ${facts.intel.trialDays}-day free trial with no credit card.`,
+      `A ${facts.intel.trialDays}-day free trial (credit card required; canceling before it ends avoids any charge).`,
     ],
     nextStep: { label: 'Start a CareMetric Intel free trial', url: pageUrl('intel-home') },
     pages: ['intel-home', 'intel-how-it-works', 'intel-county-report', 'intel-pricing', 'intel-resources', 'intel-targeted-marketing', 'intel-territory-analysis', 'intel-referral-measurement', 'intel-manager-playbook'],
@@ -199,11 +199,11 @@ export const salesPlaybook = deepFreeze({
     ],
     objections: [
       { key: 'price', when: 'Cost or budget.', answer: 'Quote only the fact sheet: Starter, Growth and Pro with seats and counties, annual billing saving about 17%, and the Founders Sale (50% off eligible subscription charges for the first 12 months of paid service). Never promise more referrals or revenue.' },
-      { key: 'timing', when: 'Not now or busy.', answer: `Acknowledge it, mention the ${facts.intel.trialDays}-day free trial needs no credit card, and ask when to check back. Record a dated follow-up.` },
+      { key: 'timing', when: 'Not now or busy.', answer: `Acknowledge it, mention the ${facts.intel.trialDays}-day free trial (a credit card is required, and canceling before it ends avoids any charge), and ask when to check back. Record a dated follow-up.` },
       { key: 'current_system', when: 'They already use a CRM, a spreadsheet or another data tool.', answer: 'Ask what it leaves out (territory analysis, focused lists, recorded referrals in one place). Never name or criticize another product.' },
       { key: 'data_trust', when: 'They ask whether the data shows real referrals.', answer: 'Be precise: public Medicare and Census figures are research signals; referrals are what the organization records in Intel.' },
       { key: 'authority', when: 'They must ask an owner or a corporate office.', answer: 'Offer a short summary they can forward and ask who else should see it.' },
-      { key: 'demo', when: 'They ask for a demo, a call or a meeting.', answer: `CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the resource or guide that shows what they want to see, the ${facts.intel.trialDays}-day free trial (no credit card) on one county, and answers to any question by email.` },
+      { key: 'demo', when: 'They ask for a demo, a call or a meeting.', answer: `CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the resource or guide that shows what they want to see, the ${facts.intel.trialDays}-day free trial on one county (credit card required; canceling before it ends avoids any charge), and answers to any question by email.` },
       { key: 'results', when: 'They ask for proof of results or case studies.', answer: 'There are no approved customer results to share. Suggest the free trial on one county so they can judge it on their own market.' },
       { key: 'integration', when: 'They ask whether Intel connects to their EHR or another system.', answer: 'Be exact: Intel imports referral and admission reports from the EHR as files (an upload, an SFTP folder or email), with saved layouts for common EHR reports. It is not a live connection. Never name an EHR vendor and never imply a live link.' },
       { key: 'security', when: 'They ask about HIPAA, a BAA, security or a contract.', answer: 'Say only that the research uses no patient-level data, that imports drop patient-identifying columns and that notes should never name a patient. Tell them the owner answers security, BAA and contract questions in writing, and hand the conversation to the owner.' },
@@ -246,7 +246,7 @@ export const experimentAngles = deepFreeze({
 export const lifecyclePlays = deepFreeze({
   onboarding: 'Welcome them, ask what outcome would make the product worth keeping, and point to the guide for the single first setup step that leads to it.',
   activation: 'They have not reached first value yet. Name the one setup step that is usually missing, point to its guide, and ask what is in the way.',
-  trial: 'Before the trial ends: recap the goal they named, ask what is left to decide, and explain how to activate a paid plan; the Founders Sale (its terms on the fact sheet) applies automatically when paid service starts, with no code needed. Never pressure and never invent an extension.',
+  trial: 'Before the trial ends: recap the goal they named, ask what is left to decide, and say what happens when it ends exactly as the fact sheet states for this product (for CareMetric Intel, the plan chosen at sign-up bills automatically unless they cancel before then); the Founders Sale (its terms on the fact sheet) applies automatically when paid service starts, with no code needed. Never pressure and never invent an extension.',
   adoption: 'Use has stalled. Ask whether the workflow still fits and what is in the way, and point to the guide for one specific step.',
   renewal: 'Ahead of renewal, recap the goals they set, ask what is working and what is not, and invite open questions.',
   support: 'An open support issue comes first: acknowledge it and say the team is working with them on it. No sales or upgrade talk.',
