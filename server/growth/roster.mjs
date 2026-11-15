@@ -81,7 +81,11 @@ export function rosterClosed(item, now = new Date()) {
  * scratch) and new owners (they are investing to grow) come first; government agencies and the largest chains, which buy through
  * other channels, come last. A closed agency is excluded.
  */
+/** Agencies CareMetric's own people run, by CCN: never prospects (the founder's agency, owner direction 2026-11-15). */
+export const ownAgencies = new Set(['398009']);
+
 export function rankTarget(item, now = new Date()) {
+  if (ownAgencies.has(String(item?.ccn ?? ''))) return { rank: 0, reasons: ["CareMetric's own agency"], excluded: true };
   if (rosterClosed(item, now)) return { rank: 0, reasons: ['Closed in the CMS roster'], excluded: true };
   let rank = 40;
   const reasons = [];

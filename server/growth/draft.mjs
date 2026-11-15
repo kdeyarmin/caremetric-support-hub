@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { playbooks, qualify } from './policy.mjs';
-import { experimentAngles, inboundAngle, lifecyclePlay, linkablePages, offersMeeting, playbookFor, playbookText, reaskAngle, sequencePlan, touchAngle } from './playbook.mjs';
+import { experimentAngles, inboundAngle, lifecyclePlay, linkablePages, offersMeeting, playbookFor, playbookText, reaskAngle, reportTouchAngle, reviewTouchAngle, sequencePlan, touchAngle } from './playbook.mjs';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import { factSheetText, products as factProducts } from '../agents/content/facts.mjs';
 import { allowedNumbers, normalizeTerms, percentsOf, textProblems, unclearCopy } from '../agents/content/validate.mjs';
@@ -25,7 +25,7 @@ import { researchOnlyPrefix } from './roster.mjs';
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.9';
+export const growthPromptVersion='growth.11';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric about one CareMetric product: outreach to a prospect, written as CareMetric's founder, or a message to a customer from its Account Manager. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -48,8 +48,9 @@ How to write so it gets read and answered:
 - Then one concrete way the product helps, in plain words from the fact sheet ("what we may say"), tied to that problem. For CareMetric Intel, pick the part of the whole workspace that answers that problem (the fact sheet's "Everything it does"), never email campaigns as the point.
 - Write so it is easy to read and makes sense on the first pass (the fact sheet's "How everything must read").
 - End with one easy next step: a short lead-in line, then the link on its own line (the free trial, or the walkthrough page that shows the part that matters to them). No urgency, no "just checking in", no "hope this finds you well".
+- A market report is the heart of the first email to a CareMetric Intel prospect ("touchPlan" says how). Intel draws it from public CMS and Census data: where an agency stands among the agencies located in its county, the county's largest agencies, the hospitals its residents use, the physicians Intel ranks highest as referral sources, its public ratings and three suggested moves. When "report" is set, CareMetric made this agency's own report, and its link is the one in "links" whose label starts "Free market report for"; otherwise the market report page in "links" lets the agency get its own. In touch 2 you may point to the report again in a few words before the new angle. Never state or hint at a figure, rank or rating from it; the reader opens it to see them. Call it a market report, never an assessment or audit of their performance.
 - Short paragraphs of one to three sentences with a blank line between them, so it reads well on a phone.
-- One idea and one next step per message, with at most one question. Respect the length in "style".
+- One idea and one next step per message, with at most one question, unless "touchPlan" allows more (the first email built around a market report may ask up to three questions and carry two links). Respect the length in "style".
 - Subject: three to seven words about their work or the problem, in sentence case, under 60 characters; specific and plain, never clickbait, "Re:" or "Fwd:". In a first outreach touch, leave the product name out of the subject.
 - Outreach follows "touchPlan" for its touch number, so a later touch never repeats an earlier one. A customer message follows "play".
 - When "lead" is set, the reader asked for something on the website (what and when are in it): they know CareMetric, so thank them for it and follow up on it instead of introducing yourself as a stranger.
@@ -95,12 +96,13 @@ export function draftLinks(product) {
  * Why a model draft may not be offered, or null when it passes. Checks the words, the links and the citations, and that it offers no
  * demo, call, meeting or conversation.
  */
-export function draftProblem(answer, { product, sources, outreach, organization = null }) {
+export function draftProblem(answer, { product, sources, outreach, organization = null, extraLinks = [] }) {
   if (!answer || answer.needsHuman) return 'needs_human';
   if (!answer.subject.trim() || answer.subject.length>150 || /[\r\n]/.test(answer.subject) || /^(?:re|fwd?):/i.test(answer.subject.trim())) return 'subject';
   if (!answer.body.trim() || answer.body.length>3500) return 'body';
   if (answer.citations.some(id=>!sources.some(s=>s.id===id)) || (outreach && !answer.citations.length)) return 'citation';
-  const allowed=new Set(draftLinks(product).map(link=>link.url));
+  // The product's own pages, and the agency's own report link when the draft was given one.
+  const allowed=new Set([...draftLinks(product).map(link=>link.url),...extraLinks]);
   // A tagged product link is read as the page it points to; a tag that is not well formed leaves the address as written, and it fails.
   const links=(untagLinks(answer.body).match(/https?:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(trailing,''));
   if (links.some(url=>!allowed.has(url))) return 'link';
@@ -163,7 +165,7 @@ export function messageArms(o, sources) {
 export const memoBlock=memo=>`Notes from CareMetric's own results (memo ${memo.version}):\n${memo.memo}`;
 const usableMemo=memo=>memo&&Number.isInteger(memo.version)&&memo.version>0&&typeof memo.memo==='string'&&memo.memo.trim()?memo:null;
 
-export async function draftMessage({ opportunity:o, work, task, model, signal, onReject=null, memo=null }) {
+export async function draftMessage({ opportunity:o, work, task, model, signal, onReject=null, memo=null, report=null }) {
   const rejected=code=>{try{onReject?.(code);}catch{/* reporting never stops a draft */}return null;};
   const approved=o.policy?.approved_claim?.trim();
   if (!approved || screenIdentifiers(approved).flagged || !o.contact_id || !qualify(o.evidence).canDraft && work.kind==='outreach') return null;
@@ -197,15 +199,21 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
       :`How is your progress with ${product.name}?\n\n${customerSteps[work.kind]??"Reply with the step you need help with."}`,
     citations:sources.map(s=>s.id),modelGenerated:false,variant,arms};
   if(variant==='concise' && work.kind==='outreach')fallback.body=`${approved}\n\nTry it free:${trialPage?` ${trialPage}`:' reply and we will send the link.'}`;
+  // An agency's own market report (report-link.mjs) is the first touch's next step when there is one.
+  const offered=work.kind==='outreach'&&report?.url&&/^https:\/\/www\.caremetricintel\.com\/report\/[A-Za-z0-9_.-]+$/.test(report.url)?report:null;
+  if(offered&&outreachTouch===1&&!reask)fallback.body=`${approved}\n\nAre you getting your share of the referrals in your county? I put together a free market report for your agency from public Medicare data: where you stand, who leads the county and the hospitals and physicians who refer the most.\n${offered.url}\n\nAny question, just reply to this email.`;
   fallback.body=tagLinks(fallback.body,tags);
   if (!model?.configured) return fallback;
   const book=playbookFor(o.product);
   const outreach=work.kind==='outreach';
   const touch=outreach?outreachTouch:null;
+  // The first cold email to a CareMetric Intel prospect is built around a market report (owner direction 2026-11-15).
+  const reportLed=outreach&&o.product==='caremetric-intel'&&touch===1&&!reask&&!lead;
   const input={
-    kind:work.kind, product:product.name, style:variant==='concise'?'Keep the body under eighty words.':'Keep the body under one hundred twenty words.',
-    approvedClaim:approved, links:draftLinks(o.product), nextStep:book?.nextStep??null,
-    ...(outreach?{touch,maxTouches:reask?1:Number(o.policy?.max_touches??3),touchPlan:reask?reaskAngle:lead?inboundAngle(touch):touchAngle(touch),
+    kind:work.kind, product:product.name, style:reportLed?'Keep the body under one hundred seventy words.':variant==='concise'?'Keep the body under eighty words.':'Keep the body under one hundred twenty words.',
+    approvedClaim:approved, links:[...draftLinks(o.product),...(offered?[{label:offered.label,url:offered.url}]:[])], nextStep:book?.nextStep??null,
+    ...(offered?{report:true}:{}),
+    ...(outreach?{touch,maxTouches:reask?1:Number(o.policy?.max_touches??3),touchPlan:reask?reaskAngle:lead?inboundAngle(touch):reportLed?(offered?reportTouchAngle:reviewTouchAngle):touchAngle(touch),
       ...(lead?{lead:{kind:String(lead.kind??''),place:lead.place??null,at:lead.at??null}}:{}),...(reask?{reask:true}:{}),
       ...(arms.angle?{focus:arms.angle.replace(/_/g,' ')}:{}),...(arms.subject?{subjectStyle:arms.subject}:{})}:{play:lifecyclePlay(work.kind)}),
     stage:o.stage??null, organization:{name:o.name??null,domain:o.domain??null},
@@ -213,7 +221,7 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   };
   // Structured business context only; free-form customer conversation is not included here.
   if (screenIdentifiers(JSON.stringify({...input,sources:[],links:[],nextStep:null})).flagged || sources.some(s=>screenIdentifiers(`${s.claim} ${s.source_url}`).flagged)) return null;
-  const checks={product:o.product,sources,outreach,organization:o.name??null};
+  const checks={product:o.product,sources,outreach,organization:o.name??null,extraLinks:offered?[offered.url]:[]};
   const learned=outreach?usableMemo(memo):null;
   const system=[{text:growthSystem,cache:true},...(learned?[{text:memoBlock(learned),cache:true}]:[])];
   const promptVersion=learned?`${growthPromptVersion}-m${learned.version}`:growthPromptVersion;

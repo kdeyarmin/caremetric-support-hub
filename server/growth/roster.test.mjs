@@ -128,3 +128,11 @@ describe('confirming the site is the agency\'s', () => {
     expect(confirmsSite(target(), { email: null })).toBeNull();
   });
 });
+
+describe("CareMetric's own agency", () => {
+  it('is never a prospect', async () => {
+    const { rankTarget, ownAgencies } = await import('./roster.mjs');
+    expect(ownAgencies.has('398009')).toBe(true);
+    expect(rankTarget({ ccn: '398009', state: 'PA', name: 'PENN HOME HEALTH, INC', setting: 'home_health' })).toMatchObject({ excluded: true, rank: 0 });
+  });
+});

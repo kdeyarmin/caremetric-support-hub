@@ -394,10 +394,10 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  const on=await sweep(true);
  expect(on.store.learningActive).toHaveBeenCalledTimes(1);
  expect(on.store.learningActive).toHaveBeenCalledWith('caremetric-intel');
- expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.9-m5');
+ expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.11-m5');
  expect(on.store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({memoVersion:5}));
  const off=await sweep(false);
  expect(off.store.learningActive).not.toHaveBeenCalled();
- expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.9');
+ expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.11');
  expect(off.store.draft.mock.calls[0][2].memoVersion).toBeUndefined();
 });

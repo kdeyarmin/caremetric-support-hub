@@ -326,6 +326,7 @@ export const productPages = deepFreeze([
   { id: 'intel-pricing', product: 'intel', label: 'CareMetric Intel plans and pricing', url: 'https://www.caremetricintel.com/#pricing' },
   { id: 'intel-how-it-works', product: 'intel', label: 'How CareMetric Intel works', url: 'https://www.caremetricintel.com/#how-it-works' },
   { id: 'intel-county-report', product: 'intel', label: 'Free county report from CareMetric Intel', url: 'https://www.caremetricintel.com/county-report' },
+  { id: 'intel-market-review', product: 'intel', label: 'Free market report for your agency (CareMetric Intel)', url: 'https://www.caremetricintel.com/market-review' },
   { id: 'intel-resources', product: 'intel', label: 'CareMetric Intel resource library', url: 'https://www.caremetricintel.com/resources/' },
   { id: 'intel-targeted-marketing', product: 'intel', label: 'A practical framework for targeted healthcare marketing', url: 'https://www.caremetricintel.com/resources/targeted-healthcare-marketing-framework' },
   { id: 'intel-territory-analysis', product: 'intel', label: 'Territory analysis with public healthcare and demographic data', url: 'https://www.caremetricintel.com/resources/public-data-territory-analysis' },
