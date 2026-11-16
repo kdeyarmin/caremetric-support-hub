@@ -968,6 +968,17 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
 
   /**
+   * The full refresh from Stripe, once per process, as soon as Stripe can be verified: at the start, or on a later sweep when Stripe could
+   * not be reached then (before, a Stripe outage at the start meant no refresh until the next deploy). Webhooks keep the mirror current
+   * after it. Resolves to null while Stripe cannot be verified, so the next call tries again.
+   */
+  let reconciled = null;
+  function reconcileOnce() {
+    reconciled ??= reconcile().then(result => { if (result === null) reconciled = null; return result; }, error => { reconciled = null; throw error; });
+    return reconciled;
+  }
+
+  /**
    * Founders Sale prices that later changes replaced keep the offer for the
    * applications in FOUNDERS_FOLLOW_APPS (server/founders-sale.mjs). Reads every
    * price, archived ones included, of the Founders products of those
@@ -1095,7 +1106,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
 
   return {
-    start: verify, reconcile, reconcileUsage, syncAppCatalog, refreshFounders,
+    start: verify, reconcile, reconcileOnce, reconcileUsage, syncAppCatalog, refreshFounders,
     reconcileCustomerCheckouts: async () => {
       const result = await customerSelfService.reconcileCheckouts();
       if (result.failed || result.unbound) log.warn(`Customer Checkout reconciliation: ${result.failed} failed and ${result.unbound} unbound pending purchases.`);

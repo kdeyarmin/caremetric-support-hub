@@ -166,6 +166,8 @@ const syncCatalogs=async()=>{
   if(catalogSyncRunning)return;
   catalogSyncRunning=true;
   try{
+    // The full refresh from Stripe, once: a no-op after it has run, and the retry when Stripe could not be reached at the start.
+    await billing.reconcileOnce();
     const result=!settings.get('billing.intel_price_sync')?null
       :await billing.syncAppCatalog('caremetric-intel',process.env.INTEL_CATALOG_URL?{url:process.env.INTEL_CATALOG_URL}:{});
     if(result?.applied) console.info(`Intel prices: ${result.applied} Stripe product(s) and price(s) brought in step with catalog ${result.version}.`);
@@ -174,7 +176,7 @@ const syncCatalogs=async()=>{
   }catch{console.warn('The Intel price catalog or Founders Sale prices could not be synced; it will retry.');}
   finally{catalogSyncRunning=false;}
 };
-void billing.start().then(ready => ready && billing.reconcile()).then(()=>syncCatalogs()).catch(() => {});
+void billing.reconcileOnce().then(()=>syncCatalogs()).catch(() => {});
 const catalogTimer=setInterval(()=>void syncCatalogs(),15*60*1000);catalogTimer.unref();
 let billingSweepRunning=false;
 const billingTimer=setInterval(()=>{
