@@ -40,12 +40,11 @@ const pageText = html => clean(html.replace(/<script[\s\S]*?<\/script>|<style[\s
 const first = (pattern, text) => pattern.exec(text)?.[1] ?? null;
 
 // Wording the AI team may not repeat, rewritten: other products' names (content/validate.mjs), so Intel's EMR import layouts are described
-// without the vendors' names, and the AI apps and CRM Intel connects to without theirs; demos and sales calls, which CareMetric does not
-// offer (growth/playbook.mjs offersMeeting); and counts of Intel's data, which the fact sheet's Intel boundaries rule out until the owner
-// approves data-scale figures (docs/INTEL_MARKETING_PLAYBOOK.md, "Decisions for the owner"): a catalog's numbers are ones drafts may state.
+// without the vendors' names, and the AI apps and CRM Intel connects to without theirs; and demos and sales calls, which CareMetric does
+// not offer (growth/playbook.mjs offersMeeting). Intel's published count of its datasets stays: the owner approved data-scale figures on
+// 2026-11-16 (docs/INTEL_MARKETING_PLAYBOOK.md, "Decisions for the owner"), and a catalog's numbers are ones drafts may state.
 const vendorEdit = replacement => `EMR vendors named on the page are written generically: "${replacement}"`;
 const productEdit = replacement => `Other products named on the page are written generically: "${replacement}"`;
-const countEdit = replacement => `A count of Intel's datasets is left out until the owner approves data-scale figures: "${replacement}"`;
 const generic = [
   [/Saved layouts cover HCHB, WellSky, Axxess and MatrixCare\./g, 'Saved layouts cover common home health and hospice EMR reports.', vendorEdit],
   [/Saved layouts support common reports from Homecare Homebase, WellSky, Axxess, and MatrixCare\. These are file-based imports; the listed layouts do not imply a live connection to those vendors\./g,
@@ -57,8 +56,6 @@ const generic = [
     'start from a saved layout for a common home health or hospice EMR report. These are file-based imports, not live EMR connections.', vendorEdit],
   [/connect Claude, ChatGPT or any MCP app to Intel/g, 'connect an AI app that supports MCP to Intel', productEdit],
   [/accounts to HubSpot as companies/g, 'accounts to a supported CRM as companies', productEdit],
-  [/with 150\+ public healthcare datasets/g, 'with public healthcare datasets', countEdit],
-  [/More than 150 public healthcare datasets/g, 'Public healthcare datasets', countEdit],
   [/ ?You can also explore demo options with fictional facility data before setting up your own organization\./g, '', () => 'A sentence offering demo options is left out: CareMetric offers no demos.'],
   [/without a sales call/g, 'on your own', () => '"Without a sales call" is written "on your own": the team never mentions sales calls.'],
 ];
@@ -112,6 +109,10 @@ export function extractIntel(home, features) {
   const otherSettings = settingCards.filter(card => !settings.includes(card));
   // The manager view: its own section's numbered outcomes ("Focus the work before the week starts", ...).
   const managers = cardsOf(first(/<ul class="cm-outcome-list">([\s\S]*?)<\/ul>/, sectionOf(home, 'for-managers')) ?? '');
+  // The site's own figures about its data ("The data behind every decision", section#by-the-numbers): each a figure, what it counts and a
+  // line on it. The owner approved them on 2026-11-16 as the only figures about its data the team may state.
+  const scale = [...plain(sectionOf(home, 'by-the-numbers')).matchAll(/<dt><strong>([\s\S]*?)<\/strong><span>([\s\S]*?)<\/span><\/dt><dd>([\s\S]*?)<\/dd>/g)]
+    .map(([, figure, label, text]) => ({ figure: clean(figure), label: clean(label), text: clean(text) }));
   const tabs = Object.fromEntries([...home.matchAll(/id="(_R_[^"]+-tab-\d+)"[^>]*>(?:<svg[\s\S]*?<\/svg>)?\s*<span>([\s\S]*?)<\/span>/g)].map(([, tab, label]) => [tab, clean(label)]));
   const data = [...home.matchAll(/role="tabpanel" aria-labelledby="([^"]+)"[^>]*class="cm-data-panel"[^>]*>([\s\S]*?<p class="cm-data-limit">[\s\S]*?<\/p>)/g)].map(([, tab, panel]) => ({
     family: tabs[tab] ?? null,
@@ -143,7 +144,7 @@ export function extractIntel(home, features) {
     overview: clean(first(/<p class="cm-hero-description">([\s\S]*?)<\/p>/, home)),
     legend: clean(first(/<p class="cm-features-legend">([\s\S]*?)<\/p>/, features)),
     publishedCount: count ? Number(count[1]) : null,
-    pillars, areas, data,
+    pillars, areas, data, scale,
     settings, otherSettings, managers,
     // Purchasing and the end of the trial are the fact sheet's (prices come from Intel's catalog); the rest are product answers.
     faq: faq.filter(item => !/^(How do we purchase|What happens when the trial ends)/.test(item.question)),
@@ -246,8 +247,8 @@ export const products = {
       const total = body.areas.reduce((sum, area) => sum + area.features.length, 0);
       // All five primary settings, the manager outcomes, and no pillar read as a care setting or a manager outcome.
       const strays = [...body.settings, ...body.otherSettings, ...body.managers].filter(card => body.pillars.some(pillar => pillar.title === card.name)).length;
-      if (body.areas.length < 5 || total < 50 || body.data.length < 5 || body.pillars.length < 5 || body.settings.length !== 5 || body.managers.length < 3 || strays) {
-        throw new Error(`Intel's pages changed shape (areas ${body.areas.length}, features ${total}, data ${body.data.length}, pillars ${body.pillars.length}, settings ${body.settings.length}, managers ${body.managers.length}${strays ? `, ${strays} pillars read as settings or managers` : ''}); update the extractor.`);
+      if (body.areas.length < 5 || total < 50 || body.data.length < 5 || body.pillars.length < 5 || body.settings.length !== 5 || body.managers.length < 3 || !body.scale.length || strays) {
+        throw new Error(`Intel's pages changed shape (areas ${body.areas.length}, features ${total}, data ${body.data.length}, pillars ${body.pillars.length}, settings ${body.settings.length}, managers ${body.managers.length}, figures ${body.scale.length}${strays ? `, ${strays} pillars read as settings or managers` : ''}); update the extractor.`);
       }
       if (body.publishedCount && body.publishedCount !== total) throw new Error(`Intel's features page says ${body.publishedCount} features but ${total} were read.`);
       return `${body.areas.length} areas, ${total} features, ${body.data.length} data families and ${body.faq.length} answers`;
