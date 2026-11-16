@@ -58,7 +58,7 @@
     },
     {
       "title": "Reach contacts at scale",
-      "why": "Send email campaigns to a lead list or the contacts on your book, with your sender details and automatic unsubscribe handling. Track deliveries, opens, clicks, responses, and bounces.",
+      "why": "Send email campaigns to a lead list or the contacts on your book, with your sender details and automatic unsubscribe handling. Track deliveries, opens, clicks, and bounces.",
       "area": "Email campaigns · Growth & Pro"
     }
   ],
@@ -541,7 +541,7 @@
         },
         {
           "name": "Delivery tracking",
-          "does": "Track deliveries, opens, clicks, responses and bounces for each campaign, and link campaigns to the accounts they touched.",
+          "does": "Track deliveries, opens, clicks and bounces for each campaign, and link campaigns to the accounts they touched.",
           "access": "Owners · Growth & Pro"
         },
         {
