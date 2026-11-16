@@ -7,7 +7,7 @@ import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
 import { assertBackendContract } from '../src/lib/backendContract.ts';
-import { databaseConfig } from './database-config.mjs';
+import { databaseConfig, guardPool } from './database-config.mjs';
 import { publications } from './publications.mjs';
 import { distributionObserver } from './distribution-observer.mjs';
 import { aiAssistance } from './ai-assistance.mjs';
@@ -47,7 +47,8 @@ import { hubSettings } from './hub-settings.mjs';
 import { socialConnections } from './social-connections.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
-const pool=new pg.Pool(databaseConfig());
+// A dropped connection is logged and replaced, never an uncaught error (guardPool).
+const pool=guardPool(new pg.Pool(databaseConfig()));
 // Refuse an incomplete release before replacing the running application.
 await pool.query('select c.credential_version,s.auth_method from private.password_credentials c,private.sms_sessions s limit 0');
 const provider=smsProvider({apiKey:process.env.HUB_TELNYX_API_KEY,profileId:process.env.HUB_TELNYX_VERIFY_PROFILE_ID});

@@ -55,3 +55,18 @@ export function databaseConfig(environment = process.env, now = Date.now()) {
     ssl: { rejectUnauthorized: true, servername: url.hostname, ...(ca ? { ca } : {}) },
   };
 }
+
+/**
+ * Keeps a dropped database connection from stopping the Hub. pg-pool emits 'error' on the pool when an idle connection fails, and a pg
+ * client emits 'error' on itself when its socket dies while it is checked out (pg-pool removes its own listener on checkout, and the Hub
+ * holds connections across Stripe and Telnyx calls inside transactions). With no listener either one is an uncaught exception and the
+ * process exits. The query in flight still fails and its caller handles that; the pool opens a new connection for the next one.
+ * One line per lost connection, logged by the connection's own listener, without the error's text, which can name the host or role.
+ */
+export function guardPool(pool, log = console) {
+  const dropped = () => log.warn('A database connection dropped; the next query opens a new one.');
+  // An idle connection's failure is reported on the connection first (below), then on the pool: counted once.
+  pool.on('error', () => {});
+  pool.on('connect', client => client.on('error', dropped));
+  return pool;
+}

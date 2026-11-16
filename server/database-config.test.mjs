@@ -1,7 +1,8 @@
+import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { describe, expect, it } from 'vitest';
-import { databaseConfig } from './database-config.mjs';
+import { databaseConfig, guardPool } from './database-config.mjs';
 
 const host = 'db.xgauehtwksmnoqhgqegm.supabase.co';
 const url = `postgresql://hub_app_server:synthetic-test-password@${host}:5432/postgres`;
@@ -54,5 +55,25 @@ describe('restricted PostgreSQL connection configuration', () => {
       expect(failure.message).not.toContain('%zz');
     }
     expect(config(url.replace('synthetic-test-password', 'encoded%40password%3Avalue')).password).toBe('encoded@password:value');
+  });
+});
+
+describe('a dropped database connection', () => {
+  const lostConnection = () => new Error('Connection terminated unexpectedly: host db.example password=synthetic-secret');
+  it('is an uncaught error on an unguarded pool, which stops the process', () => {
+    const pool = new pg.Pool(config());
+    expect(() => pool.emit('error', lostConnection())).toThrow(/terminated/);
+  });
+  it('is logged once, without its text, whether the connection was idle or held in a transaction', () => {
+    const lines = [];
+    const pool = guardPool(new pg.Pool(config()), { warn: line => lines.push(line) });
+    // A connection the pool opens gets its own listener: pg-pool removes its idle listener while a connection is checked out.
+    const held = new EventEmitter();
+    pool.emit('connect', held);
+    expect(() => held.emit('error', lostConnection())).not.toThrow();
+    // An idle connection's failure reaches the pool too; that one is not counted twice.
+    expect(() => pool.emit('error', lostConnection(), held)).not.toThrow();
+    expect(lines).toEqual(['A database connection dropped; the next query opens a new one.']);
+    expect(lines.join('')).not.toContain('synthetic');
   });
 });
