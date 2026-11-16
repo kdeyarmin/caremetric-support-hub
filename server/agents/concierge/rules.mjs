@@ -106,8 +106,8 @@ const trialPhrase = 'credit card';
  * `text` with the company's own words about its free trial made neutral: "a 30-day free trial with no credit card" (what outreach said
  * until 2026-11-14) and "a 30-day free trial (credit card required ...)" (what it says since Intel trials began to need a card). The fact
  * sheet and the sales playbook say one or the other in outreach emails, and a mail program that quotes the original with no mark puts it
- * under the prospect's answer. "credit card" is set aside only in a sentence about trying the product free, so "I have no credit card on
- * file" and "please update our credit card" are still billing. Found with indexOf and judged on a bounded stretch of its own sentence, so
+ * under the prospect's answer. "credit card" is set aside only in recognized trial disclosures, so card-management requests stay billing
+ * even when they mention the trial or sit beside marketing wording. Found with indexOf and judged on bounded disclosure context, so
  * a long message costs no more than its length.
  */
 export function withoutTrialPhrase(text) {
@@ -120,8 +120,17 @@ export function withoutTrialPhrase(text) {
     const after = lower.slice(at + trialPhrase.length, at + trialPhrase.length + 60);
     const sentenceStart = Math.max(before.lastIndexOf('.'), before.lastIndexOf('!'), before.lastIndexOf('?'), before.lastIndexOf('\n'));
     const sentenceEnd = after.search(/[.!?\n]/);
-    const sentence = `${before.slice(sentenceStart + 1)} ${sentenceEnd === -1 ? after : after.slice(0, sentenceEnd)}`;
-    const ours = /\b(?:trial|try|free)\b/.test(sentence);
+    const prefix = before.slice(sentenceStart + 1);
+    const suffix = sentenceEnd === -1 ? after : after.slice(0, sentenceEnd);
+    // Match the disclosure immediately around this occurrence, not trial words elsewhere in the sentence.
+    const noCard = /\b(?:trial(?: with| needs)?|free for 30 days[,]?) no $/.test(prefix)
+      && /^(?: needed|required)?\s*(?:$|[,;)])/.test(suffix);
+    const cardRequired = /\btrial(?: on one county)?\s*[(,;]\s*(?:a )?$/.test(prefix) && /^ (?:is )?required\b/.test(suffix);
+    const startTrial = /(?:^\s*>?\s*|\bthat )a $/.test(prefix) && /^ is required to start the trial\b/.test(suffix);
+    // The documented trial summary uses "it" in the next sentence; require that specific trial-summary context.
+    const startIt = /\bfree trial, [^.!?\n]{0,70}\. a $/.test(before) && /^ is required to start it(?:,|$)/.test(suffix);
+    const siteTerms = /^\s*>?\s*$/.test(prefix) && /^ required · cancel before trial end to avoid charges(?:$|[;,])/.test(suffix);
+    const ours = noCard || cardRequired || startTrial || startIt || siteTerms;
     // "no credit card" reads "no card", as it always has; "credit card required" reads "card required".
     const no = ours && at - 3 >= from && lower.slice(at - 3, at) === 'no ';
     out += source.slice(from, no ? at - 3 : at) + (ours ? (no ? 'no card' : 'card') : source.slice(at, at + trialPhrase.length));
