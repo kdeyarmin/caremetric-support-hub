@@ -144,7 +144,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     return object;
   }
 
-  const customerSelfService = customerBillingService({ pool, stripe, now, publicOrigin, purchasingEnabled: customerPurchasingEnabled,
+  const customerSelfService = customerBillingService({ pool, stripe, now, publicOrigin, purchasingEnabled: customerPurchasingEnabled, log,
     authorize: authorizeCustomerBilling ?? (() => { throw new HttpError(503, 'Native purchasing verification is unavailable.'); }),
     mirrorSubscription: subscription => transaction(pool, db => mirror(db, 'subscription', subscription, new Date(now()), { live: client })),
     mirrorCustomer: customer => transaction(pool, db => mirror(db, 'customer', customer, new Date(now()), { live: client })),
@@ -177,15 +177,24 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         }
         return { received: true };
       });
-      // A duplicate receipt can retry reconciliation after a prior provider/database timeout.
-      if (eventTarget(event)?.kind === 'checkout') await customerSelfService.reconcileCheckout(event.data.object.id);
-      if (live && event.data.object.metadata?.app !== 'caremetric-go' && normalizers.invoice(event.data.object).app !== 'caremetric-go') {
-        const target = eventTarget(event);
-        if (target?.kind === 'subscription') await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${target.id}`, { expand: ['latest_invoice', 'discounts'] }));
-        if (target?.kind === 'invoice') {
-          const invoice = normalizers.invoice(event.data.object);
-          if (invoice.subscription) await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${invoice.subscription}`, { expand: ['latest_invoice', 'discounts'] }));
+      // A duplicate receipt can retry reconciliation after a prior provider/database timeout. A conflict (a 409: a paid checkout whose
+      // receipt does not match its quote) is permanent, so retrying the event cannot help: it is logged and the event acknowledged, and
+      // the one-minute Checkout sweep keeps reporting it for billing support. Before, it failed every event Stripe sent about that quote
+      // until Stripe stopped calling the endpoint. Subscription quotes settle their own conflicts (customer-billing.mjs). Anything else
+      // fails the event, so Stripe sends it again.
+      try {
+        if (eventTarget(event)?.kind === 'checkout') await customerSelfService.reconcileCheckout(event.data.object.id);
+        if (live && event.data.object.metadata?.app !== 'caremetric-go' && normalizers.invoice(event.data.object).app !== 'caremetric-go') {
+          const target = eventTarget(event);
+          if (target?.kind === 'subscription') await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${target.id}`, { expand: ['latest_invoice', 'discounts'] }));
+          if (target?.kind === 'invoice') {
+            const invoice = normalizers.invoice(event.data.object);
+            if (invoice.subscription) await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${invoice.subscription}`, { expand: ['latest_invoice', 'discounts'] }));
+          }
         }
+      } catch (error) {
+        if (!(error instanceof HttpError && error.status === 409)) throw error;
+        log.warn(`Billing webhook ${event.type} was recorded, but a customer quote it touches needs billing support: ${error.message}`);
       }
       return receipt;
     } catch (error) {

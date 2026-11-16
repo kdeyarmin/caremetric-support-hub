@@ -72,7 +72,7 @@ function verifyAccount(subscription, execution) {
  * Two requesters run the same flow: a Hub customer session over its native connection, and an application server
  * acting, with its application key, for its own organization administrator.
  */
-export function customerBillingService({ pool, stripe, mirrorSubscription, mirrorCustomer, mirrorInvoice, publicOrigin, authorize, now = () => Date.now(), purchasingEnabled = false }) {
+export function customerBillingService({ pool, stripe, mirrorSubscription, mirrorCustomer, mirrorInvoice, publicOrigin, authorize, now = () => Date.now(), purchasingEnabled = false, log = console }) {
   // Whether customers may buy subscriptions: the Hub setting (Settings → Billing). `purchasingEnabled` may be a function, read on each request.
   const purchasing = () => live(purchasingEnabled) === true;
   const one = async (db, query, values) => (await db.query(query, values)).rows[0]?.result;
@@ -337,13 +337,31 @@ export function customerBillingService({ pool, stripe, mirrorSubscription, mirro
     await mirrorSubscription(sub);
     return finish(live, quote, sub);
   }
+  /**
+   * Brings every open quote on a subscription up to date; Stripe's webhook calls this for each event on the subscription. A quote
+   * that can never finish (a 409: the subscription, its account, schedule or renewal no longer match what was confirmed) is settled
+   * here rather than failing the event: before, one such quote failed every event for its subscription until Stripe gave up on the
+   * endpoint. With nothing charged it fails, as confirming it would, and the customer reviews a new preview; one with a payment
+   * receipt is left for billing support, since money moved. Anything else (Stripe or the database unavailable) still fails, so Stripe
+   * sends the event again.
+   */
   async function reconcileSubscription(subscription) {
     if (!selfServiceApps.includes(subscription.metadata?.app)) return;
     const quotes = await service('customer_quotes_for_subscription', [subscription.id]);
     if (!quotes?.length) return;
     const live = await stripe();
     const latest = await readSubscription(live, subscription.id, { expand: ['latest_invoice', 'discounts'] });
-    for (const quote of quotes) if (quote.execution.kind !== 'checkout') await finish(live, quote, latest);
+    let retry = null;
+    for (const quote of quotes) {
+      if (quote.execution.kind === 'checkout') continue;
+      try { await finish(live, quote, latest); }
+      catch (error) {
+        if (!(error instanceof HttpError && error.status === 409)) { retry ??= error; continue; }
+        if (!quote.payment_invoice) await settle(quote.id, 'failed', subscription.id);
+        log.warn(`Customer billing quote ${quote.id} no longer matches its subscription; ${quote.payment_invoice ? 'it has a payment receipt and needs billing support' : 'nothing was charged, so it was marked failed'}.`);
+      }
+    }
+    if (retry) throw retry;
   }
   // One flow for both requesters: reading and previewing work while purchasing is off; confirming does not, and a
   // pending Checkout can be checked or cancelled but never newly created.

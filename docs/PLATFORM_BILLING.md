@@ -118,7 +118,15 @@ answers never wait on Stripe.
   (`billing_webhook_events`) and then re-reads the object from Stripe, so a late
   or out-of-order event can never overwrite newer state. Without a key it
   applies the event's own snapshot only when it is newer than what the mirror
-  last saw.
+  last saw. It then brings any customer quote the event touches up to date. A
+  Stripe or database failure there fails the event, so Stripe sends it again. A
+  quote that can never finish (its subscription, account, schedule or renewal no
+  longer matches what was confirmed) no longer fails it: with nothing charged the
+  quote is marked failed and the customer reviews a new preview; one with a
+  payment receipt, or a paid Checkout whose receipt does not match its quote, is
+  logged for billing support and the event acknowledged. Before, one such quote
+  failed every event for its subscription until Stripe stopped calling the
+  endpoint.
 - On every start, once the key is verified, the Hub re-reads the catalog and
   every customer that carries a Hub tenant (with their subscriptions and
   invoices), so changes made in the Stripe Dashboard or while the Hub was down
