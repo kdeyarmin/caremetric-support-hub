@@ -26,11 +26,15 @@ const pageSize = 24;
 function ComplianceBadge({ asset }: { asset: CreativeAsset }) {
   const verdict = asset.compliance.verdict;
   const warnings = (asset.compliance.reasons ?? []).filter(reason => reason.level === "warn");
+  const review = asset.compliance.review;
   if (!verdict) return null;
-  return verdict === "pass"
-    ? <span className="creative-badge creative-badge-pass"><ShieldCheck size={14} aria-hidden="true" />Passed every check</span>
-    : <details className="creative-badge creative-badge-warn"><summary><ShieldAlert size={14} aria-hidden="true" />{plural(warnings.length, "warning")}</summary>
-      <ul>{warnings.map(item => <li key={`${item.rule}:${item.message}`}>{item.message}</li>)}</ul></details>;
+  return <>
+    {verdict === "pass"
+      ? <span className="creative-badge creative-badge-pass"><ShieldCheck size={14} aria-hidden="true" />Passed every check</span>
+      : <details className="creative-badge creative-badge-warn"><summary><ShieldAlert size={14} aria-hidden="true" />{plural(warnings.length, "warning")}</summary>
+        <ul>{warnings.map(item => <li key={`${item.rule}:${item.message}`}>{item.message}</li>)}</ul></details>}
+    {review?.score ? <p className="creative-review">Image review: {review.score} of 5 as its audience would see it.{review.reader ? ` ${review.reader}` : ""}</p> : null}
+  </>;
 }
 
 function Preview({ asset }: { asset: CreativeAsset }) {

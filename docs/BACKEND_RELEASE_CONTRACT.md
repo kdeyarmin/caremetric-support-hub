@@ -43,8 +43,8 @@ integer alone does not establish compatibility. Both entry points require these
 | `support.bulk-email.v1` | Governed bulk email preparation and delivery |
 | `learning.catalog-authoring.v1` | Reviewed course unpublish and published-lesson corrections |
 
-`20261117100100_app_command_audiences_contract.sql` declares `platform.admin.app-commands.v1` only after
-`20261117100000_app_command_audiences.sql` has given Breathe and CareMetric Intel command audiences of their own
+`20261117110100_app_command_audiences_contract.sql` declares `platform.admin.app-commands.v1` only after
+`20261117110000_app_command_audiences.sql` has given Breathe and CareMetric Intel command audiences of their own
 (`breathe.command`, `intel.command`) while keeping every existing audience, and the SMS, administrator-command and Intel
 foundations are declared. It is optional: the Hub server reads it at boot and, until it is present, refuses those audiences and
 hides Breathe's and Intel's change capabilities from the browser ([central access commands](CENTRAL_ADMIN_COMMANDS.md)).
@@ -190,6 +190,38 @@ role, a reservation reads the owner's monthly number and daily ad-set limit, a n
 under the hand-over and never past an unsubscribe or an opt-out, a memo is used on its own only under the hand-over, and a founder
 post handed back keeps its approval. Each test fails closed. Declaring it changes nothing by itself: the steps ship held. The Hub
 server launches campaigns live and publishes automatically approved founder posts only when the feature is declared.
+
+`20261116130100_creative_review_contract.sql` declares `platform.agents.creative-review.v1` only after the settings, Creative Director,
+data creative and roster features are declared, the `creative.vision_review` and `creative.vision_min_score` settings exist, and the
+three-argument `private.creative_data_counties` is executable by `hub_app_server` alone, requires the Hub server connection, keeps a county
+out for 56 days after it is pictured and reports the setting it was pictured with last. Each test fails closed. The Hub server picks
+counties from Intel's list of the roster's states only when the feature is declared, and otherwise from the roster's own counties as before.
+
+`20261116120100_growth_report_views_contract.sql` declares `platform.agents.growth-report-views.v1` only after the settings, growth autonomy
+and roster features are declared, the `growth.report_views` setting exists, an activity event may be `report_viewed`, the read cursor has row
+level security and is closed to every role, `private.growth_report_views_cursor` and `private.growth_report_views_record` are executable by
+`hub_app_server` alone and require the Hub server connection, an open counts only two minutes or more after the opportunity's first email,
+and the Marketing Manager's `growth.views` task is scheduled. Each test fails closed. The Hub server reads opens and shapes second emails by
+them only when the feature is declared.
+
+`20261116110100_growth_brief_contract.sql` declares `platform.agents.growth-brief.v1` only after the settings, growth autonomy, roster and
+research features are declared, the five settings exist (`growth.account_brief`, `growth.brief_per_day`, `growth.brief_cents`,
+`growth.quality_writer`, `growth.draft_critic`), `private.growth_briefs` and `private.growth_brief_log` have row level security and are
+closed to every role, `private.growth_brief_next`, `private.growth_brief_save` and `private.growth_brief_writer` are executable by
+`hub_app_server` alone and require the Hub server connection, the writer's reader returns only a brief's writer part and never its research
+part, `hub.growth_brief` needs a signed-in owner, and the Marketing Manager's `growth.brief` task is scheduled. Each test fails closed. The
+Hub server writes briefs, drafts from them and shows them on Growth only when the feature is declared.
+
+`20261116100100_growth_address_check_contract.sql` declares `platform.agents.growth-address-check.v1` only after the settings,
+growth autonomy, people finder and colleagues features are declared, the settings `growth.presend_check` (text) and
+`growth.bounce_guard_percent` (number) exist, the send guard table has row level security and is closed to every role,
+`private.growth_send_hold`, `private.growth_draft_hold`, `private.growth_mailbox_candidates`, `private.growth_mailbox_record` and
+`private.growth_send_guard_state` are executable by `hub_app_server` alone and require the Hub server connection, their helpers
+(`growth_presend_mode`, `growth_mailbox_tries`, `growth_bounce_guard`, `growth_hold_for`) are closed to every role,
+`hub.growth_send_guard` and `hub.growth_send_guard_resume` need a signed-in owner, contacts may be `undeliverable` while the send
+claim still writes only to permitted contacts, the guard counts cold email that bounced for good, and the Marketing Manager's
+`growth.verify` task is scheduled. Each test fails closed. The Hub server checks addresses, holds drafts and sends, and shows the
+Send guard only when the feature is declared ([Customer growth](CUSTOMER_GROWTH.md#checking-an-address-before-the-first-email-and-the-bounce-guard)).
 
 `20261106220100_learning_media_import_contract.sql` declares `learning.media-import.v1` only after `learning.runtime.v1`,
 `learning.media.v1` and `app.sms.v1` are declared, the staged-import table exists with row level security and is closed to every
