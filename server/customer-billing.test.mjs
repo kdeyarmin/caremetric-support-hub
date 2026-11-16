@@ -3,7 +3,7 @@ import { customerBillingService, sameBillingLines, subscriptionItemPatch } from 
 
 const connection = '95000000-0000-4000-8000-000000000001', actor = '95000000-0000-4000-8000-000000000002';
 const price = (id, key, amount, kind = 'plan') => ({ id, product: `prod_${id}`, name: key, description: '', kind, key, features: [key], allows_addons: kind === 'plan', active: true, amount, currency: 'usd', interval: 'month', interval_count: 1, model: 'per_unit', unit_label: 'facility' });
-function fixture({ payment = 'paid', denied = false, purchasing = true } = {}) {
+function fixture({ payment = 'paid', denied = false, purchasing = true, log = { warn: vi.fn() } } = {}) {
   const quotes = new Map(), events = [];
   const purchases = new Map();
   let currentTime = Date.parse('2026-01-02T00:00:00Z');
@@ -48,9 +48,9 @@ function fixture({ payment = 'paid', denied = false, purchasing = true } = {}) {
     throw new Error(`Unexpected provider operation ${path}`);
   }) };
   const authorize = vi.fn(async () => { if (denied) throw Object.assign(new Error('Native authority revoked'), { status: 403 }); return { authorized: true }; });
-  const service = customerBillingService({ pool, stripe: async () => live, mirrorSubscription: async () => {}, authorize, now: () => currentTime, purchasingEnabled: purchasing });
+  const service = customerBillingService({ pool, stripe: async () => live, mirrorSubscription: async () => {}, authorize, now: () => currentTime, purchasingEnabled: purchasing, log });
   const preview = (addons = ['price_train'], plan = 'price_core') => service.handle('session', { action: 'quote', connection_id: connection, facility_id: null, plan, addons, request_id: crypto.randomUUID() });
-  return { service, preview, live, quotes, events, authorize, query, workspace,
+  return { service, preview, live, quotes, events, authorize, query, workspace, log,
     mutateSubscription: changes => { sub = { ...sub, ...changes }; }, mutateInvoice: changes => { invoice = { ...invoice, ...changes }; },
     mutateSchedule: changes => { schedule = { ...schedule, ...changes }; },
     advance: milliseconds => { currentTime += milliseconds; } };
@@ -125,6 +125,36 @@ describe('customer purchases', () => {
     test.mutateInvoice({ status: 'paid' });
     await test.service.reconcileSubscription({ id: 'sub_test', metadata: { app: 'carebase' } });
     expect(test.quotes.get(quote.id).state).toBe('applied');
+  });
+  // Stripe sends every event for a subscription through this reconciliation. One quote that can never finish used to fail all of them,
+  // and after days of retries Stripe can switch the endpoint off.
+  it('fails a quote that can never finish, with nothing charged, instead of failing every event for its subscription', async () => {
+    const test = fixture(), quote = await test.preview();
+    // Reserved, then the provider account changed before anything was charged.
+    test.quotes.get(quote.id).state = 'confirming';
+    test.mutateSubscription({ customer: 'cus_other' });
+    await expect(test.service.reconcileSubscription({ id: 'sub_test', metadata: { app: 'carebase' } })).resolves.toBeUndefined();
+    expect(test.quotes.get(quote.id).state).toBe('failed');
+    expect(test.events).not.toContain('provider_purchase');
+    expect(test.log.warn).toHaveBeenCalledWith(expect.stringContaining(quote.id));
+  });
+  it('leaves a paid quote whose receipt no longer matches for billing support, without failing the event', async () => {
+    const test = fixture({ payment: 'challenge' }), quote = await test.preview();
+    await test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true });
+    expect(test.quotes.get(quote.id).payment_invoice).toBe('in_purchase');
+    test.mutateInvoice({ subscription: 'sub_other' });
+    await expect(test.service.reconcileSubscription({ id: 'sub_test', metadata: { app: 'carebase' } })).resolves.toBeUndefined();
+    // Money moved: it is not closed on its own.
+    expect(test.quotes.get(quote.id).state).toBe('pending_payment');
+    expect(test.log.warn).toHaveBeenCalledWith(expect.stringMatching(/payment receipt.*billing support/));
+  });
+  it('still fails the event while Stripe cannot be read, so Stripe sends it again', async () => {
+    const test = fixture({ payment: 'challenge' }), quote = await test.preview();
+    await test.service.handle('session', { action: 'confirm', quote_id: quote.id, confirmed: true });
+    const read = test.live.get.getMockImplementation();
+    test.live.get.mockImplementation(async (path, ...rest) => (path.startsWith('/v1/invoices/') ? Promise.reject(Object.assign(new Error('Stripe is down.'), { status: 503 })) : read(path, ...rest)));
+    await expect(test.service.reconcileSubscription({ id: 'sub_test', metadata: { app: 'carebase' } })).rejects.toThrow('Stripe is down.');
+    expect(test.quotes.get(quote.id).state).toBe('pending_payment');
   });
   it('releases a failed purchase after its exact invoice is voided and the pending update is gone', async () => {
     const test = fixture({ payment: 'challenge' }), quote = await test.preview();

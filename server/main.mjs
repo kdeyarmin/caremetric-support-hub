@@ -154,7 +154,7 @@ const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:proces
   mail:bulkSender({from:supportFrom,replyTo:supportReplyTo})});
 // Platform billing: the Hub is the only Stripe client for every application's subscriptions.
 const customerSelfService=selfService({pool,provider});
-const billing=platformBilling({pool,secretKey:process.env.STRIPE_SECRET_KEY,authorizeCustomerBilling:customerSelfService.authorizeBilling,customerPurchasingEnabled:setting('billing.customer_purchasing'),
+const billing=platformBilling({pool,features,secretKey:process.env.STRIPE_SECRET_KEY,authorizeCustomerBilling:customerSelfService.authorizeBilling,customerPurchasingEnabled:setting('billing.customer_purchasing'),
   webhookSecrets:(process.env.STRIPE_WEBHOOK_SECRET||'').split(',').map(value=>value.trim()).filter(Boolean),
   portalConfiguration:setting('billing.portal_configuration'),
   publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin});

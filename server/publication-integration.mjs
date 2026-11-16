@@ -85,6 +85,11 @@ async function upload(stage,bytes,part='primary') {
   const response=await fetch(`${baseUrl}/api/publications/imports/${stage.id}/assets/${part}`,{method:'POST',headers:{Origin:'https://hub.test','Content-Type':publicationPartRules(stage.manifest,part).contentType,Cookie:`${sessionCookie}=${jar[sessionCookie]}`},body:bytes});
   return {status:response.status,body:await response.json()};
 }
+async function uploadPart(stage,bytes,offset,total,part='primary') {
+  const response=await fetch(`${baseUrl}/api/publications/imports/${stage.id}/assets/${part}`,{method:'POST',headers:{Origin:'https://hub.test','Content-Type':publicationPartRules(stage.manifest,part).contentType,
+    Cookie:`${sessionCookie}=${jar[sessionCookie]}`,'Upload-Offset':String(offset),'Upload-Length':String(total)},body:bytes});
+  return {status:response.status,body:await response.json()};
+}
 async function stage(manifest) {
   const result=await call('publications/imports/stage',{manifest,sourceReviewConfirmed:true}); assert.equal(result.status,200,JSON.stringify(result.body)); return result.body;
 }
@@ -138,6 +143,23 @@ try {
   const changed=structuredClone(moved); changed.content.title='Changed workspace title';
   const changedStage=await stage(changed); assert.equal((await upload(changedStage,articleBytes)).status,200);
   assert.equal((await call(`publications/imports/${changedStage.id}/preview`,{})).status,422,'same source version cannot change content');
+  // In parts (server/upload-parts.mjs): ordered and resumable, checked and stored once as a whole, and repeatable once stored.
+  const partsManifest=await fixtureManifest(); partsManifest.source.content_key='integration-parts-guide';
+  const partsStage=await stage(partsManifest); const half=Math.ceil(articleBytes.length/2), total=articleBytes.length, writesBefore=storageWrites;
+  assert.deepEqual(await uploadPart(partsStage,articleBytes.subarray(half),half,total),{status:202,body:{received:0}},'a part cannot start a spool past its beginning');
+  assert.deepEqual(await uploadPart(partsStage,articleBytes.subarray(0,half),0,total),{status:202,body:{received:half}});
+  assert.deepEqual(await uploadPart(partsStage,articleBytes.subarray(0,half),0,total),{status:202,body:{received:half}},'a repeated part is not written twice');
+  assert.equal(storageWrites,writesBefore,'nothing is stored before the whole file has arrived');
+  const whole=await uploadPart(partsStage,articleBytes.subarray(half),half,total);
+  assert.equal(whole.status,200,JSON.stringify(whole.body)); assert.deepEqual(whole.body.uploadedParts,['primary']); assert.equal(storageWrites,writesBefore+1);
+  assert.equal((await uploadPart(partsStage,articleBytes.subarray(0,half),0,total)).status,200,'a stored asset answers its stage again');
+  assert.equal(storageWrites,writesBefore+1);
+  assert.equal((await call(`publications/imports/${partsStage.id}/preview`,{})).status,200,'an asset sent in parts previews like one sent whole');
+  const wrongStage=await stage({...structuredClone(partsManifest),source:{...partsManifest.source,content_key:'integration-parts-wrong'}});
+  assert.equal((await uploadPart(wrongStage,new Uint8Array(half),0,total)).status,202);
+  assert.equal((await uploadPart(wrongStage,new Uint8Array(total-half),half,total)).status,422,'the whole file must match the manifest hash');
+  assert.deepEqual(await uploadPart(wrongStage,new Uint8Array(total-half),half,total),{status:202,body:{received:0}},'a rejected file is discarded');
+  assert.equal(storageWrites,writesBefore+1);
   await expireUncommitted();
   const next=structuredClone(moved); next.source.version='docstudio-v2'; next.content.title='Updated workspace guide';
   const a=await prepared(next),b=await prepared(next);

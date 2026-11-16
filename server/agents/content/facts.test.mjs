@@ -97,7 +97,7 @@ describe('the fact sheet', () => {
     expect(text).toContain(`The bigger picture: ${intel.bigPicture}`);
     expect(text).toContain(`How to present it: ${intel.present}`);
     // Every "why it matters" area Intel publishes on its /features page.
-    for (const area of ['Market and territory research', 'Prospecting and targeting', 'Healthcare marketing CRM', 'Daily field work', 'Expenses, mileage and reimbursement',
+    for (const area of ['Market and territory research', 'Public data library', 'Prospecting and targeting', 'Healthcare marketing CRM', 'Daily field work', 'Expenses, mileage and reimbursement',
       'Referral and admission tracking', 'Competitor intelligence', 'Manager and team tools', 'Reports and analytics', 'Email campaigns', 'Administration, security and data']) {
       expect(intel.capabilities.some(line => line.startsWith(`${area}:`) || line.startsWith(`${area} [`)), area).toBe(true);
     }
@@ -155,7 +155,9 @@ describe('the fact sheet', () => {
       expect(doc).toContain(line);
     }
     expect(industryGuidance.join(' ')).toMatch(/not measured customer usage/);
-    expect(industryGuidance.join(' ')).toMatch(/care-specific CRM workflows require an Enterprise agreement/);
+    // Standard plans offer every healthcare service line within their count of lines (kdeyarmin/intel@8abe4c6 planCatalog.ts).
+    expect(industryGuidance.join(' ')).toMatch(/Standard plans offer CRM workflows for every healthcare service line/);
+    expect([...industryGuidance, ...industryUseCases.flatMap(item => Object.values(item))].join(' ')).not.toMatch(/Enterprise agreement/);
     expect(industryGuidance.join(' ')).toMatch(/State-licensed residential coverage depends on which state files are loaded/);
     // New targeting guidance must not expand allowed numeric claims or conflict with the shared draft checks.
     const added = [...industryGuidance, ...industryUseCases.flatMap(item => Object.values(item))].join('\n');
