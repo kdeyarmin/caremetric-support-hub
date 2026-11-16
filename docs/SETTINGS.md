@@ -102,6 +102,7 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Social media | Post about new CMS data and observances | The weekly plan may write one post about a new release or an observance |
 | Social media | Write posts for my LinkedIn profile; Posts for my profile a week | Posts in your voice, each approved by you until you hand "Founder posts" over on the AI team page |
 | Paid ads | Most to spend on new campaigns a month | New LinkedIn, Meta and Google search campaigns are proposed only while it is set (Intel's send agencies to the free market report for their own agency); after you hand "Ad campaign launch" over, the campaigns that start on their own share it and never pass it together |
+| Paid ads | Run each month's campaign as a short flight | The month's number spent in one campaign over about this many days (3 to 30), never below the platform's least daily budget, ending on its own; empty spreads each campaign a thirtieth a day ([Social media](SOCIAL_MEDIA.md#new-campaigns-launched-on-their-own-2026-11-15)) |
 | Paid ads | Meta retargeting audience; Meta Pixel (dataset) id; LinkedIn conversion rule id | Where new Meta campaigns aim and where leads are reported |
 | Paid ads | Report leads to the ad platforms | Hashed-email lead reports to the platform whose ad was clicked |
 | Paid ads | Google Ads customer id; Google Ads manager account id; Google Ads OAuth client id; Google Ads API version | The Google Ads API |
