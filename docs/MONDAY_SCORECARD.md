@@ -82,10 +82,11 @@ figure to watch next Monday.
    count. Strong fits, waiting drafts and approvals are as of the read.
 2. **The candidates** (`server/agents/strategist/rules.mjs`), scored 0 to 100 from the figures alone: email bouncing (a complaint, or
    2% or more hard bounces of at least 10 sent; half weight when the bounce guard's window since shows 10 clean sends), too few agencies
-   ready, strong fits with no address (half or more), a daily limit (the cold-email cap or Intel's own "Maximum messages per day" on
+   ready, strong fits with no address found (half or more), strong fits whose address waits for your permission (5 or more; the move
+   is your decision on Growth, since more address checks cannot reach them), a daily limit (the cold-email cap or Intel's own "Maximum messages per day" on
    Growth, which the send claim checks first, reached on 4 or more days with 5 or more approved drafts waiting and bounces under 2%;
    the move raises whichever limits sit below the new number, at most 100), first emails not read or answered (30 sent over two weeks, no reply, under 10%
-   of the two weeks' first emails opened), interest without trials, trials without
+   of the two weeks' first emails opened; while report opens are not recorded, on replies alone, saying opens are unknown), interest without trials, trials without
    first value, the Marketing Manager's budget (3 or more days), and proposals waiting for you (10 or more). A constraint the figures do
    not show is never offered.
 3. **The choice.** One call on the top model (high effort, about 10 to 20 cents) reads the figures, the week before's counts, the

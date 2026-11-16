@@ -7,7 +7,8 @@
 --
 -- 1. Settings -> AI team -> "Name the week's binding constraint" (agents.strategist): off until the owner turns it on.
 -- 2. private.growth_strategy_facts(since, until): the week's Intel funnel, counts only (never a name, address or amount of a customer):
---    strong fits not yet written to and how many the team may write to, roster agencies resolved and still unresolved, addresses
+--    strong fits not yet written to, how many the team may write to, how many have an address waiting for the owner's permission and
+--    how many have none, roster agencies resolved and still unresolved, addresses
 --    checked, cold first emails and later touches sent, cold emails attempted, delivered, hard and soft bounces, complaints, agencies that
 --    replied or opened their report, days the cold-email cap or Intel's own daily limit was reached, drafts waiting (and how many of
 --    them are approved), briefs
@@ -30,11 +31,11 @@ insert into private.hub_settings (key, kind) values ('agents.strategist', 'flag'
 
 create table if not exists private.agent_strategy_notes (
   week date primary key check (extract(isodow from week) = 1),
-  constraint_key text not null check (constraint_key in ('deliverability', 'supply', 'reach', 'volume', 'engagement', 'conversion', 'activation', 'budget', 'approvals', 'none')),
+  constraint_key text not null check (constraint_key in ('deliverability', 'supply', 'reach', 'permission', 'volume', 'engagement', 'conversion', 'activation', 'budget', 'approvals', 'none')),
   headline text not null check (length(headline) between 1 and 200),
   why text not null check (length(why) between 1 and 600),
   move text not null check (length(move) between 1 and 300),
-  watch text check (watch in ('bounceRate', 'ready', 'strongNoContact', 'firstSent', 'openRate', 'replies', 'trialStarts', 'activated', 'budgetDays', 'approvals')),
+  watch text check (watch in ('bounceRate', 'ready', 'strongNoContact', 'awaitingPermission', 'firstSent', 'openRate', 'replies', 'trialStarts', 'activated', 'budgetDays', 'approvals')),
   chosen_by text not null check (chosen_by in ('model', 'rules')),
   model text check (model ~ '^[a-z0-9.:_-]{1,80}$'),
   prompt_version text not null check (prompt_version ~ '^[a-z0-9._-]{1,40}$'),
@@ -58,7 +59,9 @@ with opp as (
   where o.product = 'caremetric-intel' and not g.internal
 ),
 strong as (
-  select opp.id, exists (select 1 from private.growth_contacts c where c.id = opp.contact_id and c.eligibility = 'permitted') as reachable
+  select opp.id, exists (select 1 from private.growth_contacts c where c.id = opp.contact_id and c.eligibility = 'permitted') as reachable,
+    -- An address found and waiting for the owner's permission (Growth), which the people finder no longer looks past.
+    exists (select 1 from private.growth_contacts c where c.organization_id = opp.org and c.eligibility = 'review') as awaiting
   from opp where opp.fit >= 75 and opp.stage in ('identified', 'researched', 'qualified')
     and not exists (select 1 from private.growth_messages m where m.opportunity_id = opp.id and m.purpose = 'marketing' and m.attempted_at is not null)
 ),
@@ -92,7 +95,8 @@ select jsonb_build_object(
   'since', p_since, 'until', p_until, 'product', 'caremetric-intel',
   'prospects', jsonb_build_object(
     'strong', (select count(*) from strong), 'strongReachable', (select count(*) from strong where reachable),
-    'strongNoContact', (select count(*) from strong where not reachable),
+    'strongNoContact', (select count(*) from strong where not reachable and not awaiting),
+    'strongAwaitingPermission', (select count(*) from strong where not reachable and awaiting),
     'briefed', (select count(*) from private.growth_briefs b join opp on opp.id = b.opportunity_id where b.created_at >= p_since and b.created_at < p_until)),
   'roster', jsonb_build_object(
     'unresolved', (select count(*) from private.growth_roster_targets t where t.status in ('new', 'resolving', 'unresolved')),
@@ -144,6 +148,8 @@ select jsonb_build_object(
   'guard', (select jsonb_build_object('on', coalesce((value ->> 'on')::boolean, false), 'since', value -> 'since',
       'sent', coalesce((value ->> 'sent')::integer, 0), 'bounced', coalesce((value ->> 'bounced')::integer, 0)) from guard),
   'settings', jsonb_build_object('coldEmailCap', coalesce(private.growth_cold_email_cap(), 10), 'presendCheck', private.growth_presend_mode(),
+    -- Whether report opens are being recorded (Settings -> Customer growth): without it no open is counted, which is not zero opens.
+    'reportViews', coalesce((select s.value = 'true'::jsonb from private.hub_settings s where s.key = 'growth.report_views'), false),
     'productDailyLimit', (select p.daily_limit from private.growth_policies p where p.product = 'caremetric-intel'))
 );
 $$;

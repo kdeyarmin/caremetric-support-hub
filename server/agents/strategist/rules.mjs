@@ -18,6 +18,7 @@ export const constraintLabels = Object.freeze({
   deliverability: 'Email is bouncing',
   supply: 'Too few agencies ready to write to',
   reach: 'Strong fits with no address',
+  permission: 'Addresses waiting for your permission',
   volume: 'The daily cold-email cap',
   engagement: 'First emails are not read or answered',
   conversion: 'Interest is not becoming trials',
@@ -31,6 +32,7 @@ export const watchLabels = Object.freeze({
   bounceRate: 'hard bounces as a share of cold emails sent',
   ready: 'strong fits ready for a first email',
   strongNoContact: 'strong fits with no usable address',
+  awaitingPermission: 'strong fits whose address is waiting for your permission',
   firstSent: 'first emails sent',
   openRate: 'agencies that opened their report, per first email delivered',
   replies: 'replies',
@@ -50,7 +52,7 @@ export function weekFigures(facts) {
   // Cold emails attempted in the week, counted by message as the bounce guard counts them; delivery events can lag or be missing.
   const sent = Math.max(n(e.sent), n(e.delivered) + n(e.bounced));
   return {
-    strong: n(p.strong), ready: n(p.strongReachable), strongNoContact: n(p.strongNoContact), briefed: n(p.briefed),
+    strong: n(p.strong), ready: n(p.strongReachable), strongNoContact: n(p.strongNoContact), awaitingPermission: n(p.strongAwaitingPermission), briefed: n(p.briefed),
     rosterOpen: n(facts?.roster?.unresolved), rosterResolved: n(facts?.roster?.resolvedInWeek),
     checked: n(facts?.addresses?.checked), unanswered: n(facts?.addresses?.unanswered),
     firstSent: n(e.firstSent), followups: n(e.followups), sent, delivered: n(e.delivered), bounced: n(e.bounced), bounceRate: pct(n(e.bounced), sent),
@@ -66,7 +68,7 @@ export function weekFigures(facts) {
 }
 
 /** The figures that are counts of the week itself; the others (strong fits, drafts waiting, approvals, the cap) are as of the read. */
-export const snapshotFigures = Object.freeze(['strong', 'ready', 'strongNoContact', 'rosterOpen', 'waiting', 'cap', 'productLimit', 'approvals', 'budgetDollars', 'guardSent', 'guardBounced']);
+export const snapshotFigures = Object.freeze(['strong', 'ready', 'strongNoContact', 'awaitingPermission', 'rosterOpen', 'waiting', 'cap', 'productLimit', 'approvals', 'budgetDollars', 'guardSent', 'guardBounced']);
 export const weekOnly = figures => Object.fromEntries(Object.entries(figures).filter(([key]) => !snapshotFigures.includes(key)));
 
 /**
@@ -101,12 +103,20 @@ export function candidates(facts, previous = null) {
       f.rosterOpen > 0 ? `Raise "Roster agencies resolved a day": ${f.rosterOpen} roster agencies still have no confirmed website.`
         : 'Widen discovery to the next state the roster covers.', 'ready');
   }
-  // Strong fits the team cannot write to: no address, or none it may use.
+  // Strong fits the team cannot write to because no address was found: more address checks can help these.
   if (f.strong >= 10) {
     const share = pct(f.strongNoContact, f.strong);
     add('reach', share >= 50 ? 40 + share / 2 : share, { strong: f.strong, strongNoContact: f.strongNoContact, share },
       `${f.strongNoContact} of ${f.strong} strong-fit agencies (${share}%) have no address the team may write to.`,
       'Raise "Most address checks a day" so the people finder tries more decision-makers per agency.', 'strongNoContact');
+  }
+  // Strong fits whose address was found and waits for your permission: the people finder no longer looks past it, so only your
+  // decision (or handing named contacts over to the team) moves them.
+  if (f.awaitingPermission >= 5) {
+    const share = pct(f.awaitingPermission, Math.max(f.strong, 1));
+    add('permission', 40 + Math.min(share, 50), { strong: f.strong, awaitingPermission: f.awaitingPermission, share },
+      `${f.awaitingPermission} strong-fit ${f.awaitingPermission === 1 ? 'agency has an address' : 'agencies have an address'} waiting for your permission.`,
+      'Decide the addresses waiting on Growth, or hand named contacts over to the team on the AI team page.', 'awaitingPermission');
   }
   // A daily limit held sending back on most days while approved drafts waited and bounces stayed low. Two limits apply: Intel's own
   // "Maximum messages per day" (Growth), which the send claim checks first, and the cold-email cap shared with CareBase. Each is judged
@@ -127,16 +137,21 @@ export function candidates(facts, previous = null) {
     }
   }
   // Delivered but not read or answered: the message, not the list. Judged over two weeks, sends, replies and opens alike, so one quiet
-  // week is not called a pattern.
+  // week is not called a pattern. While report opens are not recorded (Settings → Customer growth), none is counted, which is not zero
+  // opens: the rule then rests on replies alone and says opens are unknown.
   const firstTwoWeeks = f.firstSent + (before?.firstSent ?? 0), viewsTwoWeeks = f.reportViews + (before?.reportViews ?? 0);
   const openTwoWeeks = pct(viewsTwoWeeks, firstTwoWeeks);
-  if (twoWeeksSent >= 30 && f.replies + (before?.replies ?? 0) === 0 && openTwoWeeks < 10) {
-    add('engagement', 55 + Math.min(twoWeeksSent, 100) / 5, { sentTwoWeeks: twoWeeksSent, firstTwoWeeks, replies: 0, reportViewsTwoWeeks: viewsTwoWeeks, openRateTwoWeeks: openTwoWeeks },
-      `${twoWeeksSent} cold emails in two weeks drew no reply, and ${viewsTwoWeeks} ${viewsTwoWeeks === 1 ? 'agency' : 'agencies'} opened its report.`,
-      'Read the reader\'s weakest sentences on Growth and change the first email\'s offer, not its wording.', 'openRate');
+  const opensKnown = facts?.settings?.reportViews !== false;
+  if (twoWeeksSent >= 30 && f.replies + (before?.replies ?? 0) === 0 && (!opensKnown || openTwoWeeks < 10)) {
+    add('engagement', 55 + Math.min(twoWeeksSent, 100) / 5,
+      opensKnown ? { sentTwoWeeks: twoWeeksSent, firstTwoWeeks, replies: 0, reportViewsTwoWeeks: viewsTwoWeeks, openRateTwoWeeks: openTwoWeeks } : { sentTwoWeeks: twoWeeksSent, replies: 0 },
+      opensKnown ? `${twoWeeksSent} cold emails in two weeks drew no reply, and ${viewsTwoWeeks} ${viewsTwoWeeks === 1 ? 'agency' : 'agencies'} opened its report.`
+        : `${twoWeeksSent} cold emails in two weeks drew no reply; report opens are not being recorded, so whether they were read is unknown.`,
+      opensKnown ? 'Read the reader\'s weakest sentences on Growth and change the first email\'s offer, not its wording.'
+        : 'Turn on recording report opens (Settings → Customer growth), and read the reader\'s weakest sentences on Growth.', opensKnown ? 'openRate' : 'replies');
   }
   // Interest without trials.
-  if ((f.replies >= 2 || f.reportViews >= 5) && f.trialStarts === 0) {
+  if ((f.replies >= 2 || (opensKnown && f.reportViews >= 5)) && f.trialStarts === 0) {
     add('conversion', 55 + Math.min(f.replies * 5 + f.reportViews, 30), { replies: f.replies, reportViews: f.reportViews, trialStarts: 0 },
       `${f.replies} ${f.replies === 1 ? 'reply' : 'replies'} and ${f.reportViews} report ${f.reportViews === 1 ? 'open' : 'opens'} last week, and no trial started.`,
       'Make the second email to agencies that opened their report a direct trial offer with one step.', 'trialStarts');

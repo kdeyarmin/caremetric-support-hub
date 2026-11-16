@@ -12,7 +12,7 @@ const week = (over = {}) => ({
   conversion: { trialStarts: 2, activated: 1, paid: 0, ...over.conversion },
   spend: { marketingCents: 1036, budgetCents: 1500, budgetDays: 0, ...over.spend },
   approvals: over.approvals ?? 3,
-  settings: { coldEmailCap: 10, presendCheck: 'check', productDailyLimit: 50, ...over.settings },
+  settings: { coldEmailCap: 10, presendCheck: 'check', productDailyLimit: 50, reportViews: true, ...over.settings },
 });
 
 describe('the strategist\'s rules', () => {
@@ -61,6 +61,18 @@ describe('the strategist\'s rules', () => {
     const shared = candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 50, productDailyLimit: 8 }, email: { capDays: 5, limitDays: 0, approvedWaiting: 12, delivered: 60, bounced: 0 } }));
     expect(shared[0].move).toBe('Raise "Most cold emails a day" (Settings → Customer growth) from 50 to 55.');
     expect(shared[0].headline).toMatch(/^The cold-email cap of 50 a day was reached on 5 of 7 days/);
+  });
+
+  it('tells addresses waiting for your permission from missing ones, and never counts unrecorded report opens as zero', () => {
+    const waiting = candidates(week({ prospects: { strongNoContact: 6, strongAwaitingPermission: 60 } }));
+    expect(waiting[0]).toMatchObject({ key: 'permission', evidence: { awaitingPermission: 60, share: 64 }, watch: 'awaitingPermission' });
+    expect(waiting.map(c => c.key)).not.toContain('reach');
+    expect(waiting[0].move).toMatch(/^Decide the addresses waiting on Growth/);
+    const quiet = { prospects: { strongNoContact: 10 }, email: { delivered: 20, bounced: 0, replies: 0, reportViews: 0, firstSent: 20 } };
+    const unrecorded = candidates(week({ ...quiet, settings: { reportViews: false } }), week(quiet)).find(c => c.key === 'engagement');
+    expect(unrecorded).toMatchObject({ evidence: { sentTwoWeeks: 40, replies: 0 }, watch: 'replies' });
+    expect(unrecorded.evidence).not.toHaveProperty('openRateTwoWeeks');
+    expect(unrecorded.headline).toMatch(/report opens are not being recorded/);
   });
 
   it('takes the bounce rate over every cold email attempted, not only those whose delivery has been reported', () => {

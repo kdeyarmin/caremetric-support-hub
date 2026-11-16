@@ -93,6 +93,9 @@ try {
   const waiting = await prospect('strategist-waiting');
   const unreachable = await prospect('strategist-no-address', { contact: false });
   const internal = await prospect('strategist-internal', { internal: true });
+  // A strong fit whose found address waits for the owner's permission: not missing, and not one more address checks can reach.
+  const review = await prospect('strategist-review');
+  await admin.query("update private.growth_contacts set eligibility='review' where organization_id=$1", [review.org]);
   const sent = await touch(opened);
   await store.delivery(`strategist-delivered:${run}`, sent.id, 'delivered', new Date().toISOString());
   const hard = await touch(bounced);
@@ -114,6 +117,7 @@ try {
   const after = await facts();
   assert.deepEqual({
     strong: delta(after, before, 'prospects.strong'), strongNoContact: delta(after, before, 'prospects.strongNoContact'),
+    awaitingPermission: delta(after, before, 'prospects.strongAwaitingPermission'),
     strongReachable: delta(after, before, 'prospects.strongReachable'), briefed: delta(after, before, 'prospects.briefed'),
     firstSent: delta(after, before, 'email.firstSent'), followups: delta(after, before, 'email.followups'), delivered: delta(after, before, 'email.delivered'),
     bounced: delta(after, before, 'email.bounced'), softBounced: delta(after, before, 'email.softBounced'), replies: delta(after, before, 'email.replies'),
@@ -121,8 +125,9 @@ try {
     resolved: delta(after, before, 'roster.resolvedInWeek'), unresolved: delta(after, before, 'roster.unresolved'), marketingCents: delta(after, before, 'spend.marketingCents'),
     sent: delta(after, before, 'email.sent'), approvedWaiting: delta(after, before, 'email.approvedWaiting'),
   }, {
-    // Strong fits never written to: the waiting one (reachable) and the one with no address; the sent ones and the internal one are not.
-    strong: 2, strongNoContact: 1, strongReachable: 1, briefed: 1,
+    // Strong fits never written to: the waiting one (reachable), the one with no address and the one whose address waits for
+    // permission; the sent ones and the internal one are not.
+    strong: 3, strongNoContact: 1, awaitingPermission: 1, strongReachable: 1, briefed: 1,
     firstSent: 3, followups: 0, delivered: 1, bounced: 1, softBounced: 1, replies: 1, reportViews: 1, waiting: 1, trialStarts: 1,
     resolved: 1, unresolved: 1, marketingCents: 12,
     // Every cold email attempted counts as sent, whatever its delivery events say; a waiting draft is approved only once its action is.
@@ -136,6 +141,12 @@ try {
   await setting('growth.cold_email_daily_cap', 3);
   assert.ok((await facts()).email.capDays >= 1, 'a day with as many cold emails as the cap is counted');
   assert.equal((await facts()).settings.coldEmailCap, 3, 'the move can name the cap as it is');
+  const seedViews = await row("select value from private.hub_settings where key='growth.report_views'");
+  await setting('growth.report_views', false);
+  assert.equal((await facts()).settings.reportViews, false, 'opens not recorded are not zero opens');
+  await setting('growth.report_views', true);
+  assert.equal((await facts()).settings.reportViews, true);
+  await admin.query("update private.hub_settings set value=$1 where key='growth.report_views'", [seedViews?.value ?? null]);
   // Intel's own daily limit (Growth), checked by the send claim before the cap: its days are counted too, and the move can name it.
   await admin.query("update private.growth_policies set daily_limit=3 where product='caremetric-intel'");
   const limited = await facts();
