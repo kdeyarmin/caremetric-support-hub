@@ -60,12 +60,13 @@ model calls carry its product's published catalog as a second cached block after
   utilization and quality, and the organization's own results), each with what is included, its source (NPPES, CMS files and Care
   Compare, the Census Bureau's American Community Survey, state licensing files), the decision it helps make and its limit; each care
   setting; the manager view; the questions and answers; and the site's own caveats.
-- **CareMetric CareBase**, from https://cmcarebase.com/features, its home page and /faq: every capability (60 in 6 modules: training and
-  compliance, courses and live training, resident care and clinical records, survey, safety and facility, credentials and workforce, and
-  access and portals); why it matters and the tools that set it apart; the newest tools (Survey Day Mode, the compliance copilot, clinical
-  records); a resident's record from inquiry to move-out; what each role sees and does; before and with CareBase; each chapter's
-  requirements; the questions and answers; and the site's own caveats (the readiness score is not a prediction of survey results; it
-  guarantees no compliance).
+- **CareMetric CareBase**, from https://cmcarebase.com/features, its home page and /faq: every capability (112 in 8 areas: resident care and
+  daily operations, staff training, medication management and eMAR, survey readiness and safety, workforce and scheduling, resident
+  billing and payments, AI assistance with human review, and access and onboarding), each area with the plan or add-on it needs and its
+  own notes; why it matters and the tools that set it apart; the newest tools (Survey Day Mode, the compliance copilot, clinical records);
+  a resident's record from inquiry to move-out; what each role sees and does; before and with CareBase; each chapter's requirements; the
+  questions and answers; and the site's own caveats (CareBase guarantees no compliance, and native eMAR needs enrollment, clinical
+  approval and a documented switch).
 
 The model is told to sell one feature per asset by the decision it helps make or the work it saves, to vary features across variants, to
 respect plan and module labels, and never to imply that public data confirms referrals, that a tool makes anyone compliant or survey-ready,
