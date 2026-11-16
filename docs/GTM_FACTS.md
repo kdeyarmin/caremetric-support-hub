@@ -385,7 +385,7 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
   Growth and Pro. Small Home and single-facility eligibility and all capacity limits still apply.
 - Core example: **$99.50 per facility per month**, or **$995 for the first annual payment**, then the regular rate.
   Intel Starter example: **$174.50 per organization per month**, or **$1,740 for the first annual payment**, then the regular rate.
-- Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Intel onboarding
+- Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Intel onboarding
   is free on every plan. Other promotional discounts cannot be combined. One introductory year per organization
   and product; cancellation/restart does not reset it. No enrollment deadline or redemption cap has been set.
 - Checkout, paid subscription creation and eligible trial conversions apply the underlying coupon automatically after
@@ -631,8 +631,9 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
 - [ ] 2026-11-16: Intel's trial covers 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of the customer's choice
   and 1 county, as Intel's billing catalog states it (it said 1 branch, home health and hospice); and the plans' descriptions follow
   the catalog too: locations instead of branches, healthcare service lines of the customer's choice instead of home health and hospice,
-  and Growth "For growing healthcare teams" instead of "The usual agency plan". Prices are unchanged. Tick this box when you approve the
-  pull request that changes them.
+  and Growth "For growing healthcare teams" instead of "The usual agency plan"; the Founders Sale's excluded add-ons say "Intel extra
+  seats/locations/states" to match. Prices and the offer's scope are unchanged. Tick this box when you approve the pull request that
+  changes them.
 
 ## Feature and function reference
 

@@ -20,6 +20,7 @@
  * Also on 2026-11-16 Intel's reviewed trial follows its billing catalog: 1 location and up to 2 healthcare service lines of the
  * customer's choice, where it said 1 branch, home health and hospice, and so do the plans' descriptions: locations instead of
  * branches, service lines of the customer's choice, and Growth "for growing healthcare teams" (it said "the usual agency plan").
+ * The Founders Sale terms name the same add-on: "Intel extra seats/locations/states".
  */
 
 export const factsVersion = '2026-11-16.3';
@@ -42,7 +43,7 @@ const deepFreeze = value => {
  * trial signup"; Intel's own site says "Credit card required · Cancel before trial end to avoid charges"). Never "no credit card".
  */
 export const trialCardTerms = 'A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.';
-const foundersSaleTerms = 'Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service on new paid product subscriptions, including existing free-trial users. The discount is applied automatically to eligible subscriptions after the trial, when paid service starts. No code or activation request is needed. Monthly billing receives 50% off the regular monthly rate; annual billing receives 50% off the published annual price paid upfront. Standard pricing resumes after the introductory year. Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization and product; plan eligibility and capacity limits still apply. No enrollment deadline or cap has been set. Source: live Stripe offer verified 2026-11-08; docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md.';
+const foundersSaleTerms = 'Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service on new paid product subscriptions, including existing free-trial users. The discount is applied automatically to eligible subscriptions after the trial, when paid service starts. No code or activation request is needed. Monthly billing receives 50% off the regular monthly rate; annual billing receives 50% off the published annual price paid upfront. Standard pricing resumes after the introductory year. Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization and product; plan eligibility and capacity limits still apply. No enrollment deadline or cap has been set. Source: live Stripe offer verified 2026-11-08; docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md.';
 
 const usd = cents => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 const listNames = names => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '');
