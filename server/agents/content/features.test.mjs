@@ -52,6 +52,8 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     // approved on 2026-11-16 (the fact sheet's Intel boundaries).
     expect(text).not.toMatch(/ChatGPT|Claude|HubSpot/);
     expect(text).toContain('More than 150 public healthcare datasets');
+    // The site's own figures about its data, the only ones the team may state (the fact sheet's Intel boundaries).
+    for (const figure of ['- 150+ public healthcare datasets:', '- 33,000+ ZIP areas and 3,200+ counties:', '- Every NPI in the national provider registry:']) expect(text).toContain(figure);
     expect(featuresText('intel')).toBe(text);
     expect(featuresText('advisors')).toBe('');
   });
