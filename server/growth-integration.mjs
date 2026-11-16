@@ -11,6 +11,8 @@ import { growthHandlers, growthExecutors } from './growth/worker.mjs';
 import { planOpportunity } from './growth/policy.mjs';
 import { actionExecutor, recordOnlyExecutors } from './agents/actions.mjs';
 import { lifecycleInput, lifecyclePreview } from './agents/accounts/lifecycle.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -69,7 +71,7 @@ const fixtureSnapshot = async id => (await store.snapshot(0)).items.find(o=>o.id
 try {
   await admin.query('insert into auth.users(id,email,is_anonymous) values($1,$2,false)', [owner, `growth-owner-${run}@test.invalid`]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550971',now())", [owner]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())', [owner, phones.owner]);
   await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3", [randomUUID(), digest(token), owner]);
   await admin.query('insert into hub.tenants(id,slug,name) values($1,$2,$3)', [tenant, `growth-${run}`, 'Synthetic Growth Organization']);
   await admin.query("update private.agents set status='active',autonomy='propose',daily_budget_cents=100 where key in ('marketing_manager','account_manager')");

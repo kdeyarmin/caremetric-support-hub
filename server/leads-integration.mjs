@@ -16,6 +16,8 @@ import { appServer } from './http.mjs';
 import { leadAdmin, leadIntake, leadSignature } from './leads.mjs';
 import { leadRetention } from './lead-retention.mjs';
 import { leadPageSchema, leadSchema } from '../src/admin/leadsProtocol.ts';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -41,7 +43,7 @@ const secrets = { carebase: randomBytes(32).toString('hex'), intel: randomBytes(
 const owner = randomUUID();
 // The browser's session cookie: 43 URL-safe characters, as the Hub issues it.
 const ownerToken = token();
-const ownerPhone = `+1202556${String(1000 + Math.floor(Math.random() * 9000))}`;
+const ownerPhone = phones.owner;
 const advisorsKey = () => `CM-${randomBytes(6).toString('hex').toUpperCase()}`;
 const external = name => `leads-int-${run}-${name}`;
 const advisorsKeys = [];

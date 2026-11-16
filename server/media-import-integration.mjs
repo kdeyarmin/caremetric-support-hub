@@ -12,6 +12,7 @@ import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
 import { learningMediaImport } from './learning-media-import.mjs';
 import { learningSourceId } from '../src/imports/pennsyncCourseImport.ts';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
 
 const database=new URL(process.env.HUB_TEST_DATABASE_URL);assert.equal(database.hostname,'127.0.0.1');assert.equal(database.port,'54322');
 let config;
@@ -23,11 +24,11 @@ const admin=new pg.Pool({connectionString:database.href});await admin.query("alt
 const appUrl=new URL(database);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
 const pool=new pg.Pool({connectionString:appUrl.href});
 const editor=randomUUID(),learner=randomUUID(),run=randomBytes(4).toString('hex');
-const phones=['+1202555'+String(Math.floor(Math.random()*9000)+1000),'+1202556'+String(Math.floor(Math.random()*9000)+1000)];
+const phones=testPhones(import.meta.url);
 await admin.query("insert into auth.users(id,email,is_anonymous) values($1,$3,false),($2,$4,false)",[editor,learner,`media-import-${run}@test.invalid`,`media-learner-${run}@test.invalid`]);
 // Shared-course editing is the platform administrator's (20261015130000); content permission alone is refused.
 await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin'),($2,'content.write')",[editor,learner]);
-await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2),($3,$4)',[editor,phones[0],learner,phones[1]]);
+await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2),($3,$4)',[editor,phones.editor,learner,phones.learner]);
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const mp4=label=>Buffer.concat([Buffer.from([0,0,0,24]),Buffer.from('ftypisom'),Buffer.from([0,0,2,0]),Buffer.from('isommp41'),randomBytes(4096),Buffer.from(label)]);
 const captions='WEBVTT\n\n00:00.000 --> 00:01.500\nWelcome to the lesson.\n',transcript='Welcome to the lesson.\n';
@@ -93,9 +94,9 @@ async function sendPart(offset,bytes){
 try{
   assert.equal((await media({operation:'list'})).status,401,'signed-out callers are refused');
   assert.equal((await sendPart(0,lessonVideo.subarray(0,2048))).status,401,'a signed-out caller cannot start an upload in parts');
-  await login(phones[1]);
+  await login(phones.learner);
   assert.equal((await media({operation:'list'})).status,403,'a content writer without shared-course editor authority is refused');
-  await login(phones[0]);
+  await login(phones.editor);
   assert.equal((await media({operation:'list'})).status,200);
   assert.deepEqual(await sendPart(0,lessonVideo.subarray(0,2048)),{status:202,body:{received:2048}});
   assert.deepEqual(await sendPart(0,lessonVideo.subarray(0,2048)),{status:202,body:{received:2048}},'a repeated part is not written twice');
@@ -220,5 +221,6 @@ try{
 }finally{
   await new Promise(resolve=>server.close(resolve));
   for(const path of stored)await fetch(`${storageApi}/object/hub-learning/${path}`,{method:'DELETE',headers:{apikey:serviceKey,Authorization:`Bearer ${serviceKey}`}}).catch(()=>{});
+  await removeTestIdentities(admin,[editor,learner],{also:['update private.learning_courses set updated_by = null where updated_by = any($1::uuid[])','delete from private.learning_media_imports where created_by = any($1::uuid[]) or updated_by = any($1::uuid[]) or registered_by = any($1::uuid[])','delete from private.learning_media where uploaded_by = any($1::uuid[])']});
   await pool.end();await admin.end();
 }

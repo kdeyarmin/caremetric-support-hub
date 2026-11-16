@@ -7,6 +7,8 @@ import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { parseAdvisorChangeResult } from '../supabase/functions/_shared/advisorsCommands.ts';
 import { appServer } from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;
 const local=new URL(databaseUrl);
 assert.equal(local.hostname,'127.0.0.1'); assert.equal(local.port,'54322');
@@ -14,7 +16,7 @@ const admin=new pg.Pool({connectionString:databaseUrl});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(databaseUrl); appUrl.username='hub_app_server'; appUrl.password='ephemeral-test-only';
 const pool=new pg.Pool({connectionString:appUrl.href});
-const editor=randomUUID(), learner=randomUUID(), ownerPhone='+12025550101', learnerPhone='+12025550102';
+const editor=randomUUID(), learner=randomUUID(), ownerPhone=phones.editor, learnerPhone=phones.learner;
 await admin.query(`insert into auth.users(id,email,raw_user_meta_data,is_anonymous) values($1,'sms-editor@test.invalid','{"display_name":"SMS editor"}',false),($2,'sms-learner@test.invalid','{"display_name":"SMS learner"}',false)`,[editor,learner]);
 await admin.query("insert into private.staff_permissions(user_id,permission,granted_by) values($1,'platform.admin',$1)",[editor]);
 await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2),($3,$4)',[editor,ownerPhone,learner,learnerPhone]);
@@ -118,7 +120,7 @@ try {
     assert.equal((await db.query('select private.current_app_session_verified() as allowed')).rows[0].allowed,false,'knowing a session UUID does not authorize a different database caller');
   });
   await assert.rejects(pool.query('select * from auth.users'),/permission denied/);
-  await assert.rejects(pool.query("update private.sms_identities set phone_e164='+12025550199'"),/permission denied/);
+  await assert.rejects(pool.query('update private.sms_identities set phone_e164=$1',[phones.refused]),/permission denied/);
   const capability='cmh_'+'a'.repeat(43);
   await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'carebase','{\"operation\":\"overview\"}',now()+interval '30 seconds')",[digest(capability),session]);
   await assert.rejects(caps.consume(capability,'media'));
@@ -248,12 +250,12 @@ try {
   await call('auth/logout',{});
   assert.equal((await call('auth/session',undefined,{Cookie:`${sessionCookie}=${editorToken}`})).body.authenticated,false);
   await admin.query('update private.sms_sessions set revoked_at=null where id=$1',[session]);
-  await admin.query("update private.sms_identities set phone_e164='+12025550109' where user_id=$1",[editor]);
+  await admin.query('update private.sms_identities set phone_e164=$2 where user_id=$1',[editor,phones.renumbered]);
   assert.equal((await call('auth/session',undefined,{Cookie:`${sessionCookie}=${editorToken}`})).body.authenticated,false,'number changes invalidate existing sessions');
   const next=await call('auth/sms/start',{phone:learnerPhone}); assert.equal(next.status,200);
   for(let i=0;i<5;i++) assert.equal((await call('auth/sms/verify',{challengeId:next.body.challengeId,code:'000000'})).status,401);
   assert.equal((await call('auth/sms/verify',{challengeId:next.body.challengeId,code:'123456'})).status,401,'a sixth attempt cannot succeed');
-  const unknown=await call('auth/sms/start',{phone:'+12025550103'}); assert.equal(unknown.status,200); assert.equal(sent.length,2);
+  const unknown=await call('auth/sms/start',{phone:phones.unknown}); assert.equal(unknown.status,200); assert.equal(sent.length,2);
   assert.equal((await call('auth/sms/verify',{challengeId:unknown.body.challengeId,code:'123456'})).status,401);
   console.log('App SMS integration passed: actual PostgreSQL permissions, browser binding, rate limits, attempts, replay, roles, course creation, delegation and logout.');
-} finally { await new Promise(resolve=>server.close(resolve)); await pool.end(); await admin.end(); }
+} finally { await new Promise(resolve=>server.close(resolve)); await removeTestIdentities(admin,[editor,learner],{also:['with drafts as (delete from private.learning_courses where updated_by = any($1::uuid[]) returning item_id) delete from hub.content_items where id in (select item_id from drafts)']}); await pool.end(); await admin.end(); }

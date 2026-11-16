@@ -16,6 +16,8 @@ import { assess } from './agents/accounts/health.mjs';
 import { monthlyTotals } from './agents/accounts/money.mjs';
 import { composeAccountsReport } from './agents/accounts/report.mjs';
 import { weekStart } from './agents/accounts/week.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -34,7 +36,7 @@ const run = randomUUID().slice(0, 8);
 const prefix = `acct-it-${run}`;
 const owner = randomUUID();
 const ownerToken = `accounts-owner-${randomUUID()}`;
-const ownerPhone = `+1202555${String(1000 + Math.floor(Math.random() * 9000))}`;
+const ownerPhone = phones.owner;
 const day = 86_400_000;
 
 // Text that may reach the owner's email and nothing else: names, the billing contact, Stripe identifiers, a case subject and amounts.

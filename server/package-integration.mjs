@@ -8,12 +8,14 @@ import { smsAuth,sessionCookie,digest,withSession } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL,local=new URL(databaseUrl);
 assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:databaseUrl});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(databaseUrl);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
-const pool=new pg.Pool({connectionString:appUrl.href}),owner=randomUUID(),item=randomUUID(),phone='+12025550921';
+const pool=new pg.Pool({connectionString:appUrl.href}),owner=randomUUID(),item=randomUUID(),phone=phones.owner;
 const source=JSON.parse(readFileSync(new URL('../src/imports/fixtures/governedCourse.json',import.meta.url)));
 source.sourceCourseId=randomUUID();source.sourceVersionId=randomUUID();source.sourceVersionState='draft';
 const course=source.sourceCourseId,version=source.sourceVersionId;
@@ -175,4 +177,4 @@ try{
   expectStatus(await command(ctx),401);
   const revokedCalls=calls;expectStatus(await command(ctx),401);assert.equal(calls,revokedCalls);
   console.log('Package PostgreSQL/HTTP integration passed: closed streaming route, original SMS tickets, one-use/audience binding, explicit stage/finish, lost replies, immutable pre/post receipts, preserved-head CAS, tampered result denial, native/current Hub revocation, expiry and distinct same-request operations across real sessions.');
-}finally{await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
+}finally{await new Promise(resolve=>server.close(resolve));await removeTestIdentities(admin,[owner],{also:['delete from private.learning_source_snapshots where staged_by = any($1::uuid[])']});await pool.end();await admin.end();}

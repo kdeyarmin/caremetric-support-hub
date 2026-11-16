@@ -9,13 +9,15 @@ import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
 import { configurationAction, sameConfigurationTarget } from '../supabase/functions/_shared/operationalConfiguration.ts';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const local = new URL(process.env.HUB_TEST_DATABASE_URL);
 assert.equal(local.hostname, '127.0.0.1'); assert.equal(local.port, '54322');
 const admin = new pg.Pool({ connectionString: local.href });
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl = new URL(local); appUrl.username = 'hub_app_server'; appUrl.password = 'ephemeral-test-only';
-const pool = new pg.Pool({ connectionString: appUrl.href }), owner = randomUUID(), phone = '+12025550831';
+const pool = new pg.Pool({ connectionString: appUrl.href }), owner = randomUUID(), phone = phones.owner;
 
 const domain = 'operations.config.v1', target = { kind: 'release', featureKey: 'fixture.safe-rollout' };
 const impact = { kind: 'feature', definitionActive: true, organizationName: null, globalKillSwitchActive: false,

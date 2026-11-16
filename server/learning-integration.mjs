@@ -6,13 +6,15 @@ import { smsAuth,sessionCookie,digest,transaction,withSession } from './sms-auth
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;const local=new URL(databaseUrl);
 assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:databaseUrl});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(databaseUrl);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
 const pool=new pg.Pool({connectionString:appUrl.href});
-const owner=randomUUID(),learner=randomUUID(),phone='+12025550301',org=randomUUID(),employee=randomUUID(),profile=randomUUID(),tenant=randomUUID(),mapping=randomUUID(),snapshot=randomUUID(),item=randomUUID(),course=randomUUID(),version=randomUUID(),assignment=randomUUID();
+const owner=randomUUID(),learner=randomUUID(),phone=phones.owner,org=randomUUID(),employee=randomUUID(),profile=randomUUID(),tenant=randomUUID(),mapping=randomUUID(),snapshot=randomUUID(),item=randomUUID(),course=randomUUID(),version=randomUUID(),assignment=randomUUID();
 await admin.query(`insert into auth.users(id,email,is_anonymous) values($1,'receipt-sms-owner@test.invalid',false),($2,'receipt-sms-learner@test.invalid',false)`,[owner,learner]);
 await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
 await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)',[owner,phone]);
@@ -76,4 +78,4 @@ try {
   await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner]);assert.equal((await call('admin/learning',{operation:'status'})).status,401);
   assert.ok(events.includes('acknowledge'));
   console.log('Learning SMS HTTP/PostgreSQL integration passed: explicit canonical access, operation-bound authority, exact receipts, replay, withdrawal, no duplicate writer, principal/session/actor revocation.');
-} finally {await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
+} finally {await new Promise(resolve=>server.close(resolve));await removeTestIdentities(admin,[owner,learner],{also:['delete from private.learning_receipt_inbox where mapping_id in (select id from private.learning_receipt_mappings where created_by = any($1::uuid[]))','delete from private.learning_receipt_mappings where created_by = any($1::uuid[])','delete from private.learning_source_snapshots where staged_by = any($1::uuid[])']});await pool.end();await admin.end();}

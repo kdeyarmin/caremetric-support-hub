@@ -6,6 +6,8 @@ import pg from 'pg';
 import { digest, withSession } from './sms-auth.mjs';
 import { delegations } from './delegations.mjs';
 import { adminRegistry } from '../supabase/functions/_shared/adminRegistry.ts';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const local=new URL(process.env.HUB_TEST_DATABASE_URL);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:local.href});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
@@ -36,7 +38,7 @@ const apply=(p,requestId=randomUUID(),token=ownerToken,extra={})=>bridge.onboard
 try {
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'onboard-owner@test.invalid',false),($2,'onboard-customer@test.invalid',false),($3,'onboard-other@test.invalid',false)",[owner,customer,other]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550501',now()),($2,'+12025550502',now()),($3,'+12025550503',now())",[owner,customer,other]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$4,now()),($2,$5,now()),($3,$6,now())',[owner,customer,other,phones.owner,phones.customer,phones.other]);
   for(const [id,user,token] of [[ownerSession,owner,ownerToken],[secondSession,owner,secondToken],[randomUUID(),customer,customerToken]]) {
     await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[id,digest(token),user]);
   }

@@ -8,11 +8,13 @@ import {smsAuth} from './sms-auth.mjs';
 import {gateway} from './gateway.mjs';
 import {delegations} from './delegations.mjs';
 import {appServer} from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const local=new URL(process.env.HUB_TEST_DATABASE_URL);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:local.href});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(local);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
-const pool=new pg.Pool({connectionString:appUrl.href}),owner=randomUUID(),phone='+12025550861',course=randomUUID();
+const pool=new pg.Pool({connectionString:appUrl.href}),owner=randomUUID(),phone=phones.owner,course=randomUUID();
 await admin.query("insert into auth.users(id,email,is_anonymous) values($1,$2,false)",[owner,`catalog-sms-owner-${owner}@test.invalid`]);
 await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
 await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)',[owner,phone]);
@@ -76,4 +78,4 @@ try{
   await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner]);
   const beforeRevoked=calls;assert.equal((await run(read)).status,401);assert.equal(calls,beforeRevoked);
   console.log('Training library HTTP integration passed: exact tickets, refused records before CareBase, replayed saves, stale revisions, keyed paging and post-save revocation.');
-}finally{await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
+}finally{await new Promise(resolve=>server.close(resolve));await removeTestIdentities(admin,[owner]);await pool.end();await admin.end();}

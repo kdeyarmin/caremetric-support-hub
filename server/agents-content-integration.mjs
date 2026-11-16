@@ -24,6 +24,8 @@ import { completion, fireDrillDraft, outreachDraft, referralDraft } from './agen
 import { promptVersion } from './agents/content/prompt.mjs';
 import { topics } from './agents/content/topics.mjs';
 import { contentHandlers } from './agents/tasks/content.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -42,7 +44,7 @@ const gate = await readFile(new URL('../supabase/migrations/20261103150100_agent
 const run = randomUUID().replace(/[^a-f]/g, '').padEnd(8, 'x').slice(0, 8);
 const owner = randomUUID();
 const ownerToken = `content-owner-${randomUUID()}`;
-const ownerPhone = `+1202555${String(1000 + Math.floor(Math.random() * 9000))}`;
+const ownerPhone = phones.owner;
 const ai = 'a1a00000-a1a0-4000-8000-000000000001';
 const ownerEmail = 'owner@example.test';
 const fireTopic = topics.find(topic => topic.key === 'pa-fire-drill-requirements');

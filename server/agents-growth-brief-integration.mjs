@@ -9,6 +9,8 @@ import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { digest, withSession } from './sms-auth.mjs';
 import { growthStore } from './growth/store.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -49,7 +51,7 @@ const mine = async daily => {
 try {
   await admin.query('insert into auth.users(id,email,is_anonymous) values($1,$2,false)', [owner, `growth-brief-owner-${run}@test.invalid`]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550978',now())", [owner]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())', [owner, phones.owner]);
   await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3", [randomUUID(), digest(token), owner]);
   // Briefs from earlier runs today would use up the number; this run counts from a clean day.
   earlier = (await admin.query('select id from private.growth_brief_log where started_at >= private.agent_day_start()')).rows.map(r => r.id);

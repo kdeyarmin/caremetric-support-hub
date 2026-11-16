@@ -7,6 +7,8 @@ import pg from 'pg';
 import { digest, withSession } from './sms-auth.mjs';
 import { sqlAgentStore } from './agents/store.mjs';
 import { accountsFeature, accountsHandlers } from './agents/tasks/accounts.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -26,7 +28,7 @@ try {
   assert.ok((await admin.query('select hub.get_backend_contract() as c')).rows[0].c.features.includes('platform.agents.scorecard.v1'));
   await admin.query('insert into auth.users(id,email,is_anonymous) values($1,$2,false)', [owner, `scorecard-owner-${run}@test.invalid`]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550976',now())", [owner]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())', [owner, phones.owner]);
   await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3", [randomUUID(), digest(token), owner]);
   const owned = (sql, values = []) => withSession(pool, token, async db => (await db.query(sql, values)).rows[0].r);
   await admin.query('update private.agent_scorecard_settings set individual_reports = false');

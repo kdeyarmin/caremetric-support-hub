@@ -9,6 +9,8 @@ import { smsAuth, sessionCookie, digest, transaction, withSession } from './sms-
 import { exerciseCustomerCheckout } from './customer-checkout-integration.mjs';
 import { exerciseCustomerCatalog } from './customer-catalog-integration.mjs';
 import { exercisePennSyncNoPayments } from './pennsync-no-payments-integration.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -66,13 +68,13 @@ try {
   // linking must never grant those platform privileges to the customer.
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'self-service-owner@test.invalid',false)", [supportOwner]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [supportOwner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550852',now())", [supportOwner]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())', [supportOwner, phones.supportOwner]);
   await admin.query('insert into private.billing_app_keys(id,product_id,key_hash,key_hint) values($1,$2,$3,$4)', [keyId, product, digest(key), key.slice(-4)]);
   assert.equal((await call('apps/connect', nativeProof, { Authorization: `Bearer ${key}` })).status, 403, 'native proofs cannot come from a browser');
   assert.equal((await call('apps/connect', { ...nativeProof, role: 'platform_admin' }, { Authorization: `Bearer ${key}` }, false)).status, 400);
   const issued = await call('apps/connect', nativeProof, { Authorization: `Bearer ${key}` }, false);
   assert.equal(issued.status, 200); const token = new URL(issued.body.url).hash.slice(1);
-  const started = await call('self-service/connect/start', { token, phone: '+12025550851', consent: true });
+  const started = await call('self-service/connect/start', { token, phone: phones.customer, consent: true });
   assert.equal(started.status, 200);
   assert.equal((await call('self-service/connect/verify', { challenge_id: started.body.challenge_id, code: '000000' })).status, 401);
   assert.equal((await call('self-service/connect/verify', { challenge_id: started.body.challenge_id, code: '123456' })).status, 200);
@@ -207,7 +209,7 @@ try {
   console.log('Customer self-service: app-key ingress, real SMS linking, one-use scope-bound capabilities, confirmation, safe evidence links, immutable quote intent/payment receipts, role revocation, source outages and secret-free audit passed.');
 } finally {
   await new Promise(resolve => server.close(resolve));
-  if (!customerId) customerId = (await admin.query("select user_id from private.sms_identities where phone_e164='+12025550851'")).rows[0]?.user_id;
+  if (!customerId) customerId = (await admin.query('select user_id from private.sms_identities where phone_e164=$1', [phones.customer])).rows[0]?.user_id;
   if (!tenant) tenant = (await admin.query('select c.tenant_id from private.self_service_connections c where c.source_account=$1', [account])).rows[0]?.tenant_id;
   if (customerId) {
     await admin.query('delete from private.self_service_case_requests where actor_id=$1', [customerId]);

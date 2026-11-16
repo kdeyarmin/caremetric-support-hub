@@ -6,6 +6,8 @@ import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import {digest} from './sms-auth.mjs';
 import {bulkEmail} from './bulk-email.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;
 const local=new URL(databaseUrl);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:databaseUrl});
@@ -70,7 +72,7 @@ try{
   const [carebaseId,goId,advisorsId]=[await product('carebase'),await product('breathe'),await product('advisors')];
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,$3,false),($2,$4,false)",[owner,customer,`owner@${domain}`,`customer@${domain}`]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550895',now()),($2,'+12025550896',now())",[owner,customer]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$3,now()),($2,$4,now())',[owner,customer,phones.owner,phones.customer]);
   for(const [id,user,token,started] of [[ownerSession,owner,ownerToken,'0'],[customerSession,customer,customerToken,'0'],[staleSession,owner,staleToken,'9']])
     await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,created_at,expires_at) select $1,$2,user_id,identity_version,now()-make_interval(hours=>$4::int),now()+interval '1 hour' from private.sms_identities where user_id=$3",[id,digest(token),user,started]);
 
