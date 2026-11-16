@@ -155,7 +155,9 @@ describe('the fact sheet', () => {
       expect(doc).toContain(line);
     }
     expect(industryGuidance.join(' ')).toMatch(/not measured customer usage/);
-    expect(industryGuidance.join(' ')).toMatch(/care-specific CRM workflows require an Enterprise agreement/);
+    // Standard plans offer every healthcare service line within their count of lines (kdeyarmin/intel@8abe4c6 planCatalog.ts).
+    expect(industryGuidance.join(' ')).toMatch(/Standard plans offer CRM workflows for every healthcare service line/);
+    expect([...industryGuidance, ...industryUseCases.flatMap(item => Object.values(item))].join(' ')).not.toMatch(/Enterprise agreement/);
     expect(industryGuidance.join(' ')).toMatch(/State-licensed residential coverage depends on which state files are loaded/);
     // New targeting guidance must not expand allowed numeric claims or conflict with the shared draft checks.
     const added = [...industryGuidance, ...industryUseCases.flatMap(item => Object.values(item))].join('\n');

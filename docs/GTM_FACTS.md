@@ -214,7 +214,12 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
 ## CareMetric Intel
 
 - **For:** home health agencies, hospice agencies, hospitals, nursing homes and personal care homes that want more targeted
-  marketing. Site: https://www.caremetricintel.com.
+  marketing. These five are the primary audience. Site: https://www.caremetricintel.com.
+- **Secondary markets** (owner decision 2026-11-16): physician practices, behavioral health, rehabilitation and therapy,
+  diagnostics, dialysis and DME suppliers. Intel serves them too, and its site lists them after the primary five, but no outreach,
+  content or ads are aimed at them until the primary audience has been thoroughly marketed to. Prospect discovery stays on home
+  health and hospice agencies for now (`discoveryGrid` in `server/growth/playbook.mjs`); widening it to the other primary
+  settings is a separate owner decision.
 - **What it does:** targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data,
   plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place. Its AI features
   (briefs, supported reporting questions, drafted outreach) are text.
@@ -295,23 +300,26 @@ CareMetric Intel runs a healthcare organization's whole marketing program in one
 Added at the owner's request on 2026-11-14. This use-case mapping was checked against
 `kdeyarmin/intel@393b9b3cd5b19de0ede7f09846313ac11a929f60`: `src/content/featureCatalog.json`,
 `src/lib/businessLine.ts`, `src/lib/planCatalog.ts` and `src/content/marketingCopy.json`.
-It does not refresh the saved feature inventory or verify a live deployment. The machine copy is
+Service-line access was rechecked on 2026-11-16 against `kdeyarmin/intel@8abe4c6` (`src/lib/planCatalog.ts`,
+`src/lib/healthcareServiceLines.ts`): standard plans offer CRM workflows for every healthcare service line, within each
+plan's count of lines. It does not refresh the saved feature inventory or verify a live deployment. The machine copy is
 `industryUseCases` and `industryGuidance` in `server/agents/content/facts.mjs`.
 
 **Industry fit and access conditions:**
 
 - These industries are ordered by fit with the current product. The feature priorities describe likely uses, not measured customer usage or proven demand.
-- Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans support home health and hospice CRM workflows within each plan's allowances.
-- Other care settings can use market and territory research within the subscribed territory. Their care-specific CRM workflows require an Enterprise agreement. Home health and hospice workflow support does not imply equivalent CRM support for every industry.
+- Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans offer CRM workflows for every healthcare service line, within each plan's allowance of service lines the organization chooses; Enterprise covers every line.
+- Every care setting can use market and territory research within the subscribed territory. Public datasets and specialized analyses cover particular settings and geographies, so research depth varies by industry: specialized Medicare share rankings and competitor alerts cover home health and hospice.
 - Research coverage varies by dataset, geography and reporting period. State-licensed residential coverage depends on which state files are loaded. Feature access also depends on the plan, role and configured services.
 - Public provider and market data supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.
 - For each audience, lead with its relevant features and main purpose below, within these conditions. This guidance does not change prospecting eligibility, campaign audiences or outreach permissions.
+- Secondary markets, by owner decision: physician practices, behavioral health, rehabilitation and therapy (inpatient rehabilitation included), diagnostics, dialysis and DME suppliers. Use their rows only to answer a reader from one of those settings, and never aim outreach, content or ads at them until home health agencies, hospice agencies, hospitals, nursing homes and personal care homes have been thoroughly marketed to.
 
 | Industry | Most useful features, in priority order | Main purpose |
 | --- | --- | --- |
 | **1. Home health agencies** | Referral-source rankings for physicians certifying home health; marketing book and call plans; referral and admission reports and drop-off alerts; competitor rankings. | Focus marketers on promising sources and maintain productive referral relationships. |
 | **2. Hospice agencies** | Physician and facility research; relationship history and follow-up tasks; referral and admission tracking; county demand and hospice competitor analysis. | Develop consistent professional relationships and research underserved territories. |
-| **3. Skilled nursing facilities and nursing homes** | Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking under the appropriate Enterprise agreement. | Prioritize hospital relationships and understand the facility's competitive position. |
+| **3. Skilled nursing facilities and nursing homes** | Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking on the nursing home service line. | Prioritize hospital relationships and understand the facility's competitive position. |
 | **4. Assisted Living Facilities and memory care communities** | Site finder; county and ZIP-area demographics, especially older residents and people living alone; licensed-home and bed-supply research; nearby provider and facility directories. | Evaluate local demand, competition, expansion locations and community partners. |
 | **5. Personal care and residential care homes** | Local demographic research; licensed-home directories and bed counts; hospital and physician searches; territory maps. | Understand the local service area and identify professional relationships worth developing. |
 | **6. Hospitals and health systems** | Hospital service-area analysis; post-discharge spending by care setting; physician and practice directories; post-acute facility profiles and quality information. | Plan physician outreach and research potential post-acute partners. |

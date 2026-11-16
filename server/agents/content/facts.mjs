@@ -167,7 +167,9 @@ export const products = deepFreeze({
   intel: {
     slug: 'caremetric-intel', name: 'CareMetric Intel', site: 'https://www.caremetricintel.com',
     source: 'kdeyarmin/intel@f50b3eb src/lib/planCatalog.ts, read live from https://www.caremetricintel.com/api/billing/catalog (reviewed copy: intelReviewedFacts)',
-    forWhom: 'Home health agencies, hospice agencies, hospitals, nursing homes and personal care homes that want more targeted marketing.',
+    // Owner decision 2026-11-16 (docs/GTM_FACTS.md, "For" and "Secondary markets"): these five are the primary audience; the
+    // secondary settings get no marketing of their own until the primary audience has been thoroughly marketed to.
+    forWhom: 'Home health agencies, hospice agencies, hospitals, nursing homes and personal care homes that want more targeted marketing. These five are the primary audience. Physician practices, behavioral health, rehabilitation and therapy, diagnostics, dialysis and DME suppliers can use it too, but they are secondary markets: no outreach, content or ads aimed at them until the primary audience has been thoroughly marketed to.',
     does: 'Targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data, plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place.',
     // Owner direction 2026-11-12 (docs/GTM_FACTS.md, "CareMetric Intel: the bigger picture"): every agent sees the whole product, and
     // email is never the point of it. Written from Intel's own published /features page and home page (intel-features.json), in words
@@ -192,14 +194,17 @@ export const products = deepFreeze({
       'Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.',
     ],
     // Owner-requested industry priorities, checked against kdeyarmin/intel@393b9b3: featureCatalog.json, businessLine.ts,
-    // planCatalog.ts and marketingCopy.json. Keep the matching table and conditions in docs/GTM_FACTS.md together.
+    // planCatalog.ts and marketingCopy.json; service-line access rechecked 2026-11-16 against kdeyarmin/intel@8abe4c6. Keep the
+    // matching table and conditions in docs/GTM_FACTS.md together.
     industryGuidance: [
       'These industries are ordered by fit with the current product. The feature priorities describe likely uses, not measured customer usage or proven demand.',
-      'Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans support home health and hospice CRM workflows within each plan\'s allowances.',
-      'Other care settings can use market and territory research within the subscribed territory. Their care-specific CRM workflows require an Enterprise agreement. Home health and hospice workflow support does not imply equivalent CRM support for every industry.',
+      'Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans offer CRM workflows for every healthcare service line, within each plan\'s allowance of service lines the organization chooses; Enterprise covers every line.',
+      'Every care setting can use market and territory research within the subscribed territory. Public datasets and specialized analyses cover particular settings and geographies, so research depth varies by industry: specialized Medicare share rankings and competitor alerts cover home health and hospice.',
       'Research coverage varies by dataset, geography and reporting period. State-licensed residential coverage depends on which state files are loaded. Feature access also depends on the plan, role and configured services.',
       'Public provider and market data supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.',
       'For each audience, lead with its relevant features and main purpose below, within these conditions. This guidance does not change prospecting eligibility, campaign audiences or outreach permissions.',
+      // Owner decision 2026-11-16 (docs/GTM_FACTS.md, "Secondary markets"). No digits here: the test keeps numbers out of this list.
+      'Secondary markets, by owner decision: physician practices, behavioral health, rehabilitation and therapy (inpatient rehabilitation included), diagnostics, dialysis and DME suppliers. Use their rows only to answer a reader from one of those settings, and never aim outreach, content or ads at them until home health agencies, hospice agencies, hospitals, nursing homes and personal care homes have been thoroughly marketed to.',
     ],
     industryUseCases: [
       {
@@ -214,7 +219,7 @@ export const products = deepFreeze({
       },
       {
         industry: 'Skilled nursing facilities and nursing homes',
-        priorityFeatures: 'Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking under the appropriate Enterprise agreement.',
+        priorityFeatures: 'Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking on the nursing home service line.',
         purpose: 'Prioritize hospital relationships and understand the facility\'s competitive position.',
       },
       {
