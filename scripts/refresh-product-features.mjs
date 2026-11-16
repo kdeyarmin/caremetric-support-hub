@@ -6,8 +6,8 @@
  *   needs) and the home page (why each area matters, the data behind it with its sources and limits, the care settings, the manager view,
  *   and the questions and answers).
  * - CareMetric CareBase (carebase-features.json): https://cmcarebase.com/features (every capability by area with the plan or add-on it
- *   needs, the newest tools, the resident lifecycle and what each role sees and does), the home page (why it matters, the tools that set
- *   it apart, before and after, and each chapter's requirements) and /faq (the questions and answers).
+ *   needs, the newest tools, the resident lifecycle and what each role sees and does), the home page (its figures, why it matters, the
+ *   tools that set it apart, before and after, and each chapter's requirements) and /faq (the questions and answers).
  *
  *   npm run refresh:features                                    # fetch every page
  *   node scripts/refresh-product-features.mjs --from <folder>     # from saved copies: intel-home.html, intel-features.html,
@@ -205,6 +205,10 @@ export function extractCarebase({ home, features, faq }) {
     .map(([, step, text]) => ({ step: clean(step), text: clean(text) }));
   const roles = [...plain(sectionOf(features, 'roles')).matchAll(/<span>\d\d<\/span><h3>([\s\S]*?)<\/h3><\/div><p><span>Sees<\/span>([\s\S]*?)<\/p><p><span>Does<\/span>([\s\S]*?)<\/p>/g)]
     .map(([, role, sees, does]) => ({ role: clean(role), sees: clean(sees), does: clean(does) }));
+  // The home page's own figures: the strip under its hero (`<section id="top">`), each a figure and what it counts ("12–16 hrs",
+  // "annual training tracked per direct care worker, by facility type").
+  const figures = [...sectionOf(home, 'top').matchAll(/<div\b[^>]*\btabular-nums\b[^>]*>([\s\S]*?)<\/div>\s*<div\b[^>]*>([\s\S]*?)<\/div>/g)]
+    .map(([, figure, label]) => ({ figure: clean(figure), label: clean(label) }));
   const pillars = [...h.matchAll(/<span>0\d<\/span><span>([^<]+)<\/span><\/div><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p>/g)].map(([, area, title, why]) => ({ title: clean(title), why: clean(why), area: clean(area) }));
   // The tools that set it apart: each a heading, what it does, and a closing line; the "What sets it apart" section only.
   const apartFrom = h.indexOf('What sets it apart');
@@ -228,6 +232,7 @@ export function extractCarebase({ home, features, faq }) {
   return sanitize({
     overview: clean(/<\/h1>[\s\S]*?<p>([\s\S]*?)<\/p>/.exec(h)?.[1]),
     summary: clean(/In plain English[\s\S]*?<\/h2>(?:<\/div>)?<p>([\s\S]*?)<\/p>/.exec(h)?.[1]),
+    figures,
     intro: clean(intro), legend: clean(plans),
     publishedCount: published ? Number(published[1]) : null,
     publishedAreas: published ? Number(published[2]) : null,
@@ -264,8 +269,8 @@ export const products = {
       const partial = body.areas.filter(area => !area.name || !area.intro || !area.plan || area.capabilities.length !== area.count).map(area => area.key);
       const strays = body.pillars.filter(pillar => body.chapters.some(chapter => chapter.title === pillar.title)).length;
       if (!body.overview || !body.summary || !body.intro || !body.legend || body.areas.length < 6 || total < 80 || partial.length || body.pillars.length < 3 || strays
-        || !body.newest.length || body.roles.length < 4 || body.lifecycle.length < 4 || body.beforeAfter.length < 2 || body.chapters.length < 2 || body.faq.length < 10) {
-        throw new Error(`CareBase's pages changed shape (areas ${body.areas.length}, capabilities ${total}${partial.length ? `, partly read: ${partial.join(', ')}` : ''}, pillars ${body.pillars.length}${strays ? ` (${strays} from the chapters)` : ''}, newest ${body.newest.length}, roles ${body.roles.length}, lifecycle ${body.lifecycle.length}, before and after ${body.beforeAfter.length}, chapters ${body.chapters.length}, answers ${body.faq.length}${body.intro && body.legend ? '' : ', no intro or plan note'}); update the extractor.`);
+        || !body.figures.length || !body.newest.length || body.roles.length < 4 || body.lifecycle.length < 4 || body.beforeAfter.length < 2 || body.chapters.length < 2 || body.faq.length < 10) {
+        throw new Error(`CareBase's pages changed shape (areas ${body.areas.length}, capabilities ${total}${partial.length ? `, partly read: ${partial.join(', ')}` : ''}, pillars ${body.pillars.length}${strays ? ` (${strays} from the chapters)` : ''}, figures ${body.figures.length}, newest ${body.newest.length}, roles ${body.roles.length}, lifecycle ${body.lifecycle.length}, before and after ${body.beforeAfter.length}, chapters ${body.chapters.length}, answers ${body.faq.length}${body.intro && body.legend ? '' : ', no intro or plan note'}); update the extractor.`);
       }
       if (body.publishedCount !== total || body.publishedAreas !== body.areas.length) {
         throw new Error(`CareBase's features page says ${body.publishedCount ?? 'no number of'} capabilities across ${body.publishedAreas ?? 'no number of'} areas but ${total} across ${body.areas.length} were read.`);

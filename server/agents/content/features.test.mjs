@@ -142,6 +142,8 @@ describe('CareMetric CareBase\'s published capabilities', () => {
       'a documented switch to CareBase as the official medication administration record', 'Copilot actions require human approval', 'What each role sees and does',
       '55 Pa. Code Chapter 2800', 'Compliance and survey outcomes depend on']) expect(text).toContain(phrase);
     expect(text).toContain(`${carebase.publishedCount} capabilities in ${carebase.publishedAreas} areas.`);
+    // The home page's own figures.
+    for (const figure of ['- 12–16 hrs annual training tracked per direct care worker, by facility type', '- 60+ survey-ready form templates included']) expect(text).toContain(figure);
     expect(carebase.edits.length).toBeGreaterThan(0);
   });
 

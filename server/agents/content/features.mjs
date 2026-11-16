@@ -8,7 +8,7 @@
  *   with its area and the plan or role it needs, why each part matters, the data behind it (what is included, the source, the decision it
  *   helps make and its limit), each care setting, the manager view, the questions and answers, and the site's own caveats.
  * - CareMetric CareBase (carebase-features.json), from https://cmcarebase.com/features, its home page and /faq: every capability by
- *   area with the plan or add-on it needs, why it matters and the tools that set it apart, the newest tools, a resident's record from
+ *   area with the plan or add-on it needs, the home page's figures, why it matters and the tools that set it apart, the newest tools, a resident's record from
  *   inquiry to move-out, what each role sees and does, before and with CareBase, each chapter's requirements, the questions and answers,
  *   and the site's own caveats.
  * The AI team names no other product, so vendor names on the pages are written generically; each catalog lists those edits.
@@ -39,6 +39,7 @@ function carebaseText(catalog) {
   return [
     `CareMetric CareBase capabilities (published at ${catalog.sources.features}, ${catalog.sources.home} and ${catalog.sources.faq}, read ${catalog.reviewed})`,
     `What it is: ${catalog.overview} ${catalog.summary}`,
+    ...(catalog.figures?.length ? ['By the numbers (the home page\'s own figures, worded as the site words them):', ...catalog.figures.map(item => `- ${item.figure} ${item.label}`)] : []),
     `${total} capabilities in ${catalog.areas.length} areas. ${catalog.intro} ${catalog.legend}`,
     '',
     'Why it matters, and the tools that set it apart:',
