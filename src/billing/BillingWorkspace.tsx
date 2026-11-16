@@ -247,7 +247,7 @@ function PriceChangeSheet({ client, price, product, onClose, onSaved }: { client
     const cents = parseDollars(amount);
     if (cents === null || cents === price.unit_amount) { action.setError('Enter a new dollar amount.'); return; }
     const result = await action.run(['price.change', price.id, cents, migrate], request_key => client.command({ action: 'price.change', price: price.id, unit_amount: cents, migrate, expected_version: price.version, request_key }));
-    if (result) onSaved(migrate === 'grandfather' ? 'New price created; current subscribers keep their old price.' : `New price created; ${result.migrated ?? 0} subscription item(s) moved${result.failed ? `, ${result.failed} could not be moved — retry from the customer page` : ''}.`);
+    if (result) onSaved(migrate === 'grandfather' ? 'New price created; current subscribers keep their old price.' : `New price created; ${result.migrated ?? 0} subscription item(s) moved${result.failed ? `, ${result.failed} could not be moved — retry from the customer page` : ''}${result.incomplete ? '. Stripe had more subscriptions on the old price than one pass reads: move the rest from each customer page' : ''}.`);
   }
   return <Sheet title={`Change price · ${product?.name ?? price.product}`} onClose={onClose} busy={action.busy}><form className="billing-form" onSubmit={event => void submit(event)}>
     <p>Current: <strong>{priceLabel(price, product?.unit_label)}</strong> · {price.subscribers} subscriber{price.subscribers === 1 ? '' : 's'}. Stripe prices cannot be edited, so a new price is created and this one is archived.</p>

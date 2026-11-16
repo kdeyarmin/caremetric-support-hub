@@ -593,8 +593,11 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   async function migrateSubscribers(live, actor, request, newPrice, oldPrice) {
     let migrated = 0, failed = 0;
     const subscriptions = await live.list('/v1/subscriptions', { price: request.price, status: 'all' }, 1000);
-    for (const subscription of subscriptions) {
-      if (['canceled', 'incomplete_expired'].includes(subscription.status)) continue;
+    for (const listed of subscriptions) {
+      if (['canceled', 'incomplete_expired'].includes(listed.status)) continue;
+      // Stripe lists a subscription with its first ten items only; the old price may be further down.
+      let subscription;
+      try { subscription = await withAllSubscriptionItems(live, listed); } catch { failed++; continue; }
       for (const item of subscription.items.data.filter(entry => (entry.price?.id ?? entry.price) === request.price)) {
         try {
           await live.post(`/v1/subscription_items/${item.id}`, { price: newPrice, quantity: item.quantity,
@@ -605,7 +608,8 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       }
     }
     await transaction(pool, db => audit(db, actor, 'billing.price.migrate', oldPrice.tenant_id, null, { price_from: request.price, price_to: newPrice, migrated, failed }));
-    return { migrated, failed };
+    // More subscriptions were on the old price than one pass reads (1000): the rest are still on it, and the administrator is told so.
+    return { migrated, failed, ...(subscriptions.truncated ? { incomplete: true } : {}) };
   }
 
   // ---------------------------------------------------------------------------
