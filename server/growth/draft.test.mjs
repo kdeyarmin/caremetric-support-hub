@@ -32,7 +32,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.12');
+ expect(request.promptVersion).toBe('growth.13');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -138,6 +138,35 @@ it('keeps the organization\'s numbers in sentences about the organization, never
  // A number inside the organization's own name is part of the name.
  expect(draftProblem(answer('I wrote to 24 Hour Home Care because Intel maps referral sources.'),{product:'caremetric-intel',sources,outreach:true,organization:'24 Hour Home Care'})).toBeNull();
 });
+it('lets an Intel message state the numbers Intel\'s catalog states, and gives its writer the catalog (owner direction 2026-11-16)',async()=>{
+ const sources=[{id:'s',claim:'The agency serves 12 counties.'}];
+ const answer=body=>({subject:'Referral sources in your county',body,citations:['s'],needsHuman:false});
+ const intel=body=>draftProblem(answer(body),{product:'caremetric-intel',sources,outreach:true,organization:'Valley Hospice'});
+ // The site's own figures about its data ("By the numbers") and a feature's number, in a sentence about Intel or in the first person.
+ expect(intel('Intel draws on 150+ public healthcare datasets, linked by county and ZIP.')).toBeNull();
+ expect(intel('I built Intel on more than 150 public healthcare datasets.')).toBeNull();
+ expect(intel('Our data covers 33,000+ ZIP areas and 3,200+ counties.')).toBeNull();
+ expect(intel('Intel lists the accounts that go 45 days without a visit.')).toBeNull();
+ // A figure the catalog does not state is refused, and so is the organization's own figure in a sentence about Intel.
+ expect(intel('Intel draws on 200+ public healthcare datasets.')).toBe('claim');
+ expect(intel('Intel covers your 12 counties.')).toBe('claim');
+ // A CareBase message keeps the fact sheet's numbers only: Intel's catalog is not CareBase's.
+ expect(draftProblem(answer('CareBase draws on 150+ public healthcare datasets.'),{product:'carebase',sources,outreach:true})).toBe('claim');
+ // The writer of an Intel message gets Intel's catalog as its own cached block after the instructions; a CareBase writer does not.
+ expect(growthSystem).toContain('in a message about CareMetric Intel one its catalog states');
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Your first setup step',body:'Where are you in setup?',citations:[],needsHuman:false}}))};
+ const customer={kind:'onboarding',action:'Agree the goal',success:'First value'};
+ await draftMessage({opportunity:{...opportunity,product:'caremetric-intel',stage:'trial',owner_agent:'account_manager'},work:customer,task:{},model});
+ const system=model.run.mock.calls[0][1].system;
+ expect(system).toHaveLength(2);
+ expect(system.every(block=>block.cache)).toBe(true);
+ expect(system[0].text).toBe(growthSystem);
+ expect(system[1].text).toMatch(/^CareMetric Intel features and data/);
+ expect(system[1].text).toContain('150+ public healthcare datasets');
+ model.run.mockClear();
+ await draftMessage({opportunity:{...opportunity,stage:'trial',owner_agent:'account_manager'},work:customer,task:{},model});
+ expect(model.run.mock.calls[0][1].system).toHaveLength(1);
+});
 it('repairs a draft once, telling the writer what to fix, and reports why one was refused',async()=>{
  const bad={outcome:'completed',output:{subject:'Training',body:'A seamless way to train staff.',citations:['source-1'],needsHuman:false}};
  const good={outcome:'completed',output:{subject:'Training',body:'How do you track training hours today?',citations:['source-1'],needsHuman:false}};
@@ -146,7 +175,7 @@ it('repairs a draft once, telling the writer what to fix, and reports why one wa
  const draft=await draftMessage({opportunity,work,task:{},model,onReject:code=>reasons.push(code)});
  expect(draft).toMatchObject({modelGenerated:true,body:'How do you track training hours today?'});
  const repair=model.run.mock.calls[1][1];
- expect(repair.promptVersion).toBe('growth.12-r');
+ expect(repair.promptVersion).toBe('growth.13-r');
  expect(repair.system[0].text).toBe(growthSystem);
  expect(JSON.parse(repair.user)).toMatchObject({previousDraft:{body:'A seamless way to train staff.'},fix:expect.stringMatching(/plain words/)});
  expect(reasons).toEqual([]);
@@ -181,7 +210,7 @@ it('writes outreach with the owner-approved memo as a second cached block, and r
  expect(request.system[0].text).toBe(growthSystem);
  expect(request.system[1].text).toContain('memo 3');
  expect(request.system[1].text).toContain('Too long');
- expect(request.promptVersion).toBe('growth.12-m3');
+ expect(request.promptVersion).toBe('growth.13-m3');
  expect(draft.memoVersion).toBe(3);
  // A customer's message and an unusable memo are written without it.
  model.run.mockClear();
@@ -190,5 +219,5 @@ it('writes outreach with the owner-approved memo as a second cached block, and r
  expect(customer?.memoVersion).toBeUndefined();
  model.run.mockClear();
  await draftMessage({opportunity,work,task:{},model,memo:{version:'3',memo:'x'}});
- expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.12');
+ expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.13');
 });
