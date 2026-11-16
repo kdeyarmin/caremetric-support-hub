@@ -75,3 +75,11 @@ describe('the weekly memo task', () => {
     expect(quiet.learningPropose).not.toHaveBeenCalled();
   });
 });
+
+it('never compares report length with concise/control while preserving other experiments', () => {
+ const result=composeMemo('caremetric-intel',facts({arms:[arm('length','report',100,80),arm('length','control',40,5),
+  arm('length','concise',40,1),arm('subject','question',40,6),arm('subject','plain',40,0)]}));
+ expect(result.text).not.toContain('80 of 100');
+ expect(result.text).toContain('under 120 words');
+ expect(result.text).toContain('subjects phrased as a question');
+});

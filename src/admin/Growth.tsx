@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { growthPost, growthMutation, workspaceSchema, detailSchema, rosterSchema, peopleSchema, learningSchema, companiesSchema, companyListCsv, importRows } from './growthClient';
+import { growthPost, growthMutation, workspaceSchema, detailSchema, rosterSchema, peopleSchema, learningSchema, sendGuardSchema, briefSchema, companiesSchema, companyListCsv, importRows } from './growthClient';
 import type { GrowthOpportunity, GrowthPolicy } from './growthClient';
 import type { z } from 'zod';
 import './admin.css';
@@ -125,6 +125,37 @@ function LearningPanel({revision,onSave}:{revision:number;onSave:(op:string,data
   </article>):<p>No memo yet. One is written when there is something worth saying: at least 20 emails of each kind compared, an objection raised three times, or a note on a draft you turned down.</p>}</>}
  </section>;
 }
+function BriefPanel({id,revision}:{id:string;revision:number}) {
+ const [entry,setEntry]=useState<{id:string;revision:number;data:z.infer<typeof briefSchema>}|null>(null),[failure,setFailure]=useState('');
+ useEffect(()=>{const c=new AbortController();void growthPost('brief',{id},briefSchema,c.signal).then(data=>{if(!c.signal.aborted){setEntry({id,revision,data});setFailure('');}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'The account brief could not be loaded.');});return()=>c.abort();},[id,revision]);
+ const brief=entry?.id===id?entry.data.brief:null;
+ return <section aria-labelledby="growth-brief-title"><h3 id="growth-brief-title">Account brief</h3>
+  {failure&&<p>{failure}</p>}{!entry&&!failure&&<p role="status">Loading the account brief…</p>}
+  {entry?.id===id&&!brief&&<p>No brief yet. Agencies about to be written to are briefed first.</p>}
+  {brief&&<><p>{brief.writer.summary}{brief.writer.serviceArea?` Serves ${brief.writer.serviceArea}.`:''}{brief.writer.ownership?` ${brief.writer.ownership}.`:''}</p>
+   {brief.writer.triggers.length>0&&<><p>Why now:</p><ul>{brief.writer.triggers.map(t=><li key={t.sourceUrl+t.fact}>{t.fact}{t.date?` (${t.date})`:''} <a href={t.sourceUrl} target="_blank" rel="noreferrer">source</a></li>)}</ul></>}
+   {brief.writer.hook&&<p>Opening: {brief.writer.hook.sentence}</p>}
+   {brief.writer.countyFact&&<p>County figure: {brief.writer.countyFact.claim}</p>}
+   {brief.writer.pains.length>0&&<><p>Questions to ask:</p><ul>{brief.writer.pains.map(p=><li key={p.question}>{p.question}{p.capability?` (${p.capability})`:''}</li>)}</ul></>}
+   <p>Lead with: {String(brief.writer.angle??'').replaceAll('_',' ')}{brief.research.angleReason?` · ${brief.research.angleReason}`:''}</p>
+   <p>Brief's fit: {brief.research.fit??'—'}{brief.research.fitReasons.length?` · ${brief.research.fitReasons.join('; ')}`:''}</p>
+   {brief.research.leaders.length>0&&<p>Leaders: {brief.research.leaders.map(l=>`${l.name} (${l.title})`).join(', ')}</p>}
+   {brief.research.questions.length>0&&<p>Still to learn: {brief.research.questions.join(' ')}</p>}
+   <p><small>Version {brief.version}, written {new Date(brief.updatedAt).toLocaleString()}. Emails never state the agency's own share, rank or ratings.</small></p></>}
+ </section>;
+}
+const checkModes:Record<string,string>={off:'Off',check:'On: never write to a mailbox that does not exist',strict:'Strict: also hold an address no server answered for'};
+function SendGuardPanel({revision,onSave}:{revision:number;onSave:(op:string,data:unknown)=>Promise<void>}) {
+ const [data,setData]=useState<z.infer<typeof sendGuardSchema>|null>(null),[failure,setFailure]=useState('');
+ useEffect(()=>{const c=new AbortController();void growthPost('sendGuard',{},sendGuardSchema,c.signal).then(d=>{if(!c.signal.aborted){setData(d);setFailure('');}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'The send guard could not be loaded.');});return()=>c.abort();},[revision]);
+ return <section className="panel" aria-labelledby="growth-guard-title"><h2 id="growth-guard-title">Send guard</h2>
+  {failure&&<p>{failure}</p>}{!data&&!failure&&<p role="status">Loading the send guard…</p>}
+  {data&&<><p>Checking addresses before the first email: {checkModes[data.mode]}. Checked so far: {data.addresses.verified} confirmed, {data.addresses.catchAll} on servers that accept any address, {data.addresses.undeliverable} that do not exist, {data.addresses.unanswered} not answered yet, {data.addresses.unchecked} waiting.</p>
+  {!data.on&&<p role="status">The bounce guard is off. To have cold email pause itself when it bounces, set Settings → Customer growth → Pause cold email at this bounce rate.</p>}
+  {data.on&&<p role={data.tripped?'alert':undefined}>{data.tripped?'Cold email is paused. ':'Cold email is going out. '}Since {data.since?new Date(data.since).toLocaleDateString():'—'}: {data.sent??0} cold emails, {data.bounced??0} bounced for good, {data.complaints??0} marked as spam (limit {data.percent}%, counted from 20 emails).</p>}
+  {data.on&&data.tripped&&<button className="button button-primary" onClick={()=>void onSave('sendGuardResume',{})}>Resume cold email</button>}</>}
+ </section>;
+}
 export function Growth() {
  const [workspace,setWorkspace]=useState<{offset:number;data:z.infer<typeof workspaceSchema>}|null>(null),[offset,setOffset]=useState(0),[revision,setRevision]=useState(0),[error,setError]=useState(''),[busy,setBusy]=useState(false),[selected,setSelected]=useState<string|null>(null);
  const [detailEntry,setDetail]=useState<{id:string;revision:number;data:z.infer<typeof detailSchema>}|null>(null);
@@ -144,6 +175,7 @@ export function Growth() {
  {data&&<><section className="panel"><h2>Readiness</h2><p>Sending: {data.services.sending?'enabled':'disabled'} · Research: {data.services.research?'ready':'not configured'} · Unsubscribe signing: {data.services.signing?'ready':'not configured'} · Sender address: {data.services.postalAddress?'ready':'needed'}</p><p>Sending also requires an active agent, a reviewed policy and an eligible verified contact.</p></section>
  {data.services.roster&&<RosterPanel revision={revision}/>}
  {data.services.people&&<PeoplePanel revision={revision} onSave={save}/>}
+ {data.services.addressCheck&&<SendGuardPanel revision={revision} onSave={save}/>}
  {data.services.learning&&<LearningPanel revision={revision} onSave={save}/>}
  <fieldset disabled={busy} style={{border:0,padding:0}}>
  <details className="panel"><summary>Add a prospect or customer</summary><form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('create',{name:value(f,'name'),domain:value(f,'domain').toLowerCase(),product:value(f,'product'),email:value(f,'email'),contactName:value(f,'contactName'),role:value(f,'role'),goal:value(f,'goal'),...(value(f,'tenantId')?{tenantId:value(f,'tenantId')}:{}),internal:f.has('internal')});}}>
@@ -158,9 +190,10 @@ export function Growth() {
  {item&&<section className="panel" key={`${item.id}:${item.version}`}><h2>{item.name} · {names[item.product]}</h2><p>Contact: {item.email??'Missing'} · {item.eligibility??'Needs a contact'} · Owner: {item.owner_agent.replaceAll('_',' ')}</p>
  {detailError&&<p role="alert">{detailError}</p>}{!detail&&!detailError&&<p role="status">Loading organization details…</p>}
  <p>Evidence-based fit: {item.fit??"Not assessed"} · Observed intent: {item.intent??"Unknown"}</p><p>{String(item.memory.researchRationale??"")}</p>
+ {data.services.briefs&&item.product==='caremetric-intel'&&<BriefPanel id={item.id} revision={revision}/>}
  <OpportunityEditor item={item} onSave={save}/><button className="button" onClick={()=>void save('research',{id:item.id})}>Research this organization</button>
  {item.contact_id&&<form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('contact',{id:item.contact_id,version:item.contact_version,eligibility:value(f,'eligibility'),verified:f.has('verified'),sourceUrl:value(f,'sourceUrl')});}}>
- <h3>Contact eligibility</h3><select aria-label="Contact eligibility" name="eligibility" defaultValue={item.eligibility??'review'}><option value="review">Needs review</option><option value="permitted">Outreach permitted</option><option value="opted_out">Do not contact</option></select>
+ <h3>Contact eligibility</h3><select aria-label="Contact eligibility" name="eligibility" defaultValue={item.eligibility??'review'}><option value="review">Needs review</option><option value="permitted">Outreach permitted</option><option value="opted_out">Do not contact</option><option value="undeliverable">Mailbox does not exist</option></select>
  <label>Verification source<input name="sourceUrl" type="url"/></label><label><input type="checkbox" name="verified" defaultChecked={Boolean(item.verified_at)}/> Business contact and channel eligibility verified</label><button>Save contact review</button></form>}
  <h3>Evidence</h3>{detail?.evidence.map(e=><p key={e.id}><a href={e.source_url} target="_blank" rel="noreferrer">Source</a> · {e.confidence} · {new Date(e.observed_at).toLocaleDateString()} · {e.claim}</p>)}
  <form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('evidence',{opportunityId:item.id,sourceUrl:value(f,'sourceUrl'),claim:value(f,'claim'),confidence:value(f,'confidence'),observedAt:new Date().toISOString()});}}><label>Source URL<input name="sourceUrl" type="url" required/></label><label>Verified fact<textarea name="claim" maxLength={4000} required/></label><select aria-label="Evidence confidence" name="confidence"><option>low</option><option>medium</option><option>high</option></select><button>Add evidence</button></form>

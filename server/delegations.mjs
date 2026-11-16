@@ -52,7 +52,7 @@ const commandTargets={
   carebase:{endpoint:'https://cmcarebase.com/api/platform-admin/command',audience:'carebase.command',header:'Authorization'},
   intel:{endpoint:'https://www.caremetricintel.com/functions/centralAdminCommand',audience:'intel.command',header:'X-CareMetric-Hub-Authorization'},
 };
-// Breathe and Intel changes need platform.admin.app-commands.v1 (20261117100100_app_command_audiences_contract.sql). Without it the
+// Breathe and Intel changes need platform.admin.app-commands.v1 (20261117110100_app_command_audiences_contract.sql). Without it the
 // capabilities those applications advertise for them are not passed to the browser.
 const appCommandCapabilities=new Set([...tenantLifecycleCapabilities,...staffAccessCapabilities,'commands.preview','commands.apply']);
 async function authorize(db,audience,payload,{appCommands=false}={}) {

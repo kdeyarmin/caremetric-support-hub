@@ -14,7 +14,7 @@ do $$ declare contract jsonb:=hub.get_backend_contract(); begin
         and position('''carebase.command''::text' in pg_catalog.pg_get_expr(c.conbin,c.conrelid))>0
         and position('''advisors''::text' in pg_catalog.pg_get_expr(c.conbin,c.conrelid))>0
         and position('''carebase.learning''::text' in pg_catalog.pg_get_expr(c.conbin,c.conrelid))>0) then
-    raise exception 'Apply 20261117100000_app_command_audiences.sql first' using errcode='55000';
+    raise exception 'Apply 20261117110000_app_command_audiences.sql first' using errcode='55000';
   end if;
   if not (contract->'features' @> '["platform.admin.app-commands.v1"]'::jsonb) then
     contract:=jsonb_set(contract,'{features}',(contract->'features')||'["platform.admin.app-commands.v1"]'::jsonb);

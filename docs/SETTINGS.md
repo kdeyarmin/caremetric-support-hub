@@ -53,6 +53,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Customer growth | Most people to email at one organization | none: a setting from the start (three, the contact included, until you save a number; [Customer growth](CUSTOMER_GROWTH.md#several-decision-makers-at-one-organization)) |
 | Billing | Customers can buy subscriptions | `HUB_CUSTOMER_PURCHASING_ENABLED` |
 | Billing | Keep Stripe in step with Intel's prices | `HUB_APP_CATALOG_SYNC` (`off` meant switched off) |
+| Billing | Intel price catalog address (empty: Intel's live prices; staging only) | `INTEL_CATALOG_URL` |
 | Billing | Stripe customer portal configuration | `STRIPE_PORTAL_CONFIGURATION_ID` |
 | Social media | Facebook Page id | `HUB_META_PAGE_ID` |
 | Social media | Instagram account id | `HUB_META_INSTAGRAM_ID` |
@@ -74,6 +75,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Creative | Most renders a day | none: a setting from the start |
 | Creative | How videos are made | none: a setting from the start |
 | Course distribution | Allow legacy opt-in distribution | `HUB_LEGACY_DISTRIBUTION_OPT_IN` |
+| Course distribution | Lesson video import hosts (one per line; empty: HeyGen's) | `HUB_MEDIA_IMPORT_HOSTS` (comma separated) |
 
 Settings added with the AI workforce build-out (2026-11-13), all settings from the start and all off or empty until you choose
 ([AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md) has the order to turn them on):
@@ -88,12 +90,18 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Customer growth | Days before asking again | When a "not now" or a silent prospect is asked once more (at least 30) |
 | Customer growth | Win-back and cancellation emails | The Account Manager proposes, for your approval, one email when a trial ends unpaid and one when a plan is set to cancel |
 | Customer growth | Finding people's addresses; Most address checks a day | Named decision-makers from the CMS owners file, the NPI registry and their own websites; an address they publish, or one their mail server confirms; every address waits for your review until you hand "Named people's email addresses" over on the AI team page |
+| Customer growth | Learn which agencies opened their report | Reads from Intel which market report links were opened (agency and time only), alerts you on an agency's first open, and shapes its second email ([Customer growth](CUSTOMER_GROWTH.md#which-agencies-opened-their-market-report)) |
+| Customer growth | Write an account brief before the first email; Most account briefs a day; Most to spend on one account brief | A brief per Intel agency from Intel's data, its county's figures for its own setting and dated web triggers, written on the top model ([Customer growth](CUSTOMER_GROWTH.md#an-account-brief-before-the-first-email-written-and-reviewed-on-the-top-model)) |
+| Customer growth | Write first emails on the top model; Have a reader review each first email | The first email written from the brief on the top model, and a second model's 1-to-5 review with one rewrite below 4 |
+| Customer growth | Check an address before the first email | Off, Check or Strict: the business's mail server is asked whether a mailbox exists before the first cold email to it, and one that does not is never written to ([Customer growth](CUSTOMER_GROWTH.md#checking-an-address-before-the-first-email-and-the-bounce-guard)) |
+| Customer growth | Pause cold email at this bounce rate | Cold email waits for you to resume it on Growth when the last seven days' cold emails bounce above this percent or one is marked as spam (empty: off) |
 | Customer growth | Research prospects with web search; Most prospects to research a day; Most to spend researching one prospect | Deeper research within a cost ceiling |
 | Customer growth | Write from what is working | Drafts use the weekly memo you approve on Growth, or each new memo at once after you hand "Learning memo" over on the AI team page |
-| Creative | County snapshots a week | Images of one public number for a county your prospects are in (0 turns them off) |
+| Creative | County snapshots a week | Images of one public number about home health or hospice for a county of your roster's states, each sending agencies to their free market report (0 turns them off; [Creative Director](CREATIVE_DIRECTOR.md#county-snapshots-2026-11-13)) |
+| Creative | Have a model look at each image before you see it; Least score from the image review | A model reads each finished ad image as a person in a feed would: cut-off, overlapping, unreadable or garbled text or a wrong figure is never shown to you, and an image below the least score (1 to 5) comes with a warning ([Creative Director](CREATIVE_DIRECTOR.md#the-image-review-2026-11-16)) |
 | Social media | Post about new CMS data and observances | The weekly plan may write one post about a new release or an observance |
 | Social media | Write posts for my LinkedIn profile; Posts for my profile a week | Posts in your voice, each approved by you until you hand "Founder posts" over on the AI team page |
-| Paid ads | Most to spend on new campaigns a month | New LinkedIn, Meta and Google search campaigns are proposed only while it is set; after you hand "Ad campaign launch" over, the campaigns that start on their own share it and never pass it together |
+| Paid ads | Most to spend on new campaigns a month | New LinkedIn, Meta and Google search campaigns are proposed only while it is set (Intel's send agencies to the free market report for their own agency); after you hand "Ad campaign launch" over, the campaigns that start on their own share it and never pass it together |
 | Paid ads | Meta retargeting audience; Meta Pixel (dataset) id; LinkedIn conversion rule id | Where new Meta campaigns aim and where leads are reported |
 | Paid ads | Report leads to the ad platforms | Hashed-email lead reports to the platform whose ad was clicked |
 | Paid ads | Google Ads customer id; Google Ads manager account id; Google Ads OAuth client id; Google Ads API version | The Google Ads API |
@@ -139,8 +147,6 @@ The service's wiring, which has to be right before the Hub can start or sign you
 - `HUB_TELNYX_VERIFY_PROFILE_ID`: the sign-in codes depend on it, so a wrong value saved in the Hub could lock you out of
   the page you would fix it on.
 - `HUB_PUBLIC_ORIGIN` (optional): must match the webhook addresses Twilio and SendGrid hold.
-- `HUB_MEDIA_IMPORT_HOSTS` (optional): the hosts bulk lesson-video import may fetch from.
-- `INTEL_CATALOG_URL` (optional, staging only): reads another Intel's price catalog.
 - The `VITE_*` build arguments, which are compiled into the web app.
 
 ## For developers

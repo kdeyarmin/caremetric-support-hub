@@ -96,6 +96,16 @@ it('refuses an MP4 URL outside the allowlist before recording or fetching anythi
   await expect(f.run(stage(row(1,{mp4Url:'http://resource2.heygen.ai/1.mp4'})))).rejects.toMatchObject({status:400,code:'invalid_request'});
 });
 
+it('reads the host setting on every request, so a change applies without a restart', async () => {
+  let current=['videos.example.com'];
+  const f=setup({hosts:()=>current});
+  await expect(f.run(stage(row(1)))).rejects.toMatchObject({status:422,code:'host_not_allowed'});
+  current=['videos.example.com','resource2.heygen.ai'];
+  // Now allowed: the row goes on to the database (the fixture source answers 404, which is the row's own failure, not the host's).
+  await f.run(stage(row(1))).catch(error=>expect(error?.code).not.toBe('host_not_allowed'));
+  expect(f.db.calls.length).toBeGreaterThan(0);
+});
+
 it('follows redirects only to allowlisted https hosts and records a refused hop as the row failure', async () => {
   const bytes=mp4('one');
   const allowed=setup({routes:{'https://resource2.heygen.ai/video/1.mp4':redirect('https://files2.heygen.ai/a/1.mp4'),'https://files2.heygen.ai/a/1.mp4':video(bytes)}});

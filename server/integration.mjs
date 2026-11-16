@@ -197,7 +197,7 @@ try {
   assert.deepEqual(commandActor.operation,commandOperation);
   assert.equal(Date.parse(commandActor.assurance_expires_at)-Date.parse(commandActor.session_started_at),8*60*60*1000);
   await assert.rejects(caps.consume(commandCapability,'carebase.command'),'command authorization is single use');
-  // Breathe's and Intel's change endpoints redeem their own command audiences (20261117100000_app_command_audiences.sql).
+  // Breathe's and Intel's change endpoints redeem their own command audiences (20261117110000_app_command_audiences.sql).
   const appCaps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async()=>{throw new Error('No native call is expected.');},appCommands:true});
   const lifecycleOperation={domain:'tenant.lifecycle.v1',operation:'context',targetId:'5b0c5a0e-2f4e-4d7a-9a3b-0a6c1e2d3f40'};
   const breatheChangeCapability='cmh_'+'h'.repeat(43);

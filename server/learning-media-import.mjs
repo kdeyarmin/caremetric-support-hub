@@ -7,6 +7,7 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { HttpError } from './sms-auth.mjs';
 import { boundedSession } from './bounded-session.mjs';
+import { live } from './live.mjs';
 import { MEDIA_IMPORT_FAILURES, MEDIA_IMPORT_LIMITS, mediaImportListSchema, mediaImportRequestSchema, mediaImportResultSchema,
   mediaImportUrl } from '../src/learning/mediaImportProtocol.ts';
 import { validatePublicationMp4Header, validatePublicationText } from '../src/imports/publicationImportPreview.ts';
@@ -15,10 +16,12 @@ import { validatePublicationMp4Header, validatePublicationText } from '../src/im
 // allowlisted host, and stores it through the same media capability as the single-file uploader.
 
 export const mediaImportFeature='learning.media-import.v1';
-/** HeyGen asset hosts. Exact names only; HUB_MEDIA_IMPORT_HOSTS replaces the list. */
+/** HeyGen asset hosts. Exact names only; Settings -> Course distribution -> Lesson video import hosts replaces the list. */
 export const DEFAULT_MEDIA_IMPORT_HOSTS=Object.freeze(['resource2.heygen.ai','files.heygen.ai','files2.heygen.ai']);
 const hostName=/^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
-/** Returns null for an unusable setting, so a typo disables imports instead of widening them. */
+/** One exact, lowercase host name (the setting's test). */
+export const isMediaImportHost=host=>typeof host==='string'&&hostName.test(host);
+/** The hosts a comma-separated list names (the retired HUB_MEDIA_IMPORT_HOSTS), or null for an unusable list. */
 export function mediaImportHosts(value) {
   if(value===undefined||value===null||!String(value).trim())return DEFAULT_MEDIA_IMPORT_HOSTS;
   const hosts=String(value).split(',').map(host=>host.trim().toLowerCase()).filter(Boolean);
@@ -86,6 +89,7 @@ async function storedDigest(response,expectedBytes,signal) {
   return {sha256:hash.digest('hex'),size};
 }
 
+// `hosts` is the allowlist, or a function giving it (the Hub setting, read on each request).
 export function learningMediaImport({pool,storage,hosts,fetchImpl=fetch,enabled=true,deadlineMs=480000,metadataTimeoutMs=15000}) {
   const sql=(sessionToken,signal,text,values)=>boundedSession(pool,sessionToken,signal,async db=>{
     await db.query('reset role');return (await db.query(text,values)).rows[0].value;
@@ -97,15 +101,16 @@ export function learningMediaImport({pool,storage,hosts,fetchImpl=fetch,enabled=
     catch(error){throw refuse(422,'invalid_captions',`${MEDIA_IMPORT_FAILURES.invalid_captions} ${String(error?.message??'').replace(/^assets\.captions:?\s*/,'').slice(0,200)}`.trim());}
     try{validatePublicationText(transcript,'transcript');}
     catch(error){throw refuse(422,'invalid_transcript',`${MEDIA_IMPORT_FAILURES.invalid_transcript} ${String(error?.message??'').replace(/^assets\.transcript:?\s*/,'').slice(0,200)}`.trim());}
-    // A source host outside the allowlist is refused before anything is recorded or fetched.
-    if(!hosts?.includes(mediaImportUrl(row.mp4Url)?.hostname))throw refuse(422,'host_not_allowed',MEDIA_IMPORT_FAILURES.host_not_allowed);
+    // A source host outside the allowlist is refused before anything is recorded or fetched. One reading serves the whole row.
+    const allowed=live(hosts);
+    if(!allowed?.includes(mediaImportUrl(row.mp4Url)?.hostname))throw refuse(422,'host_not_allowed',MEDIA_IMPORT_FAILURES.host_not_allowed);
     const begun=await sql(sessionToken,signal,'select private.learning_media_import_begin($1::jsonb,$2,$3,$4,$5,$6) as value',
       [JSON.stringify(row),sha256(captions),captions.length,sha256(transcript),transcript.length,op.manifestSha256]);
     if(begun.action==='done')return {item:begun.item,replayed:true};
     const itemKey=`${row.product}:${row.sourceRecord}:${row.heygenVideoId}`,lease=begun.lease;
     let directory=null;
     try{
-      const response=await fetchAllowlisted(row.mp4Url,{hosts,fetchImpl,signal});
+      const response=await fetchAllowlisted(row.mp4Url,{hosts:allowed,fetchImpl,signal});
       directory=await mkdtemp(join(tmpdir(),'caremetric-media-import-'));
       const file=join(directory,'video.mp4');
       const source=await spoolSource(response,file,signal);

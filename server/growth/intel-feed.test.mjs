@@ -92,6 +92,15 @@ describe('Intel marketing feed reader', () => {
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ action: 'county_figures', county_fips: ['42003'] });
     expect(result.counties[0].figures[0]).toMatchObject({ key: 'medicare_beneficiaries', value: 250000 });
   });
+
+  it('reads every county of the states asked for, and refuses an answer that does not fit', async () => {
+    const fetchImpl = answer({ contract: 'caremetric.marketing-feed.v1', action: 'counties', counties: [{ county_fips: '42053', county_name: 'Forest', state: 'PA' }] });
+    const result = await reader(fetchImpl).counties({ states: ['PA'] });
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ action: 'counties', states: ['PA'] });
+    expect(result.counties).toEqual([{ county_fips: '42053', county_name: 'Forest', state: 'PA' }]);
+    await expect(reader(answer({ contract: 'caremetric.marketing-feed.v1', action: 'counties', counties: [{ county_fips: '4205', county_name: 'Forest', state: 'PA' }] }))
+      .counties({ states: ['PA'] })).rejects.toMatchObject({ code: 'feed_response_invalid' });
+  });
 });
 
 describe('agency facts', () => {

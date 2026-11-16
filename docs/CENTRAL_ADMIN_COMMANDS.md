@@ -59,7 +59,7 @@ mapped administrator again; the Hub never holds an application credential.
   sessions stay ended. See Breathe's `docs/central-admin-staff-access.md`.
 - **Retries:** a lost answer is recovered from the saved review (Breathe's `resume`; Intel's `apply` replays the stored result
   with `replayed: true`), never by sending another change.
-- **Release order:** apply `20261117100000_app_command_audiences.sql` and `20261117100100_app_command_audiences_contract.sql`,
+- **Release order:** apply `20261117110000_app_command_audiences.sql` and `20261117110100_app_command_audiences_contract.sql`,
   deploy this Hub, then switch each application's flag on. Before the Hub's database declares `platform.admin.app-commands.v1`,
   the server refuses both audiences and hides the capabilities, so the applications can be released in any order. Verify on a
   real record with a preview only; never apply a change as a smoke test.

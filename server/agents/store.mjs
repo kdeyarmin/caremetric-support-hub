@@ -14,7 +14,7 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, ads = false, watchdog = false, handover = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, creativeReview = false, ads = false, watchdog = false, handover = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -60,6 +60,10 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
       ...(creativeData ? {
         creativeDataCounties: (perWeek, weekStart) => call('private.creative_data_counties', [perWeek, weekStart]),
         socialRecentArticles: days => call('private.social_recent_articles', [days]),
+      } : {}),
+      // Every county of the roster's states, least recently pictured first, and the vision review (20261116130000_creative_review.sql).
+      ...(creativeReview ? {
+        creativeDataCountiesAll: (perWeek, weekStart, counties) => call('private.creative_data_counties', [perWeek, weekStart, counties === null ? null : JSON.stringify(counties)]),
       } : {}),
       creativeBriefFinish: (id, status, result = null) => call('private.creative_brief_finish', [id, status, result === null ? null : JSON.stringify(result)]),
       creativeDraftsSave: (briefId, taskId, assets) => call('private.creative_drafts_save', [briefId, taskId, JSON.stringify(assets)]),

@@ -132,7 +132,7 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
             '/api/internal/publications/authorize':'publication',
             '/api/internal/media/authorize':'media', '/api/internal/admin/authorize':'carebase',
             '/api/internal/admin/breathe/authorize':'breathe', '/api/internal/admin/emr/authorize':'caremetric-emr',
-            // Breathe's and Intel's change endpoints redeem their own command audience (20261117100000_app_command_audiences.sql).
+            // Breathe's and Intel's change endpoints redeem their own command audience (20261117110000_app_command_audiences.sql).
             '/api/internal/command/breathe/authorize':'breathe.command', '/api/internal/command/intel/authorize':'intel.command',
             '/api/internal/admin/pennsync/authorize':'pennsync', '/api/internal/command/carebase/authorize':'carebase.command',
             '/api/internal/admin/go/authorize':'caremetric-go',

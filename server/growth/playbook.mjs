@@ -225,6 +225,12 @@ export const sequencePlan = deepFreeze([
   { touch: 3, angle: 'A short, polite close-the-loop note: ask whether the topic is a priority this year or whether someone else handles it. Make it easy to say "not now". No new pitch.' },
 ]);
 export const touchAngle = touch => sequencePlan[Math.min(Math.max(Number(touch) || 1, 1), sequencePlan.length) - 1].angle;
+/**
+ * The second email to a CareMetric Intel agency whose first offered its own market report, by whether someone there opened it (Intel
+ * records opens; views.mjs, 2026-11-16). Never say or hint that you know whether it was opened.
+ */
+export const viewedTouchAngle = 'Second email to an agency whose market report was sent with the first. Do not say or hint that you know whether anyone opened it. Pick up where a report leaves an agency: it shows where they stand, and the next step is acting on it. Name one concrete way Intel turns that into a plan (the physicians who certify the most patients in their county with their practice locations, the hospitals their residents use, a visit plan for the team), ask one qualifying question, and offer the free trial. Do not repeat touch 1\'s opening or retell the founder\'s story.';
+export const unviewedTouchAngle = 'Second email to an agency whose market report was sent with the first. Do not say or hint that you know whether anyone opened it. Bring a new subject and a different angle from touch 1 (one concrete capability or one useful free resource page), then mention in a few words that its free market report is still there, with the report link again on its own line. Do not repeat touch 1\'s opening.';
 
 /**
  * The first email to a CareMetric Intel prospect, built around a market report (owner direction 2026-11-15): make the reader ask
@@ -394,6 +400,24 @@ export function operatorHost(host) {
   if (!value || /\.(?:gov|edu|mil)$/.test(value) || /\.(?:gov|edu)\.[a-z]{2}$/.test(value) || /(?:^|\.)(?:pa\.us|state\.[a-z]{2}\.us)$/.test(value)) return false;
   if (directoryName.test(value)) return false;
   return !notOperators.some(blocked => value === blocked || value.endsWith(`.${blocked}`));
+}
+
+/**
+ * Job boards and news sites where a dated fact about an employer is published ('jobs' or 'news'), or null. They are never a prospect
+ * (operatorHost refuses them), but "is hiring a community liaison" or "opened a Bucks County office" there is a trigger about the
+ * organization that posted it (deep-research.mjs keeps such a fact only when it names the organization and is recent).
+ */
+const jobHosts = ['indeed.com', 'glassdoor.com', 'ziprecruiter.com', 'monster.com', 'simplyhired.com', 'careerbuilder.com', 'snagajob.com', 'jooble.org',
+  'talent.com', 'lensa.com', 'vivian.com', 'myworkdayjobs.com', 'icims.com', 'greenhouse.io', 'lever.co', 'paylocity.com', 'workforcenow.adp.com',
+  'recruiting.paylocity.com', 'applytojob.com', 'jobs.lever.co', 'hiringthing.com', 'workable.com', 'bamboohr.com', 'ultipro.com', 'dayforcehcm.com'];
+const newsHosts = ['prnewswire.com', 'businesswire.com', 'globenewswire.com', 'homehealthcarenews.com', 'hospicenews.com', 'mcknightshomecare.com',
+  'mcknights.com', 'beckershospitalreview.com', 'fiercehealthcare.com', 'modernhealthcare.com', 'bizjournals.com', 'patch.com'];
+export function triggerHost(host) {
+  const value = String(host ?? '').toLowerCase().replace(/^www\./, '');
+  const on = list => list.some(listed => value === listed || value.endsWith(`.${listed}`));
+  if (on(jobHosts) || /(?:^|[.-])(?:jobs|careers)(?:[.-]|$)/.test(value)) return 'jobs';
+  if (on(newsHosts)) return 'news';
+  return null;
 }
 
 /** The playbook as the model reads it: constant text, cached with the system prompt. */
