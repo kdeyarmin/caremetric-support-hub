@@ -187,11 +187,12 @@ export const products = deepFreeze({
       'Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.',
     ],
     // Owner-requested industry priorities, checked against kdeyarmin/intel@393b9b3: featureCatalog.json, businessLine.ts,
-    // planCatalog.ts and marketingCopy.json. Keep the matching table and conditions in docs/GTM_FACTS.md together.
+    // planCatalog.ts and marketingCopy.json; service-line access rechecked 2026-11-16 against kdeyarmin/intel@8abe4c6. Keep the
+    // matching table and conditions in docs/GTM_FACTS.md together.
     industryGuidance: [
       'These industries are ordered by fit with the current product. The feature priorities describe likely uses, not measured customer usage or proven demand.',
-      'Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans support home health and hospice CRM workflows within each plan\'s allowances.',
-      'Other care settings can use market and territory research within the subscribed territory. Their care-specific CRM workflows require an Enterprise agreement. Home health and hospice workflow support does not imply equivalent CRM support for every industry.',
+      'Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans offer CRM workflows for every healthcare service line, within each plan\'s allowance of service lines the organization chooses; Enterprise covers every line.',
+      'Every care setting can use market and territory research within the subscribed territory. Public datasets and specialized analyses cover particular settings and geographies, so research depth varies by industry: specialized Medicare share rankings and competitor alerts cover home health and hospice.',
       'Research coverage varies by dataset, geography and reporting period. State-licensed residential coverage depends on which state files are loaded. Feature access also depends on the plan, role and configured services.',
       'Public provider and market data supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.',
       'For each audience, lead with its relevant features and main purpose below, within these conditions. This guidance does not change prospecting eligibility, campaign audiences or outreach permissions.',
@@ -211,7 +212,7 @@ export const products = deepFreeze({
       },
       {
         industry: 'Skilled nursing facilities and nursing homes',
-        priorityFeatures: 'Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking under the appropriate Enterprise agreement.',
+        priorityFeatures: 'Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking on the nursing home service line.',
         purpose: 'Prioritize hospital relationships and understand the facility\'s competitive position.',
       },
       {
