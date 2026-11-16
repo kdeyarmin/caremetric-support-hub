@@ -8,8 +8,9 @@
  *   with its area and the plan or role it needs, why each part matters, the data behind it (what is included, the source, the decision it
  *   helps make and its limit), each care setting, the manager view, the questions and answers, and the site's own caveats.
  * - CareMetric CareBase (carebase-features.json), from https://cmcarebase.com/features, its home page and /faq: every capability by
- *   module, why it matters and the tools that set it apart, the newest tools, a resident's record from inquiry to move-out, what each role
- *   sees and does, before and with CareBase, each chapter's requirements, the questions and answers, and the site's own caveats.
+ *   area with the plan or add-on it needs, why it matters and the tools that set it apart, the newest tools, a resident's record from
+ *   inquiry to move-out, what each role sees and does, before and with CareBase, each chapter's requirements, the questions and answers,
+ *   and the site's own caveats.
  * The AI team names no other product, so vendor names on the pages are written generically; each catalog lists those edits.
  */
 import { readFileSync } from 'node:fs';
@@ -34,17 +35,17 @@ export function featuresText(product) {
 }
 
 function carebaseText(catalog) {
-  const total = catalog.modules.reduce((sum, module) => sum + module.capabilities.length, 0);
+  const total = catalog.areas.reduce((sum, area) => sum + area.capabilities.length, 0);
   return [
     `CareMetric CareBase capabilities (published at ${catalog.sources.features}, ${catalog.sources.home} and ${catalog.sources.faq}, read ${catalog.reviewed})`,
     `What it is: ${catalog.overview} ${catalog.summary}`,
-    `${total} capabilities in ${catalog.modules.length} modules. ${catalog.intro} ${catalog.legend}`,
+    `${total} capabilities in ${catalog.areas.length} areas. ${catalog.intro} ${catalog.legend}`,
     '',
     'Why it matters, and the tools that set it apart:',
     ...catalog.pillars.map(pillar => `- ${pillar.title} (${pillar.area}): ${pillar.why}`),
     '',
-    'Every capability, by module:',
-    ...catalog.modules.map(module => `- ${module.name}: ${module.capabilities.join('; ')}.`),
+    'Every capability, by area (a bracket names the plan or add-on it needs):',
+    ...catalog.areas.map(area => `- ${area.name} [${area.plan}]: ${area.intro} ${area.capabilities.join('; ')}.${area.note ? ` ${area.note}` : ''}`),
     '',
     'The newest tools:',
     ...catalog.newest.map(item => `- ${item.name} (${item.headline}): ${item.does}`),
@@ -96,13 +97,13 @@ function intelText(catalog) {
 
 // Words that tie a plan item's text to one of the "why it matters" pillars, in the pillars' order on each site.
 const carebaseWords = [
-  /\b(surveys?|surveyors?|binder|deficienc|citations?|chapter 2[68]00)/i,
-  /\b(courses?|education|in-?service|training hours|curriculum|quizzes)\b/i,
-  /\b(reminders?|chasing|overdue|follow-?up|tasks?|deadlines?)\b/i,
-  /\b(policies|reviewed|reviewer|ai-assisted|presenter)\b/i,
-  /\b(readiness score|readiness|gaps?)\b/i,
-  /\b(medications?|insulin|practicums?|authorization)\b/i,
-  /\b(live class|classes|attendance|sign-?in sheet|roster)\b/i,
+  /\b(surveys?|surveyors?|binder|deficienc|citations?|readiness)/i, // Prepare for your next survey
+  /\b(courses?|education|in-?service|training hours|curriculum|quizzes)\b/i, // Spend less on required education
+  /\b(reminders?|chasing|overdue|follow-?up|tasks?|deadlines?)\b/i, // Spend less time chasing records
+  /\b(chapters? 2[68]00|2[68]00|dementia|direct care|state-specific)\b/i, // Pennsylvania is built into the workflow
+  /\b(hospital returns?|change of condition|change-of-condition|reassessments?|support-plan reviews?)\b/i, // The next step stays connected to the record
+  /\b(policies|reviewed|reviewer|ai-assisted|presenter)\b/i, // Training prepared for you. AI reviewed by people.
+  /\b(price[ds]?|pricing|per facility|headcount|per-resident|per-staff)\b/i, // A price based on your facility, not your headcount
 ];
 const intelWords = [
   /\b(market|territor(?:y|ies)|count(?:y|ies)|demographic|service area)/i,

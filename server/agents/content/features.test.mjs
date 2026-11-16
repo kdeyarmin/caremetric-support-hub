@@ -88,12 +88,17 @@ describe('CareMetric Intel\'s published feature catalog', () => {
 const carebase = productFeatures.carebase;
 
 describe('CareMetric CareBase\'s published capabilities', () => {
-  it('holds every capability by module, why it matters, the newest tools, the lifecycle, the roles and the chapters', () => {
-    const total = carebase.modules.reduce((sum, module) => sum + module.capabilities.length, 0);
+  it('holds every capability by area with the plan it needs, why it matters, the newest tools, the lifecycle, the roles and the chapters', () => {
+    const total = carebase.areas.reduce((sum, area) => sum + area.capabilities.length, 0);
     expect(total).toBe(carebase.publishedCount);
-    expect(carebase.modules.every(module => module.capabilities.length === module.count)).toBe(true);
-    expect(carebase.modules.map(module => module.name)).toEqual(expect.arrayContaining(['Training & compliance core', 'Resident care, clinical & operations', 'Survey, safety & facility', 'Credentials & workforce']));
-    expect(carebase.pillars.map(pillar => pillar.title)).toEqual(expect.arrayContaining(['Prepare for your next survey', 'Spend less on required education', 'Spend less time chasing records', 'Medication authorization roster']));
+    expect(carebase.areas).toHaveLength(carebase.publishedAreas);
+    expect(total).toBeGreaterThanOrEqual(100);
+    expect(carebase.areas.every(area => area.capabilities.length === area.count && area.name && area.intro && area.plan)).toBe(true);
+    expect(carebase.areas.map(area => area.name)).toEqual(expect.arrayContaining(['Resident care & daily operations', 'Staff training & learning', 'Medication management & eMAR',
+      'Survey readiness, safety & quality', 'Workforce, credentials & scheduling', 'Resident billing & payments']));
+    expect(carebase.pillars.map(pillar => pillar.title)).toEqual(expect.arrayContaining(['Prepare for your next survey', 'Spend less on required education', 'Spend less time chasing records', 'Pennsylvania is built into the workflow']));
+    // The chapter cards that follow "What sets it apart" on the home page are chapters, not reasons to choose it.
+    expect(carebase.pillars.filter(pillar => carebase.chapters.some(chapter => chapter.title === pillar.title))).toEqual([]);
     expect(carebase.newest.map(item => item.name)).toEqual(expect.arrayContaining(['Survey Day Mode']));
     expect(carebase.lifecycle.length).toBeGreaterThanOrEqual(5);
     expect(carebase.roles.map(item => item.role)).toEqual(expect.arrayContaining(['Facility manager', 'Trainer', 'Employee', 'Surveyor']));
@@ -107,13 +112,20 @@ describe('CareMetric CareBase\'s published capabilities', () => {
     expect(text).not.toMatch(/\bdemo\b|sales call/i);
     const problems = textProblems(text, { product: 'carebase' });
     for (const code of ['competitor_named', 'vocabulary', 'call_offer']) expect(problems).not.toContain(code);
-    for (const phrase of ['Survey Day Mode', 'Medication authorization roster', 'not a prediction of survey results', 'What each role sees and does', '55 Pa. Code Chapter 2800']) expect(text).toContain(phrase);
+    // The prompt names the plan or add-on each area needs, and the site's own notes on eMAR and AI drafts.
+    for (const phrase of ['Survey Day Mode', 'Medication authorization & pass-meds roster', '[eMAR add-on · facility activation required]', '[Workforce add-on]',
+      'a documented switch to CareBase as the official medication administration record', 'Copilot actions require human approval', 'What each role sees and does',
+      '55 Pa. Code Chapter 2800', 'Compliance and survey outcomes depend on']) expect(text).toContain(phrase);
+    expect(text).toContain(`${carebase.publishedCount} capabilities in ${carebase.publishedAreas} areas.`);
     expect(carebase.edits.length).toBeGreaterThan(0);
   });
 
   it('leads a CareBase brief with what its text is about, else the next in turn', () => {
     expect(focusFor('carebase', 'Annual in-service hours for your staff', 0).title).toBe('Spend less on required education');
-    expect(focusFor('carebase', 'Who can give insulin today?', 0).title).toBe('Medication authorization roster');
+    expect(focusFor('carebase', 'Dementia hours under Chapter 2800', 0).title).toBe('Pennsylvania is built into the workflow');
+    expect(focusFor('carebase', 'After a hospital return: reassessment and support-plan review', 0).title).toBe('The next step stays connected to the record');
+    expect(focusFor('carebase', 'Courses drafted from your own policies, approved by a named reviewer', 0).title).toBe('Training prepared for you. AI reviewed by people.');
+    expect(focusFor('carebase', 'One flat price per facility, whatever your headcount', 0).title).toBe('A price based on your facility, not your headcount');
     const titles = carebase.pillars.map(pillar => pillar.title);
     expect([0, 1].map(turn => focusFor('carebase', 'A tip for the week', turn).title)).toEqual(titles.slice(0, 2));
   });
