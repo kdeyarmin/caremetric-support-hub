@@ -328,3 +328,10 @@ counts as `facebook`), utm_medium `social`, utm_campaign `social-<product>` and 
 utm_medium `paid_social` and utm_content `ad`, with utm_source `facebook` for a Meta ad (it may also run on Instagram) or `linkedin`.
 A new ad based on an ad whose link already carries tags keeps that page and gets these tags instead. Before it publishes a post the
 executor checks its link again: only a product page, as written or with well-formed tags.
+
+Just before a post, founder post or reply goes out, its words go through the writing check again, since a rule may have changed
+since they were approved. Words that fail are not published, and the action fails with a code that names the check
+(`post_check_long_sentence`, `post_check_trial_terms`, `reply_check_link`; `post_check_changed` when checking again would change
+the approved words). The AI team page says in words which rule refused it (`writingCheckReasons` in `src/admin/teamProtocol.ts`),
+so you can approve a corrected post. `invalid_post` is kept for a post the Hub cannot publish at all (its platform, a story's
+image, or an image address that is not https).
