@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { productPages } from '../agents/content/facts.mjs';
 import { allowedNumbers, textProblems } from '../agents/content/validate.mjs';
 import {
-  discoveryPages, discoveryQueries, discoveryQueriesPerDay, discoveryQuery, discoveryQueryCount, lifecyclePlay, linkablePages, offersMeeting, operatorHost, playbookText, playbookVersion, salesPlaybook, sequencePlan, touchAngle,
+  discoveryPages, discoveryQueries, discoveryQueriesPerDay, discoveryQuery, discoveryQueryCount, intelSetting, lifecyclePlay, linkablePages, offersMeeting, operatorHost, playbookText, playbookVersion, salesPlaybook, sequencePlan, touchAngle,
 } from './playbook.mjs';
 
 const day = 86_400_000;
@@ -38,7 +38,12 @@ describe('sales playbook', () => {
     expect(new Set(carebase.map(search => search.query)).size).toBe(carebase.length);
     const intel = days(discoveryQueryCount('caremetric-intel')).flatMap(instant => discoveryQueries('caremetric-intel', instant));
     expect(new Set(intel.map(search => search.query)).size).toBe(discoveryQueryCount('caremetric-intel'));
-    expect(intel.every(search => /home health|hospice/.test(search.query))).toBe(true);
+    expect(intel.every(search => /home health|hospice|skilled nursing facility|nursing and rehabilitation/.test(search.query))).toBe(true);
+    // Nursing homes are a primary audience (owner decision 2026-11-16): searched in every pass, the first of them before the hospice agencies.
+    const firstOf = pattern => intel.findIndex(search => pattern.test(search.query));
+    expect(firstOf(/skilled nursing facility/)).toBeGreaterThan(-1);
+    expect(firstOf(/nursing and rehabilitation center/)).toBeGreaterThan(-1);
+    expect(firstOf(/skilled nursing facility/)).toBeLessThan(firstOf(/"hospice agency"/));
     // Intel is sold nationally: a month of searches must not run out of new markets.
     expect(discoveryQueryCount('caremetric-intel')).toBeGreaterThanOrEqual(discoveryQueriesPerDay * 60);
     // The next pass over the grid asks for the next page of each search, then starts over after the last page.
@@ -53,6 +58,21 @@ describe('sales playbook', () => {
     expect(discoveryQueries('carebase', start, 2)).toHaveLength(2);
     expect(discoveryQueries('breathe', start)).toEqual([]);
     expect(discoveryQuery('breathe', start)).toBeNull();
+  });
+
+  it('tells a nursing home from a home health or hospice agency by its name, then by its research, and doubts toward the agency', () => {
+    const said = (...claims) => claims.map((claim, index) => ({ id: `e${index}`, claim }));
+    expect(intelSetting({ name: 'Sunrise Nursing & Rehabilitation Center' })).toBe('nursing_home');
+    expect(intelSetting({ name: 'Maple Grove Skilled Nursing Facility' })).toBe('nursing_home');
+    expect(intelSetting({ name: 'Oak Ridge', evidence: said('Oak Ridge is a 120-bed nursing home with short-term rehabilitation.') })).toBe('nursing_home');
+    // An agency's name decides, whatever its pages mention; "skilled nursing" alone is a home health service.
+    expect(intelSetting({ name: 'Valley Home Health', evidence: said('We work with every nursing home in the county.') })).toBeNull();
+    expect(intelSetting({ name: 'Riverbend', evidence: said('Skilled nursing, physical therapy and aides in your home.') })).toBeNull();
+    // A nursing home's research that also speaks of hospice or home health stays with the agency's email.
+    expect(intelSetting({ name: 'Oak Ridge', evidence: said('A nursing home that also runs a hospice program.') })).toBeNull();
+    expect(intelSetting({ name: 'Oak Ridge', evidence: said('Nursing home care for seniors.') })).toBe('nursing_home');
+    expect(intelSetting({ name: 'Acme Health' })).toBeNull();
+    expect(intelSetting()).toBeNull();
   });
 
   it('uses the Eastern calendar day, so a late-evening and an early-morning run on the same day search the same thing', () => {

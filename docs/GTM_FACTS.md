@@ -219,9 +219,13 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   marketing. These five are the primary audience. Site: https://www.caremetricintel.com.
 - **Secondary markets** (owner decision 2026-11-16): physician practices, behavioral health, rehabilitation and therapy,
   diagnostics, dialysis and DME suppliers. Intel serves them too, and its site lists them after the primary five, but no outreach,
-  content or ads are aimed at them until the primary audience has been thoroughly marketed to. Prospect discovery stays on home
-  health and hospice agencies for now (`discoveryGrid` in `server/growth/playbook.mjs`); widening it to the other primary
-  settings is a separate owner decision.
+  content or ads are aimed at them until the primary audience has been thoroughly marketed to.
+- **Prospect discovery** (`discoveryGrid` in `server/growth/playbook.mjs`) searches for home health and hospice agencies and, since
+  2026-11-16 (owner decision), nursing homes. Intel's free reports (an agency's own market report, the market review and the county
+  report) cover home health and hospice agencies only, so a prospect whose own name or research shows it is a nursing home gets the
+  standard first email instead (founder's story, a likely problem, how Intel helps, the free trial), and is never offered those
+  report pages (`intelSetting` and `draft.mjs`). Hospitals and personal care homes are not searched yet: widening discovery to them
+  is a separate owner decision.
 - **What it does:** targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data,
   plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place. Its AI features
   (briefs, supported reporting questions, drafted outreach) are text.
