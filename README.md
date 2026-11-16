@@ -76,12 +76,13 @@ CareMetric Stripe account), whatever the connection provides:
 | --- | --- | --- | --- | --- |
 | CareBase (PennTrain) | Organizations, users, access controls | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Courses, facility training, jobs, releases, audit |
 | Breathe (PennFit) | Organizations, staff | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Shared phone-line messages; organization suspend and restore; staff sign-ins off and back on ([access commands](docs/CENTRAL_ADMIN_COMMANDS.md#breathe-and-caremetric-intel)) |
-| CareMetric Intel | Registered users only | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Website leads, visitor sessions; turning accounts off and on ([access commands](docs/CENTRAL_ADMIN_COMMANDS.md#breathe-and-caremetric-intel)) |
+| CareMetric Intel | Organizations, registered users | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Website leads, visitor sessions; organization suspend and restore; turning accounts off and on ([access commands](docs/CENTRAL_ADMIN_COMMANDS.md#breathe-and-caremetric-intel)) |
 | Healthcare Advisors | No software accounts | Not applicable (consulting practice) | Not applicable | Consultation requests: list, status, notes and delete ([connection](docs/ADVISORS_ADMIN_CONNECTION.md)) |
 
-A directory the connection does not provide (Intel's organizations) needs a
-read added to that application's administration connection; the coverage
-matrix lists such gaps live.
+A directory a connection does not provide needs a read added to that
+application's administration connection; the coverage matrix lists such gaps
+live. Intel's organizations appear once Intel's release that lists them is
+deployed.
 
 Apply `20261021120000_ai_usage_ledger.sql` and
 `20261021120100_ai_usage_ledger_contract.sql` before deploying the control

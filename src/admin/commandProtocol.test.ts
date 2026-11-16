@@ -49,7 +49,14 @@ describe("access changes for other applications", () => {
     // The platform-command Edge function sends whatever parsePortfolioCommand accepts to CareBase.
     expect(() => parsePortfolioCommand(intel)).toThrow();
     expect(parseAppCommand(draft)).toEqual(request);
-    for (const invalid of [{ ...intel, targetId: target }, { ...intel, targetId: account.toUpperCase() }, { ...intel, action: "organizations.setSuspension", parameters: { suspended: true } }, { ...intel, product: "breathe" }, { ...intel, product: "advisors" }])
+    for (const invalid of [{ ...intel, targetId: target }, { ...intel, targetId: account.toUpperCase() }, { ...intel, product: "breathe" }, { ...intel, product: "advisors" }])
+      expect(() => parseAppCommand(invalid), JSON.stringify(invalid)).toThrow();
+  });
+  it("accepts suspending or restoring an Intel organization by its 24-hex id, with only the suspended parameter", () => {
+    const suspend = { ...draft, product: "intel", action: "organizations.setSuspension", targetId: account, parameters: { suspended: true } };
+    expect(parseAppCommand(suspend)).toEqual({ product: "intel", command: { ...request.command, action: "organizations.setSuspension", targetId: account, parameters: { suspended: true } } });
+    expect(() => parsePortfolioCommand(suspend)).toThrow();
+    for (const invalid of [{ ...suspend, parameters: { active: false } }, { ...suspend, parameters: { suspended: true, active: false } }, { ...suspend, targetId: target }])
       expect(() => parseAppCommand(invalid), JSON.stringify(invalid)).toThrow();
   });
   it("checks Intel's answer names Intel and the same account", () => {

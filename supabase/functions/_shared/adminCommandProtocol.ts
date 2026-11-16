@@ -11,10 +11,10 @@ export interface PortfolioCommandRequest { product: "carebase"; command: Command
 export const appCommandProducts = ["carebase", "intel"] as const;
 export type AppCommandProduct = typeof appCommandProducts[number];
 export interface AppCommandRequest { product: AppCommandProduct; command: CommandRequest; }
-/** What each application accepts: CareBase changes profiles and organizations by UUID; Intel changes accounts, named by 24-hex ids. */
+/** What each application accepts: CareBase changes profiles and organizations by UUID; Intel changes accounts and organizations, named by 24-hex ids. */
 const appCommandRules: Record<AppCommandProduct, { actions: readonly CommandAction[]; targetId: (value: unknown) => string }> = {
   carebase: { actions: commandActions, targetId: value => id(value) },
-  intel: { actions: ["users.setActive"], targetId: value => { if (typeof value !== "string" || !/^[0-9a-f]{24}$/.test(value)) throw new Error("Invalid command identifier"); return value; } },
+  intel: { actions: commandActions, targetId: value => { if (typeof value !== "string" || !/^[0-9a-f]{24}$/.test(value)) throw new Error("Invalid command identifier"); return value; } },
 };
 export interface CommandChange { field: "active" | "status" | "billingState" | "stateSource" | "compedUntil"; before: string | null; after: string | null; }
 export interface CommandPreview { commandId: string; action: CommandAction; targetId: string; reason: string; expiresAt: string; previewDigest: string; changes: CommandChange[]; }

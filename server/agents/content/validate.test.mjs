@@ -222,6 +222,37 @@ describe('each check that rejects a draft', () => {
     expect(reasons(withSentence('CareBase is used in 500 U.S. facilities.'))).toEqual(['unlisted_number']);
   });
 
+  it('reads a number past a describing word before its unit, so "3,200 rural counties" is checked like "3,200 counties"', () => {
+    for (const [text, pair] of [['3,200 rural counties', '3200:county'], ['500 Pennsylvania homes', '500:facility'], ['500 Pennsylvania personal care homes', '500:facility'],
+      ['500 family-owned homes', '500:facility'], ['500 U.S.-based agencies', '500:facility'], ['10 Medicare-certified agencies', '10:facility'],
+      ['14 more trial days', '14:day'], ['2 unanswered leads', '2:referral']]) expect(numbersIn(text), text).toEqual([pair]);
+    // The phrase ends first at a function word, at a plural that is its own subject, or at a measure the number belongs to.
+    expect(numbersIn('3 questions your staff ask; 2 ways to save hours; 4 things caregivers wish; 5 mistakes nurses make; a 5 star rating; 4 star agencies; a 30 second video; 40 percent of homes'))
+      .toEqual([]);
+    // A hyphenated number and a year take only the words the reader knows, as before.
+    expect(numbersIn('a 30-second video; In 2026 survey deficiencies rose; By 2027 most homes; 24-hour-a-day support')).toEqual(['24:hour']);
+    expect(numbersIn('12 month-to-month plans, 65 year-old residents')).toEqual(['12:month', '65:year']);
+    // "and" or "or" joins two describing words; a number right after a label names a step, not a count.
+    for (const text of ['3,200 rural and urban counties', '3,200 rural or urban counties']) expect(numbersIn(text), text).toEqual(['3200:county']);
+    expect(numbersIn('2 new and existing customers; 3 rural and the counties; 5 tips and resident stories')).toEqual(['2:customer']);
+    // So may a comma, with or without "and" after it; a unit straight after a comma begins another clause, and is not the number's.
+    for (const text of ['3,200 rural, suburban and urban counties', '3,200 rural, suburban, and urban counties', '3,200 rural, urban counties'])
+      expect(numbersIn(text), text).toEqual(['3200:county']);
+    expect(numbersIn('in 12 Pennsylvania, staff can help; in 12 Pennsylvania, and staff can help; 5 tips, staff will love; In 2026, homes closed')).toEqual([]);
+    expect(numbersIn('Step 2 Train staff; Steps 2 and 3 cover staff training; Tip 3 staff; Touch 2 leads; No. 1 referral source; #1 referral source')).toEqual([]);
+    expect(numbersIn('each year 12 hours of training')).toEqual(['12:hour']);
+    // A Markdown heading's marker is not a label: its count is read, so a draft cannot slip one past the check in a section heading.
+    for (const text of ['## 500 homes use CareBase', '# 500 homes', '### 500 rural homes', '# 500 + homes']) expect(numbersIn(text), text).toEqual(['500:facility']);
+    expect(textProblems('## 500 homes use CareBase', { numbers: allowedNumbers([]) })).toEqual(['unlisted_number']);
+    expect(numbersIn('Step #2 staff, ##1 staff')).toEqual(['1:staff']);
+    // A count no source states is refused; one the catalog states may be written with a describing word.
+    expect(reasons(withSentence('CareBase is used in 500 Pennsylvania homes.'))).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('CareBase is used in 500 rural and urban homes.'))).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('CareBase is used in 500 rural, suburban, and urban homes.'))).toEqual(['unlisted_number']);
+    expect(textProblems('CareMetric Intel covers 3,200+ rural counties.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual([]);
+    expect(textProblems('CareMetric Intel covers 4,000 rural counties.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual(['unlisted_number']);
+  });
+
   it('rejects guarantees, compliance assurances and certifications', () => {
     expect(reasons(withSentence('We guarantee a clean survey.'))).toContain('guarantee');
     for (const sentence of ['CareBase ensures compliance with Chapter 2600.', 'It keeps your home compliant.', 'Pass your next inspection with CareBase.',

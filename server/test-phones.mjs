@@ -12,6 +12,7 @@
 
 import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { digest } from './sms-auth.mjs';
 
 export const testPhoneRegistry = Object.freeze({
   integration: { editor: '+12025550101', learner: '+12025550102', unknown: '+12025550103', renumbered: '+12025550109', refused: '+12025550199' },
@@ -96,10 +97,14 @@ const sessionsOf = 'select id from private.sms_sessions where user_id = any($1::
  * `unlock` names [table, trigger] pairs that keep the script's own rows immutable, such as
  * provenance. They are disabled for this transaction only and enabled again before it commits.
  *
+ * `phones` lists numbers the script asked codes for that no identity holds. Their challenges
+ * carry no user, so they are found by the number's hash; left behind, they would keep the
+ * SMS rate limits closed to the next run.
+ *
  * Call it in the script's `finally` with the script's pg.Pool. A failure fails the run, but
  * is reported without hiding the error that ended the test.
  */
-export async function removeTestIdentities(pool, users, { also = [], unlock = [] } = {}) {
+export async function removeTestIdentities(pool, users, { also = [], unlock = [], phones = [] } = {}) {
   const steps = [
     `delete from private.app_delegations where session_id in (${sessionsOf})`,
     `delete from private.learning_authoring_intents where session_id in (${sessionsOf})`,
@@ -115,6 +120,7 @@ export async function removeTestIdentities(pool, users, { also = [], unlock = []
     await client.query('begin');
     for (const [table, trigger] of unlock) await client.query(`alter table ${table} disable trigger ${trigger}`);
     for (const sql of steps) await client.query(sql, [users]);
+    if (phones.length) await client.query('delete from private.sms_challenges where phone_hash = any($1::text[])', [phones.map(digest)]);
     for (const [table, trigger] of unlock) await client.query(`alter table ${table} enable trigger ${trigger}`);
     await client.query('commit');
   } catch (error) {
