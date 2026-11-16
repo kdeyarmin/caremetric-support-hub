@@ -196,11 +196,13 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   competitor, testimonial, call or demo as a step, "prove" about CareBase), may state only its own product's prices, may link only to
   its product's pages, and has its vocabulary fixed (ALF, surveyor). A draft that fails is dropped. The template
   path used without a model, and every send rule, are unchanged.
-- **Intel's catalog** (owner direction 2026-11-16, `growth.13`): a message about CareMetric Intel also gives the writer Intel's
-  published features catalog (`server/agents/content/features.mjs`), as its own cached block after the instructions, the way the Sales
-  Executive and the Social Media Manager get it. Its numbers join the fact sheet's in that message's checks, so a sentence about Intel
-  may state, for example, the figures Intel's site publishes about its data ("150+ public healthcare datasets", "33,000+ ZIP areas and
-  3,200+ counties") as the catalog words them, and no other figure. A message about CareBase is unchanged: the fact sheet's numbers only.
+- **The product's catalog** (owner direction 2026-11-16: Intel's in `growth.13`, CareBase's in `growth.14`): every message gives the
+  writer its own product's published catalog (`server/agents/content/features.mjs`), as its own cached block after the instructions,
+  the way the Sales Executive and the Social Media Manager get it. Its numbers join the fact sheet's in that message's checks, so a
+  sentence about the product may state them as the catalog words them, and no other figure: for Intel, the figures its site publishes
+  about its data ("150+ public healthcare datasets", "33,000+ ZIP areas and 3,200+ counties"); for CareBase, the Pennsylvania
+  requirements its site states ("12 hours of training a year" for a personal care home's direct care workers, 16 in an ALF). Neither
+  message may state the other product's numbers.
 - **Campaign tags**: the product pages in every growth message, model-written or template, carry utm_source `caremetric`,
   utm_medium `email` and utm_campaign `growth-<product>-touch<n>` for outreach or `account-<product>-<moment>` for a customer play
   (`server/agents/links.mjs`; no message carries a booking link). The tags are added after the checks and the tagged message is checked
