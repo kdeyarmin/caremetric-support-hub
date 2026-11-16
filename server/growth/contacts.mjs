@@ -168,7 +168,7 @@ export function privateAddress(address) {
  * answer that includes a private, loopback or link-local address refuses the connection. TLS still verifies the certificate for the
  * name. Redirects are not followed (the finder checks each one itself).
  */
-export function pinnedFetch(lookup = dnsLookup) {
+export function pinnedFetch(lookup = dnsLookup, request = httpsRequest) {
   const checkedLookup = (hostname, options, callback) => {
     Promise.resolve(lookup(hostname, { all: true })).then(addresses => {
       if (!Array.isArray(addresses) || addresses.length === 0 || addresses.some(entry => privateAddress(entry?.address))) {
@@ -182,17 +182,25 @@ export function pinnedFetch(lookup = dnsLookup) {
   };
   return (url, { headers = {}, signal } = {}) => new Promise((resolve, reject) => {
     const target = new URL(url);
-    const outgoing = httpsRequest({
+    const outgoing = request({
       protocol: 'https:', hostname: target.hostname, servername: target.hostname, port: 443, path: `${target.pathname}${target.search}`,
       method: 'GET', headers, signal, lookup: checkedLookup, agent: false,
     }, incoming => {
-      const responseHeaders = new Headers();
-      for (const [name, value] of Object.entries(incoming.headers)) {
-        if (value !== undefined) for (const one of [].concat(value)) responseHeaders.append(name, String(one));
+      // Node accepts any three-digit status (LinkedIn answers 999), but a Response holds only 200 to 599, and a throw in this callback
+      // is uncaught and stops the whole process. Such an answer, like anything this callback cannot turn into a Response, is no page.
+      const refuse = error => { incoming.resume(); reject(error); };
+      if (!(incoming.statusCode >= 200 && incoming.statusCode <= 599)) {
+        return refuse(Object.assign(new Error('The site answered with a status the finder does not read.'), { code: 'EBADSTATUS' }));
       }
-      const empty = [204, 205, 304].includes(incoming.statusCode);
-      if (empty) incoming.resume();
-      resolve(new Response(empty ? null : Readable.toWeb(incoming), { status: incoming.statusCode, headers: responseHeaders }));
+      try {
+        const responseHeaders = new Headers();
+        for (const [name, value] of Object.entries(incoming.headers)) {
+          if (value !== undefined) for (const one of [].concat(value)) responseHeaders.append(name, String(one));
+        }
+        const empty = [204, 205, 304].includes(incoming.statusCode);
+        if (empty) incoming.resume();
+        resolve(new Response(empty ? null : Readable.toWeb(incoming), { status: incoming.statusCode, headers: responseHeaders }));
+      } catch (error) { refuse(error); }
     });
     outgoing.on('error', reject);
     outgoing.end();
