@@ -200,7 +200,7 @@ try {
   // Breathe's and Intel's change endpoints redeem their own command audiences (20261117100000_app_command_audiences.sql).
   const appCaps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async()=>{throw new Error('No native call is expected.');},appCommands:true});
   const lifecycleOperation={domain:'tenant.lifecycle.v1',operation:'context',targetId:'5b0c5a0e-2f4e-4d7a-9a3b-0a6c1e2d3f40'};
-  const breatheChangeCapability='cmh_'+'e'.repeat(43);
+  const breatheChangeCapability='cmh_'+'h'.repeat(43);
   await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'breathe.command',$3::jsonb,now()+interval '30 seconds')",[digest(breatheChangeCapability),session,JSON.stringify(lifecycleOperation)]);
   await assert.rejects(appCaps.consume(breatheChangeCapability,'breathe'),'a Breathe change capability cannot be used for a Breathe read');
   await assert.rejects(caps.consume(breatheChangeCapability,'breathe.command'),'Breathe changes are refused until the database declares them');
