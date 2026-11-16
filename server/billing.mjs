@@ -23,6 +23,8 @@ import { trialCardOnFile } from './trial-card.mjs';
 export const appKeyPattern = /^cmb_[A-Za-z0-9_-]{43}$/;
 const trialDays = { carebase: 30, breathe: 14, 'caremetric-emr': 14, 'caremetric-go': 14, 'caremetric-intel': 30 };
 export const entitlementCacheSeconds = 300;
+/** Stripe's trial card answers kept in the database (20261116020000_billing_trial_cards.sql), so they outlast a restart. */
+export const trialCardsFeature = 'billing.trial-cards.v1';
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 // The CareMetric AI Assistant: the actor of every billing change the AI team makes (hub.profiles row seeded with the AI team).
 const aiAssistant = 'a1a00000-a1a0-4000-8000-000000000001';
@@ -68,7 +70,7 @@ function asHttpError(error) {
 }
 
 export function platformBilling({ pool, secretKey, webhookSecrets = [], accountId = STRIPE_ACCOUNT_ID, portalConfiguration,
-  publicOrigin, fetchImpl = fetch, apiBase, now = () => Date.now(), log = console, authorizeCustomerBilling, customerPurchasingEnabled = false }) {
+  publicOrigin, fetchImpl = fetch, apiBase, now = () => Date.now(), log = console, authorizeCustomerBilling, customerPurchasingEnabled = false, features = new Set() }) {
   // The customer portal configuration (Settings → Billing); `portalConfiguration` may be a function, read on each use.
   const portal = () => { const value = live(portalConfiguration); return typeof value === 'string' && /^bpc_[A-Za-z0-9]+$/.test(value) ? value : undefined; };
   const client = stripeClient({ secretKey, fetchImpl, ...(apiBase ? { apiBase } : {}) });
@@ -651,25 +653,45 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
    * tenant's subscription, true only if Stripe confirmed its card, else false. Every new trial needs a card, but Stripe starts the
    * trial before the card is entered (an abandoned card setup is a trialing subscription with none), so "trialing" alone proves nothing.
    * A confirmation stands until a check finds no card: a card removed later does not matter, as Stripe cancels a trial that ends
-   * without one. It is kept in memory, so a restart while Stripe is down starts with none.
+   * without one. Stripe's last answer is kept in memory and, once the database declares billing.trial-cards.v1, in
+   * private.billing_trial_cards, so a restart during an outage keeps it too (before that, a restart starts with none). The database is
+   * written only when the answer changes, and one that cannot be reached never fails the entitlement either.
    */
-  const confirmedCards = new Map();
+  const lastCardAnswers = new Map();
+  const savedCardAnswers = new Map();
+  const remember = (map, key, value) => {
+    map.delete(key);
+    map.set(key, value);
+    if (map.size > 5000) map.delete(map.keys().next().value);
+  };
   async function trialCardAnswer(entitlement) {
     const subscriptions = (entitlement.products ?? []).filter(product => product.kind === 'plan' && product.status === 'trialing').map(product => product.subscription).sort();
     const key = `${entitlement.tenant_id}:${subscriptions.join(',')}`;
+    const stored = features.has(trialCardsFeature) && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entitlement.tenant_id ?? '')
+      && subscriptions.length > 0 && subscriptions.length <= 20 && subscriptions.every(id => /^sub_[A-Za-z0-9]{1,250}$/.test(id ?? ''));
+    let confirmed;
     try {
-      const confirmed = await trialCardOnFile(await stripe(), entitlement);
-      confirmedCards.delete(key);
-      if (confirmed) {
-        confirmedCards.set(key, now());
-        if (confirmedCards.size > 5000) confirmedCards.delete(confirmedCards.keys().next().value);
-      }
-      return confirmed;
+      confirmed = await trialCardOnFile(await stripe(), entitlement);
     } catch {
-      const confirmed = confirmedCards.has(key);
-      log.warn(`Stripe could not confirm an Intel trial's card; answering ${confirmed ? 'the card it confirmed earlier' : 'not confirmed'} until it can.`);
-      return confirmed;
+      let last = lastCardAnswers.get(key);
+      if (last === undefined && stored) {
+        try {
+          last = (await transaction(pool, db => one(db, 'select private.billing_trial_card_confirmed($1,$2) as confirmed', [entitlement.tenant_id, subscriptions]))).confirmed === true;
+          remember(lastCardAnswers, key, last);
+          remember(savedCardAnswers, key, last);
+        } catch { last = false; }
+      }
+      log.warn(`Stripe could not confirm an Intel trial's card; answering ${last === true ? 'the card it confirmed earlier' : 'not confirmed'} until it can.`);
+      return last === true;
     }
+    remember(lastCardAnswers, key, confirmed);
+    if (stored && savedCardAnswers.get(key) !== confirmed) {
+      try {
+        await transaction(pool, db => db.query('select private.billing_trial_card_record($1,$2,$3)', [entitlement.tenant_id, subscriptions, confirmed]));
+        remember(savedCardAnswers, key, confirmed);
+      } catch { log.warn('An Intel trial card answer could not be saved; it is kept in memory and saved on a later check.'); }
+    }
+    return confirmed;
   }
 
   async function entitlements(authorization, input) {

@@ -107,14 +107,26 @@ it('creates one annual trial with automatic card collection, and reuses it on re
 describe('an Intel trial entitlement while Stripe cannot be reached', () => {
   // Intel locks an organization to its Billing page whenever the Hub cannot answer its entitlement (sessionUsers.ts), so a Stripe
   // failure inside the card check must not fail the whole answer.
-  function hub({ cardSaved = true } = {}) {
+  // `table` stands in for private.billing_trial_cards: it outlives a restart (`make` again), as the database does.
+  function hub({ cardSaved = true, durable = false, table = new Map(), databaseDown = false } = {}) {
     const stripe = { up: true, account: true, card: cardSaved };
     let clock = Date.parse('2026-11-16T12:00:00Z');
-    const trial = { linked: true, entitled: true, status: 'trialing', app: 'caremetric-intel', tenant_id: 'tenant-a', trial_end: '2026-12-16T00:00:00Z',
+    const trial = { linked: true, entitled: true, status: 'trialing', app: 'caremetric-intel', tenant_id: tenant, trial_end: '2026-12-16T00:00:00Z',
       products: [{ key: 'growth', kind: 'plan', status: 'trialing', subscription: 'sub_trial' }] };
-    const query = vi.fn(async sql => {
+    const saved = [];
+    const query = vi.fn(async (sql, params = []) => {
       if (sql.includes('billing_authenticate_app')) return { rows: [{ app: { slug: 'caremetric-intel', product_id: 'intel' } }] };
       if (sql.includes('scoped_app_billing_entitlements')) return { rows: [{ e: structuredClone(trial) }] };
+      if (sql.includes('billing_trial_card')) {
+        if (databaseDown) throw Object.assign(new Error('Connection terminated unexpectedly'), { code: '08006' });
+        const [owner, subscriptions, confirmed] = params;
+        if (sql.includes('billing_trial_card_record')) {
+          saved.push(confirmed);
+          for (const id of subscriptions) { if (confirmed) table.set(id, owner); else table.delete(id); }
+          return { rows: [{}] };
+        }
+        return { rows: [{ confirmed: subscriptions.every(id => table.get(id) === owner) }] };
+      }
       return { rows: [] };
     });
     const fetchImpl = vi.fn(async url => {
@@ -123,14 +135,17 @@ describe('an Intel trial entitlement while Stripe cannot be reached', () => {
       if (path === '/v1/account') return stripe.account ? new Response(JSON.stringify({ id: STRIPE_ACCOUNT_ID })) : down();
       if (!stripe.up) return down();
       if (path === '/v1/subscriptions/sub_trial') return new Response(JSON.stringify({ status: 'trialing', collection_method: 'charge_automatically', metadata: { app: 'caremetric-intel' }, customer: 'cus_owner' }));
-      if (path === '/v1/customers/cus_owner') return new Response(JSON.stringify({ metadata: { hub_tenant_id: 'tenant-a' }, invoice_settings: { default_payment_method: stripe.card ? 'pm_card' : null } }));
+      if (path === '/v1/customers/cus_owner') return new Response(JSON.stringify({ metadata: { hub_tenant_id: tenant }, invoice_settings: { default_payment_method: stripe.card ? 'pm_card' : null } }));
       if (path === '/v1/payment_methods/pm_card') return new Response(JSON.stringify({ type: 'card', customer: 'cus_owner' }));
       throw new Error(`Unexpected provider request ${path}`);
     });
     const log = { warn: vi.fn(), info: vi.fn() };
-    const make = () => platformBilling({ pool: { connect: async () => ({ query, release() {} }) }, secretKey: 'sk_test_fixture', fetchImpl, now: () => clock, log });
-    return { stripe, log, make, later: ms => { clock += ms; } };
+    const features = new Set(durable ? ['billing.platform.v1', 'billing.trial-cards.v1'] : ['billing.platform.v1']);
+    const make = () => platformBilling({ pool: { connect: async () => ({ query, release() {} }) }, secretKey: 'sk_test_fixture', fetchImpl, now: () => clock, log, features });
+    const used = () => query.mock.calls.some(([sql]) => sql.includes('billing_trial_card'));
+    return { stripe, log, make, saved, table, used, later: ms => { clock += ms; } };
   }
+  const tenant = '97610000-0000-4000-8000-000000000001';
   const key = `Bearer cmb_${'a'.repeat(43)}`;
   let platformBilling, STRIPE_ACCOUNT_ID;
   beforeAll(async () => { ({ platformBilling } = await import('./billing.mjs')); ({ STRIPE_ACCOUNT_ID } = await import('./stripe.mjs')); });
@@ -164,6 +179,44 @@ describe('an Intel trial entitlement while Stripe cannot be reached', () => {
     expect(await again.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: false });
     removed.stripe.up = false;
     expect(await again.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: false });
+  });
+
+  it('keeps confirmations in the database once it declares billing.trial-cards.v1, so a restart during an outage keeps the trial open', async () => {
+    const h = hub({ durable: true });
+    const first = h.make();
+    expect(await first.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: true });
+    // Saved once: the same answer again is not written again.
+    expect(await first.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: true });
+    expect(h.saved).toEqual([true]);
+    // Restarted while Stripe is down: the saved confirmation keeps the trial open.
+    h.stripe.up = false;
+    expect(await h.make().entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: true });
+    // A check that finds no card is saved too, so a later restart does not bring the old confirmation back.
+    h.stripe.up = true;
+    h.stripe.card = false;
+    const second = h.make();
+    expect(await second.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: false });
+    expect(h.saved).toEqual([true, false]);
+    h.stripe.up = false;
+    expect(await h.make().entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: false });
+  });
+
+  it('leaves the database alone until the feature is declared', async () => {
+    const h = hub();
+    await h.make().entitlements(key, { account: 'abc' });
+    h.stripe.up = false;
+    await h.make().entitlements(key, { account: 'abc' });
+    expect(h.used()).toBe(false);
+  });
+
+  it('still answers when the database cannot keep or read a confirmation either', async () => {
+    const h = hub({ durable: true, databaseDown: true });
+    const billing = h.make();
+    expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: true });
+    h.stripe.up = false;
+    expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: true });
+    expect(await h.make().entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: false });
+    expect(h.log.warn).toHaveBeenCalledWith(expect.stringContaining('could not be saved'));
   });
 
   it('answers when Stripe cannot even be verified, as after a restart during an outage', async () => {
