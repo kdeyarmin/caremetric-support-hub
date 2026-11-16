@@ -185,9 +185,9 @@ describe('an Intel trial entitlement while Stripe cannot be reached', () => {
     const h = hub({ durable: true });
     const first = h.make();
     expect(await first.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: true });
-    // Saved once: the same answer again is not written again.
+    // Saved on every check: another Hub instance (a deploy's overlap) may have written since.
     expect(await first.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: true });
-    expect(h.saved).toEqual([true]);
+    expect(h.saved).toEqual([true, true]);
     // Restarted while Stripe is down: the saved confirmation keeps the trial open.
     h.stripe.up = false;
     expect(await h.make().entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: true });
@@ -196,7 +196,7 @@ describe('an Intel trial entitlement while Stripe cannot be reached', () => {
     h.stripe.card = false;
     const second = h.make();
     expect(await second.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: false });
-    expect(h.saved).toEqual([true, false]);
+    expect(h.saved).toEqual([true, true, false]);
     h.stripe.up = false;
     expect(await h.make().entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: false });
   });

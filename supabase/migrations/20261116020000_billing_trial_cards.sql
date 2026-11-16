@@ -14,9 +14,10 @@ create index if not exists billing_trial_cards_confirmed on private.billing_tria
 alter table private.billing_trial_cards enable row level security;
 revoke all on private.billing_trial_cards from public, anon, authenticated, service_role, hub_app_server;
 
--- Server: records Stripe's answer for one tenant's trialing subscriptions. Confirmed: each subscription that is the tenant's is kept as
--- confirmed now. Not confirmed: every one of them is forgotten, whichever tenant it was kept for. Confirmations older than 90 days
--- (trials last 30) are removed on the way.
+-- Server: records Stripe's answer for one tenant's trialing subscriptions, on every check (several Hub instances can answer, so none
+-- relies on what it wrote before). Confirmed: each subscription that is the tenant's is kept as confirmed now. Not confirmed: every one
+-- of them is forgotten, whichever tenant it was kept for. Confirmations of subscriptions no longer trialing are removed on the way; a
+-- trial of any length (an administrator's may run up to 730 days) keeps its confirmation while it lasts.
 create or replace function private.billing_trial_card_record(p_tenant uuid, p_subscriptions text[], p_confirmed boolean) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
@@ -33,7 +34,8 @@ begin
   else
     delete from private.billing_trial_cards where stripe_subscription_id = any (p_subscriptions);
   end if;
-  delete from private.billing_trial_cards where confirmed_at < now() - interval '90 days';
+  delete from private.billing_trial_cards c using private.billing_subscriptions b
+   where b.stripe_subscription_id = c.stripe_subscription_id and b.status <> 'trialing';
 end; $$;
 
 -- Server: whether Stripe last confirmed a card on every one of the tenant's trialing subscriptions named. A subscription that is not

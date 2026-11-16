@@ -655,10 +655,10 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
    * A confirmation stands until a check finds no card: a card removed later does not matter, as Stripe cancels a trial that ends
    * without one. Stripe's last answer is kept in memory and, once the database declares billing.trial-cards.v1, in
    * private.billing_trial_cards, so a restart during an outage keeps it too (before that, a restart starts with none). The database is
-   * written only when the answer changes, and one that cannot be reached never fails the entitlement either.
+   * written on every check, as another Hub instance (during a deploy, or with replicas) may have written since; one that cannot be
+   * reached never fails the entitlement either.
    */
   const lastCardAnswers = new Map();
-  const savedCardAnswers = new Map();
   const remember = (map, key, value) => {
     map.delete(key);
     map.set(key, value);
@@ -678,18 +678,15 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         try {
           last = (await transaction(pool, db => one(db, 'select private.billing_trial_card_confirmed($1,$2) as confirmed', [entitlement.tenant_id, subscriptions]))).confirmed === true;
           remember(lastCardAnswers, key, last);
-          remember(savedCardAnswers, key, last);
         } catch { last = false; }
       }
       log.warn(`Stripe could not confirm an Intel trial's card; answering ${last === true ? 'the card it confirmed earlier' : 'not confirmed'} until it can.`);
       return last === true;
     }
     remember(lastCardAnswers, key, confirmed);
-    if (stored && savedCardAnswers.get(key) !== confirmed) {
-      try {
-        await transaction(pool, db => db.query('select private.billing_trial_card_record($1,$2,$3)', [entitlement.tenant_id, subscriptions, confirmed]));
-        remember(savedCardAnswers, key, confirmed);
-      } catch { log.warn('An Intel trial card answer could not be saved; it is kept in memory and saved on a later check.'); }
+    if (stored) {
+      try { await transaction(pool, db => db.query('select private.billing_trial_card_record($1,$2,$3)', [entitlement.tenant_id, subscriptions, confirmed])); }
+      catch { log.warn('An Intel trial card answer could not be saved; it is kept in memory and saved on a later check.'); }
     }
     return confirmed;
   }

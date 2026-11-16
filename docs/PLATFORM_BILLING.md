@@ -454,8 +454,10 @@ without a card). Stripe's last answer is kept in the server's memory and, once
 `20261116020000_billing_trial_cards.sql` and its contract
 (`billing.trial-cards.v1`) are applied, in `private.billing_trial_cards`, so a
 restart during an outage keeps it too; before that, a restart reads `false` until
-Stripe answers. The server writes the table only when an answer changes, and a
-database that cannot be reached never fails the entitlement either. Intel only grants a new trial after this server-side check, never from
+Stripe answers. The server writes Stripe's answer on every check (another Hub
+instance may have written since), a confirmation is removed once its subscription is
+no longer trialing, and a database that cannot be reached never fails the entitlement
+either. Intel only grants a new trial after this server-side check, never from
 a success query parameter. The browser can force a fresh check on returning from
 Stripe; ordinary entitlement checks retain Intel's five-minute cache limit.
 

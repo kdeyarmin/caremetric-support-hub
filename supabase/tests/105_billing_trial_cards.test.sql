@@ -1,7 +1,7 @@
 -- Stripe's trial card answers (20261116020000_billing_trial_cards.sql): closed to every role, recorded and read by the Hub server
 -- only, kept per tenant, all-or-nothing across the subscriptions named, and forgotten when a check finds no card.
 begin;
-select plan(17);
+select plan(19);
 
 select ok((select relrowsecurity from pg_class where oid = 'private.billing_trial_cards'::regclass), 'The trial card table has row-level security');
 select ok(not has_table_privilege(r, 'private.billing_trial_cards', 'select, insert, update, delete'), 'The trial card table is closed to ' || r)
@@ -41,6 +41,14 @@ select private.billing_trial_card_record('97610000-0000-4000-8000-000000000001',
 select ok(not private.billing_trial_card_confirmed('97610000-0000-4000-8000-000000000001', array['sub_trialCardsA']), 'A check that finds no card forgets it');
 select throws_ok($$select private.billing_trial_card_record('97610000-0000-4000-8000-000000000001', array['not-a-subscription'], true)$$,
   '22023', 'Name the tenant and its trialing subscriptions.', 'Only Stripe subscription ids are recorded');
+
+-- A trial of any length keeps its confirmation, however long ago it was made (an administrator's trial may run up to 730 days); a
+-- subscription that is no longer trialing keeps none.
+select private.billing_trial_card_record('97610000-0000-4000-8000-000000000001', array['sub_trialCardsA'], true);
+update private.billing_trial_cards set confirmed_at = now() - interval '400 days' where stripe_subscription_id = 'sub_trialCardsA';
+select private.billing_trial_card_record('97610000-0000-4000-8000-000000000001', array['sub_paidCardsA'], true);
+select ok(private.billing_trial_card_confirmed('97610000-0000-4000-8000-000000000001', array['sub_trialCardsA']), 'A long trial keeps its confirmation');
+select is((select count(*)::integer from private.billing_trial_cards where stripe_subscription_id = 'sub_paidCardsA'), 0, 'A subscription no longer trialing keeps no confirmation');
 
 select * from finish();
 rollback;
