@@ -17,9 +17,13 @@
  * needs, in words only; the CareBase reference in docs/GTM_FACTS.md was rewritten from the same page. Later on 2026-11-16 Intel's
  * `capabilities` follow its refreshed catalog (intel-features.json): twelve areas with the public data library, in words only, with no
  * count of its data and nothing spoken; who Intel is for stays as written here until its positioning is settled (owner decision).
+ * Also on 2026-11-16 Intel's reviewed trial follows its billing catalog: 1 location and up to 2 healthcare service lines of the
+ * customer's choice, where it said 1 branch, home health and hospice, and so do the plans' descriptions: locations instead of
+ * branches, service lines of the customer's choice, and Growth "for growing healthcare teams" (it said "the usual agency plan").
+ * The Founders Sale terms name the same add-on: "Intel extra seats/locations/states".
  */
 
-export const factsVersion = '2026-11-16.2';
+export const factsVersion = '2026-11-16.3';
 
 /**
  * Where public help articles live. An article's help-center address is `${helpCenterOrigin}/help/articles/<slug>`; that is its
@@ -39,7 +43,7 @@ const deepFreeze = value => {
  * trial signup"; Intel's own site says "Credit card required · Cancel before trial end to avoid charges"). Never "no credit card".
  */
 export const trialCardTerms = 'A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.';
-const foundersSaleTerms = 'Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service on new paid product subscriptions, including existing free-trial users. The discount is applied automatically to eligible subscriptions after the trial, when paid service starts. No code or activation request is needed. Monthly billing receives 50% off the regular monthly rate; annual billing receives 50% off the published annual price paid upfront. Standard pricing resumes after the introductory year. Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization and product; plan eligibility and capacity limits still apply. No enrollment deadline or cap has been set. Source: live Stripe offer verified 2026-11-08; docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md.';
+const foundersSaleTerms = 'Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service on new paid product subscriptions, including existing free-trial users. The discount is applied automatically to eligible subscriptions after the trial, when paid service starts. No code or activation request is needed. Monthly billing receives 50% off the regular monthly rate; annual billing receives 50% off the published annual price paid upfront. Standard pricing resumes after the introductory year. Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization and product; plan eligibility and capacity limits still apply. No enrollment deadline or cap has been set. Source: live Stripe offer verified 2026-11-08; docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md.';
 
 const usd = cents => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 const listNames = names => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '');
@@ -72,7 +76,7 @@ export function intelFactsFromCatalog(catalog) {
   const branch = product('extra_branch');
   const state = product('extra_state');
   const extras = [
-    branch && amount(branch, 'month') ? `Extra branches are ${usd(amount(branch, 'month'))} per month each${perYear(0, amount(branch, 'year'))}` : '',
+    branch && amount(branch, 'month') ? `Extra locations are ${usd(amount(branch, 'month'))} per month each${perYear(0, amount(branch, 'year'))}` : '',
     state && amount(state, 'month') ? `extra states ${usd(amount(state, 'month'))} per month each${perYear(0, amount(state, 'year'))}` : '',
   ].filter(Boolean);
   const saving = catalog.annual_saving_percent ? ` Annual billing saves about ${catalog.annual_saving_percent}%.` : '';
@@ -95,14 +99,14 @@ export function intelFactsFromCatalog(catalog) {
 export const intelReviewedFacts = deepFreeze({
   trialDays: 30,
   pricing: [
-    'Starter: $349 per month, or $290 per month billed annually ($3,480 per year). One office. 3 marketer seats + 1 manager, 1 branch, home health or hospice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding.',
-    'Growth: $899 per month, or $749 per month billed annually ($8,988 per year). The usual agency plan, with campaigns, manager tools and AI field help. 10 seats included, up to 3 branches, home health and hospice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding.',
-    'Pro: $1,999 per month, or $1,665 per month billed annually ($19,980 per year). For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 branches, home health and hospice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding.',
+    'Starter: $349 per month, or $290 per month billed annually ($3,480 per year). One office. 3 marketer seats + 1 manager, 1 location, 1 healthcare service line of your choice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding.',
+    'Growth: $899 per month, or $749 per month billed annually ($8,988 per year). For growing healthcare teams, with campaigns, manager tools and AI field help. 10 seats included, up to 3 locations, up to 2 healthcare service lines of your choice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding.',
+    'Pro: $1,999 per month, or $1,665 per month billed annually ($19,980 per year). For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 locations, up to 2 healthcare service lines of your choice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding.',
     'Enterprise: a custom annual agreement starting at about $3,500 per month.',
-    'Extra branches are $99 per month each ($990 per year on annual billing) and extra states $199 per month each ($1,990 per year on annual billing). Annual billing saves about 17%.',
+    'Extra locations are $99 per month each ($990 per year on annual billing) and extra states $199 per month each ($1,990 per year on annual billing). Annual billing saves about 17%.',
   ],
   offers: [
-    `A 30-day free trial, covering 3 marketer seats + 1 manager, 1 branch, home health and hospice, 1 county. ${trialCardTerms}`,
+    `A 30-day free trial, covering 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your choice, 1 county. ${trialCardTerms}`,
     foundersSaleTerms,
     'Eligible Intel products: Starter, Growth and Pro. Intel Starter is $174.50 per organization per month during the introductory year, or $1,740 for the first annual payment, then the regular rate. Onboarding is free on every plan.',
   ],
@@ -292,7 +296,7 @@ export const products = deepFreeze({
       'Give field work a purpose and a next step. Pre-visit cards, call plans, routes, mobile visit logs and dated follow-ups connect preparation with the work after a visit.',
       'See what recorded activity led to. Referral funnels, admissions, response times and lost reasons let managers review results alongside visits and outreach without treating public data as confirmed referrals.',
       'Review marketing spend with the supporting records. Account-linked expenses, receipts, per-person values, policy flags, approvals and reimbursement records help managers examine spending. These tools are not legal advice.',
-      'Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and branches, subject to plan and role.',
+      'Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and locations, subject to plan and role.',
       'Reduce repeated research and report assembly. Saved lists, account history, supported reporting questions, file imports and reusable reports bring the work together. Any time or cost benefit depends on use.',
     ],
     // Prices, the trial and Intel's offers come from Intel's own catalog once the Hub has read it.

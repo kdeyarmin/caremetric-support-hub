@@ -227,8 +227,9 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   (briefs, supported reporting questions, drafted outreach) are text.
 - **The bigger picture** (owner direction 2026-11-12; `bigPicture`, `capabilities`, `whoUses` and `present` in `facts.mjs`, written
   from Intel's own /features page and home page with no numbers): see "CareMetric Intel: the bigger picture" below.
-- **Trial:** a **30-day** free trial covering 3 marketer seats + 1 manager, 1 branch, home health and hospice, 1 county
-  (`TRIAL_DAYS = 30`, the `trial` plan; owner decision 2026-11-12, it was 14 days). **A credit card is required to start the
+- **Trial:** a **30-day** free trial covering 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your
+  choice, 1 county (`TRIAL_DAYS = 30`, the `trial` plan; owner decision 2026-11-12, it was 14 days; the coverage as Intel's billing
+  catalog states it since 2026-11-16, where it was 1 branch, home health and hospice). **A credit card is required to start the
   trial**, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then (Hub billing
   since 2026-11-14, [Platform billing](PLATFORM_BILLING.md); Intel's site: "Credit card required · Cancel before trial end to avoid
   charges"). Never write "no credit card" for Intel (`trialCardTerms` in `facts.mjs`).
@@ -240,12 +241,12 @@ catalog moves on, the Hub logs and audits `billing.catalog.facts_stale` until th
 
 | Plan | Monthly billing | Annual billing | Includes |
 | --- | --- | --- | --- |
-| Starter | $349 per month | $290 per month ($3,480 per year) | One office. 3 marketer seats + 1 manager, 1 branch, home health or hospice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding. |
-| Growth | $899 per month | $749 per month ($8,988 per year) | The usual agency plan, with campaigns, manager tools and AI field help. 10 seats included, up to 3 branches, home health and hospice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding. |
-| Pro | $1,999 per month | $1,665 per month ($19,980 per year) | For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 branches, home health and hospice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding. |
+| Starter | $349 per month | $290 per month ($3,480 per year) | One office. 3 marketer seats + 1 manager, 1 location, 1 healthcare service line of your choice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding. |
+| Growth | $899 per month | $749 per month ($8,988 per year) | For growing healthcare teams, with campaigns, manager tools and AI field help. 10 seats included, up to 3 locations, up to 2 healthcare service lines of your choice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding. |
+| Pro | $1,999 per month | $1,665 per month ($19,980 per year) | For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 locations, up to 2 healthcare service lines of your choice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding. |
 | Enterprise | custom | annual only, from about $3,500 per month | larger footprints by agreement |
 
-Extra branches are $99 per month each ($990 per year on annual billing) and extra states $199 per month each
+Extra locations are $99 per month each ($990 per year on annual billing) and extra states $199 per month each
 ($1,990 per year on annual billing).
 
 ### Top reasons a company would choose Intel
@@ -256,7 +257,7 @@ Extra branches are $99 per month each ($990 per year on annual billing) and extr
 - Give field work a purpose and a next step. Pre-visit cards, call plans, routes, mobile visit logs and dated follow-ups connect preparation with the work after a visit.
 - See what recorded activity led to. Referral funnels, admissions, response times and lost reasons let managers review results alongside visits and outreach without treating public data as confirmed referrals.
 - Review marketing spend with the supporting records. Account-linked expenses, receipts, per-person values, policy flags, approvals and reimbursement records help managers examine spending. These tools are not legal advice.
-- Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and branches, subject to plan and role.
+- Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and locations, subject to plan and role.
 - Reduce repeated research and report assembly. Saved lists, account history, supported reporting questions, file imports and reusable reports bring the work together. Any time or cost benefit depends on use.
 
 **Example workflow:** compare counties and providers, save a target list, add relevant accounts to the marketing book, and assign an owner.
@@ -384,7 +385,7 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
   Growth and Pro. Small Home and single-facility eligibility and all capacity limits still apply.
 - Core example: **$99.50 per facility per month**, or **$995 for the first annual payment**, then the regular rate.
   Intel Starter example: **$174.50 per organization per month**, or **$1,740 for the first annual payment**, then the regular rate.
-- Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Intel onboarding
+- Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Intel onboarding
   is free on every plan. Other promotional discounts cannot be combined. One introductory year per organization
   and product; cancellation/restart does not reset it. No enrollment deadline or redemption cap has been set.
 - Checkout, paid subscription creation and eligible trial conversions apply the underlying coupon automatically after
@@ -437,8 +438,8 @@ This is a guide to the existing packages, not a recommendation to buy features t
 | Training, workforce and survey work without resident-operations Core. | Compliance Suite. | Includes Staff Training, Workforce and Survey & Compliance; does not include Core. |
 | A facility with fewer than 20 licensed beds. | Small Home or Small Home Complete. | Small Home includes Core and eMAR. Eligibility uses licensed beds, not current occupancy; complete native eMAR enrollment and clinical approval before use. |
 | Staff education as a separate purchase. | CareMetric Train or Train Single Facility. | Train is per organization with unlimited learners; Single Facility is for a one-facility organization. It is not the complete resident-operations product. |
-| One office working one line of business in a county-based territory. | Intel Starter. | Select home health or hospice, within the published seat, branch and county limits. Campaigns and other labeled Growth/Pro features are not included. |
-| Both home health and hospice, more branches, campaigns and manager tools. | Intel Growth. | Check included seats, branches, state coverage and the access labels on each needed feature. |
+| One office working one line of business in a county-based territory. | Intel Starter. | Select one healthcare service line, within the published seat, location and county limits. Campaigns and other labeled Growth/Pro features are not included. |
+| Two healthcare service lines, such as home health and hospice, more locations, campaigns and manager tools. | Intel Growth. | Check included seats, locations, state coverage and the access labels on each needed feature. |
 | Several territories, admissions forecasting and book balancing. | Intel Pro. | Forecasting and book balance are Pro features. Territory, team capacity and owner/manager permissions still apply. |
 | A larger footprint requiring an individually agreed scope. | Intel Enterprise. | Annual custom agreement; confirm included services and requirements in the contract. Custom contracts are excluded from the Founders Sale. |
 
@@ -490,7 +491,7 @@ Use the company's own labor costs and observations. Include implementation effor
 An exported report or completed task demonstrates a workflow; it does not establish a guaranteed financial return, survey result or referral increase.
 
 **Budget for the ongoing scope:** all published prices here are USD, before applicable taxes. Count billed facilities for CareBase,
-the applicable organization or single-facility basis for Train, and the plan plus needed extra seats, branches and states for Intel.
+the applicable organization or single-facility basis for Train, and the plan plus needed extra seats, locations and states for Intel.
 Compare the actual annual payment with monthly billing; Intel's displayed annual monthly equivalent is not a monthly payment schedule.
 Evaluate the first paid year and the regular renewal price separately. The Founders Sale excludes Intel expansion add-ons and other listed charges.
 Intel onboarding is free on every plan; this does not establish free custom migration, integration work or onboarding terms for another product.
@@ -627,6 +628,12 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
   (125 features across 12 areas, including the public data library, 8 data families and the site's 10 care settings). The site’s other
   five care settings are listed as secondary markets; the pre-visit card and spoken debrief pillar never leads; the count of Intel's
   datasets and the AI apps and CRM it connects to are written generically. Tick this box when you approve the pull request that adds them.
+- [ ] 2026-11-16: Intel's trial covers 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of the customer's choice
+  and 1 county, as Intel's billing catalog states it (it said 1 branch, home health and hospice); and the plans' descriptions follow
+  the catalog too: locations instead of branches, healthcare service lines of the customer's choice instead of home health and hospice,
+  and Growth "For growing healthcare teams" instead of "The usual agency plan"; the Founders Sale's excluded add-ons say "Intel extra
+  seats/locations/states" to match. Prices and the offer's scope are unchanged. Tick this box when you approve the pull request that
+  changes them.
 
 ## Feature and function reference
 
@@ -845,7 +852,7 @@ Use the linked training-requirement guide and official sources for exact deadlin
 
 “All plans; subject to scope” means the saved source has no additional plan or role label. Territory, purchased capacity, data coverage and organization access rules still apply.
 An owner or location-manager label is required authority, not a feature available to every user. Configured-service conditions also apply where described.
-The source describes Pro feature access during the trial within its one-county footprint; the reviewed trial seats, branch and duration above remain the limits.
+The source describes Pro feature access during the trial within its one-county footprint; the reviewed trial seats, location, service lines and duration above remain the limits.
 
 #### Healthcare marketing CRM
 
