@@ -235,6 +235,10 @@ describe('each check that rejects a draft', () => {
     // "and" or "or" joins two describing words; a number right after a label names a step, not a count.
     for (const text of ['3,200 rural and urban counties', '3,200 rural or urban counties']) expect(numbersIn(text), text).toEqual(['3200:county']);
     expect(numbersIn('2 new and existing customers; 3 rural and the counties; 5 tips and resident stories')).toEqual(['2:customer']);
+    // So may a comma, with or without "and" after it; a unit straight after a comma begins another clause, and is not the number's.
+    for (const text of ['3,200 rural, suburban and urban counties', '3,200 rural, suburban, and urban counties', '3,200 rural, urban counties'])
+      expect(numbersIn(text), text).toEqual(['3200:county']);
+    expect(numbersIn('in 12 Pennsylvania, staff can help; in 12 Pennsylvania, and staff can help; 5 tips, staff will love; In 2026, homes closed')).toEqual([]);
     expect(numbersIn('Step 2 Train staff; Steps 2 and 3 cover staff training; Tip 3 staff; Touch 2 leads; No. 1 referral source; #1 referral source')).toEqual([]);
     expect(numbersIn('each year 12 hours of training')).toEqual(['12:hour']);
     // A Markdown heading's marker is not a label: its count is read, so a draft cannot slip one past the check in a section heading.
@@ -244,6 +248,7 @@ describe('each check that rejects a draft', () => {
     // A count no source states is refused; one the catalog states may be written with a describing word.
     expect(reasons(withSentence('CareBase is used in 500 Pennsylvania homes.'))).toEqual(['unlisted_number']);
     expect(reasons(withSentence('CareBase is used in 500 rural and urban homes.'))).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('CareBase is used in 500 rural, suburban, and urban homes.'))).toEqual(['unlisted_number']);
     expect(textProblems('CareMetric Intel covers 3,200+ rural counties.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual([]);
     expect(textProblems('CareMetric Intel covers 4,000 rural counties.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual(['unlisted_number']);
   });

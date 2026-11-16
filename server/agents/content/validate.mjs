@@ -91,10 +91,12 @@ const chapterNumbers = new Set(['2600', '2800', '6400', '3270', '3280', '3290'])
 // The whole number, decimals included: "6.5 months" is 6.5 months, never 6. A "+" after it ("3,200+ counties", "500 + homes") is read
 // like "more than": the number is the same one, so "150+" and "more than 150" both read as 150 and either one allows the other.
 const numberStart = new RegExp(String.raw`(?<![\w.$§,/])((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?|${Object.keys(numberWords).join('|')})(?=\s|[-–+])`, 'gi');
-// What follows the number, up to its unit: an optional "+", then a space or a dash (captured), then words, hyphenated ones whole.
-const unitWords = /^(?:\s*\+)?(?:\s*([-–])\s*|\s+)([a-z' -]+)/i;
+// What follows the number, up to its unit: an optional "+", then a space or a dash (captured), then words, hyphenated ones whole, and
+// the commas between them.
+const unitWords = /^(?:\s*\+)?(?:\s*([-–])\s*|\s+)([a-z' ,-]+)/i;
 // A describing word the reader does not know may stand before the unit too ("3,200 rural counties", "500 Pennsylvania homes", "500
-// family-owned homes"), and "and" or "or" may join two of them ("3,200 rural and urban counties"), but not a word that ends the phrase first: a function word ("3 questions your staff ask", "2 ways to save
+// family-owned homes"), and "and", "or" or a comma may join two of them ("3,200 rural and urban counties", "3,200 rural, suburban, and urban
+// counties"), but not a word that ends the phrase first: a function word ("3 questions your staff ask", "2 ways to save
 // hours"), a plural that is not a unit, which is the phrase's own subject ("4 things caregivers wish"), or a measure the number belongs to
 // ("a 5 star rating", "a 30 second video"). A hyphenated number ("30-second video") and a year ("In 2026 survey deficiencies rose") take
 // only the known words, as before.
@@ -132,19 +134,29 @@ export function numbersIn(value) {
     const after = text.slice(match.index + match[0].length, match.index + match[0].length + 80);
     const [, dash, phrase = ''] = unitWords.exec(after.replace(country, 'US')) ?? [];
     // After a dash, the number's own compound ends at the next hyphen ("24-hour-a-day" is 24 hours), as it always has.
-    const words = (dash ? phrase.split('-')[0] : phrase).trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5);
+    // A comma is a word of its own; up to five words are read, commas aside.
+    const tokens = (dash ? phrase.split('-')[0] : phrase).replace(/,/g, ' , ').trim().toLowerCase().split(/\s+/).filter(Boolean);
     const describing = !dash && !yearLike.test(match[1]);
-    let joinable = false;
-    for (const word of words) {
+    // joinable: the last word described the unit, so "and", "or" or a comma may follow it. listed: a comma came after it, so the next word
+    // must describe the unit too: a unit straight after a comma begins another clause ("in 12 Pennsylvania, staff can"), and is not this
+    // number's.
+    let joinable = false, listed = false, read = 0;
+    for (const word of tokens) {
+      if (word === ',') {
+        if (describing && joinable) { joinable = false; listed = true; continue; }
+        break;
+      }
+      if (++read > 5) break;
       // A hyphenated word is read by its first part as well ("12 month-to-month plans" is 12 months, as before).
       const unit = unitOf(word) ?? (word.includes('-') ? unitOf(word.split('-')[0]) : null);
       if (unit) {
-        found.add(`${numberWords[match[1].toLowerCase()] ?? numberOf(match[1])}:${unit}`);
+        if (!listed) found.add(`${numberWords[match[1].toLowerCase()] ?? numberOf(match[1])}:${unit}`);
         break;
       }
-      if (qualifiers.has(word) || (describing && !phraseEnds.has(word) && !plural(word))) { joinable = true; continue; }
-      // "and" or "or" right after a describing word joins it to the next; anywhere else it ends the phrase.
-      if (describing && joinable && (word === 'and' || word === 'or')) { joinable = false; continue; }
+      if (qualifiers.has(word) || (describing && !phraseEnds.has(word) && !plural(word))) { joinable = true; listed = false; continue; }
+      // "and" or "or" right after a describing word, or after its comma ("rural, suburban, and urban"), joins it to the next; anywhere
+      // else it ends the phrase.
+      if (describing && (joinable || listed) && (word === 'and' || word === 'or')) { joinable = false; continue; }
       break;
     }
   }
