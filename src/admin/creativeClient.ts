@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { config } from "../lib/config";
-import { sessionEvent } from "../lib/appSession";
+import { sessionEvent, responseErrorMessage } from "../lib/appSession";
 import { brandKitSchema, briefSchema, studioSchema, uploadResultSchema } from "./creativeProtocol";
 import type { BrandKit, CreativeBrief, CreativePlatform, CreativeProduct, CreativeStatus, CreativeStudio, UploadResult } from "./creativeProtocol";
 import { TeamApiError, teamClient } from "./teamClient";
@@ -16,7 +16,7 @@ async function post<S extends z.ZodType>(path: string, body: unknown, schema: S,
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new Event(sessionEvent));
-    const message = data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : "The request could not be completed.";
+    const message = responseErrorMessage(data) ?? "The request could not be completed.";
     throw new TeamApiError(response.status, message);
   }
   return schema.parse(data);
@@ -63,7 +63,7 @@ export const creativeClient: CreativeClient = {
     const data: unknown = await response.json().catch(() => null);
     if (!response.ok) {
       if (response.status === 401) window.dispatchEvent(new Event(sessionEvent));
-      const message = data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : "The video could not be added.";
+      const message = responseErrorMessage(data) ?? "The video could not be added.";
       throw new TeamApiError(response.status, message);
     }
     return uploadResultSchema.parse(data);

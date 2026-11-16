@@ -3,10 +3,13 @@
 ## One hub for CareBase, Breathe, and Intel
 
 The Hub is the administration, support, billing, and knowledge center for
-CareBase (PennTrain), Breathe (PennFit), and CareMetric Intel.
-PennSync, EMR, Go, and Healthcare Advisors use their own support. Historical Hub
-product identities, cases, memberships, and learning records are retained; new
-connections, intake, delegated actions, and purchases for those apps are disabled.
+CareBase (PennTrain), Breathe (PennFit), and CareMetric Intel. The owner also
+administers CareMetric Healthcare Advisors' consultation requests here; as a
+consulting practice it has no billing, self-service or support intake in the Hub
+([connection](docs/ADVISORS_ADMIN_CONNECTION.md)). PennSync, EMR and Go use their
+own support. Their historical Hub product identities, cases, memberships, and
+learning records are retained; new connections, intake, delegated actions, and
+purchases for those apps are disabled.
 
 - **Control center** (`/admin`): the administrator's home. Every application's
   connection health, subscriptions, users and organizations, Help SDK and
@@ -72,8 +75,8 @@ CareMetric Stripe account), whatever the connection provides:
 | Application | Directory | Subscribers | Invoices & payments | Other |
 | --- | --- | --- | --- | --- |
 | CareBase (PennTrain) | Organizations, users, access controls | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Courses, facility training, jobs, releases, audit |
-| Breathe (PennFit) | Organizations, staff | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Shared phone-line messages |
-| CareMetric Intel | Registered users only | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Website leads, visitor sessions |
+| Breathe (PennFit) | Organizations, staff | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Shared phone-line messages; organization suspend and restore; staff sign-ins off and back on ([access commands](docs/CENTRAL_ADMIN_COMMANDS.md#breathe-and-caremetric-intel)) |
+| CareMetric Intel | Registered users only | Hub billing: subscriptions and MRR | Hub billing: invoices, payment links, customer portal | Website leads, visitor sessions; turning accounts off and on ([access commands](docs/CENTRAL_ADMIN_COMMANDS.md#breathe-and-caremetric-intel)) |
 | Healthcare Advisors | No software accounts | Not applicable (consulting practice) | Not applicable | Consultation requests: list, status, notes and delete ([connection](docs/ADVISORS_ADMIN_CONNECTION.md)) |
 
 A directory the connection does not provide (Intel's organizations) needs a
@@ -274,7 +277,7 @@ Do not connect this application to `CM Train`, PennFit, CMbackup, or any other e
 
 1. Confirm the signed BAAs and verify the required Supabase HIPAA add-on, MFA, PITR, SSL enforcement, and network restrictions before enabling PHI-capable support.
 2. Expose only the `hub` schema through the Data API. Never expose `private`.
-3. Apply the reviewed files in `supabase/migrations`; `supabase/schema.sql` is the consolidated reference schema.
+3. Apply the reviewed files in `supabase/migrations`, in order. `supabase/schema.sql` is a historical snapshot (it stops at `20261021130000`); the migrations are the schema.
 4. Run database/security advisors and the pgTAP tests.
 5. Keep every production change represented by a reviewed, idempotent migration.
 6. Configure `VITE_SUPABASE_URL` and the publishable key. Never put a secret or service-role key in a browser variable.
@@ -304,7 +307,7 @@ src/data/                    demo and Supabase repository adapters
 src/imports/                 credential-free publication validation and preview planning
 src/security/                executable security-contract tests
 packages/help-sdk/           cross-product contextual help launcher
-supabase/schema.sql          migration-ready schema source
+supabase/schema.sql          historical schema snapshot; supabase/migrations is current
 supabase/tests/              pgTAP schema/security checks
 docs/                        API, integration, and rollout guidance
 ```

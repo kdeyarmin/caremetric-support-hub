@@ -51,10 +51,12 @@ server:
    video, no markup, links, e-mail addresses or provider names). Transcripts get the
    same text checks.
 2. Refuses an `mp4_url` whose host is not on the allowlist, before recording or
-   fetching anything. The allowlist is exact host names in `HUB_MEDIA_IMPORT_HOSTS`
-   (comma separated). Empty means HeyGen's asset hosts: `resource2.heygen.ai`,
-   `files.heygen.ai` and `files2.heygen.ai`. Wildcards, schemes and ports are
-   refused; an unusable value refuses every source.
+   fetching anything. The allowlist is the exact host names in Settings → Course
+   distribution → **Lesson video import hosts**, one per line, read on every request.
+   Empty means HeyGen's asset hosts: `resource2.heygen.ai`, `files.heygen.ai` and
+   `files2.heygen.ai`. Wildcards, schemes, paths and ports cannot be saved. (It was
+   the `HUB_MEDIA_IMPORT_HOSTS` Railway variable; a value still set there is copied in
+   once.)
 3. Fetches the MP4 itself, with no cookies or credentials and `Accept-Encoding:
    identity`. It follows at most three redirects, by hand, and only to `https`
    allowlisted hosts.
@@ -150,8 +152,9 @@ closed to browser, service-role and direct server access. The route answers
    identity parity hold.
 2. Deploy the Hub server and web. Features are read at boot, so restart the server
    after the migration if it deployed first.
-3. Optionally set `HUB_MEDIA_IMPORT_HOSTS`, if the manifest's MP4 URLs or their
-   redirects use another HeyGen host. A refused hop names `redirect_not_allowed`.
+3. Optionally add hosts to Settings → Course distribution → **Lesson video import
+   hosts**, if the manifest's MP4 URLs or their redirects use another HeyGen host. A
+   refused hop names `redirect_not_allowed`.
 
 ## Verification
 

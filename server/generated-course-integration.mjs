@@ -8,6 +8,8 @@ import { smsAuth,digest } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL,local=new URL(databaseUrl);
 assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:databaseUrl});
@@ -15,7 +17,7 @@ await admin.query("alter role hub_app_server login password 'ephemeral-test-only
 const appUrl=new URL(databaseUrl);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
 const pool=new pg.Pool({connectionString:appUrl.href});
 // Fresh identities each run, so the script can be rerun on the same database.
-const owner=randomUUID(),phone='+1312555'+String(Math.floor(Math.random()*10000)).padStart(4,'0');
+const owner=randomUUID(),phone=phones.owner;
 const fixture=JSON.parse(readFileSync(new URL('../src/imports/fixtures/governedCourse.json',import.meta.url)));
 // Exactly what CareBase's create_course_from_ai_draft_delegated writes: version 1 of a new course, a draft, AI-generated.
 const aiDraft=()=>({...fixture,sourceCourseId:randomUUID(),sourceVersionId:randomUUID(),sourceVersionNumber:1,publicationState:'draft',sourceVersionState:'draft',
@@ -81,4 +83,4 @@ try {
   await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner]);
   assert.equal((await register(put(aiDraft()))).status,401);
   console.log('AI-written course registration passed: a fresh AI draft joins the catalog once, its material can then be preserved, and other courses, existing mappings and other people are refused.');
-} finally {await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
+} finally {await new Promise(resolve=>server.close(resolve));await removeTestIdentities(admin,[owner],{also:['delete from private.learning_source_snapshots where staged_by = any($1::uuid[])']});await pool.end();await admin.end();}

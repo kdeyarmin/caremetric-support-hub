@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { HttpError } from './sms-auth.mjs';
 import { boundedSession } from './bounded-session.mjs';
-import { MEDIA_METADATA_LIMIT, parseHubMediaOperation, nativeMediaOperation, projectMediaEnvelope,
+import { partKey, partUploads } from './upload-parts.mjs';
+import { MEDIA_METADATA_LIMIT, MEDIA_VIDEO_LIMIT, parseHubMediaOperation, nativeMediaOperation, projectMediaEnvelope,
   projectMediaContextView, verifyMediaReceipt } from '../src/learning/mediaProtocol.ts';
 
 const target='https://cmcarebase.com/api/learning-admin/media';
@@ -49,8 +50,9 @@ export function mediaRange(value,size) {
   if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||start>=size||end<start)throw fail(416,'invalid_range');
   return {start,end};
 }
-export function learningMedia({pool,issue,fetchImpl=fetch,timeoutMs=120000,metadataTimeoutMs=12000}) {
-  return async(sessionToken,input,{body,contentType,contentLength,rangeHeader,headOnly=false,signal:requestSignal}={})=>{
+// Two course videos at once.
+export function learningMedia({pool,issue,fetchImpl=fetch,timeoutMs=120000,metadataTimeoutMs=12000,parts=partUploads({budget:2*MEDIA_VIDEO_LIMIT})}) {
+  const media=async(sessionToken,input,{body,contentType,contentLength,rangeHeader,headOnly=false,signal:requestSignal}={})=>{
     let op;try{op=parseHubMediaOperation(input);}catch{throw fail(400,'invalid_request');}
     if(op.operation==='media.upload'){
       if(!body||contentType!==op.mimeType)throw fail(400,'invalid_request');
@@ -143,4 +145,21 @@ export function learningMedia({pool,issue,fetchImpl=fetch,timeoutMs=120000,metad
       throw fail(({forbidden:403,unauthenticated:401,conflict:409,invalid_request:400})[code]??503,code);
     }
   };
+  /**
+   * One part of a course upload (server/upload-parts.mjs), so a large video does not have to arrive in one request. Each part is
+   * authorized again; once the whole file has arrived and matches the declared size and hash, it is uploaded to CareBase as above.
+   * The answer is {received} while bytes remain and {result: stage} once CareBase has staged the file.
+   */
+  media.uploadPart=async(sessionToken,input,upload,body,contentType,requestSignal)=>{
+    let op;try{op=parseHubMediaOperation(input);}catch{throw fail(400,'invalid_request');}
+    if(op.operation!=='media.upload'||contentType!==op.mimeType||upload.total!==op.sourceBytes)throw fail(400,'invalid_request');
+    const signal=AbortSignal.any([...(requestSignal?[requestSignal]:[]),AbortSignal.timeout(metadataTimeoutMs)]);
+    try{await boundedSession(pool,sessionToken,signal,db=>db.query('select hub.authorize_app_command()'));}
+    catch(error){if(error instanceof HttpError)throw error;throw fail(error.code==='42501'?403:error.code==='28000'?401:503,error.code==='42501'?'forbidden':error.code==='28000'?'unauthenticated':'upstream');}
+    return parts.receive(partKey(sessionToken,`course-media:${op.requestId}:${op.sourceSha256}`),upload,body,file=>{
+      if(file.sha256!==op.sourceSha256)throw fail(409,'artifact_mismatch');
+      return media(sessionToken,op,{body:file.stream(),contentType,contentLength:String(file.byteLength),signal:requestSignal});
+    });
+  };
+  return media;
 }

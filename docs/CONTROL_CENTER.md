@@ -6,8 +6,9 @@ into the workspace that manages each thing. Nothing on it is estimated. A read
 that failed, or that an application's connection never advertised, is shown as
 unavailable or not provided; a silent application never contributes a zero.
 
-The per-application workspace (organizations, users, billing, courses, facility
-training, jobs, releases, audit) now lives at `/admin/apps?product=<id>`. Links
+The per-application workspace (organizations, users, consultation requests, courses,
+facility training, jobs, releases, audit) now lives at `/admin/apps?product=<id>`;
+billing for every application is in `/admin/billing`. Links
 that still carry the old `/admin?product=…&view=…` query redirect there.
 
 ## What it shows and where it comes from
@@ -19,7 +20,7 @@ that still carry the old `/admin?product=…&view=…` query redirect there.
 | Hub services | The AI go-live readiness report, `hub.list_phone_numbers()` and `hub.get_support_readiness()` | `/admin/go-live-readiness`, `/phone-numbers`, `/integration` |
 | AI usage | `hub.get_ai_usage_summary(p_days)` (see below) | — |
 | Integration setup | `POST /api/admin/integration-setup` (see below) | Setup steps in this repository's docs |
-| Applications | Each connection's `capabilities` and `overview` reads (as the portfolio rollup), the Hub's own billing summary, the Hub's support cases and published articles, one `communications/list` read per application, the support readiness summary and the AI usage summary | `/admin/apps?product=<id>&view=<organizations\|users\|inquiries>`, `/admin/billing`, `/communications?product=<slug>`, `/cases?product=<slug>`, `/knowledge?product=<slug>`, `/integration` |
+| Applications | Each connection's `capabilities` (which also decide the card's **Controls** row: what can be changed from the Hub, or view only) and `overview` reads (as the portfolio rollup), the Hub's own billing summary, the Hub's support cases and published articles, one `communications/list` read per application, the support readiness summary and the AI usage summary | `/admin/apps?product=<id>&view=<organizations\|users\|inquiries>`, `/admin/billing`, `/communications?product=<slug>`, `/cases?product=<slug>`, `/knowledge?product=<slug>`, `/integration` |
 
 Every block loads independently, so one unavailable connection or service never
 hides the others. **Refresh everything** re-reads all of them.

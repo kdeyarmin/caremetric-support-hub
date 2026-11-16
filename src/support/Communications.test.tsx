@@ -161,6 +161,53 @@ describe("inbox safety", () => {
     expect(await screen.findByText("Conversation 1")).toBeTruthy();
     expect(fake.list).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }), expect.anything());
   });
+  it("keeps the reason a reply failed on screen after the list reloads", async () => {
+    const fake = { ...client(), reply: vi.fn(async () => { throw new Error("Text message replies are not configured in the Hub yet."); }) };
+    render(<Communications products={products} actor={actor} client={fake} />);
+    fireEvent.click(within(await screen.findByRole("region", { name: "Conversations" })).getByText("Text message from +1 (202) 555-0144"));
+    const thread = await screen.findByRole("region", { name: "Conversation" });
+    fireEvent.change(await within(thread).findByLabelText("Reply by text message"), { target: { value: "Request a new code." } });
+    fireEvent.click(within(thread).getByRole("button", { name: "Send reply" }));
+    expect(await screen.findByText("Text message replies are not configured in the Hub yet.")).toBeTruthy();
+    // The failed action reads the list again; the reason it failed must survive that read.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(screen.getByRole("alert").textContent).toBe("Text message replies are not configured in the Hub yet.");
+  });
+  it("sends a second quick change with the version the first one returned", async () => {
+    const fake = client();
+    const sent: string[] = [];
+    let version = "2026-10-20T00:00:00Z";
+    const slowGet = fake.get;
+    const update = vi.fn(async (change: Parameters<typeof fake.update>[0]) => {
+      sent.push(change.expectedUpdatedAt);
+      if (change.expectedUpdatedAt !== version) throw new Error("This conversation changed. Reload it before saving.");
+      const updated = await fake.update(change);
+      version = `2026-10-20T00:00:0${sent.length}Z`;
+      return { ...updated, updatedAt: version };
+    });
+    // The refreshed conversation arrives long after the change, as it can on a slow connection.
+    const get = vi.fn(async (id: string, signal?: AbortSignal) => { const thread = await slowGet(id, signal); if (update.mock.calls.length) await new Promise(resolve => setTimeout(resolve, 500)); return { ...thread, updatedAt: version }; });
+    render(<Communications products={products} actor={actor} client={{ ...fake, update, get }} />);
+    fireEvent.click(within(await screen.findByRole("region", { name: "Conversations" })).getByText("Text message from +1 (202) 555-0144"));
+    const thread = await screen.findByRole("region", { name: "Conversation" });
+    await within(thread).findByText("My sign-in code expired before it arrived.");
+    fireEvent.change(within(thread).getByLabelText("Status"), { target: { value: "open" } });
+    await waitFor(() => expect(within(thread).getByLabelText("Type")).toHaveProperty("disabled", false));
+    fireEvent.change(within(thread).getByLabelText("Type"), { target: { value: "technical_support" } });
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    expect(sent[1]).not.toBe(sent[0]);
+    expect(screen.queryByText("This conversation changed. Reload it before saving.")).toBeNull();
+  });
+  it("reads the channels again on Refresh after a failed read", async () => {
+    const fake = client();
+    const channels = vi.fn().mockRejectedValueOnce(new Error("503")).mockResolvedValue(configured);
+    render(<Communications products={products} actor={actor} client={{ ...fake, channels }} />);
+    await screen.findByRole("region", { name: "Conversations" });
+    expect(screen.queryByText("Receiving · replies not configured")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByText("Receiving · replies not configured")).toBeTruthy();
+    expect(channels).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("website chat", () => {

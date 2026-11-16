@@ -65,7 +65,10 @@ to the Social Media Manager's list. While it is automatic:
 
 Once a month per marketed product, `ads.plan` proposes a LinkedIn campaign, a Meta retargeting campaign and a Google search campaign
 (`server/agents/ads/index.mjs`). Each waits for your approval and is created paused (LinkedIn as a draft) with no ads, and you add the
-first ad in the platform's ad manager. The autonomy step **Ad campaign launch** (`ad_campaigns`, AI team page; it ships held) adds
+first ad in the platform's ad manager. Since 2026-11-16 Intel's campaigns send people to the free market report for their own agency
+(`/market-review`: its share and rank in its county, the county's largest agencies and three moves, emailed as a PDF), not the county
+report; the report is for home health agencies and hospices, so the LinkedIn proposal says to use the Medicare roster's company list as
+the campaign's audience. The autonomy step **Ad campaign launch** (`ad_campaigns`, AI team page; it ships held) adds
 `social.campaign_create` and `social.google_campaign` to the Social Media Manager's list. While it is automatic:
 
 - **The first ad comes from creative you already approved.** The plan picks, for each LinkedIn or Meta campaign, the first approved
@@ -325,3 +328,10 @@ counts as `facebook`), utm_medium `social`, utm_campaign `social-<product>` and 
 utm_medium `paid_social` and utm_content `ad`, with utm_source `facebook` for a Meta ad (it may also run on Instagram) or `linkedin`.
 A new ad based on an ad whose link already carries tags keeps that page and gets these tags instead. Before it publishes a post the
 executor checks its link again: only a product page, as written or with well-formed tags.
+
+Just before a post, founder post or reply goes out, its words go through the writing check again, since a rule may have changed
+since they were approved. Words that fail are not published, and the action fails with a code that names the check
+(`post_check_long_sentence`, `post_check_trial_terms`, `reply_check_link`; `post_check_changed` when checking again would change
+the approved words). The AI team page says in words which rule refused it (`writingCheckReasons` in `src/admin/teamProtocol.ts`),
+so you can approve a corrected post. `invalid_post` is kept for a post the Hub cannot publish at all (its platform, a story's
+image, or an image address that is not https).

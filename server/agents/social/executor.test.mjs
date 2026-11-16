@@ -38,7 +38,8 @@ describe('carrying out social actions', () => {
   });
 
   it('refuses a post whose words no longer pass the checks, or an Instagram post without an image', async () => {
-    await expect(run('social.post', { platform: 'facebook', product: 'carebase', message: 'CareBase ensures compliance.', scheduledFor: '2026-11-10T15:00:00Z' }).promise).rejects.toMatchObject({ code: 'invalid_post' });
+    // The code names the check that refused it, so the owner's screen can say why (src/admin/teamProtocol.ts).
+    await expect(run('social.post', { platform: 'facebook', product: 'carebase', message: 'CareBase ensures compliance.', scheduledFor: '2026-11-10T15:00:00Z' }).promise).rejects.toMatchObject({ code: 'post_check_compliance_assurance' });
     await expect(run('social.post', { platform: 'instagram', product: 'carebase', message, scheduledFor: '2026-11-10T15:00:00Z' }).promise).rejects.toMatchObject({ code: 'image_missing' });
   });
 
@@ -55,7 +56,7 @@ describe('carrying out social actions', () => {
       'https://www.caremetricintel.com/?utm_source=facebook&utm_medium=social&utm_campaign=social-intel',
     ]) {
       const refused = run('social.post', { ...post, link });
-      await expect(refused.promise, link).rejects.toMatchObject({ code: 'invalid_post' });
+      await expect(refused.promise, link).rejects.toMatchObject({ code: 'post_check_link' });
       expect(refused.meta.publishPost).not.toHaveBeenCalled();
     }
   });
@@ -226,8 +227,8 @@ describe('stories and article links', () => {
     const { meta, promise } = run('social.post', input);
     expect(await promise).toEqual({ published: true, id: '1111_99' });
     expect(meta.publishPost).toHaveBeenCalledWith(expect.objectContaining({ link: article }));
-    await expect(run('social.post', { ...input, link: 'https://www.caremetricintel.com/elsewhere/county-market-basics' }).promise).rejects.toMatchObject({ code: 'invalid_post' });
-    await expect(run('social.post', { ...input, product: 'carebase' }).promise).rejects.toMatchObject({ code: 'invalid_post' });
+    await expect(run('social.post', { ...input, link: 'https://www.caremetricintel.com/elsewhere/county-market-basics' }).promise).rejects.toMatchObject({ code: 'post_check_link' });
+    await expect(run('social.post', { ...input, product: 'carebase' }).promise).rejects.toMatchObject({ code: 'post_check_link' });
   });
 });
 
@@ -241,7 +242,7 @@ describe('the founder\'s own posts', () => {
     expect(await executors['social.founder_post'](action())).toEqual({ published: true, id: 'urn:li:share:7300000000000000001', founder: true });
     expect(linkedin.publishMemberPost).toHaveBeenCalledWith({ message });
     await expect(executors['social.founder_post'](action({ autoApproved: true }))).rejects.toMatchObject({ code: 'approval_required' });
-    await expect(executors['social.founder_post'](action({ input: { ...input, message: 'Book a call with me today.' } }))).rejects.toMatchObject({ code: 'invalid_post' });
+    await expect(executors['social.founder_post'](action({ input: { ...input, message: 'Book a call with me today.' } }))).rejects.toMatchObject({ code: 'post_check_meeting_offer' });
     const unconnected = socialExecutors({ meta: metaOf(), linkedin: linkedinOf(), settings: {}, now, log: () => {} });
     await expect(unconnected['social.founder_post'](action())).rejects.toMatchObject({ code: 'linkedin_not_configured' });
   });
@@ -255,7 +256,7 @@ describe('the founder\'s own posts', () => {
     expect(await handedOver['social.founder_post'](action())).toEqual({ published: true, id: 'urn:li:share:7300000000000000002', founder: true });
     expect(trusted.actionTrusted).toHaveBeenCalledWith('a2', 4);
     await expect(handedOver['social.founder_post'](action({ input: { ...input, scheduledFor: '2026-11-11T12:50:00Z' } }))).rejects.toMatchObject({ code: 'action_deferred' });
-    await expect(handedOver['social.founder_post'](action({ input: { ...input, message: 'Book a call with me today.' } }))).rejects.toMatchObject({ code: 'invalid_post' });
+    await expect(handedOver['social.founder_post'](action({ input: { ...input, message: 'Book a call with me today.' } }))).rejects.toMatchObject({ code: 'post_check_meeting_offer' });
     // Held again (or paused, or off Act) since it was approved: it waits for the owner instead of publishing.
     const held = socialExecutors({ meta: metaOf(), linkedin, settings: {}, now, log: () => {}, store: { actionTrusted: vi.fn(async () => false) }, handover: true });
     await expect(held['social.founder_post'](action())).rejects.toMatchObject({ code: 'approval_required' });
@@ -266,5 +267,42 @@ describe('the founder\'s own posts', () => {
     // Without the founder's personal token it is not published at all (the weekly plan emails such posts to copy instead).
     const unconnected = socialExecutors({ meta: metaOf(), linkedin: linkedinOf(), settings: {}, now, log: () => {}, store: trusted, handover: true });
     await expect(unconnected['social.founder_post'](action())).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+  });
+});
+
+describe('why a post or reply was refused just before it went out', () => {
+  it('says which check refused it, and that the words changed when they pass but would change', async () => {
+    const sentence = Array.from({ length: 31 }, (_, index) => `word${index}`).join(' ');
+    await expect(run('social.post', { platform: 'facebook', product: 'carebase', message: `${sentence}.`, scheduledFor: '2026-11-10T15:00:00Z' }).promise)
+      .rejects.toMatchObject({ code: 'post_check_long_sentence' });
+    // Approved with two spaces: the check would publish it with one, which is not the text that was approved.
+    await expect(run('social.post', { platform: 'facebook', product: 'carebase', message: message.replace(' ', '  '), scheduledFor: '2026-11-10T15:00:00Z' }).promise)
+      .rejects.toMatchObject({ code: 'post_check_changed' });
+    const reply = { platform: 'messenger', kind: 'message', id: 'm_1', parentId: 't_1', message: 'Thanks for asking! 🎉🎉🎉🎉', product: 'carebase' };
+    await expect(run('social.reply', reply).promise).rejects.toMatchObject({ code: 'reply_check_emoji' });
+  });
+
+  it('has words on the owner\'s screen for every reason the checks can give', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const { writingCheckReasons, errorLabel } = await import('../../../src/admin/teamProtocol.ts');
+    const { longestSentence } = await import('../content/validate.mjs');
+    const source = async path => readFile(new URL(path, import.meta.url), 'utf8');
+    const social = await source('./content.mjs');
+    // The checks checkSocialText runs: the claim rules, textProblems and unclearCopy (not the Markdown checks that follow them).
+    const validateAll = await source('../content/validate.mjs');
+    const validate = validateAll.slice(0, validateAll.indexOf('// ---- Links and markup'));
+    const reasons = new Set([
+      ...[...social.matchAll(/reason: '([a-z_]+)'/g)].map(match => match[1]),
+      ...[...validate.matchAll(/reasons\.add\('([a-z_]+)'\)/g)].map(match => match[1]),
+      ...[...validate.slice(validate.indexOf('const claimRules = ['), validate.indexOf('];', validate.indexOf('const claimRules = [')))
+        .matchAll(/^\s*\['([a-z_]+)',/gm)].map(match => match[1]),
+    ]);
+    expect(reasons.size).toBeGreaterThan(25);
+    for (const reason of reasons) expect(writingCheckReasons[reason], reason).toBeTruthy();
+    expect(writingCheckReasons.long_sentence).toContain(`over ${longestSentence} words`);
+    expect(errorLabel('post_check_trial_terms')).toMatch(/^The post no longer passes the writing check .* so it was not published: it says the Intel trial needs no credit card/);
+    expect(errorLabel('reply_check_link')).toMatch(/^The reply no longer passes the writing check, so it was not sent: it links somewhere other/);
+    expect(errorLabel('post_check_some_new_rule')).toContain('some new rule');
+    expect(errorLabel('invalid_post')).not.toBe('invalid_post');
   });
 });

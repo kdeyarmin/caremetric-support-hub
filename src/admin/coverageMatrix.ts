@@ -4,11 +4,12 @@ import type { RollupAppSnapshot } from "./portfolioRollup";
 /** Whether the Hub holds one area of an application's super-admin information right now. */
 export type CoverageState = "available" | "partial" | "missing" | "not-applicable" | "unavailable";
 export interface CoverageCell { state: CoverageState; label: string }
-export interface CoverageArea { id: "directory" | "subscribers" | "financial" | "requests" | "support"; label: string }
+export interface CoverageArea { id: "directory" | "controls" | "subscribers" | "financial" | "requests" | "support"; label: string }
 export interface CoverageRow { product: PortfolioProduct; cells: Record<CoverageArea["id"], CoverageCell>; nextSteps: string[] }
 
 export const coverageAreas: readonly CoverageArea[] = [
   { id: "directory", label: "Organizations & users" },
+  { id: "controls", label: "Access controls" },
   { id: "subscribers", label: "Subscribers & subscriptions" },
   { id: "financial", label: "Invoices & payments" },
   { id: "requests", label: "Consultation requests" },
@@ -53,13 +54,40 @@ export function coverageMatrix(apps: RollupAppSnapshot[]): CoverageRow[] {
       : has(app, "inquiries.list") ? { state: "available", label: "Consultation requests" }
       : missing("Not provided yet", "Deploy the Advisors bridge and list Hub administrators in HUB_ADMIN_USER_IDS.");
 
+    const controls = accessControls(app);
+    const control: CoverageCell = advisors ? notApplicable("No software accounts")
+      : !connected ? unavailable
+      : controls.state === "available" ? { state: "available", label: controls.label }
+      : missing("View only", controls.nextStep);
+
     if (advisors && !connected) nextSteps.push("Deploy the Advisors bridge and list Hub administrators in HUB_ADMIN_USER_IDS.");
     else if (!connected) nextSteps.push("Restore the application's administration connection; its figures are unavailable until it answers.");
 
     // Every channel lands in the Hub inbox by design; this does not depend on the application connection.
     const support: CoverageCell = { state: "available", label: advisors ? "Hub inbox, including the imported web form · channel status in Communications" : "Hub inbox · channel status in Communications" };
-    return { product: app.product, cells: { directory, subscribers, financial, requests, support }, nextSteps: [...new Set(nextSteps)] };
+    return { product: app.product, cells: { directory, controls: control, subscribers, financial, requests, support }, nextSteps: [...new Set(nextSteps)] };
   });
+}
+
+/**
+ * What the Hub can change in an application now, from what its live connection advertises. CareBase and Intel take access changes
+ * through their command endpoints; Breathe through its own organization suspend/restore review.
+ */
+export function accessControls(app: RollupAppSnapshot): { state: "available" | "view-only"; label: string; nextStep: string } {
+  const commands = has(app, "commands.preview") && has(app, "commands.apply");
+  if (app.product === "carebase") return commands ? { state: "available", label: "Organization suspension and profile access", nextStep: "" }
+    : { state: "view-only", label: "View only", nextStep: "Switch on CareBase's access commands (CAREMETRIC_ADMIN_COMMANDS_ENABLED on CareBase)." };
+  if (app.product === "intel") return commands ? { state: "available", label: "Turn accounts on and off", nextStep: "" }
+    : { state: "view-only", label: "View only", nextStep: "Deploy Intel's account command and switch it on (CAREMETRIC_ADMIN_COMMANDS_ENABLED on Intel)." };
+  if (app.product === "breathe") {
+    const lifecycle = (["organizations.lifecycle.context", "organizations.lifecycle.preview", "organizations.lifecycle.apply", "organizations.lifecycle.resume"] as const).every(name => has(app, name));
+    const staff = (["staff.access.context", "staff.access.preview", "staff.access.apply", "staff.access.resume"] as const).every(name => has(app, name));
+    if (lifecycle && staff) return { state: "available", label: "Organization suspend and restore; staff sign-ins on and off", nextStep: "" };
+    if (lifecycle) return { state: "available", label: "Organization suspend and restore", nextStep: "To change staff sign-ins too, switch on Breathe's staff changes (CAREMETRIC_ADMIN_STAFF_COMMANDS_ENABLED on Breathe)." };
+    if (staff) return { state: "available", label: "Staff sign-ins on and off", nextStep: "To suspend organizations too, switch on Breathe's organization changes (CAREMETRIC_ADMIN_TENANT_COMMANDS_ENABLED on Breathe)." };
+    return { state: "view-only", label: "View only", nextStep: "Switch on Breathe's organization changes (CAREMETRIC_ADMIN_TENANT_COMMANDS_ENABLED) or staff changes (CAREMETRIC_ADMIN_STAFF_COMMANDS_ENABLED) on Breathe." };
+  }
+  return { state: "view-only", label: "View only", nextStep: "This application has no access commands." };
 }
 
 /** Areas that apply to the application, and how many of those the Hub holds completely. */

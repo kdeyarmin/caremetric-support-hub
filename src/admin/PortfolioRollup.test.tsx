@@ -88,16 +88,17 @@ describe("portfolio rollup", () => {
 
   it("shows super-admin coverage: billing from the Hub even when a connection fails", async () => {
     const portfolio = fakePortfolio({
-      carebase: { capabilities: { apiVersion: 1, operations: ["organizations.list", "users.list"], sourceRevision: null } },
+      carebase: { capabilities: { apiVersion: 1, operations: ["organizations.list", "users.list", "commands.preview", "commands.apply"], sourceRevision: null } },
       advisors: { capabilities: { apiVersion: 1, operations: ["overview", "inquiries.list"], sourceRevision: null }, overview: { organizationCount: null, activeUserCount: null, inquiryCount: 0, openInquiryCount: 0 } },
     });
     renderRollup(portfolio);
     const coverage = await screen.findByRole("region", { name: "Super-admin coverage" });
     expect(within(coverage).getAllByRole("row")).toHaveLength(5);
     const carebase = within(coverage).getByRole("row", { name: /CareBase \(PennTrain\)/ });
-    expect(within(carebase).getAllByText("In the Hub")).toHaveLength(4);
+    expect(within(carebase).getAllByText("In the Hub")).toHaveLength(5);
     const breathe = within(coverage).getByRole("row", { name: /Breathe \(PennFit\)/ });
-    expect(within(breathe).getAllByText("Unavailable")).toHaveLength(1);
+    // Its directory and access controls both depend on the connection that failed.
+    expect(within(breathe).getAllByText("Unavailable")).toHaveLength(2);
     expect(within(breathe).getAllByText("In the Hub")).toHaveLength(3);
   });
 

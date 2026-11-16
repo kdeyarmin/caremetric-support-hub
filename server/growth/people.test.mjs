@@ -128,3 +128,29 @@ describe('growth.people', () => {
     expect(peopleHandlers({ growth: { store: {} }, features: new Set() })).toEqual({});
   });
 });
+
+describe('the next decision-maker (2026-11-16)', () => {
+  const team = { people: [{ name: 'Jane Doe', title: 'Administrator', sourceUrl: 'https://valleyhospice.org/team' }, { name: 'Sam Lee', title: 'Director of Business Development', sourceUrl: 'https://valleyhospice.org/team' }],
+    addresses: [] };
+  it('asks about the next person who decides, for one more reserved check, when the server refuses every shape of the first one\'s name', async () => {
+    const { store, mailbox, run } = setup({ team });
+    mailbox.check.mockResolvedValueOnce({ result: 'rejected' }).mockResolvedValueOnce({ result: 'verified', email: 'slee@valleyhospice.org' });
+    const { result } = await run();
+    expect(mailbox.check).toHaveBeenCalledTimes(2);
+    expect(mailbox.check.mock.calls[1][1]).toContain('slee@valleyhospice.org');
+    expect(store.enrichmentReserve).toHaveBeenCalledTimes(2);
+    expect(store.personAddress).toHaveBeenCalledWith(expect.any(String), 'slee@valleyhospice.org', 'Sam Lee', 'mail_server', null);
+    expect(result).toMatchObject({ found: 1, verified: 1, answers: { rejected: 1, verified: 1 } });
+  });
+  it('never asks again after a catch-all or an unanswered server, nor without a credit for it', async () => {
+    for (const check of [{ result: 'catch_all' }, { result: 'unknown', reason: 'temporary' }]) {
+      const { mailbox, run } = setup({ team, check });
+      expect((await run()).result).toMatchObject({ found: 0, answers: { [check.result]: 1 } });
+      expect(mailbox.check).toHaveBeenCalledTimes(1);
+    }
+    const { store, mailbox, run } = setup({ team, check: { result: 'rejected' } });
+    store.enrichmentReserve.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    expect((await run()).result).toMatchObject({ found: 0, answers: { rejected: 1 } });
+    expect(mailbox.check).toHaveBeenCalledTimes(1);
+  });
+});

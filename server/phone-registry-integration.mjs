@@ -5,6 +5,8 @@ import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import {digest} from './sms-auth.mjs';
 import {gateway} from './gateway.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;
 const local=new URL(databaseUrl);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:databaseUrl});
@@ -15,7 +17,7 @@ const owner=randomUUID(),customer=randomUUID(),ownerToken='phones-owner-'+random
 const ownerSession=randomUUID(),customerSession=randomUUID();
 let recordId;
 const rpc=(name,args={},token=ownerToken)=>api.rpc(name,args,token);
-const record={number:'+12025550881',label:'Synthetic support line',provider:'Test provider',account:'Test account',purpose:'Synthetic registry test',apps:'Test app',owner:'Test team',lifecycle:'active',usage_status:'unknown',voice_status:'unknown',voice_routing:'',sms_status:'unknown',sms_routing:'',last_used_on:'',reviewed_on:'',evidence:'',notes:''};
+const record={number:phones.line,label:'Synthetic support line',provider:'Test provider',account:'Test account',purpose:'Synthetic registry test',apps:'Test app',owner:'Test team',lifecycle:'active',usage_status:'unknown',voice_status:'unknown',voice_routing:'',sms_status:'unknown',sms_routing:'',last_used_on:'',reviewed_on:'',evidence:'',notes:''};
 const save=(value=record,id=null,version=0,token=ownerToken)=>rpc('save_phone_number',{p_id:id,p_record:value,p_expected_version:version},token);
 const contractMigration=await readFile(new URL('../supabase/migrations/20260925022151_phone_registry_contract.sql',import.meta.url),'utf8');
 try{
@@ -40,7 +42,7 @@ try{
   }finally{contractConnection.release();}
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'phone-owner@test.invalid',false),($2,'phone-customer@test.invalid',false)",[owner,customer]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550882',now()),($2,'+12025550883',now())",[owner,customer]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$3,now()),($2,$4,now())',[owner,customer,phones.owner,phones.customer]);
   for(const [id,user,token] of [[ownerSession,owner,ownerToken],[customerSession,customer,customerToken]])
     await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[id,digest(token),user]);
   await assert.rejects(rpc('list_phone_numbers',{},null));
@@ -58,7 +60,7 @@ try{
   const updated=await save({...record,lifecycle:'retired',notes:'Keep for history'},created.id,1);
   assert.equal(updated.version,2);assert.equal(updated.lifecycle,'retired');assert.equal(updated.tenant,'Example DME');assert.equal(updated.migration_status,'staged');assert.equal(updated.account_sid,'AC'+'1'.repeat(32));
   await assert.rejects(save(record,created.id,1),'stale changes cannot overwrite');
-  await assert.rejects(save({...record,number:'+12025550884'},created.id,2),'cannot rename an existing number');
+  await assert.rejects(save({...record,number:phones.renamed},created.id,2),'cannot rename an existing number');
   assert.ok((await rpc('list_phone_numbers')).rows.some(row=>row.id===created.id&&row.lifecycle==='retired'));
   await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[owner]);
   await assert.rejects(rpc('list_phone_numbers'));await assert.rejects(save(record,created.id,2));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { legalDisclaimer, officialSources } from './facts.mjs';
-import { featuresText } from './features.mjs';
+import { catalogNumbers, featuresText } from './features.mjs';
 import { fireDrillDraft, referralDraft } from './fixtures.mjs';
 import { topics } from './topics.mjs';
 import { allowedNumbers, allowedUrl, checkArticle, checkDraft, limits, markupProblems, normalizeTerms, numbersIn, previewOf, textProblems, unclearCopy } from './validate.mjs';
@@ -169,6 +169,57 @@ describe('each check that rejects a draft', () => {
     expect(numbersIn('6.5 months, 6.0 months, 1,299.50 residents, § 2600.132(c) and 2800.132 homes, Chapters 2600 and 2800 homes'))
       .toEqual(['6.5:month', '6:month', '1299.5:resident']);
     expect(allowed.has('6.5:month')).toBe(false);
+  });
+
+  it('reads "N+" as the number N with its unit, so "3,200+ counties" is checked like "3,200 counties"', () => {
+    expect(numbersIn('3,200+ counties')).toEqual(['3200:county']);
+    expect(numbersIn('3,200+ counties, 33,000+ ZIP areas, 500 + facilities, 10,000+ staff, 150+ public healthcare datasets, ten+ hours'))
+      .toEqual(['3200:county', '33000:zip', '500:facility', '10000:staff', '150:dataset', '10:hour']);
+    // An age group, a "+" with no unit after it and a "+" between two counts give no number of their own (Intel's catalog writes the first).
+    expect(numbersIn('Residents 65+, 75+ and 85+, and 65+ households living alone; residents aged 65+; 60+ document templates')).toEqual([]);
+    expect(numbersIn('3 marketer seats + 1 manager')).toEqual(['3:staff']);
+    // Regulation numbers are still names, and prices and percentages keep their own checks.
+    expect(numbersIn('Chapter 2600+ homes and § 2800.132 + 2600.132 residences')).toEqual([]);
+    expect(reasons(withSentence('CareBase costs $4+ per resident.'))).toEqual(['unlisted_price']);
+    expect(reasons(withSentence('Teams cut survey preparation by 40%+.'))).toEqual(['unlisted_number']);
+    // A count no source states is refused, for an article, and for outreach, sales and social copy (catalogNumbers).
+    for (const sentence of ['CareBase is used in 500+ facilities.', 'CareBase is used in 500 + facilities.', 'Teams of 10,000+ staff use it.'])
+      expect(reasons(withSentence(sentence)), sentence).toEqual(['unlisted_number']);
+    expect(textProblems('CareMetric Intel covers 4,000+ counties and 40,000+ ZIP areas.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual(['unlisted_number']);
+    // A count the product's catalog states may be written with "+".
+    const intelArticle = { ...referralDraft, body: `${referralDraft.body}\n\nCareMetric Intel lists accounts that go 45+ days without a visit.` };
+    expect(checkDraft(intelArticle, { topic: referral, promptVersion: 'content.3' }).reasons).toContain('unlisted_number');
+    expect(checkDraft(intelArticle, { topic: referral, promptVersion: 'content.3', features: featuresText(referral.product) }).reasons ?? []).not.toContain('unlisted_number');
+  });
+
+  it('treats "150+" and "more than 150" as the same count: either one on the fact sheet or a catalog allows both, and no other count', () => {
+    for (const source of ['150+ public healthcare datasets', 'More than 150 public healthcare datasets']) {
+      const numbers = allowedNumbers([source]);
+      for (const sentence of ['Intel draws on 150+ public healthcare datasets.', 'Intel draws on more than 150 public healthcare datasets.', 'Intel draws on 150 + datasets.'])
+        expect(textProblems(sentence, { product: 'intel', numbers }), `${source}: ${sentence}`).toEqual([]);
+      expect(textProblems('Intel draws on 200+ public healthcare datasets.', { product: 'intel', numbers }), source).toEqual(['unlisted_number']);
+    }
+    // The owner approved the figures Intel's site publishes about its data on 2026-11-16 ("By the numbers" in its catalog): copy about
+    // Intel may state them as the site words them, or as "more than", and no other count.
+    const intel = catalogNumbers('intel');
+    for (const sentence of ['Intel draws on 150+ public healthcare datasets.', 'Intel draws on more than 150 public healthcare datasets.', 'Intel covers 33,000+ ZIP areas and 3,200+ counties.'])
+      expect(textProblems(sentence, { product: 'intel', numbers: intel }), sentence).toEqual([]);
+    for (const sentence of ['Intel draws on 200+ public healthcare datasets.', 'Intel covers 40,000+ ZIP areas.', 'Intel covers 3,300+ counties.'])
+      expect(textProblems(sentence, { product: 'intel', numbers: intel }), sentence).toEqual(['unlisted_number']);
+    // They are Intel's figures: copy about CareBase may state none of them.
+    expect(textProblems('CareBase draws on 150+ public healthcare datasets.', { product: 'carebase', numbers: catalogNumbers('carebase') })).toEqual(['unlisted_number']);
+  });
+
+  it('reads a number past the country before its unit, so "3,200 U.S. counties" is checked like "3,200 counties"', () => {
+    for (const text of ['3,200 U.S. counties', '3,200+ U.S. counties', '3,200 U. S. counties', '3,200 US counties', '3,200 U.S.A. counties', '3,200 American counties'])
+      expect(numbersIn(text), text).toEqual(['3200:county']);
+    expect(numbersIn('33,000+ U.S. ZIP areas, 50 U.S. states')).toEqual(['33000:zip', '50:state']);
+    // "U.S." and "us" with no count after them give no number of their own.
+    expect(numbersIn('2020 U.S. Census data; join 3 of us; 3 USB drives; 3,200 counties in the U.S.')).toEqual(['3200:county']);
+    // Copy about Intel may state its published figures with the country, and no other figure; copy about CareBase may state none.
+    expect(textProblems('CareMetric Intel covers 3,200+ U.S. counties and 33,000+ U.S. ZIP areas.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual([]);
+    expect(textProblems('CareMetric Intel covers 4,000 U.S. counties.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('CareBase is used in 500 U.S. facilities.'))).toEqual(['unlisted_number']);
   });
 
   it('rejects guarantees, compliance assurances and certifications', () => {

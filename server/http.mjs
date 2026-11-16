@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { cookie,readCookie,sessionCookie,challengeCookie,HttpError } from './sms-auth.mjs';
 import { parseMediaUploadHeader } from './learning-media.mjs';
+import { parseUploadPart } from './upload-parts.mjs';
 import { parsePackageUploadHeader } from './learning-packages.mjs';
 import { chatCookie } from './communications.mjs';
 import { bulkEmailActions } from './bulk-email.mjs';
@@ -68,6 +69,7 @@ export function reviewedDatabaseError(error) {
   const message=error.message.split('\n')[0].trim().slice(0,500);
   return message?{status:databaseStatus[error.code],message}:null;
 }
+const largeUploads=new Set(['/api/admin/creative/video','/api/admin/learning-media-import','/api/admin/packages']);
 export const privateHubMessage='This Hub is private. Only its owner can sign in.';
 /**
  * `owner.allows(sessionToken)` makes the Hub private to its owner: a session that fails it is
@@ -82,11 +84,14 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
       if(cookies.length) res.setHeader('Set-Cookie',cookies);
       res.end(JSON.stringify(body));
     };
+    // An upload part (server/upload-parts.mjs): 202 with where the next part starts, or the upload's own answer once it is whole.
+    const partAnswer=outcome=>'received' in outcome?json({received:outcome.received},202):json(outcome.result);
     try {
       const url=new URL(req.url,'http://internal');
       const path=url.pathname;
       const cookieSession=readCookie(req.headers.cookie,sessionCookie);
-      const session=owner && cookieSession && path.startsWith('/api/') && !(await owner.allows(cookieSession)) ? undefined : cookieSession;
+      // Signing out needs no owner check: it only ends the cookie's own session.
+      const session=owner && cookieSession && path.startsWith('/api/') && path!=='/api/auth/logout' && !(await owner.allows(cookieSession)) ? undefined : cookieSession;
       if (path.startsWith('/api/')) {
         res.setHeader('Cache-Control','no-store');
         // Public liveness for uptime probes: whether this process can reach its database. It reveals nothing else.
@@ -127,6 +132,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
             '/api/internal/publications/authorize':'publication',
             '/api/internal/media/authorize':'media', '/api/internal/admin/authorize':'carebase',
             '/api/internal/admin/breathe/authorize':'breathe', '/api/internal/admin/emr/authorize':'caremetric-emr',
+            // Breathe's and Intel's change endpoints redeem their own command audience (20261117110000_app_command_audiences.sql).
+            '/api/internal/command/breathe/authorize':'breathe.command', '/api/internal/command/intel/authorize':'intel.command',
             '/api/internal/admin/pennsync/authorize':'pennsync', '/api/internal/command/carebase/authorize':'carebase.command',
             '/api/internal/admin/go/authorize':'caremetric-go',
             '/api/internal/admin/intel/authorize':'intel',
@@ -228,6 +235,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
         }
         if (!['GET','POST','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
         if(req.method==='POST' && !sameOrigin(req,origins)) throw new HttpError(403,'Open this action in CareMetric.');
+        // Uploads (a video may be 60 MB) need a signed-in session before any of the body is read; the handlers check it again.
+        if(req.method==='POST' && !session && (largeUploads.has(path) || path.startsWith('/api/admin/creative/brand'))) throw new HttpError(401,'Sign in to continue.');
         if(owner && (path.startsWith('/api/self-service/connect/') || path.startsWith('/api/auth/invitation/'))) throw new HttpError(403,privateHubMessage);
         if(path==='/api/self-service/connect/start' && req.method==='POST' && selfService) {
           if(url.search) throw new HttpError(400,'Query parameters are not supported.');
@@ -277,8 +286,11 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
               const input=await jsonBody(req,8192);if(!['media.context','media.status','media.finish'].includes(input.operation))throw new HttpError(400,'Invalid media metadata operation.');
               return json(await delegations.courseMedia(session,input,{signal:controller.signal}));
             }
-            if(path==='/api/course-media/upload' && req.method==='POST')return json(await delegations.courseMedia(session,parseMediaUploadHeader(req.headers['x-caremetric-media-request']),
-              {body:req,contentType:req.headers['content-type'],contentLength:req.headers['content-length'],signal:controller.signal}));
+            if(path==='/api/course-media/upload' && req.method==='POST'){
+              const op=parseMediaUploadHeader(req.headers['x-caremetric-media-request']),part=parseUploadPart(req.headers);
+              if(part)return partAnswer(await delegations.courseMedia.uploadPart(session,op,part,req,req.headers['content-type'],controller.signal));
+              return json(await delegations.courseMedia(session,op,{body:req,contentType:req.headers['content-type'],contentLength:req.headers['content-length'],signal:controller.signal}));
+            }
             const ids=/^\/api\/course-media\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/([0-9a-f-]{36})$/.exec(path);
             if(ids&&['GET','HEAD'].includes(req.method)) {
               if(req.headers['sec-fetch-site']&&!['same-origin','none'].includes(req.headers['sec-fetch-site']))throw new HttpError(403,'Open this media in CareMetric.');
@@ -298,7 +310,11 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           if(path==='/api/publications/access' && req.method==='GET') return json(await publications.access(session));
           if(path==='/api/publications/imports/stage' && req.method==='POST') return json(await publications.stage(session,await jsonBody(req,70000)));
           const asset=/^\/api\/publications\/imports\/([0-9a-f-]{36})\/assets\/(primary|captions|transcript)$/.exec(path);
-          if(asset && req.method==='POST') return json(await publications.upload(session,asset[1],asset[2],req,req.headers['content-type']));
+          if(asset && req.method==='POST') {
+            const part=parseUploadPart(req.headers);
+            if(part) return partAnswer(await publications.uploadPart(session,asset[1],asset[2],part,req,req.headers['content-type']));
+            return json(await publications.upload(session,asset[1],asset[2],req,req.headers['content-type']));
+          }
           const intent=/^\/api\/publications\/imports\/([0-9a-f-]{36})(?:\/(preview|commit))?$/.exec(path);
           if(intent) {
             if(!intent[2] && req.method==='GET') return json(await publications.get(session,intent[1]));
@@ -366,7 +382,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           return json({authenticated:true},200,[cookie(sessionCookie,value,28800),cookie(challengeCookie,'',0)]);
         }
         if(path==='/api/auth/logout' && req.method==='POST') {
-          await jsonBody(req,2048); await auth.logout(session);
+          // The cookie's own session, even if the owner check could not answer: signing out must always end it on the server.
+          await jsonBody(req,2048); await auth.logout(cookieSession);
           return json({authenticated:false},200,[cookie(sessionCookie,'',0),cookie(challengeCookie,'',0)]);
         }
         if(path==='/api/admin/go-live-readiness' && req.method==='POST') {
@@ -487,6 +504,15 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
         // Advisors' own body limit: two 3,000-character notes (the change and what the owner saw) can need about 18 KB.
         if(path==='/api/admin/advisors-command' && req.method==='POST') return json(await delegations.advisorsCommand(session,await jsonBody(req,20000)));
         if(path==='/api/admin/command' && req.method==='POST') return json(await delegations.command(session,await jsonBody(req,4096)));
+        // Breathe organization suspend and restore (tenant.lifecycle.v1).
+        if(path==='/api/admin/tenant-lifecycle' && req.method==='POST') {
+          if(url.search)throw new HttpError(400,'Query parameters are not supported.','invalid_request');
+          const body=await jsonBody(req,4096);const controller=new AbortController();
+          const abort=()=>{if(!res.writableEnded)controller.abort();};
+          req.once('aborted',abort);res.once('close',abort);
+          try{return json(await delegations.tenantLifecycle(session,body,controller.signal));}
+          finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
+        }
         if(path==='/api/admin/registration' && req.method==='POST') {
           if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
           return json(await delegations.registration.admin(session,await jsonBody(req,4096)));
@@ -520,6 +546,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           const upload=req.method==='POST';
           const expected=objectPath.endsWith('/video.mp4') ? ['video/mp4',268435456] : objectPath.endsWith('/captions.vtt') ? ['text/vtt',2000000] : ['text/plain',1000000];
           if(upload && req.headers['content-type']?.split(';')[0]!==expected[0]) throw new HttpError(415,'Invalid media type.');
+          const part=upload?parseUploadPart(req.headers):null;
+          if(part) return partAnswer(await delegations.mediaPart(session,objectPath,part,req,expected[0],expected[1]));
           async function* boundedUpload() {
             let size=0;
             for await(const chunk of req) { size+=chunk.length; if(size>expected[1]) throw new HttpError(413,'Media is too large.'); yield chunk; }

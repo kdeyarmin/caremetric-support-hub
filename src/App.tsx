@@ -242,13 +242,15 @@ function LoadingScreen() {
   );
 }
 
-function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
+function ErrorScreen({ message, onRetry, signedIn = false }: { message: string; onRetry: () => void; signedIn?: boolean }) {
   return (
     <div className="center-screen">
       <div className="error-mark"><AlertCircle size={25} /></div>
       <h1>We couldn’t open the Support Hub</h1>
       <p>{message}</p>
       <button className="button button-primary" onClick={onRetry}>Try again</button>
+      {/* A read that keeps failing must not trap a signed-in person: they can always sign out from here. */}
+      {signedIn && !config.demoMode && <SignOutButton />}
     </div>
   );
 }
@@ -301,14 +303,21 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
   const page = currentPage(sections, location.pathname);
   const pageLabel = page?.label;
   // The preview's in-memory inbox is created once per data load so replies and notes survive navigation within the session.
-  const demoCommunications = useMemo(() => config.demoMode ? demoCommunicationsClient({
-    breathe: data.products.find((product) => product.slug === "breathe")?.id, advisors: data.products.find((product) => product.slug === "advisors")?.id, pennsync: data.products.find((product) => product.slug === "pennsync")?.id,
-    carebase: data.products.find((product) => product.slug === "carebase")?.id,
-  }) : undefined, [data.products]);
+  // Keyed on the product ids, not the array: every page change reloads the products as a new array, and a new preview client
+  // would drop the replies and notes made so far in this session.
+  const demoProductKey = data.products.map(product => `${product.slug}:${product.id}`).join(",");
+  const demoCommunications = useMemo(() => {
+    const id = (slug: string) => demoProductKey.split(",").find(entry => entry.startsWith(`${slug}:`))?.slice(slug.length + 1);
+    return config.demoMode ? demoCommunicationsClient({ breathe: id("breathe"), advisors: id("advisors"), pennsync: id("pennsync"), carebase: id("carebase") }) : undefined;
+  }, [demoProductKey]);
 
+  // A help article names the tab itself (HelpArticlePage). React runs this parent effect after the page's own when an article is opened
+  // directly, so it must not overwrite that title; leaving the article restores the page's title, then this sets the next one.
+  const ownTitle = location.pathname.startsWith("/help/articles/");
   useEffect(() => {
+    if (ownTitle) return;
     document.title = pageLabel ? `${pageLabel} · CareMetric Support Hub` : "CareMetric Support Hub";
-  }, [pageLabel]);
+  }, [pageLabel, ownTitle]);
 
   // A long administrator menu scrolls; keep the current page's link in view.
   useEffect(() => {
@@ -542,7 +551,8 @@ function CasesPage({ data }: CasesPageProps) {
   const location = useLocation();
   const staff = isSupportStaff(data.actor.role);
   const params = new URLSearchParams(location.search);
-  const requestedProduct = data.products.find((product) => product.slug === params.get("product"));
+  // Repository names (pennfit, penntrain…) open their application too, as on the inbox and knowledge pages.
+  const requestedProduct = data.products.find((product) => product.slug === resolveProductSlug(params.get("product")));
   // A link can open the queue for one application: /cases?product=<slug>. The detail pane then starts on that application's first case.
   const requestedCase = params.get("case");
   const [productFilter, setProductFilter] = useState(requestedProduct?.id ?? "all");
@@ -659,7 +669,8 @@ function CasesPage({ data }: CasesPageProps) {
             </select>
             <select className="case-application-filter" aria-label="Filter by application" value={productFilter} onChange={(event) => setProductFilter(event.target.value)}>
               <option value="all">All applications</option>
-              {data.products.filter(product => isCentralHubApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+              {/* The applications the owner runs here, and whichever one a link opened the queue on, so the filter always names what is shown. */}
+              {data.products.filter(product => isHubAdminApp(product.slug) || product.id === productFilter).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
             </select>
           </div>
           <div className="case-count">{visibleCases.length} case{visibleCases.length === 1 ? "" : "s"}</div>
@@ -943,7 +954,7 @@ function KnowledgePage({ data }: { data: HubData }) {
       {isSupportStaff(data.actor.role) && <KnowledgeCoverage products={data.products} content={data.content} selectedProductId={productId} onSelect={setProductId} />}
       <section className="library-toolbar panel">
         <label className="search-box large"><Search size={18} /><input aria-label="Search knowledge articles" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search articles, workflows, and questions" /></label>
-        <select aria-label="Filter knowledge by product" value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.filter(product => isHubAdminApp(product.slug)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
+        <select aria-label="Filter knowledge by product" value={productId} onChange={(event) => setProductId(event.target.value)}><option value="all">All products</option>{data.products.filter(product => isHubAdminApp(product.slug) || product.id === productId).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>
       </section>
       <div className="knowledge-layout">
         <section className="article-grid">
@@ -1254,7 +1265,7 @@ export default function App() {
     if (path === '/security') navigate('/security', { replace:true });
   }} />;
   if (loading) return <LoadingScreen />;
-  if (error) return <ErrorScreen message={error} onRetry={() => void (publicPortal ? loadPublicHelp() : authenticated ? loadAuthenticated() : load())} />;
+  if (error) return <ErrorScreen message={error} signedIn={authenticated && !publicPortal} onRetry={() => void (publicPortal ? loadPublicHelp() : authenticated ? loadAuthenticated() : load())} />;
   if (publicPortal) return <PublicHelpShell data={data} />;
   if (homeRedirect) {
     if (location.pathname === "/") return <Navigate to={homeRedirect} replace />;

@@ -125,6 +125,8 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
       catch (error) { if (signal?.aborted) throw error; }
     }
     const counts = { searched: 0, people: 0, found: 0, published: 0, verified: 0, permitted: 0, noCredit: 0, unreachable: 0 };
+    // What the mail servers answered, so the run shows why an agency yielded no address (2026-11-16: 17 checks gave 3 addresses).
+    const answers = {};
     for (const org of candidates) {
       signal?.throwIfAborted();
       if (clock() - started > startBudgetMs) break;
@@ -153,18 +155,31 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
       const recorded = await growth.store.peopleRecord(org.id, record);
       counts.searched++; counts.people += Array.isArray(recorded) ? recorded.length : 0;
       if (!chosen) continue;
-      const personId = Array.isArray(recorded) ? recorded[record.indexOf(chosen.entry)]?.id : null;
-      let found = null;
+      let found = null, person = chosen;
       if (published) found = { email: published.email, how: 'published', sourceUrl: published.sourceUrl };
       else if (guesses.length) {
-        let answer;
-        try { answer = await mailbox.check(org.domain, guesses, { signal }); } catch (error) { if (signal?.aborted) throw error; answer = { result: 'unknown' }; }
-        if (answer?.result === 'verified') found = { email: answer.email, how: 'mail_server', sourceUrl: null };
-        if (answer?.result === 'unreachable') counts.unreachable++;
+        // The chosen person first. When the server refuses every usual shape of their name (they may have left, or use another shape),
+        // the next person who decides, for one more reserved check: a catch-all or a server that will not answer confirms nobody.
+        let list = guesses;
+        for (let attempt = 0; attempt < 2 && list.length; attempt++) {
+          if (attempt > 0 && (clock() - started > checkBudgetMs || !(await growth.store.enrichmentReserve(1)))) break;
+          let answer;
+          try { answer = await mailbox.check(org.domain, list, { signal }); } catch (error) { if (signal?.aborted) throw error; answer = { result: 'unknown' }; }
+          const result = ['verified', 'rejected', 'catch_all', 'unreachable'].includes(answer?.result) ? answer.result : 'unknown';
+          answers[result] = (answers[result] ?? 0) + 1;
+          if (result === 'verified') { found = { email: answer.email, how: 'mail_server', sourceUrl: null }; break; }
+          if (result === 'unreachable') counts.unreachable++;
+          if (result !== 'rejected') break;
+          const next = named.find(other => other !== person && other !== chosen && Number.isFinite(other.rank) && record.includes(other.entry));
+          if (!next) break;
+          person = next;
+          list = addressGuesses(next.name, org.domain, { learned: learnPattern(team.addresses.map(address => address.email), named) });
+        }
       }
+      const personId = Array.isArray(recorded) ? recorded[record.indexOf(person.entry)]?.id : null;
       if (!found || !personId) continue;
       try {
-        const saved = await growth.store.personAddress(personId, found.email, chosen.name, found.how, found.sourceUrl);
+        const saved = await growth.store.personAddress(personId, found.email, person.name, found.how, found.sourceUrl);
         if (saved?.found) {
           counts.found++; counts[found.how === 'published' ? 'published' : 'verified']++;
           // Permitted on its own under the owner's hand-over; otherwise it waits on the Growth screen.
@@ -172,7 +187,7 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
         }
       } catch (error) { if (error?.code !== '22023') throw error; }
     }
-    return { result: counts };
+    return { result: { ...counts, ...(Object.keys(answers).length ? { answers } : {}) } };
   }
   return { 'growth.people': people };
 }

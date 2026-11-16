@@ -6,6 +6,8 @@ import { Readable } from 'node:stream';
 import pg from 'pg';
 import { digest } from './sms-auth.mjs';
 import { communications, twilioSignature } from './communications.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;
 const local=new URL(databaseUrl);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:databaseUrl});
@@ -62,15 +64,15 @@ try {
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'comms-owner@test.invalid',false),($2,'comms-agent@test.invalid',false),($3,'comms-customer@test.invalid',false)",[owner,agent,customer]);
   await admin.query("insert into hub.profiles(id,display_name) values($1,'Owner'),($2,'Breathe Agent'),($3,'Customer') on conflict (id) do update set display_name=excluded.display_name",[owner,agent,customer]);
   await admin.query("insert into private.staff_permissions(user_id,permission,product_id) values($1,'platform.admin',null),($2,'case.write',$3)",[owner,agent,breathe]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550161',now()),($2,'+12025550162',now()),($3,'+12025550163',now())",[owner,agent,customer]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$4,now()),($2,$5,now()),($3,$6,now())',[owner,agent,customer,phones.owner,phones.agent,phones.customer]);
   for(const [user,token] of [[owner,ownerToken],[agent,agentToken],[customer,customerToken]])
     await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[randomUUID(),digest(token),user]);
 
   // SMS: signed, deduplicated, and threaded by sender.
-  await text('+12025550144','I cannot sign in to Breathe.','SM'+'1'.repeat(32));
-  await text('+12025550144','I cannot sign in to Breathe.','SM'+'1'.repeat(32));
-  await text('+12025550144','It says my code expired.','SM'+'2'.repeat(32));
-  const sms=await find(item=>item.contactPhone==='+12025550144');created.push(sms.id);
+  await text(phones.texter,'I cannot sign in to Breathe.','SM'+'1'.repeat(32));
+  await text(phones.texter,'I cannot sign in to Breathe.','SM'+'1'.repeat(32));
+  await text(phones.texter,'It says my code expired.','SM'+'2'.repeat(32));
+  const sms=await find(item=>item.contactPhone===phones.texter);created.push(sms.id);
   assert.equal(sms.channel,'sms');assert.equal(sms.status,'new');assert.equal(sms.messageCount,2,'a Twilio retry is stored once');assert.equal(sms.productId,null);
   // Two first texts from a new number, ingested at the same moment, share one conversation: the second waits for the first
   // instead of failing on the thread's unique key (Twilio does not retry a failed message webhook).
@@ -79,16 +81,16 @@ try {
     const first=await pool.connect(),second=await pool.connect();
     try {
       await first.query('begin');
-      await first.query(ingest,['sms','+12025550145','SM'+'4'.repeat(32),'Hi.','+12025550145']);
+      await first.query(ingest,['sms',phones.burst,'SM'+'4'.repeat(32),'Hi.',phones.burst]);
       await second.query('begin');
-      const pending=second.query(ingest,['sms','+12025550145','SM'+'5'.repeat(32),'My code expired.','+12025550145']).then(result=>result,error=>error);
+      const pending=second.query(ingest,['sms',phones.burst,'SM'+'5'.repeat(32),'My code expired.',phones.burst]).then(result=>result,error=>error);
       await new Promise(resolve=>setTimeout(resolve,300));
       await first.query('commit');
       const outcome=await pending;
       assert.ok(!(outcome instanceof Error),`the second first text is stored (${outcome?.code ?? ''})`);
       await second.query('commit');
     } finally { await first.query('rollback').catch(()=>{}); await second.query('rollback').catch(()=>{}); first.release(); second.release(); }
-    const burst=await find(item=>item.contactPhone==='+12025550145');created.push(burst.id);
+    const burst=await find(item=>item.contactPhone===phones.burst);created.push(burst.id);
     assert.equal(burst.messageCount,2,'simultaneous first texts share one conversation');
   }
   await assert.rejects(pool.query('select * from private.communications'),/permission denied/,'the server role has no direct table access');
@@ -115,13 +117,13 @@ try {
   assert.deepEqual(await service.reply(agentToken,{id:sms.id,body:'Please request a new code.',requestKey:replyKey}),{delivery:'sent',deliveryChannel:'sms',replay:true});
   await assert.rejects(service.reply(agentToken,{id:sms.id,body:'Please call us instead.',requestKey:replyKey}),error=>error.status===400&&/different message/.test(error.message));
   await assert.rejects(service.reply(agentToken,{id:sms.id,body:'Checked: account is active.',requestKey:noteKey}),error=>error.status===400&&/different message/.test(error.message));
-  assert.deepEqual(sent.sms,[{to:'+12025550144',body:'Please request a new code.'}]);
+  assert.deepEqual(sent.sms,[{to:phones.texter,body:'Please request a new code.'}]);
   smsOutcome='unknown';
   assert.equal((await service.reply(agentToken,{id:sms.id,body:'Following up.',requestKey:randomUUID()})).delivery,'unknown');
   const thread=await service.get(agentToken,{id:sms.id});
   assert.equal(thread.status,'waiting');
   assert.deepEqual(thread.messages.map(message=>[message.direction,message.delivery]),[['inbound','received'],['inbound','received'],['note','recorded'],['outbound','sent'],['outbound','unknown']]);
-  await text('+12025550144','That worked, thanks!','SM'+'3'.repeat(32));
+  await text(phones.texter,'That worked, thanks!','SM'+'3'.repeat(32));
   assert.equal((await service.get(agentToken,{id:sms.id})).status,'open','a customer reply reopens a waiting conversation');
 
   // Email: signed, product from plus-address, joins a thread only from the same sender.
@@ -130,11 +132,15 @@ try {
   assert.equal(mail.productId,(await admin.query("select id from hub.products where slug='carebase'")).rows[0].id,'PennTrain mail routes to CareBase');
   await service.reply(ownerToken,{id:mail.id,body:'We reissued it.',requestKey:randomUUID()});
   assert.match(sent.email[0].subject,new RegExp(`\\[CM-${mail.reference}\\]`));assert.equal(sent.email[0].to,'pat@agency.test');
-  await email({from:'pat@agency.test',to:'support@caremetric.ai',subject:`Re: Course certificate missing [CM-${mail.reference}]`,text:'Got it.',headers:'Message-ID: <second@agency.test>'});
-  await email({from:'someone@else.test',to:'support@caremetric.ai',subject:`Re: [CM-${mail.reference}]`,text:'Injected?',headers:'Message-ID: <third@else.test>'});
-  assert.equal((await service.get(ownerToken,{id:mail.id})).messageCount,3,'only the original sender joins by reference');
+  await email({from:'pat@agency.test',to:'support@caremetric.ai',subject:`Re: Course certificate missing [CM-${mail.reference}]`,text:'Got it.',headers:'Message-ID: <second@agency.test>',dkim:'{@agency.test : pass}'});
+  await email({from:'someone@else.test',to:'support@caremetric.ai',subject:`Re: [CM-${mail.reference}]`,text:'Injected?',headers:'Message-ID: <third@else.test>',dkim:'{@else.test : pass}'});
+  // The same address without SendGrid confirming its domain: anyone can write that From header.
+  await email({from:'pat@agency.test',to:'support@caremetric.ai',subject:`Re: [CM-${mail.reference}]`,text:'Change my address.',headers:'Message-ID: <forged@attacker.test>',SPF:'fail'});
+  assert.equal((await service.get(ownerToken,{id:mail.id})).messageCount,3,'only the original, authenticated sender joins by reference');
   const other=await find(item=>item.contactEmail==='someone@else.test');created.push(other.id);
   assert.notEqual(other.id,mail.id);
+  const forged=await find(item=>item.contactEmail==='pat@agency.test'&&item.id!==mail.id);created.push(forged.id);
+  assert.notEqual(forged.id,mail.id,'a forged sender starts its own conversation');
 
   // Chat: an opaque token, internal notes hidden, staff replies visible, abuse limits.
   const chat=await service.startChat({name:'Visitor',email:'visitor@agency.test',product:'carebase',message:'How do I export OASIS data?',noPhi:true},'203.0.113.10');
@@ -165,7 +171,7 @@ try {
   const consult=await find(item=>item.channel==='web_form');created.push(consult.id);
   assert.equal(consult.productId,advisors);assert.equal(consult.status,'closed','a request already closed in Advisors does not reopen');
   const call=await find(item=>item.channel==='phone');created.push(call.id);
-  assert.equal(call.productId,breathe,'PennFit calls route to Breathe');assert.equal(call.contactPhone,'+12025550171');assert.equal(call.inquiryType,'customer_service');
+  assert.equal(call.productId,breathe,'PennFit calls route to Breathe');assert.equal(call.contactPhone,phones.caller);assert.equal(call.inquiryType,'customer_service');
   await service.update(ownerToken,{id:call.id,status:'closed',expectedUpdatedAt:call.updatedAt});
   assert.deepEqual(await service.sync(ownerToken,{source:'breathe.phone'}),{source:'breathe.phone',read:1,created:0,skipped:1,nextOffset:null});
   assert.equal((await service.get(ownerToken,{id:call.id})).status,'closed','re-syncing never overwrites staff work');
@@ -186,7 +192,7 @@ try {
   for(const row of audit) for(const secret of ['sign in','certificate','Reports','Checked','billing']) assert.ok(!row.metadata.toLowerCase().includes(secret.toLowerCase()),row.action);
   console.log('Unified communications: signed SMS and email, threading, scoped visibility, triage, notes, single-send replies, chat limits, imports and audit hygiene passed.');
 } finally {
-  const ids=(await admin.query("select id from private.communications where id=any($1::uuid[]) or contact_email in ('pat@agency.test','someone@else.test','visitor@agency.test','v2@agency.test','v3@agency.test','caller@agency.test','requester@agency.test') or contact_phone in ('+12025550144','+12025550145')",[created])).rows.map(row=>row.id);
+  const ids=(await admin.query("select id from private.communications where id=any($1::uuid[]) or contact_email in ('pat@agency.test','someone@else.test','visitor@agency.test','v2@agency.test','v3@agency.test','caller@agency.test','requester@agency.test') or contact_phone = any($2::text[])",[created,[phones.texter,phones.burst]])).rows.map(row=>row.id);
   await admin.query('delete from private.communications where id=any($1::uuid[])',[ids]);
   await admin.query("delete from private.communication_rate_events");
   await admin.query('delete from private.audit_events where actor_id in ($1,$2,$3)',[owner,agent,customer]);

@@ -3,7 +3,7 @@ import { Mail, MessageCircle, MessageSquareText, Phone, RefreshCw, Search, Send,
 import type { Product } from "../domain";
 import {
   channelLabels, channels, communicationsClient, conversationSourceLabel, conversationStatuses, deliveryLabels, describeChannels, inquiryLabels, inquiryTypes, replyLimit, replyRoute, statusLabels,
-  type Channel, type ChannelStatus, type CommunicationsClient, type ConversationPage, type ConversationStatus, type ConversationThread, type InquiryType, type SyncSource,
+  type Channel, type ChannelStatus, type CommunicationsClient, type Conversation, type ConversationPage, type ConversationStatus, type ConversationThread, type InquiryType, type SyncSource,
 } from "./communicationsClient";
 import "./communications.css";
 
@@ -42,7 +42,10 @@ export function Communications({ products, actor, client = communicationsClient,
   const [selected, setSelected] = useState<string | null>(null);
   const [thread, setThread] = useState<ConversationThread | null>(null);
   const [status, setStatus] = useState<ChannelStatus | null>(null);
-  const [error, setError] = useState("");
+  // A failed read and a failed action are kept apart, so a list that loads again never hides why a reply or change failed.
+  const [loadError, setLoadError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const error = actionError || loadError;
   const [notice, setNotice] = useState("");
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -53,25 +56,26 @@ export function Communications({ products, actor, client = communicationsClient,
 
   useEffect(() => {
     const controller = new AbortController();
+    // Read again on every refresh, so one failed read never leaves replies switched off until the page is reloaded.
     client.channels(controller.signal).then(setStatus).catch(() => { if (!controller.signal.aborted) setStatus(null); });
     return () => controller.abort();
-  }, [client]);
+  }, [client, revision]);
   useEffect(() => {
     const controller = new AbortController();
     client.list({ ...(filter.status ? { status: filter.status } : {}), ...(filter.channel ? { channel: filter.channel } : {}), ...(filter.productId ? { productId: filter.productId } : {}),
       ...(filter.search ? { search: filter.search } : {}), offset, limit: pageSize }, controller.signal)
       .then(result => {
-        setPage(result); setError("");
+        setPage(result); setLoadError("");
         // A refreshed total can end before this page (for example after closing its last conversation): move to the last page.
         if (result.items.length === 0 && offset > 0) setOffset(Math.max(0, Math.floor((result.total - 1) / pageSize) * pageSize));
       })
-      .catch(() => { if (!controller.signal.aborted) setError("Conversations could not be loaded. Check your sign-in and try again."); });
+      .catch(() => { if (!controller.signal.aborted) setLoadError("Conversations could not be loaded. Check your sign-in and try again."); });
     return () => controller.abort();
   }, [client, filter, offset, revision]);
   useEffect(() => {
     if (!selected) return;
     const controller = new AbortController();
-    client.get(selected, controller.signal).then(setThread).catch(() => { if (!controller.signal.aborted) setError("This conversation could not be opened."); });
+    client.get(selected, controller.signal).then(setThread).catch(() => { if (!controller.signal.aborted) setLoadError("This conversation could not be opened."); });
     return () => controller.abort();
   }, [client, selected, revision]);
   useEffect(() => {
@@ -81,10 +85,10 @@ export function Communications({ products, actor, client = communicationsClient,
   }, [refresh]);
 
   async function act(work: () => Promise<string>) {
-    setBusy(true); setNotice(""); setError("");
+    setBusy(true); setNotice(""); setActionError("");
     try { setNotice(await work()); refresh(); }
     // A failed action may still have changed the conversation (a reply the provider took but the Hub could not record), so read it again.
-    catch (cause) { setError(cause instanceof Error ? cause.message : "The action could not be completed."); refresh(); }
+    catch (cause) { setActionError(cause instanceof Error ? cause.message : "The action could not be completed."); refresh(); }
     finally { setBusy(false); }
   }
   const sync = (source: SyncSource, from = 0) => act(async () => {
@@ -129,7 +133,8 @@ export function Communications({ products, actor, client = communicationsClient,
       </section>
       <section className="panel communications-thread" aria-label="Conversation">
         {!thread || thread.id !== selected ? <p className="communications-empty">Choose a conversation to read it and reply.</p>
-          : <ThreadView key={thread.id} thread={thread} products={products} actorId={actor.id} status={status} busy={busy} client={client} act={act} />}
+          : <ThreadView key={thread.id} thread={thread} products={products} actorId={actor.id} status={status} busy={busy} client={client} act={act}
+            onUpdated={updated => setThread(current => current && current.id === updated.id ? { ...current, ...updated } : current)} />}
       </section>
     </div>
   </div>;
@@ -140,13 +145,14 @@ function ChannelStrip({ status }: { status: ChannelStatus | null }) {
   return <section className="communications-channels" aria-label="Channel status">{items.map(item => <div key={item.channel} className={item.ready ? "ready" : "pending"}><strong>{item.label}</strong><span>{item.detail}</span></div>)}</section>;
 }
 
-function ThreadView({ thread, products, actorId, status, busy, client, act }: { thread: ConversationThread; products: Product[]; actorId: string; status: ChannelStatus | null; busy: boolean; client: CommunicationsClient; act: (work: () => Promise<string>) => Promise<void> }) {
+function ThreadView({ thread, products, actorId, status, busy, client, act, onUpdated }: { thread: ConversationThread; products: Product[]; actorId: string; status: ChannelStatus | null; busy: boolean; client: CommunicationsClient; act: (work: () => Promise<string>) => Promise<void>; onUpdated: (updated: Conversation) => void }) {
   const [reply, setReply] = useState("");
   const [note, setNote] = useState("");
   const replyKey = useRequestKey(), noteKey = useRequestKey();
   const route = replyRoute(thread, status);
   const limit = replyLimit(thread, status);
-  const update = (change: Partial<Parameters<CommunicationsClient["update"]>[0]>) => act(async () => { await client.update({ id: thread.id, expectedUpdatedAt: thread.updatedAt, ...change }); return "Conversation updated."; });
+  // The answer carries the conversation's new version: use it at once, so a second change made before the refresh lands is not refused as stale.
+  const update = (change: Partial<Parameters<CommunicationsClient["update"]>[0]>) => act(async () => { onUpdated(await client.update({ id: thread.id, expectedUpdatedAt: thread.updatedAt, ...change })); return "Conversation updated."; });
   const ChannelIcon = channelIcons[thread.channel];
   const replyAsNew = replyKey.changed(reply), noteAsNew = noteKey.changed(note);
   const sendReply = () => act(async () => {

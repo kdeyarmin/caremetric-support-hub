@@ -54,6 +54,22 @@ export function growthStore(pool) {
     // A found address and how: 'published' with its page on the business's own site, or 'mail_server' (20261113290000_growth_people_finder.sql).
     personAddress:(person,email,name,found,sourceUrl)=>server('private.growth_person_address',[person,email,name??null,found,sourceUrl??null]),
     importServer:rows=>server('private.growth_import_server',[JSON.stringify(rows)]),
+    // Which agencies opened their market report (20261116120000_growth_report_views.sql).
+    reportViewsCursor:()=>server('private.growth_report_views_cursor'),
+    reportViewsRecord:(views,next)=>server('private.growth_report_views_record',[JSON.stringify(views),next]),
+    // An account brief per agency before its first email (20261116110000_growth_brief.sql).
+    briefNext:daily=>server('private.growth_brief_next',[daily]),
+    briefSave:(opportunity,brief)=>server('private.growth_brief_save',[opportunity,JSON.stringify(brief)]),
+    briefWriter:opportunity=>server('private.growth_brief_writer',[opportunity]),
+    brief:(token,opportunity)=>withSession(pool,token,db=>run(db,'hub.growth_brief',[opportunity])),
+    // Addresses checked before the first email, and the bounce guard (20261116100000_growth_address_check.sql).
+    sendHold:messageId=>server('private.growth_send_hold',[messageId]),
+    draftHold:contactId=>server('private.growth_draft_hold',[contactId]),
+    mailboxCandidates:limit=>server('private.growth_mailbox_candidates',[limit]),
+    mailboxRecord:(contactId,result)=>server('private.growth_mailbox_record',[contactId,result]),
+    sendGuardState:()=>server('private.growth_send_guard_state'),
+    sendGuard:token=>withSession(pool,token,db=>run(db,'hub.growth_send_guard',[])),
+    sendGuardResume:token=>withSession(pool,token,db=>run(db,'hub.growth_send_guard_resume',[])),
     // Deeper research with web tools (20261113190000_growth_research.sql).
     researchNext:daily=>server('private.growth_research_next',[daily]),
     // What is working (20261113200000_growth_learning.sql).

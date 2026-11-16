@@ -74,8 +74,12 @@ and read uploads for review. They cannot overwrite or delete objects through the
 policies. Learners can sign URLs only for media in their own enrolled courses
 while they retain content access. The UI issues ten-minute URLs; an already-issued
 URL remains valid until expiry after access is revoked. Transcript text is shown
-alongside playback. Uploads require MP4, WebVTT, and plain-text files. The uploader
-compares SHA-256 of the source video with the stored download before registration.
+alongside playback. Uploads require MP4, WebVTT, and plain-text files. The browser sends
+each file to the Hub in 8 MiB parts (`server/upload-parts.mjs`), because Railway ends a
+request whose body takes more than five minutes, and the Hub stores the whole file once
+it has arrived; a dropped part is sent again from where the Hub left off, and the editor
+shows the video's progress. The uploader compares SHA-256 of the source video with the
+stored download before registration.
 Human review is required for accuracy, captions, transcript, and absence of private
 data. This is a staff-owned publishing flow, not a customer attachment inbox.
 To bring many approved videos in at once, the library's manifest import fetches each

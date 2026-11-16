@@ -13,6 +13,8 @@ import { agentTeam } from './agents/index.mjs';
 import { outboundHosts as seoOutboundHosts } from './agents/seo/sites.mjs';
 // The Team screen's own schemas: what the real database returns must be exactly what the screen accepts.
 import { activitySchemas, agentSchema, auditSchema, decisionSchema, overviewSchema, taskResultSchema } from '../src/admin/teamProtocol.ts';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -76,7 +78,7 @@ try {
   // A trigger gives every new user a profile; name the owner's so the audit list can show who acted.
   await admin.query("update hub.profiles set display_name = 'Agents integration owner' where id = $1", [owner]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550701',now()),($2,'+12025550702',now())", [owner, other]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$3,now()),($2,$4,now())', [owner, other, phones.owner, phones.other]);
   for (const [user, sessionToken, age] of [[owner, ownerToken, '0 hours'], [owner, staleToken, '9 hours'], [other, otherToken, '0 hours']]) {
     await admin.query(`insert into private.sms_sessions(id,token_hash,user_id,identity_version,created_at,expires_at)
       select $1,$2,user_id,identity_version,now()-$4::interval,now()+interval '1 hour' from private.sms_identities where user_id=$3`,
@@ -440,12 +442,12 @@ try {
   await assert.rejects(call('private.agent_notify_finish', [first.id, 'delivered', null]), refused('22023'));
 
   // Where to text the owner: exactly one verified administrator, otherwise nobody.
-  assert.deepEqual(await call('private.owner_contact'), { phone: '+12025550701' });
+  assert.deepEqual(await call('private.owner_contact'), { phone: phones.owner });
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [secondAdmin]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550703',now())", [secondAdmin]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())', [secondAdmin, phones.secondAdmin]);
   assert.equal(await call('private.owner_contact'), null, 'two administrators means no one is guessed');
   await admin.query('update private.sms_identities set revoked_at = now() where user_id = $1', [secondAdmin]);
-  assert.deepEqual(await call('private.owner_contact'), { phone: '+12025550701' }, 'a revoked identity does not count');
+  assert.deepEqual(await call('private.owner_contact'), { phone: phones.owner }, 'a revoked identity does not count');
   await admin.query('update private.sms_identities set verified_at = null where user_id = $1', [owner]);
   assert.equal(await call('private.owner_contact'), null, 'an unverified number is never texted');
   await admin.query('update private.sms_identities set verified_at = now() where user_id = $1', [owner]);
@@ -520,7 +522,7 @@ try {
     assert.equal(tick.claimed, 1);
     const done = await task(probeTask.id);
     assert.deepEqual([done.status, done.attempts, done.result], ['done', 2, { checked: 1 }]);
-    assert.deepEqual(sent.sms, [['+12025550701', 'CareMetric: Hub is down. The Hub probe failed twice.']]);
+    assert.deepEqual(sent.sms, [[phones.owner, 'CareMetric: Hub is down. The Hub probe failed twice.']]);
     assert.equal(sent.email.length, 1);
     assert.deepEqual([sent.email[0][0], sent.email[0][1]], ['owner@example.test', 'Hub is down']);
     assert.match(sent.email[0][2].html, /Needs your attention/);
@@ -678,7 +680,7 @@ try {
     assert.equal(incidentTask.payload.flapping, false);
     tick = await probes.tick();
     assert.deepEqual([tick.claimed, tick.executedActions], [1, 1]);
-    assert.deepEqual(sent.sms, [['+12025550701', 'CareMetric: CareBase is down. CareBase has not passed 2 health checks in a row. The last check answered with status 503.']]);
+    assert.deepEqual(sent.sms, [[phones.owner, 'CareMetric: CareBase is down. CareBase has not passed 2 health checks in a row. The last check answered with status 503.']]);
     assert.equal(sent.email[0][1], 'CareBase is down');
     assert.match(sent.email[0][2].text, /Nothing has been restarted or changed/);
     const opened = await row("select * from private.agent_actions where kind = 'incident.open' and target_id = 'carebase:1'");

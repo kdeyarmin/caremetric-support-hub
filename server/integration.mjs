@@ -7,6 +7,8 @@ import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { parseAdvisorChangeResult } from '../supabase/functions/_shared/advisorsCommands.ts';
 import { appServer } from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;
 const local=new URL(databaseUrl);
 assert.equal(local.hostname,'127.0.0.1'); assert.equal(local.port,'54322');
@@ -14,7 +16,7 @@ const admin=new pg.Pool({connectionString:databaseUrl});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(databaseUrl); appUrl.username='hub_app_server'; appUrl.password='ephemeral-test-only';
 const pool=new pg.Pool({connectionString:appUrl.href});
-const editor=randomUUID(), learner=randomUUID(), ownerPhone='+12025550101', learnerPhone='+12025550102';
+const editor=randomUUID(), learner=randomUUID(), ownerPhone=phones.editor, learnerPhone=phones.learner;
 await admin.query(`insert into auth.users(id,email,raw_user_meta_data,is_anonymous) values($1,'sms-editor@test.invalid','{"display_name":"SMS editor"}',false),($2,'sms-learner@test.invalid','{"display_name":"SMS learner"}',false)`,[editor,learner]);
 await admin.query("insert into private.staff_permissions(user_id,permission,granted_by) values($1,'platform.admin',$1)",[editor]);
 await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2),($3,$4)',[editor,ownerPhone,learner,learnerPhone]);
@@ -118,7 +120,7 @@ try {
     assert.equal((await db.query('select private.current_app_session_verified() as allowed')).rows[0].allowed,false,'knowing a session UUID does not authorize a different database caller');
   });
   await assert.rejects(pool.query('select * from auth.users'),/permission denied/);
-  await assert.rejects(pool.query("update private.sms_identities set phone_e164='+12025550199'"),/permission denied/);
+  await assert.rejects(pool.query('update private.sms_identities set phone_e164=$1',[phones.refused]),/permission denied/);
   const capability='cmh_'+'a'.repeat(43);
   await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'carebase','{\"operation\":\"overview\"}',now()+interval '30 seconds')",[digest(capability),session]);
   await assert.rejects(caps.consume(capability,'media'));
@@ -197,6 +199,31 @@ try {
   assert.deepEqual(commandActor.operation,commandOperation);
   assert.equal(Date.parse(commandActor.assurance_expires_at)-Date.parse(commandActor.session_started_at),8*60*60*1000);
   await assert.rejects(caps.consume(commandCapability,'carebase.command'),'command authorization is single use');
+  // Breathe's and Intel's change endpoints redeem their own command audiences (20261117110000_app_command_audiences.sql).
+  const appCaps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async()=>{throw new Error('No native call is expected.');},appCommands:true});
+  const lifecycleOperation={domain:'tenant.lifecycle.v1',operation:'context',targetId:'5b0c5a0e-2f4e-4d7a-9a3b-0a6c1e2d3f40'};
+  const breatheChangeCapability='cmh_'+'h'.repeat(43);
+  await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'breathe.command',$3::jsonb,now()+interval '30 seconds')",[digest(breatheChangeCapability),session,JSON.stringify(lifecycleOperation)]);
+  await assert.rejects(appCaps.consume(breatheChangeCapability,'breathe'),'a Breathe change capability cannot be used for a Breathe read');
+  await assert.rejects(caps.consume(breatheChangeCapability,'breathe.command'),'Breathe changes are refused until the database declares them');
+  const breatheActor=await appCaps.consume(breatheChangeCapability,'breathe.command');
+  assert.deepEqual(Object.keys(breatheActor).sort(),['assurance_expires_at','method','operation','role','session_id','session_started_at','user_id'],'Breathe receives exactly the proof it checks');
+  assert.deepEqual(breatheActor.operation,lifecycleOperation); assert.equal(breatheActor.role,'platform_admin');
+  await assert.rejects(appCaps.consume(breatheChangeCapability,'breathe.command'),'a Breathe change capability is single use');
+  // A staff sign-in change rides the same audience (staff.access.v1).
+  const staffOperation={domain:'staff.access.v1',operation:'context',targetId:'0f9c2d4e-6b1a-4c3d-8e5f-7a6b5c4d3e2f'};
+  const staffChangeCapability='cmh_'+'j'.repeat(43);
+  await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'breathe.command',$3::jsonb,now()+interval '30 seconds')",[digest(staffChangeCapability),session,JSON.stringify(staffOperation)]);
+  assert.deepEqual((await appCaps.consume(staffChangeCapability,'breathe.command')).operation,staffOperation);
+  const intelOperation={operation:'preview',requestId:'7d3c1b2a-4e5f-4a6b-8c7d-9e0f1a2b3c4d',action:'users.setActive',targetId:'00000000000000000000002a',parameters:{active:false},reason:'Left the agency last week'};
+  const intelChangeCapability='cmh_'+'f'.repeat(43);
+  await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'intel.command',$3::jsonb,now()+interval '30 seconds')",[digest(intelChangeCapability),session,JSON.stringify(intelOperation)]);
+  await assert.rejects(appCaps.consume(intelChangeCapability,'intel'),'an Intel change capability cannot be used for an Intel read');
+  await assert.rejects(appCaps.consume(intelChangeCapability,'carebase.command'),'an Intel change capability cannot authorize a CareBase change');
+  const intelActor=await appCaps.consume(intelChangeCapability,'intel.command');
+  assert.deepEqual(intelActor.operation,intelOperation); assert.equal(intelActor.session_id,session);
+  // The Advisors check replays an earlier migration whose audience constraint predates these two; leave no rows that it would refuse.
+  await admin.query("delete from private.app_delegations where audience in ('breathe.command','intel.command')");
   const commandAuthority=()=>withSession(pool,editorToken,async db=>(await db.query('select hub.authorize_app_command() as actor')).rows[0].actor);
   const recordedTimes=(await admin.query('select created_at,expires_at from private.sms_sessions where id=$1',[session])).rows[0];
   await admin.query("update private.sms_sessions set created_at=now()-interval '8 hours 1 second',expires_at=now()+interval '1 hour' where id=$1",[session]);
@@ -223,12 +250,12 @@ try {
   await call('auth/logout',{});
   assert.equal((await call('auth/session',undefined,{Cookie:`${sessionCookie}=${editorToken}`})).body.authenticated,false);
   await admin.query('update private.sms_sessions set revoked_at=null where id=$1',[session]);
-  await admin.query("update private.sms_identities set phone_e164='+12025550109' where user_id=$1",[editor]);
+  await admin.query('update private.sms_identities set phone_e164=$2 where user_id=$1',[editor,phones.renumbered]);
   assert.equal((await call('auth/session',undefined,{Cookie:`${sessionCookie}=${editorToken}`})).body.authenticated,false,'number changes invalidate existing sessions');
   const next=await call('auth/sms/start',{phone:learnerPhone}); assert.equal(next.status,200);
   for(let i=0;i<5;i++) assert.equal((await call('auth/sms/verify',{challengeId:next.body.challengeId,code:'000000'})).status,401);
   assert.equal((await call('auth/sms/verify',{challengeId:next.body.challengeId,code:'123456'})).status,401,'a sixth attempt cannot succeed');
-  const unknown=await call('auth/sms/start',{phone:'+12025550103'}); assert.equal(unknown.status,200); assert.equal(sent.length,2);
+  const unknown=await call('auth/sms/start',{phone:phones.unknown}); assert.equal(unknown.status,200); assert.equal(sent.length,2);
   assert.equal((await call('auth/sms/verify',{challengeId:unknown.body.challengeId,code:'123456'})).status,401);
   console.log('App SMS integration passed: actual PostgreSQL permissions, browser binding, rate limits, attempts, replay, roles, course creation, delegation and logout.');
-} finally { await new Promise(resolve=>server.close(resolve)); await pool.end(); await admin.end(); }
+} finally { await new Promise(resolve=>server.close(resolve)); await removeTestIdentities(admin,[editor,learner],{also:['with drafts as (delete from private.learning_courses where updated_by = any($1::uuid[]) returning item_id) delete from hub.content_items where id in (select item_id from drafts)']}); await pool.end(); await admin.end(); }

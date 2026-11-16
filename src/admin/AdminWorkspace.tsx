@@ -12,6 +12,9 @@ import { CourseCatalog } from "./CareBaseCourses";
 import { TrainingLibrary } from "../learning/TrainingLibrary";
 import { AccessCommand } from "./AccessCommand";
 import type { AccessTarget } from "./AccessCommand";
+import { TenantLifecyclePanel } from "./TenantLifecyclePanel";
+import { StaffAccessPanel } from "./StaffAccessPanel";
+import { staffAccessCapabilities } from "./staffAccessProtocol";
 import { Loading, ReadFailure } from "./AdminReads";
 import { timeLabel } from "./readState";
 import { useAdminRead } from "./useAdminRead";
@@ -71,7 +74,11 @@ function ApplicationWorkspace({ product, client, portfolio, actorId }: { product
   const app = adminRegistry[product];
   const capabilities = state.status === "ready" ? state.data : null;
   const supports = (candidate: Exclude<View, "inventory">) => (product === "carebase" || !["training", "jobs", "releases", "audit"].includes(candidate)) && viewOperations[candidate].every(operation => capabilities?.operations.includes(operation));
-  const allowCommands = product === "carebase" && capabilities?.operations.includes("commands.preview") === true && capabilities.operations.includes("commands.apply");
+  // Access changes appear only for an application whose connection advertises them: CareBase and Intel profiles and accounts,
+  // CareBase organizations, and Breathe organizations and staff sign-ins through Breathe's own reviews.
+  const allowCommands = (product === "carebase" || product === "intel") && capabilities?.operations.includes("commands.preview") === true && capabilities.operations.includes("commands.apply");
+  const allowLifecycle = product === "breathe" && ["organizations.lifecycle.context", "organizations.lifecycle.preview", "organizations.lifecycle.apply", "organizations.lifecycle.resume"].every(operation => capabilities?.operations.includes(operation as PortfolioOperationName));
+  const allowStaffAccess = product === "breathe" && staffAccessCapabilities.every(operation => capabilities?.operations.includes(operation));
   return <>
     <div className="admin-section-title"><div><h2>{applicationLabel(product)}</h2><p>{app.userScope}</p></div><span className={`admin-status ${state.status === "ready" ? "admin-status-connected" : "admin-status-muted"}`}>{state.status === "ready" ? "Connection verified" : state.status === "loading" ? "Checking connection" : "Unavailable"}</span></div>
     <nav className="admin-view-nav" aria-label="Administration workspace views">{views.filter(item => supports(item.id)).map(({ id, name, icon: Icon }) => <button key={id} type="button" className={view === id ? "active" : ""} aria-pressed={view === id} onClick={() => setView(id)}><Icon size={16} aria-hidden="true" />{name}</button>)}<button type="button" className={view === "inventory" ? "active" : ""} aria-pressed={view === "inventory"} onClick={() => setView("inventory")}><Layers3 size={16} aria-hidden="true" />All app functions <span>{adminFunctions.length}</span></button></nav>
@@ -81,8 +88,8 @@ function ApplicationWorkspace({ product, client, portfolio, actorId }: { product
       {capabilities && !supports(view) && <p className="admin-explanation">This connection does not currently provide this operation.</p>}
       {capabilities && supports(view) && <div key={`${view}:${refresh}`}>
         {view === "overview" && <Overview product={product} portfolio={portfolio} capabilities={capabilities} retry={retry} />}
-        {view === "organizations" && <Directory product={product} portfolio={portfolio} kind="organizations" allowCommands={allowCommands} />}
-        {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={allowCommands} />}
+        {view === "organizations" && <Directory product={product} portfolio={portfolio} kind="organizations" allowCommands={product === "carebase" ? allowCommands : allowLifecycle} />}
+        {view === "users" && <Directory product={product} portfolio={portfolio} kind="users" allowCommands={product === "breathe" ? allowStaffAccess : allowCommands} />}
         {view === "inquiries" && product === "advisors" && <ConsultationRequests />}
         {view === "courses" && product === "carebase" && <><CourseCatalog client={client} /><TrainingLibrary client={client} /></>}
         {view === "training" && product === "carebase" && (actorId ? <TrainingWorkspace actorId={actorId} portfolio={portfolio} /> : <p role="alert">Your administrator identity could not be verified. Refresh your Hub session before managing facility training.</p>)}
@@ -105,13 +112,19 @@ function Overview({ product, portfolio, capabilities, retry }: { product: Portfo
 
 function Directory({ product, portfolio, kind, allowCommands }: { product: PortfolioProduct; portfolio: PortfolioClient; kind: "organizations" | "users"; allowCommands: boolean }) {
   const [selected, setSelected] = useState<AccessTarget | null>(null);
+  const [commandBusy, setCommandBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const columns = kind === "organizations" ? ["Organization", "Slug", product === "carebase" ? "Subscription status" : "Status", "Created"] : ["Name", "Email", "Role", product === "carebase" ? "Profile status" : "Account status", "Created"];
   if (allowCommands) columns.push("Access");
   const read = useCallback((search: string, offset: number, signal: AbortSignal) => kind === "organizations"
     ? portfolio.organizations({ product, search: search || undefined, offset, limit: 20, signal })
     : portfolio.users({ product, search: search || undefined, offset, limit: 20, signal }), [kind, portfolio, product]);
-  return <>{selected && <AccessCommand key={`${selected.action}:${selected.id}`} target={selected} onClose={() => setSelected(null)} onApplied={() => setRevision(value => value + 1)} />}<PagedRecords<AdminOrganization | AdminDirectoryUser> key={revision} app={adminRegistry[product].name} title={kind === "organizations" ? "Organizations" : product === "breathe" ? "Staff accounts" : "Application user profiles"} searchLabel={kind === "organizations" ? "Search organization names" : "Search account emails"} columns={columns} read={read} render={row => <>{"name" in row
+  const lifecycle = product === "breathe" && kind === "organizations";
+  const staffAccess = product === "breathe" && kind === "users";
+  return <>{selected && (lifecycle
+    ? <TenantLifecyclePanel key={selected.id} organizationId={selected.id} label={selected.label} onClose={() => setSelected(null)} onApplied={() => setRevision(value => value + 1)} onBusyChange={setCommandBusy} />
+    : staffAccess ? <StaffAccessPanel key={selected.id} userId={selected.id} label={selected.label} onClose={() => setSelected(null)} onApplied={() => setRevision(value => value + 1)} onBusyChange={setCommandBusy} />
+    : <AccessCommand key={`${selected.action}:${selected.id}`} target={selected} product={product === "intel" ? "intel" : "carebase"} onClose={() => setSelected(null)} onApplied={() => setRevision(value => value + 1)} onBusyChange={setCommandBusy} />)}<PagedRecords<AdminOrganization | AdminDirectoryUser> key={revision} app={adminRegistry[product].name} title={kind === "organizations" ? "Organizations" : product === "breathe" ? "Staff accounts" : "Application user profiles"} searchLabel={kind === "organizations" ? "Search organization names" : "Search account emails"} columns={columns} read={read} render={row => <>{"name" in row
     ? <><td>{row.name ?? row.slug ?? row.id}</td><td>{row.slug ?? "—"}</td><td>{row.status}</td><td>{timeLabel(row.createdAt)}</td></>
-    : <><td>{row.displayName ?? "Not recorded"}</td><td>{row.email ?? "Not recorded"}</td><td>{row.role}</td><td>{row.status}</td><td>{timeLabel(row.createdAt)}</td></>}{allowCommands && <td>{!("name" in row) && row.role === "platform_admin" ? "Protected administrator" : <button type="button" className="button button-secondary button-small" onClick={() => setSelected({ id: row.id, label: "name" in row ? row.name ?? row.slug ?? row.id : row.displayName ?? row.email ?? row.id, action: "name" in row ? "organizations.setSuspension" : "users.setActive" })}>Change access</button>}</td>}</>} /></>;
+    : <><td>{row.displayName ?? "Not recorded"}</td><td>{row.email ?? "Not recorded"}</td><td>{row.role}</td><td>{row.accountStatus ?? row.status}</td><td>{timeLabel(row.createdAt)}</td></>}{allowCommands && <td>{!("name" in row) && row.role === "platform_admin" ? "Protected administrator" : <button type="button" className="button button-secondary button-small" disabled={commandBusy} onClick={() => setSelected({ id: row.id, label: "name" in row ? row.name ?? row.slug ?? row.id : row.displayName ?? row.email ?? row.id, action: "name" in row ? "organizations.setSuspension" : "users.setActive" })}>{lifecycle ? "Suspend or restore" : staffAccess ? "Turn off or on" : "Change access"}</button>}</td>}</>} /></>;
 }

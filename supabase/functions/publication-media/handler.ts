@@ -3,8 +3,6 @@ import { createHash } from "node:crypto";
 const hubOrigin = "https://support-hub-web-production.up.railway.app";
 const storageOrigin = "https://xgauehtwksmnoqhgqegm.supabase.co";
 const publicationPath = /^publications\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(primary|captions|transcript)$/;
-const uuidPath = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
-const docstudioPath = new RegExp(`^(assets/${uuidPath}/${uuidPath}|renders/${uuidPath}/[1-3]/(primary|captions|transcript))$`);
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
 const keys = (value: unknown, expected: string[]): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join(",") === [...expected].sort().join(",");
 async function boundedJson(response: Response): Promise<unknown> {
@@ -54,18 +52,17 @@ async function verifiedExisting(response: Response, capability: Record<string,un
   } finally { await reader.cancel().catch(()=>{}); }
 }
 
-export function createImmutableMediaHandler({profile,serviceKey,fetchImpl=fetch}:{profile:'publication'|'docstudio';serviceKey:string;fetchImpl?:typeof fetch}) {
-  const studio=profile==='docstudio', objectPath=studio?docstudioPath:publicationPath;
-  const bucket=studio?'hub-docstudio':'hub-publications';
+// DocStudio is retired (20261022210000_retire_docstudio.sql); publications are the only immutable media this function serves.
+export function createPublicationMediaHandler({serviceKey,fetchImpl=fetch}:{serviceKey:string;fetchImpl?:typeof fetch}) {
+  const objectPath=publicationPath, bucket='hub-publications';
   return async (request: Request): Promise<Response> => {
     try {
       if(request.method!=="POST" || request.headers.has("Origin") || request.headers.has("Cookie")) return json({error:"Forbidden"},403);
       const authorization=request.headers.get("Authorization");
       if(!authorization || !/^Bearer cmh_[A-Za-z0-9_-]{43}$/.test(authorization)) return json({error:"Unauthorized"},401);
       const mode=request.headers.get("X-CareMetric-Publication-Mode");
-      if(studio && mode!==null && mode!=='cleanup') return json({error:"Invalid operation"},400);
       if(mode!==null && mode!=="cleanup" && mode!=="public") return json({error:"Invalid operation"},400);
-      const gate=await fetchImpl(`${hubOrigin}/api/internal/${studio?'docstudio/media':`publications/${mode?mode+"/":""}`}${studio?'/':''}authorize`,{
+      const gate=await fetchImpl(`${hubOrigin}/api/internal/publications/${mode?mode+"/":""}authorize`,{
         method:"POST",headers:{Authorization:authorization,"Content-Type":"application/json"},body:"{}",redirect:"manual",signal:AbortSignal.timeout(10000),
       });
       if(!gate.ok) return json({error:"Unauthorized"},gate.status===403?403:401);
@@ -84,21 +81,15 @@ export function createImmutableMediaHandler({profile,serviceKey,fetchImpl=fetch}
       }
       if(!keys(capability,["path","operation","contentType","sha256","byteLength","maxBytes","range"])
         || typeof capability.path!=="string" || !objectPath.test(capability.path) || !["upload","download"].includes(String(capability.operation))
-        || !(studio?["image/png","image/jpeg","audio/mpeg","audio/wav","video/mp4","text/vtt","text/plain"]:["text/markdown","video/mp4","text/vtt","text/plain"]).includes(String(capability.contentType))
+        || !["text/markdown","video/mp4","text/vtt","text/plain"].includes(String(capability.contentType))
         || typeof capability.sha256!=="string" || !/^[0-9a-f]{64}$/.test(capability.sha256)
         || !Number.isSafeInteger(capability.maxBytes) || Number(capability.maxBytes)<1 || Number(capability.maxBytes)>536870912
         || (capability.byteLength!==null && (!Number.isSafeInteger(capability.byteLength) || Number(capability.byteLength)<1 || Number(capability.byteLength)>Number(capability.maxBytes)))) return json({error:"Invalid capability"},403);
       if(mode==="public" && capability.operation!=="download") return json({error:"Invalid public capability"},403);
       const part=capability.path.split("/")[2];
-      if(!studio && ((part==="captions" && capability.contentType!=="text/vtt") || (part==="transcript" && capability.contentType!=="text/plain")
+      if(((part==="captions" && capability.contentType!=="text/vtt") || (part==="transcript" && capability.contentType!=="text/plain")
         || (part==="primary" && !["text/markdown","video/mp4"].includes(String(capability.contentType)))
         || (capability.contentType!=="video/mp4" && Number(capability.maxBytes)>(capability.contentType==="text/markdown"?2097152:10485760)))) return json({error:"Invalid asset capability"},403);
-      if(studio) {
-        const parts=capability.path.split('/'),output=parts[3];
-        if(capability.range!==null || capability.byteLength!==capability.maxBytes
-          || (parts[0]==='assets' && (!["image/png","image/jpeg","audio/mpeg","audio/wav"].includes(String(capability.contentType)) || Number(capability.maxBytes)>33554432))
-          || (parts[0]==='renders' && (capability.contentType!==({primary:'video/mp4',captions:'text/vtt',transcript:'text/plain'} as Record<string,string>)[output] || Number(capability.maxBytes)>(output==='primary'?268435456:1048576)))) return json({error:'Invalid studio asset capability'},403);
-      }
       const encoded=capability.path.split("/").map(encodeURIComponent).join("/");
       if(capability.operation==="upload") {
         if(capability.range!==null || request.headers.has("Range") || request.headers.get("Content-Type")?.split(";")[0]!==capability.contentType || !request.body) return json({error:"Invalid upload"},415);
@@ -156,7 +147,4 @@ export function createImmutableMediaHandler({profile,serviceKey,fetchImpl=fetch}
       return new Response(result.body,{status:result.status,headers:{"Content-Type":String(capability.contentType),"Content-Length":String(expectedLength),"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",...(contentRange?{"Content-Range":contentRange}:{})}});
     } catch { return json({error:"Publication media unavailable"},503); }
   };
-}
-export function createPublicationMediaHandler(options:{serviceKey:string;fetchImpl?:typeof fetch}) {
-  return createImmutableMediaHandler({...options,profile:'publication'});
 }

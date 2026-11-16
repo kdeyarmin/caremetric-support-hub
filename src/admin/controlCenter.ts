@@ -13,6 +13,7 @@ import type { PhoneRow } from "../support/phoneRegistryModel";
 import { applicationLabel, overviewMetrics } from "./overviewMetrics";
 import type { OverviewMetric } from "./overviewMetrics";
 import { buildPortfolioRollup } from "./portfolioRollup";
+import { accessControls } from "./coverageMatrix";
 import type { RollupAppSnapshot } from "./portfolioRollup";
 import type { GoLiveReadinessReport } from "./readinessProtocol";
 import type { AiUsageSummary } from "./aiUsageClient";
@@ -93,6 +94,8 @@ export interface ApplicationCard {
   /** Null when the Hub has no product registered for this connection, so no cases, conversations or articles can belong to it. */
   support: SupportSummary | null;
   intake: { state: CardState; data: IntakeSummary | null; note: string };
+  /** What the owner can change in the application from the Hub, from what its live connection advertises. */
+  controls: { state: "available" | "view-only" | "unavailable" | "not-applicable"; label: string };
   links: ApplicationLinks;
 }
 
@@ -140,13 +143,20 @@ export function applicationCards(input: ControlCenterInput): ApplicationCard[] {
       : { state: "unavailable", data: null, note: "Hub billing could not be loaded" };
 
     const organizations = has(app, "organizations.list"), users = has(app, "users.list");
-    const accessControls = product === "carebase" && has(app, "commands.preview") && has(app, "commands.apply");
+    const access = accessControls(app);
+    const changes = connected && access.state === "available";
+    // Users have access controls in CareBase and Intel (the access dialog) and in Breathe (its own staff review, when advertised).
+    const accessControlsFor = changes && (product === "carebase" || product === "intel" || product === "breathe" && has(app, "staff.access.apply"));
     const directory: DirectorySummary = advisors ? { state: "not-applicable", label: "No software accounts", organizations: false, users: false, accessControls: false }
       : !connected ? unavailableDirectory
-      : organizations && users ? { state: "available", label: accessControls ? "Organizations, users and access controls" : "Organizations and users", organizations, users, accessControls }
-      : users ? { state: "partial", label: "Users only", organizations, users, accessControls }
-      : organizations ? { state: "partial", label: "Organizations only", organizations, users, accessControls }
-      : { state: "missing", label: "Not provided yet", organizations, users, accessControls };
+      : organizations && users ? { state: "available", label: changes ? "Organizations, users and access controls" : "Organizations and users", organizations, users, accessControls: changes }
+      : users ? { state: "partial", label: accessControlsFor ? "Users and access controls" : "Users only", organizations, users, accessControls: accessControlsFor }
+      : organizations ? { state: "partial", label: "Organizations only", organizations, users, accessControls: changes }
+      : { state: "missing", label: "Not provided yet", organizations, users, accessControls: false };
+    const controls: ApplicationCard["controls"] = advisors ? { state: connected ? "available" : "unavailable", label: "Consultation requests: status, notes and delete" }
+      : !connected ? { state: "unavailable", label: "Unavailable until the connection answers" }
+      : access.state === "available" ? { state: "available", label: access.label }
+      : { state: "view-only", label: "View only from the Hub" };
 
     const rollout = integrationRolloutBySlug[hubProductSlugs[product]] ?? defaultIntegrationRollout;
     const sources = [
@@ -184,7 +194,7 @@ export function applicationCards(input: ControlCenterInput): ApplicationCard[] {
       cases: hubProduct ? `/cases?product=${hubProduct.slug}` : null,
       knowledge: hubProduct ? `/knowledge?product=${hubProduct.slug}` : null,
     };
-    return { product, name: applicationLabel(product), scope: registry.userScope, hubProduct, connection, health, subscriptions, directory, integration, support, intake, links };
+    return { product, name: applicationLabel(product), scope: registry.userScope, hubProduct, connection, health, subscriptions, directory, integration, support, intake, controls, links };
   });
 }
 

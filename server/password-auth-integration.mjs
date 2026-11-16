@@ -8,6 +8,8 @@ import { smsAuth, ownerAccess, sessionCookie, digest, withSession } from './sms-
 import { gateway } from './gateway.mjs';
 import { appServer } from './http.mjs';
 import { delegations } from './delegations.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;
 const local=new URL(databaseUrl);
@@ -17,7 +19,7 @@ await admin.query("alter role hub_app_server login password 'ephemeral-test-only
 const appUrl=new URL(databaseUrl);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
 const pool=new pg.Pool({connectionString:appUrl.href});
 const owner=randomUUID(), stranger=randomUUID(), suffix=randomUUID().slice(0,8), username=`owner+${suffix}@test.invalid`, legacyUsername=`owner-${suffix}`;
-const phone=`+1202${String(Math.floor(Math.random()*9000000)+1000000)}`;
+const phone=phones.owner;
 const firstPassword='H7!mQ2vR8z', nextPassword='Next test-only password phrase';
 const origin='https://hub.test';
 const provider={send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'};
@@ -143,7 +145,7 @@ try {
 
   // Identity rotation invalidates password login until the owner recovers
   // through their current approved mobile identity.
-  const nextPhone=phone.slice(0,-1)+(phone.endsWith('9')?'0':String(Number(phone.at(-1))+1));
+  const nextPhone=phones.rebound;
   await admin.query('update private.sms_identities set phone_e164=$2 where user_id=$1',[owner,nextPhone]);
   assert.equal((await browser().call('auth/password/login',{username,password:nextPassword})).status,401);
   const rebound=await smsBrowser(nextPhone);

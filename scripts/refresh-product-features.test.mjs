@@ -18,6 +18,7 @@ const homePage = `<p class="cm-hero-description">A healthcare marketing CRM, mar
 <section id="for-managers" class="cm-section cm-managers"><p class="cm-eyebrow">FOR MANAGERS</p><ul class="cm-outcome-list"><li><span>0<!-- -->1</span><div><h3>Focus the work before the week starts</h3><p>Set priorities.</p></div></li>
 <li><span>0<!-- -->2</span><div><h3>See the effort</h3><p>Review the team.</p></div></li></ul>
 <figure class="cm-manager-report"><div class="cm-report-header"><div><h3>Activity, relationships, and recorded results</h3></div><span class="cm-sample-badge">SAMPLE DATA</span></div></figure></section>
+<section id="by-the-numbers" class="cm-proof-band"><div class="cm-container"><h2 class="cm-eyebrow">THE DATA BEHIND EVERY DECISION</h2><dl class="cm-proof-grid"><div><dt><strong>150+</strong><span>public healthcare datasets</span></dt><dd>From CMS and NPPES.</dd></div><div><dt><strong>33,000+</strong><span>ZIP areas and 3,200+ counties</span></dt><dd>Each with Census figures.</dd></div></dl><a href="#data" class="cm-text-link">See everything</a></div></section>
 <button id="_R_1_-tab-0"><span>Providers</span></button>
 <div id="_R_1_-panel-0" role="tabpanel" aria-labelledby="_R_1_-tab-0" class="cm-data-panel"><h3>Know who is practicing.</h3><ul><li>NPI identifiers</li></ul>
 <div class="cm-data-source-line"><strong>Source</strong><p>NPPES</p></div><h4>Who should we research?</h4><p>Build a target list.</p><p class="cm-data-limit">A research signal, not a promise.</p></div>
@@ -40,6 +41,8 @@ describe('reading Intel\'s published features', () => {
     expect(catalog.otherSettings).toEqual([{ name: 'Behavioral health', text: 'Research primary care practices.' }]);
     // Manager outcomes come from their own section, not the sample report beside them or the cards after the care settings.
     expect(catalog.managers).toEqual([{ name: 'Focus the work before the week starts', text: 'Set priorities.' }, { name: 'See the effort', text: 'Review the team.' }]);
+    // The site's own figures about its data, which the owner approved (2026-11-16) as the only ones the team may state.
+    expect(catalog.scale).toEqual([{ figure: '150+', label: 'public healthcare datasets', text: 'From CMS and NPPES.' }, { figure: '33,000+', label: 'ZIP areas and 3,200+ counties', text: 'Each with Census figures.' }]);
     // Purchasing belongs to the fact sheet, which reads Intel's own catalog.
     expect(catalog.faq).toEqual([{ question: 'Is CareMetric Intel a CRM?', answer: 'Yes.' }]);
     expect(catalog.caveats).toEqual(['Feature availability, territory and usage limits vary by plan.', 'Every plan welcomes healthcare organizations across specialties.']);
@@ -54,6 +57,7 @@ describe('reading Intel\'s published features', () => {
     strayed.managers.push({ name: strayed.pillars[0].title, text: strayed.pillars[0].why });
     expect(() => check(strayed)).toThrow(/1 pillars read as settings or managers/);
     expect(() => check({ ...committed, managers: [] })).toThrow(/managers 0/);
+    expect(() => check({ ...committed, scale: [] })).toThrow(/figures 0/);
   });
 
   it('stops rather than let another product\'s name through', () => {
@@ -74,7 +78,9 @@ const carebaseFeatures = ({ published = 3, extra = '' } = {}) => `<section class
 <section id="recently-shipped" class="c"><div><p>Explore three tools.</p></div><article class="a"><div class="b"><span aria-hidden="true" class="c"></span><span class="d">In focus</span><span class="e">Survey Day Mode</span></div><h3 class="f">A single workspace</h3><p class="g">Open Survey Day Mode.</p></article></section>
 <section id="resident-lifecycle" class="c"><ol class="a"><span aria-hidden="true" class="b"></span><li class="c"><div class="d"><span class="e">01</span><div><h3>Inquiry &amp; admission</h3><p>Track inquiries.</p></div></div></li></ol></section>
 <section id="roles" class="c"><ul><li><div><span aria-hidden="true">01</span><h3>Facility manager</h3></div><p><span>Sees</span>assigned sites only.</p><p><span>Does</span>resolves gaps.</p></li></ul></section>`;
-const carebaseHome = `<section><h1>Compliance on track.</h1><div><p class="hero">Manage staff training in one place.</p></div></section>
+const carebaseHome = `<section id="top" class="relative"><h1>Compliance on track.</h1><div><p class="hero">Manage staff training in one place.</p></div>
+<div class="grid"><div class="lg:border-l"><div class="flex flex-col gap-2"><div class="font-serif tabular-nums text-mkt-ink">12–16 hrs</div><div class="text-mkt-muted">annual training tracked per direct care worker, by facility type</div></div></div>
+<div class="lg:border-l"><div class="flex flex-col gap-2"><div class="font-serif tabular-nums text-mkt-ink">60+</div><div class="text-mkt-muted">survey-ready form templates included</div></div></div></div></section>
 <section><p>In plain English</p><h2>One system</h2></div><p>CareBase brings records together.</p>
 <div><div><span>01</span><span>Survey readiness</span></div><h3>Prepare for your next survey</h3><p>Keep supporting records together.</p></div></section>
 <section><p>What sets it apart</p><h2>Built around the way Pennsylvania care works.</h2><div><div><span></span><span>01</span></div><h3>Pennsylvania is built into the workflow</h3><p>Chapters 2600 and 2800 differ.</p><p>Dementia requirements stay distinct.</p><p><span class="a"></span>Rules and timing that reflect your setting</p></div>
@@ -94,6 +100,8 @@ describe('reading CareBase\'s published capabilities', () => {
     expect(catalog.publishedAreas).toBe(2);
     expect(catalog.overview).toBe('Manage staff training in one place.');
     expect(catalog.summary).toBe('CareBase brings records together.');
+    // The home page's own figures, from the strip under its hero.
+    expect(catalog.figures).toEqual([{ figure: '12–16 hrs', label: 'annual training tracked per direct care worker, by facility type' }, { figure: '60+', label: 'survey-ready form templates included' }]);
     expect(catalog.intro).toBe('Explore resident care, training and eMAR. Start with Core.');
     expect(catalog.legend).toBe('Core covers resident operations. Add training or eMAR.');
     expect(catalog.areas).toEqual([
@@ -140,6 +148,7 @@ describe('checking what was read from CareBase\'s pages', () => {
     expect(changed(body => { body.areas[0].capabilities.pop(); })).toThrow(new RegExp(`partly read: ${committed.areas[0].key}`));
     expect(changed(body => { body.areas[1].plan = ''; })).toThrow(new RegExp(`partly read: ${committed.areas[1].key}`));
     expect(changed(body => { body.newest = []; })).toThrow(/newest 0/);
+    expect(changed(body => { body.figures = []; })).toThrow(/figures 0/);
     expect(changed(body => { body.legend = ''; })).toThrow(/no intro or plan note/);
     expect(changed(body => { body.pillars.push({ ...body.pillars[0], title: body.chapters[0].title }); })).toThrow(/\(1 from the chapters\)/);
   });

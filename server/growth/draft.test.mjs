@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {draftMessage,draftProblem,growthSystem} from './draft.mjs';
+import {draftMessage,draftProblem,growthSystem,messageArms} from './draft.mjs';
 import {assessProspect} from './assessment.mjs';
 const now=new Date().toISOString();
 const opportunity={id:'o',product:'carebase',version:1,contact_id:'c',goal:'Staff training',policy:{approved_claim:'CareBase supports facility training.',booking_url:'https://example.org/book'},evidence:[{id:'source-1',source_url:'https://example.org',observed_at:now,claim:'A personal-care facility',confidence:'high'}],events:[]};
@@ -32,7 +32,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.12');
+ expect(request.promptVersion).toBe('growth.14');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -121,6 +121,10 @@ it('lets a draft state the numbers and percentages its own cited sources state, 
  expect(draftProblem(answer('You serve 14 counties.'),{product:'caremetric-intel',sources,outreach:true})).toBe('claim');
  expect(draftProblem(answer('Hospice Solutions of Erie cares for families.'),{product:'caremetric-intel',sources,outreach:true})).toBe('unclear');
  expect(draftProblem(answer('Hospice Solutions of Erie cares for families.'),{product:'caremetric-intel',sources,outreach:true,organization:'Hospice Solutions of Erie'})).toBeNull();
+ // An agency's own rating or rank never goes in an email, even with no number the claim check would catch; asking where it stands does.
+ expect(draftProblem(answer('Valley Home Health has a 4.5-star rating. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBe('own_standing');
+ expect(draftProblem(answer('Your agency ranks ninth in Erie County. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBe('own_standing');
+ expect(draftProblem(answer('Where does your agency rank in its county? Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBeNull();
 });
 it('keeps the organization\'s numbers in sentences about the organization, never in one about CareMetric or in the first person',()=>{
  const sources=[{id:'s',claim:'The agency serves 12 counties and grew 15% last year.'}];
@@ -138,6 +142,43 @@ it('keeps the organization\'s numbers in sentences about the organization, never
  // A number inside the organization's own name is part of the name.
  expect(draftProblem(answer('I wrote to 24 Hour Home Care because Intel maps referral sources.'),{product:'caremetric-intel',sources,outreach:true,organization:'24 Hour Home Care'})).toBeNull();
 });
+it('lets a message state the numbers its own product\'s catalog states, and gives its writer that catalog (owner direction 2026-11-16)',async()=>{
+ const sources=[{id:'s',claim:'The agency serves 12 counties.'}];
+ const answer=body=>({subject:'Referral sources in your county',body,citations:['s'],needsHuman:false});
+ const intel=body=>draftProblem(answer(body),{product:'caremetric-intel',sources,outreach:true,organization:'Valley Hospice'});
+ const carebase=body=>draftProblem(answer(body),{product:'carebase',sources,outreach:true,organization:'Valley Home'});
+ // Intel: the site's own figures about its data ("By the numbers") and a feature's number, in a sentence about Intel or in the first person.
+ expect(intel('Intel draws on 150+ public healthcare datasets, linked by county and ZIP.')).toBeNull();
+ expect(intel('I built Intel on more than 150 public healthcare datasets.')).toBeNull();
+ expect(intel('Our data covers 33,000+ ZIP areas and 3,200+ counties.')).toBeNull();
+ expect(intel('Intel lists the accounts that go 45 days without a visit.')).toBeNull();
+ // CareBase: the requirements its own site states, such as a personal care home's 12 annual training hours and an ALF's 16.
+ expect(carebase('CareBase tracks the 12 hours of training a year each direct care worker needs.')).toBeNull();
+ expect(carebase('In an ALF, CareBase tracks 16 annual hours per direct care worker.')).toBeNull();
+ // A figure the catalog does not state is refused, and so is the organization's own figure in a sentence about the product.
+ expect(intel('Intel draws on 200+ public healthcare datasets.')).toBe('claim');
+ expect(intel('Intel covers your 12 counties.')).toBe('claim');
+ expect(carebase('CareBase tracks 20 hours of training a year.')).toBe('claim');
+ // Each product's catalog is its own: neither message may state the other product's numbers.
+ expect(carebase('CareBase draws on 150+ public healthcare datasets.')).toBe('claim');
+ expect(intel('Intel tracks the 16 annual hours each direct care worker needs.')).toBe('claim');
+ // The writer gets the message's own product's catalog as its own cached block after the instructions, and no other.
+ expect(growthSystem).toContain('one the product\'s catalog states');
+ const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Your first setup step',body:'Where are you in setup?',citations:[],needsHuman:false}}))};
+ const customer={kind:'onboarding',action:'Agree the goal',success:'First value'};
+ for (const [product,heading,phrase,other] of [['caremetric-intel',/^CareMetric Intel features and data/,'150+ public healthcare datasets',/^CareMetric CareBase capabilities/m],
+   ['carebase',/^CareMetric CareBase capabilities/,'12 hours of training a year',/^CareMetric Intel features and data/m]]) {
+  model.run.mockClear();
+  await draftMessage({opportunity:{...opportunity,product,stage:'trial',owner_agent:'account_manager'},work:customer,task:{},model});
+  const system=model.run.mock.calls[0][1].system;
+  expect(system,product).toHaveLength(2);
+  expect(system.every(block=>block.cache)).toBe(true);
+  expect(system[0].text).toBe(growthSystem);
+  expect(system[1].text).toMatch(heading);
+  expect(system[1].text).toContain(phrase);
+  expect(system[1].text).not.toMatch(other);
+ }
+});
 it('repairs a draft once, telling the writer what to fix, and reports why one was refused',async()=>{
  const bad={outcome:'completed',output:{subject:'Training',body:'A seamless way to train staff.',citations:['source-1'],needsHuman:false}};
  const good={outcome:'completed',output:{subject:'Training',body:'How do you track training hours today?',citations:['source-1'],needsHuman:false}};
@@ -146,7 +187,7 @@ it('repairs a draft once, telling the writer what to fix, and reports why one wa
  const draft=await draftMessage({opportunity,work,task:{},model,onReject:code=>reasons.push(code)});
  expect(draft).toMatchObject({modelGenerated:true,body:'How do you track training hours today?'});
  const repair=model.run.mock.calls[1][1];
- expect(repair.promptVersion).toBe('growth.12-r');
+ expect(repair.promptVersion).toBe('growth.14-r');
  expect(repair.system[0].text).toBe(growthSystem);
  expect(JSON.parse(repair.user)).toMatchObject({previousDraft:{body:'A seamless way to train staff.'},fix:expect.stringMatching(/plain words/)});
  expect(reasons).toEqual([]);
@@ -171,24 +212,39 @@ it('records the arms a message was written under and follows a website lead or a
  expect(asked).toMatchObject({reask:true,maxTouches:1,touch:1});
  expect(asked.touchPlan).toMatch(/One brief, friendly check-in/);
 });
-it('writes outreach with the owner-approved memo as a second cached block, and records its version',async()=>{
+it('writes outreach with the owner-approved memo as a last cached block, after the product\'s catalog, and records its version',async()=>{
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Staff training records',body:'How do you track annual training hours today?\n\nhttps://cmcarebase.com/signup',citations:['source-1'],needsHuman:false}}))};
  const memo={version:3,memo:'- The owner turned down recent drafts with these notes: "Too long".'};
  const draft=await draftMessage({opportunity,work,task:{},model,memo});
  const request=model.run.mock.calls[0][1];
- expect(request.system).toHaveLength(2);
+ expect(request.system).toHaveLength(3);
  expect(request.system.every(block=>block.cache)).toBe(true);
  expect(request.system[0].text).toBe(growthSystem);
- expect(request.system[1].text).toContain('memo 3');
- expect(request.system[1].text).toContain('Too long');
- expect(request.promptVersion).toBe('growth.12-m3');
+ expect(request.system[1].text).toMatch(/^CareMetric CareBase capabilities/);
+ expect(request.system[2].text).toContain('memo 3');
+ expect(request.system[2].text).toContain('Too long');
+ expect(request.promptVersion).toBe('growth.14-m3');
  expect(draft.memoVersion).toBe(3);
  // A customer's message and an unusable memo are written without it.
  model.run.mockClear();
  const customer=await draftMessage({opportunity,work:{kind:'onboarding',action:'Help',success:'Set up'},task:{},model,memo});
- expect(model.run.mock.calls[0][1].system).toHaveLength(1);
+ expect(model.run.mock.calls[0][1].system).toHaveLength(2);
+ expect(model.run.mock.calls[0][1].system.some(block=>block.text.includes('memo 3'))).toBe(false);
  expect(customer?.memoVersion).toBeUndefined();
  model.run.mockClear();
  await draftMessage({opportunity,work,task:{},model,memo:{version:'3',memo:'x'}});
- expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.12');
+ expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.14');
+});
+
+it('records the applied report length without changing angle, subject or ordinary length treatments', async () => {
+ const o={...opportunity,product:'caremetric-intel',policy:{...opportunity.policy,experiment_enabled:true}};
+ const ordinary=messageArms(o,o.evidence);
+ expect(messageArms(o,o.evidence,{reportLed:true})).toEqual({...ordinary,length:'report'});
+ for(const context of [{touches:1},{memory:{lead:{kind:'report'}}},{memory:{reengagedAt:'2026-11-15'}}]) {
+  const draft=await draftMessage({opportunity:{...o,...context},work,task:{}});
+  expect(draft.arms.length).toBe(ordinary.length);
+ }
+ expect((await draftMessage({opportunity:o,work,task:{}})).arms.length).toBe('report');
+ expect((await draftMessage({opportunity:o,work:{kind:'trial'},task:{}})).arms.length).toBe(ordinary.length);
+ expect(ordinary.length_basis).toBe('applied_v1');
 });

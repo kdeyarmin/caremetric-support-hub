@@ -9,10 +9,12 @@ import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { distributionObserver,observerQuery } from './distribution-observer.mjs';
 import { appServer } from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const local=new URL(process.env.HUB_TEST_DATABASE_URL);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:local.href});await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 local.username='hub_app_server';local.password='ephemeral-test-only';const pool=new pg.Pool({connectionString:local.href});
-const owner=randomUUID(),phone='+12025550941',sources=new Map(),machineToken=token();let bridge,nativeAllowed=true,machineUnavailable=false,machineChange=false,revokeAfterRead=false,holdHuman=null;
+const owner=randomUUID(),phone=phones.owner,sources=new Map(),machineToken=token();let bridge,nativeAllowed=true,machineUnavailable=false,machineChange=false,revokeAfterRead=false,holdHuman=null;
 const sourceFixture=JSON.parse(readFileSync(new URL('../src/imports/fixtures/governedCourse.json',import.meta.url)));
 const status=id=>{const source=sources.get(id);return source?{courseId:id,publicationState:source.publicationState,currentVersionId:source.sourceVersionId,
   currentVersionState:source.sourceVersionState,sourceRevision:source.publicationState==='published'&&source.sourceVersionState==='published'?digest(JSON.stringify(source)):null}:
@@ -191,4 +193,21 @@ try{
   await admin.query("update private.learning_distribution_observations set attempted_at=now()-interval '6 minutes' where managed");await observer.tick();
   assert.equal((await admin.query('select count(*) from private.learning_distribution_revisions where item_id=$1',[course.item])).rows[0].count,'3');
   console.log('Distribution PostgreSQL/SMS/HTTP passed: exact published source, two-app shared catalog, immutable revisions, source-head preservation, replacement/retirement, retries, rollback, concurrent observation, current authority, machine freshness and legacy opt-in.');
-}finally{await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
+}finally{
+  await new Promise(resolve=>server.close(resolve));
+  // Distribution provenance is immutable and pins the run's SMS sessions. These rows are the
+  // run's own, so the teardown lifts those guards for its own transaction only.
+  await removeTestIdentities(admin,[owner],{
+    also:[
+      'delete from private.learning_distribution_revisions where session_id in (select id from private.sms_sessions where user_id = any($1::uuid[]))',
+      'delete from private.learning_distribution_intents where session_id in (select id from private.sms_sessions where user_id = any($1::uuid[]))',
+      'delete from private.learning_source_snapshots where staged_by = any($1::uuid[])',
+    ],
+    unlock:[
+      ['private.learning_distribution_revisions','learning_distribution_provenance_immutable'],
+      ['private.learning_distribution_intents','learning_distribution_intent_immutable'],
+      ['hub.content_revisions','learning_distribution_revision_immutable'],
+    ],
+  });
+  await pool.end();await admin.end();
+}

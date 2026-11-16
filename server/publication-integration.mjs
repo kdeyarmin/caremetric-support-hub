@@ -11,6 +11,8 @@ import {appServer} from './http.mjs';
 import {fixtureManifest,articleBytes,videoBytes,captionBytes,transcriptBytes} from '../src/imports/publicationFixtures.ts';
 import {publicationConfirmationIds,publicationPartRules} from '../src/imports/publicationProtocol.ts';
 import {createPublicationMediaHandler} from '../supabase/functions/publication-media/handler.ts';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;
 const target=new URL(databaseUrl); assert.equal(target.hostname,'127.0.0.1'); assert.equal(target.port,'54322');
 const admin=new pg.Pool({connectionString:databaseUrl});
@@ -25,7 +27,7 @@ await admin.query(`insert into auth.users(id,email,raw_user_meta_data,is_anonymo
 const products=(await admin.query("select id,slug from hub.products where slug in ('carebase','breathe')")).rows;
 const carebase=products.find(p=>p.slug==='carebase').id;
 await admin.query("insert into private.staff_permissions(user_id,permission,product_id) values($1,'platform.admin',null),($2,'content.write',$3)",[owner,scoped,carebase]);
-await admin.query("insert into private.sms_identities(user_id,phone_e164) values($1,'+12025550181'),($2,'+12025550182'),($3,'+12025550183')",[owner,scoped,learner]);
+await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$4),($2,$5),($3,$6)',[owner,scoped,learner,phones.owner,phones.scoped,phones.learner]);
 const provider={send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'};
 const auth=smsAuth({pool,provider}), api=gateway(pool), objects=new Map();
 let baseUrl,storageWrites=0,lastCapability,loseUploadResponse=false;
@@ -85,6 +87,11 @@ async function upload(stage,bytes,part='primary') {
   const response=await fetch(`${baseUrl}/api/publications/imports/${stage.id}/assets/${part}`,{method:'POST',headers:{Origin:'https://hub.test','Content-Type':publicationPartRules(stage.manifest,part).contentType,Cookie:`${sessionCookie}=${jar[sessionCookie]}`},body:bytes});
   return {status:response.status,body:await response.json()};
 }
+async function uploadPart(stage,bytes,offset,total,part='primary') {
+  const response=await fetch(`${baseUrl}/api/publications/imports/${stage.id}/assets/${part}`,{method:'POST',headers:{Origin:'https://hub.test','Content-Type':publicationPartRules(stage.manifest,part).contentType,
+    Cookie:`${sessionCookie}=${jar[sessionCookie]}`,'Upload-Offset':String(offset),'Upload-Length':String(total)},body:bytes});
+  return {status:response.status,body:await response.json()};
+}
 async function stage(manifest) {
   const result=await call('publications/imports/stage',{manifest,sourceReviewConfirmed:true}); assert.equal(result.status,200,JSON.stringify(result.body)); return result.body;
 }
@@ -102,7 +109,7 @@ async function expireUncommitted() {
 }
 try {
   assert.equal((await call('publications/access')).status,401);
-  const ownerJar=await login('+12025550181');
+  const ownerJar=await login(phones.owner);
   assert.deepEqual((await call('publications/access')).body,{canImport:true,maxVideoBytes:26214400});
   const manifest=await fixtureManifest(); manifest.source.content_key='integration-guide';
   assert.equal((await call('publications/imports/stage',{manifest,sourceReviewConfirmed:true},{Origin:'https://evil.test'})).status,403);
@@ -138,6 +145,23 @@ try {
   const changed=structuredClone(moved); changed.content.title='Changed workspace title';
   const changedStage=await stage(changed); assert.equal((await upload(changedStage,articleBytes)).status,200);
   assert.equal((await call(`publications/imports/${changedStage.id}/preview`,{})).status,422,'same source version cannot change content');
+  // In parts (server/upload-parts.mjs): ordered and resumable, checked and stored once as a whole, and repeatable once stored.
+  const partsManifest=await fixtureManifest(); partsManifest.source.content_key='integration-parts-guide';
+  const partsStage=await stage(partsManifest); const half=Math.ceil(articleBytes.length/2), total=articleBytes.length, writesBefore=storageWrites;
+  assert.deepEqual(await uploadPart(partsStage,articleBytes.subarray(half),half,total),{status:202,body:{received:0}},'a part cannot start a spool past its beginning');
+  assert.deepEqual(await uploadPart(partsStage,articleBytes.subarray(0,half),0,total),{status:202,body:{received:half}});
+  assert.deepEqual(await uploadPart(partsStage,articleBytes.subarray(0,half),0,total),{status:202,body:{received:half}},'a repeated part is not written twice');
+  assert.equal(storageWrites,writesBefore,'nothing is stored before the whole file has arrived');
+  const whole=await uploadPart(partsStage,articleBytes.subarray(half),half,total);
+  assert.equal(whole.status,200,JSON.stringify(whole.body)); assert.deepEqual(whole.body.uploadedParts,['primary']); assert.equal(storageWrites,writesBefore+1);
+  assert.equal((await uploadPart(partsStage,articleBytes.subarray(0,half),0,total)).status,200,'a stored asset answers its stage again');
+  assert.equal(storageWrites,writesBefore+1);
+  assert.equal((await call(`publications/imports/${partsStage.id}/preview`,{})).status,200,'an asset sent in parts previews like one sent whole');
+  const wrongStage=await stage({...structuredClone(partsManifest),source:{...partsManifest.source,content_key:'integration-parts-wrong'}});
+  assert.equal((await uploadPart(wrongStage,new Uint8Array(half),0,total)).status,202);
+  assert.equal((await uploadPart(wrongStage,new Uint8Array(total-half),half,total)).status,422,'the whole file must match the manifest hash');
+  assert.deepEqual(await uploadPart(wrongStage,new Uint8Array(total-half),half,total),{status:202,body:{received:0}},'a rejected file is discarded');
+  assert.equal(storageWrites,writesBefore+1);
   await expireUncommitted();
   const next=structuredClone(moved); next.source.version='docstudio-v2'; next.content.title='Updated workspace guide';
   const a=await prepared(next),b=await prepared(next);
@@ -161,9 +185,9 @@ try {
   }
   const head=await fetch(mediaPath,{method:'HEAD',headers:mediaHeaders}); assert.equal(head.status,200); assert.equal(head.headers.get('Content-Length'),'24');
   assert.equal((await fetch(mediaPath,{headers:{...mediaHeaders,Range:'bytes=0-1,4-5'}})).status,416);
-  jar=await login('+12025550182');
+  jar=await login(phones.scoped);
   assert.equal((await call('publications/imports/stage',{manifest:third,sourceReviewConfirmed:true})).status,403,'product editor cannot retire another product placement');
-  jar=await login('+12025550183');
+  jar=await login(phones.learner);
   const learnerJar={...jar};
   assert.equal((await call('publications/access')).status,403);
   assert.equal((await fetch(mediaPath,{headers:{Cookie:`${sessionCookie}=${jar[sessionCookie]}`,Range:'bytes=0-1'}})).status,403,'staff video is private to authorized viewers');
@@ -238,4 +262,19 @@ try {
   await admin.query('update private.sms_sessions set revoked_at=now() where token_hash=$1',[digest(jar[sessionCookie])]);
   assert.equal((await fetch(mediaPath,{method:'HEAD',headers:mediaHeaders})).status,401,'HEAD requires the current unrevoked session');
   console.log('Publication HTTP/PostgreSQL/Edge integration passed: actual SMS, immutable upload recovery and revision, concurrent/replayed commit, explicit placement retirement, stale preview, current product permission, public and private range/HEAD, actor-free public ticket replay/expiry/revocation, bounded cleanup, and session revocation.');
-} finally { await new Promise(resolve=>server.close(resolve)); await pool.end(); await admin.end(); }
+} finally {
+  await new Promise(resolve=>server.close(resolve));
+  // DocStudio provenance and published assets are immutable. These rows are the run's own,
+  // so the teardown lifts those guards for its own transaction only.
+  await removeTestIdentities(admin,[owner,scoped,learner],{
+    also:[
+      'delete from private.publication_revision_provenance where import_id in (select id from private.publication_imports where actor_id = any($1::uuid[]))',
+      'delete from private.publication_imports where actor_id = any($1::uuid[])',
+    ],
+    unlock:[
+      ['private.publication_revision_provenance','publication_provenance_immutable'],
+      ['private.publication_import_assets','publication_asset_immutable'],
+    ],
+  });
+  await pool.end(); await admin.end();
+}

@@ -13,6 +13,8 @@ import { sqlAgentStore } from './agents/store.mjs';
 import { ownerNotifier } from './agents/notify.mjs';
 import { costCents, inputTokenBound, modelRuntime, requestBody, worstCaseCents } from './agents/runtime/index.mjs';
 import { inputOnlyCents } from './agents/runtime/pricing.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -29,7 +31,7 @@ const store = sqlAgentStore(pool);
 const owner = randomUUID();
 const ownerToken = `runtime-owner-${randomUUID()}`;
 const run = randomUUID().slice(0, 8);
-const ownerPhone = `+1202555${String(1000 + Math.floor(Math.random() * 9000))}`;
+const ownerPhone = phones.owner;
 // Text that must appear in the request to the model and nowhere the team keeps: no run, task, action, alert, audit event, ledger row or log line.
 const canary = `CANARY-${run}`;
 const customerText = `Pat Example at 555-0142 wrote: ${canary}. Please advise.`;

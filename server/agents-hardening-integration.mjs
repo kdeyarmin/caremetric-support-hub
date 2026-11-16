@@ -12,6 +12,8 @@ import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { digest, withSession } from './sms-auth.mjs';
 import { sqlAgentStore } from './agents/store.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -29,7 +31,7 @@ const store = sqlAgentStore(pool, { fenced: true });
 const run = randomUUID().slice(0, 8);
 const owner = randomUUID();
 const ownerToken = `hardening-owner-${randomUUID()}`;
-const ownerPhone = `+1202555${String(1000 + Math.floor(Math.random() * 9000))}`;
+const ownerPhone = phones.owner;
 const minute = 60_000;
 
 const call = async (fn, args = []) => (await pool.query(`select ${fn}(${args.map((_, i) => `$${i + 1}`).join(',')}) as r`, args)).rows[0].r;

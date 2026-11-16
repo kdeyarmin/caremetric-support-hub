@@ -48,9 +48,12 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     // The prompt carries the features, the data and its sources, and the site's own caveats.
     for (const phrase of ['Stark annual limit tracking', 'Competitor rankings', 'EMR report imports', 'County intelligence', 'NPPES', 'Care Compare', 'American Community Survey',
       'not a promise of referrals', 'The 30-day trial includes Pro features in one county', 'Site finder', 'Public data library']) expect(text).toContain(phrase);
-    // The AI apps and CRM Intel connects to are written generically, and so is the count of its datasets until the owner approves
-    // data-scale figures (the fact sheet's Intel boundaries: it "states no counts about its data").
-    expect(text).not.toMatch(/ChatGPT|Claude|HubSpot|\b150\b/);
+    // The AI apps and CRM Intel connects to are written generically. The count of its datasets is the site's own, which the owner
+    // approved on 2026-11-16 (the fact sheet's Intel boundaries).
+    expect(text).not.toMatch(/ChatGPT|Claude|HubSpot/);
+    expect(text).toContain('More than 150 public healthcare datasets');
+    // The site's own figures about its data, the only ones the team may state (the fact sheet's Intel boundaries).
+    for (const figure of ['- 150+ public healthcare datasets:', '- 33,000+ ZIP areas and 3,200+ counties:', '- Every NPI in the national provider registry:']) expect(text).toContain(figure);
     expect(featuresText('intel')).toBe(text);
     expect(featuresText('advisors')).toBe('');
   });
@@ -139,6 +142,8 @@ describe('CareMetric CareBase\'s published capabilities', () => {
       'a documented switch to CareBase as the official medication administration record', 'Copilot actions require human approval', 'What each role sees and does',
       '55 Pa. Code Chapter 2800', 'Compliance and survey outcomes depend on']) expect(text).toContain(phrase);
     expect(text).toContain(`${carebase.publishedCount} capabilities in ${carebase.publishedAreas} areas.`);
+    // The home page's own figures.
+    for (const figure of ['- 12–16 hrs annual training tracked per direct care worker, by facility type', '- 60+ survey-ready form templates included']) expect(text).toContain(figure);
     expect(carebase.edits.length).toBeGreaterThan(0);
   });
 

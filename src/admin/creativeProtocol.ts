@@ -13,7 +13,10 @@ export const creativeStatuses = ["draft", "rendering", "ready", "proposed", "app
 export const videoLengthKeys = ["6s", "15s", "30s", "45-60s"] as const;
 
 const reason = z.object({ rule: z.string(), level: z.enum(["warn", "block"]), message: z.string() });
-export const complianceSchema = z.object({ verdict: z.enum(["pass", "warn", "block"]).optional(), reasons: z.array(reason).optional(), version: z.string().optional() });
+// The vision review's answer (server/agents/creative/vision.mjs), when it looked at the image: its score as the ad's audience and one sentence.
+const reviewSchema = z.object({ score: z.number().int().min(1).max(5).optional(), reader: z.string().optional(), fix: z.string().optional(), skipped: z.string().optional() });
+export const complianceSchema = z.object({ verdict: z.enum(["pass", "warn", "block"]).optional(), reasons: z.array(reason).optional(), version: z.string().optional(),
+  review: reviewSchema.optional() });
 const overlaySchema = z.object({
   kicker: z.string().optional(), stat: z.string().optional(), statLabel: z.string().optional(), statSource: z.string().optional(), quote: z.string().optional(),
   quoteSource: z.string().optional(), offerLine: z.string().optional(), checklist: z.array(z.string()).optional(), screenshotId: z.string().optional(), beats: z.array(z.string()).optional(),

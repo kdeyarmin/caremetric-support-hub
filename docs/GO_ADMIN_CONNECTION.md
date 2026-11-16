@@ -1,5 +1,10 @@
 # Go administration connection
 
+> **Retired.** Go was disconnected from the Hub on 2026-10-28
+> (`20261028220500_limit_central_hub_to_three_apps.sql`) and uses its own support. Its registry destination is empty and the
+> Hub refuses every Go capability (`server/delegations.mjs`), so nothing below is reachable today. This page records how the
+> connection worked, for a possible reconnection.
+
 Go uses the existing EMR backend at `ubbtgcaosuebrlwcvihw`; verified CM-Go
 configuration points to that project. The Hub labels its organization, staff and
 application entitlement records as shared with EMR. Do not aggregate these as
