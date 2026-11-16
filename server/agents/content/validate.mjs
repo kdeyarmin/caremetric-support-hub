@@ -94,7 +94,7 @@ const numberStart = new RegExp(String.raw`(?<![\w.$§,/])((?:\d{1,3}(?:,\d{3})+(
 // What follows the number, up to its unit: an optional "+", then a space or a dash (captured), then words, hyphenated ones whole.
 const unitWords = /^(?:\s*\+)?(?:\s*([-–])\s*|\s+)([a-z' -]+)/i;
 // A describing word the reader does not know may stand before the unit too ("3,200 rural counties", "500 Pennsylvania homes", "500
-// family-owned homes"), but not a word that ends the phrase first: a function word ("3 questions your staff ask", "2 ways to save
+// family-owned homes"), and "and" or "or" may join two of them ("3,200 rural and urban counties"), but not a word that ends the phrase first: a function word ("3 questions your staff ask", "2 ways to save
 // hours"), a plural that is not a unit, which is the phrase's own subject ("4 things caregivers wish"), or a measure the number belongs to
 // ("a 5 star rating", "a 30 second video"). A hyphenated number ("30-second video") and a year ("In 2026 survey deficiencies rose") take
 // only the known words, as before.
@@ -106,6 +106,9 @@ const phraseEnds = new Set(['a', 'an', 'the', 'this', 'that', 'these', 'those', 
   'pm', 'star', 'point', 'percent', 'second', 'mile', 'page', 'step', 'dollar', 'word', 'x']);
 const plural = word => /s$/.test(word) && !/(?:ss|us|is|ous|as|'s)$/.test(word);
 const yearLike = /^(?:19|20)\d{2}$/;
+// A label's number names a step or a place in a list, not a count: "Step 2 Train staff", "Steps 2 and 3", "Tip 3", "Touch 2", "No. 1", "#1".
+// Time words are not labels: "each year 12 hours of training" is 12 hours.
+const labelBefore = /(?:\b(?:steps?|phases?|stages?|tips?|items?|rules?|options?|questions?|lessons?|levels?|tiers?|rounds?|touch(?:es)?|no\.|number)\s*#?|#)\s*(?:\d+\s*(?:and|or|to|,|-|–)\s*)?$/i;
 // The country between a number and its unit ("3,200 U.S. counties", "50 US states", "U.S.A."), written as one word, "US", before the unit
 // is looked for: a word stops at a full stop, so "U.S." would otherwise hide the number. "US" and "American" are qualifiers above.
 const country = /\bU\.?\s?S\.?(?:\s?A\.?)?(?![a-z])/gi;
@@ -123,12 +126,14 @@ export function numbersIn(value) {
     // A regulation's own numbers are names, not counts: "Chapter 2600 homes", "§ 20.31", "Chapters 2600 and 2800".
     // A section is named by its chapter ("2800.132"), so the whole part is what marks it; a list of sections ("§ 2600.132(c) and 2800.132") counts too.
     if (chapterNumbers.has(match[1].replace(/,/g, '').split('.')[0])
-      || /(?:chapters?|ch\.|§+|sections?|part|title|code)\s*(?:\d+(?:\.\d+)?(?:\([a-z0-9]+\))*\s*(?:and|or|,)\s*)?$/i.test(text.slice(Math.max(0, match.index - 32), match.index))) continue;
+      || /(?:chapters?|ch\.|§+|sections?|part|title|code)\s*(?:\d+(?:\.\d+)?(?:\([a-z0-9]+\))*\s*(?:and|or|,)\s*)?$/i.test(text.slice(Math.max(0, match.index - 32), match.index))
+      || labelBefore.test(text.slice(Math.max(0, match.index - 16), match.index))) continue;
     const after = text.slice(match.index + match[0].length, match.index + match[0].length + 80);
     const [, dash, phrase = ''] = unitWords.exec(after.replace(country, 'US')) ?? [];
     // After a dash, the number's own compound ends at the next hyphen ("24-hour-a-day" is 24 hours), as it always has.
     const words = (dash ? phrase.split('-')[0] : phrase).trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5);
     const describing = !dash && !yearLike.test(match[1]);
+    let joinable = false;
     for (const word of words) {
       // A hyphenated word is read by its first part as well ("12 month-to-month plans" is 12 months, as before).
       const unit = unitOf(word) ?? (word.includes('-') ? unitOf(word.split('-')[0]) : null);
@@ -136,7 +141,9 @@ export function numbersIn(value) {
         found.add(`${numberWords[match[1].toLowerCase()] ?? numberOf(match[1])}:${unit}`);
         break;
       }
-      if (qualifiers.has(word) || (describing && !phraseEnds.has(word) && !plural(word))) continue;
+      if (qualifiers.has(word) || (describing && !phraseEnds.has(word) && !plural(word))) { joinable = true; continue; }
+      // "and" or "or" right after a describing word joins it to the next; anywhere else it ends the phrase.
+      if (describing && joinable && (word === 'and' || word === 'or')) { joinable = false; continue; }
       break;
     }
   }

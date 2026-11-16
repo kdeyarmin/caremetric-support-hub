@@ -232,8 +232,14 @@ describe('each check that rejects a draft', () => {
     // A hyphenated number and a year take only the words the reader knows, as before.
     expect(numbersIn('a 30-second video; In 2026 survey deficiencies rose; By 2027 most homes; 24-hour-a-day support')).toEqual(['24:hour']);
     expect(numbersIn('12 month-to-month plans, 65 year-old residents')).toEqual(['12:month', '65:year']);
+    // "and" or "or" joins two describing words; a number right after a label names a step, not a count.
+    for (const text of ['3,200 rural and urban counties', '3,200 rural or urban counties']) expect(numbersIn(text), text).toEqual(['3200:county']);
+    expect(numbersIn('2 new and existing customers; 3 rural and the counties; 5 tips and resident stories')).toEqual(['2:customer']);
+    expect(numbersIn('Step 2 Train staff; Steps 2 and 3 cover staff training; Tip 3 staff; Touch 2 leads; No. 1 referral source; #1 referral source')).toEqual([]);
+    expect(numbersIn('each year 12 hours of training')).toEqual(['12:hour']);
     // A count no source states is refused; one the catalog states may be written with a describing word.
     expect(reasons(withSentence('CareBase is used in 500 Pennsylvania homes.'))).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('CareBase is used in 500 rural and urban homes.'))).toEqual(['unlisted_number']);
     expect(textProblems('CareMetric Intel covers 3,200+ rural counties.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual([]);
     expect(textProblems('CareMetric Intel covers 4,000 rural counties.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual(['unlisted_number']);
   });
