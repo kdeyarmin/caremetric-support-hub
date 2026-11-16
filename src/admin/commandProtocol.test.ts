@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseCommandEnvelope, parsePortfolioCommand } from "../../supabase/functions/_shared/adminCommandProtocol";
+import { parseAppCommand, parseCommandEnvelope, parsePortfolioCommand } from "../../supabase/functions/_shared/adminCommandProtocol";
 import { createCommandProxy } from "../../supabase/functions/platform-command/handler";
 
 const now = "2026-09-11T16:00:00.000Z";
@@ -38,6 +38,26 @@ describe("administrator command contracts", () => {
     expect(() => parseCommandEnvelope(envelope({ ...result, commandId: id }, "apply"), apply)).toThrow();
     expect(() => parsePortfolioCommand({ operation: "apply", commandId, expectedDigest: sha, parameters: { active: true } })).toThrow();
     expect(() => parsePortfolioCommand({ operation: "apply", commandId, expectedDigest: "not-a-digest" })).toThrow();
+  });
+});
+
+describe("access changes for other applications", () => {
+  const account = "00000000000000000000002a";
+  it("accepts an Intel account change only through the Hub server's parser, never CareBase's", () => {
+    const intel = { ...draft, product: "intel", targetId: account };
+    expect(parseAppCommand(intel)).toEqual({ product: "intel", command: { ...request.command, targetId: account } });
+    // The platform-command Edge function sends whatever parsePortfolioCommand accepts to CareBase.
+    expect(() => parsePortfolioCommand(intel)).toThrow();
+    expect(parseAppCommand(draft)).toEqual(request);
+    for (const invalid of [{ ...intel, targetId: target }, { ...intel, targetId: account.toUpperCase() }, { ...intel, action: "organizations.setSuspension", parameters: { suspended: true } }, { ...intel, product: "breathe" }, { ...intel, product: "advisors" }])
+      expect(() => parseAppCommand(invalid), JSON.stringify(invalid)).toThrow();
+  });
+  it("checks Intel's answer names Intel and the same account", () => {
+    const intelRequest = parseAppCommand({ ...draft, product: "intel", targetId: account });
+    const intelPreview = { ...preview, targetId: account, changes: [{ field: "status", before: "active", after: "disabled" }] };
+    expect(parseCommandEnvelope({ ...envelope(intelPreview), product: "intel" }, intelRequest).data).toEqual(intelPreview);
+    expect(() => parseCommandEnvelope(envelope(intelPreview), intelRequest)).toThrow();
+    expect(() => parseCommandEnvelope({ ...envelope({ ...intelPreview, targetId: target }), product: "intel" }, intelRequest)).toThrow();
   });
 });
 
