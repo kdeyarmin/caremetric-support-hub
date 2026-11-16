@@ -135,22 +135,22 @@ describe('an Intel trial entitlement while Stripe cannot be reached', () => {
   let platformBilling, STRIPE_ACCOUNT_ID;
   beforeAll(async () => { ({ platformBilling } = await import('./billing.mjs')); ({ STRIPE_ACCOUNT_ID } = await import('./stripe.mjs')); });
 
-  it('still answers the entitlement, keeping a card Stripe confirmed in the last day', async () => {
+  it('still answers the entitlement, keeping a card Stripe confirmed until Stripe says otherwise', async () => {
     const h = hub();
     const billing = h.make();
     expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: true });
     h.stripe.up = false;
     expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: true });
-    expect(h.log.warn).toHaveBeenCalledWith(expect.stringContaining('confirmed in the last 24 hours'));
-    // A day on, the old confirmation no longer stands in: the card reads as not confirmed until Stripe answers again.
-    h.later(25 * 60 * 60 * 1000);
-    expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: false });
-    h.stripe.up = true;
-    expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: true });
+    expect(h.log.warn).toHaveBeenCalledWith(expect.stringContaining('the card it confirmed earlier'));
+    // A long outage does not take it away: a card removed meanwhile does not matter, as Stripe cancels a trial that ends without one.
+    h.later(3 * 24 * 60 * 60 * 1000);
+    expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: true });
+    // A restart while Stripe is down starts with no confirmation: the card reads as not confirmed until Stripe answers again.
+    expect(await h.make().entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: false });
   });
 
   it('never unlocks a trial whose card Stripe has not confirmed', async () => {
-    // No card yet, then Stripe goes down: still not confirmed.
+    // An abandoned card setup is a trialing subscription with no card. Stripe then goes down: still not confirmed.
     const h = hub({ cardSaved: false });
     const billing = h.make();
     expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: false });

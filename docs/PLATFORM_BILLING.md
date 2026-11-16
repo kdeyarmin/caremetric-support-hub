@@ -445,9 +445,13 @@ unlocks a trial, and it never fails the entitlement itself: Intel limits an
 organization to Billing whenever the Hub cannot answer, so one Stripe outage used
 to lock out every trialing Intel customer. While Stripe cannot be reached, the
 rest of the answer comes from the Hub's database as usual, and
-`payment_method_on_file` is `true` only if Stripe confirmed that subscription's
-card in the last 24 hours (kept in the server's memory), otherwise `false`. A check
-that finds no card forgets the confirmation at once. Intel only grants a new trial after this server-side check, never from
+`payment_method_on_file` is Stripe's last answer for that subscription: `true` only
+if Stripe confirmed its card, otherwise `false`. Every new trial needs a card, but
+Stripe starts the trial before the card is entered, so an abandoned card setup is a
+trialing subscription with no card, and `trialing` alone never stands in for one. A
+confirmation stands until a check finds no card (Stripe cancels a trial that ends
+without a card). It is kept in the server's memory, so after a restart during a
+Stripe outage it reads `false` until Stripe answers. Intel only grants a new trial after this server-side check, never from
 a success query parameter. The browser can force a fresh check on returning from
 Stripe; ordinary entitlement checks retain Intel's five-minute cache limit.
 

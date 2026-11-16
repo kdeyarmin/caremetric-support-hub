@@ -647,12 +647,13 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   /**
    * Whether a trialing Intel subscription has a card Stripe confirms (trial-card.mjs). Intel locks an organization to its Billing page
    * whenever the Hub cannot answer its entitlement, so a Stripe failure here must not fail the whole answer: before, one Stripe hiccup
-   * locked out every trialing Intel customer, those whose trial needs no card included. A failure never unlocks a trial: the answer
-   * falls back to the last time Stripe confirmed this tenant's subscription's card, within a day, else false. A confirmation is kept
-   * in memory only, and a check that finds no card forgets it at once.
+   * locked out every trialing Intel customer. A failure never unlocks a trial: the answer falls back to Stripe's last answer for this
+   * tenant's subscription, true only if Stripe confirmed its card, else false. Every new trial needs a card, but Stripe starts the
+   * trial before the card is entered (an abandoned card setup is a trialing subscription with none), so "trialing" alone proves nothing.
+   * A confirmation stands until a check finds no card: a card removed later does not matter, as Stripe cancels a trial that ends
+   * without one. It is kept in memory, so a restart while Stripe is down starts with none.
    */
   const confirmedCards = new Map();
-  const cardMemoryMs = 24 * 60 * 60 * 1000;
   async function trialCardAnswer(entitlement) {
     const subscriptions = (entitlement.products ?? []).filter(product => product.kind === 'plan' && product.status === 'trialing').map(product => product.subscription).sort();
     const key = `${entitlement.tenant_id}:${subscriptions.join(',')}`;
@@ -665,10 +666,9 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       }
       return confirmed;
     } catch {
-      const at = confirmedCards.get(key);
-      const recent = at !== undefined && now() - at < cardMemoryMs;
-      log.warn(`Stripe could not confirm an Intel trial's card; answering ${recent ? 'the card it confirmed in the last 24 hours' : 'not confirmed'} until it can.`);
-      return recent;
+      const confirmed = confirmedCards.has(key);
+      log.warn(`Stripe could not confirm an Intel trial's card; answering ${confirmed ? 'the card it confirmed earlier' : 'not confirmed'} until it can.`);
+      return confirmed;
     }
   }
 
