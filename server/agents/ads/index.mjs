@@ -67,7 +67,7 @@ export const flightAttempts = 3;
 const accessRefusal = /^(linkedin|meta|google)_(?:token_invalid|permission|not_configured)$/;
 
 /**
- * The ad platforms the team cannot use now (20261117160000_work_recovery.sql, review 2026-11-17): one whose last refusal of the team's
+ * The ad platforms the team cannot use now (20261117180000_work_recovery.sql, review 2026-11-17): one whose last refusal of the team's
  * sign-in or permission (the daily ad review's `refusedBy`, or a campaign it refused in the last 30 days) is newer than its last reconnect
  * (Settings → Social media for LinkedIn and Meta, Settings → Paid ads for Google). November's only flight went to LinkedIn while its token
  * was invalid. A database without the operation answers none.

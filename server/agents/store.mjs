@@ -14,7 +14,7 @@ import { transaction } from '../sms-auth.mjs';
  * work can be handed back. Against a database without those operations the calls keep their old shape
  * and the extras are ignored, so a server can be deployed before the migration is applied.
  */
-/** Work recovery (20261117160000_work_recovery.sql, review 2026-11-17): blocked images rendered again, and why an ad platform refused. */
+/** Work recovery (20261117180000_work_recovery.sql, review 2026-11-17): blocked images rendered again, and why an ad platform refused. */
 export const workRecoveryFeature = 'platform.agents.work-recovery.v1';
 
 export function sqlAgentStore(pool, { fenced = false, growthPriority = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, creativeReview = false, ads = false, watchdog = false, handover = false, workRecovery = false } = {}) {
@@ -63,10 +63,10 @@ export function sqlAgentStore(pool, { fenced = false, growthPriority = false, gr
         socialCampaignProposed: (kind, target) => call('private.social_campaign_proposed', [kind, target]),
         // 20261117120000_ads_flights.sql: read only while flights are on, which needs that migration's setting.
         adsMonthCampaigns: month => call('private.ads_month_campaigns', [month]),
-        // Which platform last refused the team, and when it was last reconnected (20261117160000_work_recovery.sql).
+        // Which platform last refused the team, and when it was last reconnected (20261117180000_work_recovery.sql).
         ...(workRecovery ? { adsPlatformRefusals: () => call('private.ads_platform_refusals') } : {}),
       } : {}),
-      // Images blocked only by checks the 2026-11-17 release corrects, rendered once more (20261117160000_work_recovery.sql).
+      // Images blocked only by checks the 2026-11-17 release corrects, rendered once more (20261117180000_work_recovery.sql).
       ...(workRecovery ? { creativeRenderRequeue: visionOn => call('private.creative_render_requeue', [visionOn === true]) } : {}),
       ...(creativeData ? {
         creativeDataCounties: (perWeek, weekStart) => call('private.creative_data_counties', [perWeek, weekStart]),

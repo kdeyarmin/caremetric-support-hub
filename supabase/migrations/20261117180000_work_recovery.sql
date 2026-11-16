@@ -16,6 +16,7 @@
 -- - The bounce guard trips on two or more hard bounces above the owner's percentage, counted against at least 20 emails: at ten cold
 --   emails a day the window that each save restarts never held 20, so it could never trip.
 -- - A decision-maker's address the people finder confirmed with the business's mail server is recorded as confirmed, not checked again.
+-- - Why a check got no answer (20261117160000_growth_diagnostics.sql) may also be one of the checker's new STARTTLS reasons.
 -- - An opportunity's intent is set when a reply, a trial, a sign-up or a payment is recorded (it was set only by the fit assessment, which
 --   stops before anyone replies).
 -- - A trial started from the owner's own address or a CareMetric address is marked internal, so the scorecard and the customer emails
@@ -160,6 +161,32 @@ begin
   end if;
   execute replace(d, $q$ v_now := v_complaints > 0 or (v_sent >= 20 and v_bounced * 100 > v_pct * v_sent);$q$,
     $q$ v_now := v_complaints > 0 or (v_bounced >= 2 and v_bounced * 100 > v_pct * greatest(v_sent, 20));$q$);
+end $$;
+
+-- ---- Customer growth: the STARTTLS reasons -----------------------------------------------------------------------------------------
+
+-- Why a check got no answer (20261117160000_growth_diagnostics.sql) may also be one of the two STARTTLS reasons the checker now gives: a
+-- server that asks for TLS without offering it (tls_required) and one whose TLS conversation failed (tls_failed).
+do $$
+declare c record;
+begin
+  for c in select con.conname from pg_constraint con join pg_attribute a on a.attrelid = con.conrelid and a.attnum = any(con.conkey)
+    where con.conrelid = 'private.growth_contacts'::regclass and con.contype = 'c' and a.attname = 'mailbox_reason'
+      and position('tls_required' in pg_get_constraintdef(con.oid)) = 0 loop
+    execute format('alter table private.growth_contacts drop constraint %I', c.conname);
+    alter table private.growth_contacts add constraint growth_contacts_mailbox_reason_check check (mailbox_reason in ('temporary', 'blocked',
+      'refused', 'sender_refused', 'unexpected', 'dropped', 'no_mail', 'invalid', 'unreachable', 'error', 'tls_required', 'tls_failed'));
+  end loop;
+end $$;
+
+do $$
+declare d text := pg_get_functiondef('private.growth_mailbox_record(uuid,text,text)'::regprocedure);
+begin
+  if position('''tls_required''' in d) > 0 then return; end if;
+  if position($q$'no_mail', 'invalid', 'unreachable', 'error')$q$ in d) = 0 then
+    raise exception 'The address record changed; update this migration' using errcode = '55000';
+  end if;
+  execute replace(d, $q$'no_mail', 'invalid', 'unreachable', 'error')$q$, $q$'no_mail', 'invalid', 'unreachable', 'error', 'tls_required', 'tls_failed')$q$);
 end $$;
 
 -- ---- Customer growth: an address the people finder confirmed -----------------------------------------------------------------------

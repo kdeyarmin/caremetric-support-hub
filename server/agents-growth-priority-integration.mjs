@@ -1,4 +1,4 @@
-// Stage 2 of the 2026-11-17 review through the real roles (20261117170000_growth_priority.sql): with "Send to the best prospects first"
+// Stage 2 of the 2026-11-17 review through the real roles (20261117190000_growth_priority.sql): with "Send to the best prospects first"
 // off the ready queue is unchanged, and on, every other kind of action keeps its place first and growth emails follow by band, fit and
 // waiting time; a deferral waits for the next Eastern day over the cap, for the next opening outside the send hours and 15 minutes
 // otherwise; the send claim holds a cold email (never a customer email) outside the owner's hours; a first report open brings the second
@@ -31,7 +31,7 @@ const readContext = salesGrowthContextReader(pool);
 const run = randomUUID().slice(0, 8), owner = randomUUID(), token = `growth-priority-${randomUUID()}`;
 const row = async (sql, values = []) => (await admin.query(sql, values)).rows[0];
 const refused = code => error => error?.code === code;
-const gate = await readFile(new URL('../supabase/migrations/20261117170100_growth_priority_contract.sql', import.meta.url), 'utf8');
+const gate = await readFile(new URL('../supabase/migrations/20261117190100_growth_priority_contract.sql', import.meta.url), 'utf8');
 const seedAgents = (await admin.query("select key,status,autonomy,config from private.agents where key='marketing_manager'")).rows;
 const seedPolicies = (await admin.query('select * from private.growth_policies')).rows;
 const settingKeys = ['growth.send_priority', 'growth.send_from_hour', 'growth.send_until_hour', 'growth.cold_email_daily_cap', 'growth.bounce_guard_percent', 'growth.presend_check'];

@@ -266,6 +266,10 @@ Keeping a rule is never a weakness: judge what the email does within them.`;
 const criticThreshold=4;
 const criticValid=output=>!['specific','relevant','clearAsk','wouldReply'].every(key=>Number.isInteger(output[key])&&output[key]>=1&&output[key]<=5)?'score_range'
   :criticWeaknesses.includes(output.weakness)||'weakness';
+/** One read as it is recorded (20261117160000_growth_diagnostics.sql): the four scores and the weakest sentence (at most 400 characters),
+ * nothing else. The weakness code goes with the email's arms. */
+export const readerNotes=output=>({specific:output.specific,relevant:output.relevant,clearAsk:output.clearAsk,wouldReply:output.wouldReply,
+  weakest:String(output.weakestSentence??'').trim().slice(0,400)});
 /** The reader's scores and weakness as arms (short codes only, within the arms column's size limit). */
 const criticArms=(arms,review)=>{
   arms.critic=String(review.wouldReply);arms.criticSpecific=String(review.specific);arms.criticRelevant=String(review.relevant);arms.criticAsk=String(review.clearAsk);
@@ -406,18 +410,33 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
       return reviewed.outcome==='completed'?reviewed.output:null;
     } catch(error) { if(signal?.aborted||error?.transient===true)throw error; return null; }
   }:null;
+  // What the reader said, and what became of the rewrite, is kept beside the message (20261117160000_growth_diagnostics.sql): the
+  // arms carry only the score the learning groups by.
+  let reviewed=null;
   if(review) {
     const first=await review(kept);
-    if(first) criticArms(arms,first);
-    if(first&&first.wouldReply<criticThreshold&&Date.now()-began<60_000) {
-      const weakest=String(first.weakestSentence??'').slice(0,400);
-      const weakness=first.weakness&&first.weakness!=='none'&&weaknessMeanings[first.weakness]?` What most held it back: ${weaknessMeanings[first.weakness]}.`:'';
-      const again=await write(JSON.stringify({...input,previousDraft:{subject:kept.subject,body:kept.body,citations:kept.citations},
-        fix:`A reader who runs an agency like this one scored this email ${first.wouldReply} of 5 for whether they would reply.${weakness}${weakest?` The sentence that most made them stop reading: "${weakest}".`:''} Rewrite it so every sentence is specific to this agency and earns its place, with one plain next step${shortForm?', keeping the short form':''}.`}),`${promptVersion}-c`,'Rewrote',top);
-      if(again.answer&&!again.problem) {
-        const second=await review(again.answer);
-        if(second&&second.wouldReply>=first.wouldReply){kept=again.answer;criticArms(arms,second);arms.rewritten='1';}
+    if(first) {
+      criticArms(arms,first);
+      let outcome='not_needed',second=null,problem=null;
+      if(first.wouldReply<criticThreshold) {
+        if(Date.now()-began>=60_000) outcome='no_time';
+        else {
+          const weakest=String(first.weakestSentence??'').slice(0,400);
+          const weakness=first.weakness&&first.weakness!=='none'&&weaknessMeanings[first.weakness]?` What most held it back: ${weaknessMeanings[first.weakness]}.`:'';
+          const again=await write(JSON.stringify({...input,previousDraft:{subject:kept.subject,body:kept.body,citations:kept.citations},
+            fix:`A reader who runs an agency like this one scored this email ${first.wouldReply} of 5 for whether they would reply.${weakness}${weakest?` The sentence that most made them stop reading: "${weakest}".`:''} Rewrite it so every sentence is specific to this agency and earns its place, with one plain next step${shortForm?', keeping the short form':''}.`}),`${promptVersion}-c`,'Rewrote',top);
+          // A rewrite refused for its words (vocabulary) comes back with no answer but a problem: only no_answer is the model's silence.
+          if(again.problem==='no_answer'||(!again.answer&&!again.problem)) outcome='no_answer';
+          else if(again.problem) {outcome='failed_checks';problem=again.problem;}
+          else {
+            second=await review(again.answer);
+            if(!second) outcome='unread';
+            else if(second.wouldReply>=first.wouldReply){kept=again.answer;criticArms(arms,second);arms.rewritten='1';outcome='kept';}
+            else outcome='scored_lower';
+          }
+        }
       }
+      reviewed={promptVersion:criticPromptVersion,first:readerNotes(first),rewrite:second?readerNotes(second):null,outcome,...(problem?{problem}:{})};
     }
   }
   const tagged={...kept,body:tagLinks(kept.body,tags)};
@@ -426,5 +445,5 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   if (after) return rejected(`tagged_${after}`);
   // The county figure is a source for the checks only: the stored citations are the agency's evidence.
   return {...tagged,citations:tagged.citations.filter(id=>id!=='county'),modelGenerated:true,variant,arms,...(learned?{memoVersion:learned.version}:{}),
-    ...(briefed?{briefVersion:Number(briefed.briefVersion)||null}:{})};
+    ...(briefed?{briefVersion:Number(briefed.briefVersion)||null}:{}),...(reviewed?{review:reviewed}:{})};
 }

@@ -58,7 +58,7 @@ export function actionExecutor({ store, executors = {}, log = line => console.wa
         // Growth deferrals get a durable retry time, and a post held for its time slot waits until then (the store routes by kind);
         // immediately releasing them would starve later ready actions.
         // A growth email says why it waits (the send claim's status), so one over the day's cap or outside the send hours waits
-        // for the next day or the next opening (20261117170000_growth_priority.sql).
+        // for the next day or the next opening (20261117190000_growth_priority.sql).
         if (code === 'action_deferred'
           && await Promise.resolve(store.deferExecution?.(execution.id, execution.execution ?? null, execution.kind, typeof error?.reason === 'string' ? error.reason : null)).catch(() => false) === true) {
           return { executed: false, failed: false, skipped: true, needsSession: false };

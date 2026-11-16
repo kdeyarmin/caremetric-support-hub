@@ -27,7 +27,7 @@ export function growthStore(pool) {
     appEvent:(keyHash,data)=>server('private.growth_app_event',[keyHash,data]),
     plan:(id,data)=>server('private.growth_plan',[id,data]),
     draft:(id,work,data)=>server('private.growth_draft',[id,work,data]),
-    // Prospects who replied, were answered and went quiet (20261117170000_growth_priority.sql; the worker reads it only with the feature).
+    // Prospects who replied, were answered and went quiet (20261117190000_growth_priority.sql; the worker reads it only with the feature).
     quietCandidates:(limit=10)=>server('private.growth_quiet_candidates',[limit]),
     propose:(taskId,messageId)=>server('private.growth_propose',[taskId,messageId]),
     claim:(id,action)=>server('private.growth_claim_message',[id,action]),
@@ -68,7 +68,9 @@ export function growthStore(pool) {
     sendHold:messageId=>server('private.growth_send_hold',[messageId]),
     draftHold:contactId=>server('private.growth_draft_hold',[contactId]),
     mailboxCandidates:limit=>server('private.growth_mailbox_candidates',[limit]),
-    mailboxRecord:(contactId,result)=>server('private.growth_mailbox_record',[contactId,result]),
+    // With a reason (20261117160000_growth_diagnostics.sql), also why the server gave no answer.
+    mailboxRecord:(contactId,result,reason)=>server('private.growth_mailbox_record',reason===undefined?[contactId,result]:[contactId,result,reason]),
+    reviewRecord:(messageId,review)=>server('private.growth_review_record',[messageId,JSON.stringify(review)]),
     sendGuardState:()=>server('private.growth_send_guard_state'),
     sendGuard:token=>withSession(pool,token,db=>run(db,'hub.growth_send_guard',[])),
     sendGuardResume:token=>withSession(pool,token,db=>run(db,'hub.growth_send_guard_resume',[])),

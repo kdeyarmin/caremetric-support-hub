@@ -23,7 +23,7 @@ const answersFeature = 'platform.agents.concierge-autosend.v1';
 /**
  * `salesContext` is the owner's switch "Give the Sales Executive the account brief" (Settings → Customer growth); `growthContext` reads a
  * prospect's account context (context.mjs `salesGrowthContextReader`, or the store's own). Both need the database's reading
- * (platform.agents.growth-priority.v1, 20261117170000_growth_priority.sql).
+ * (platform.agents.growth-priority.v1, 20261117190000_growth_priority.sql).
  */
 export function salesHandlers({ store, notifier, model = null, growth = null, features = null, customerTextToAi = false, publicOrigin = null, guides = null, marketed = null,
   salesContext = false, growthContext = null, log }) {

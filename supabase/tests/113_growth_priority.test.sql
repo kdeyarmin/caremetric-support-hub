@@ -1,7 +1,7 @@
 begin;
 select plan(28);
 
--- Stage 2 of the AI workforce review of 2026-11-17 (20261117170000_growth_priority.sql).
+-- Stage 2 of the AI workforce review of 2026-11-17 (20261117190000_growth_priority.sql).
 select ok(hub.get_backend_contract() -> 'features' ? 'platform.agents.growth-priority.v1', 'The growth priority feature is declared');
 select ok(has_function_privilege('hub_app_server', 'private.growth_defer_action(uuid,integer,text)', 'execute')
   and has_function_privilege('hub_app_server', 'private.growth_quiet_candidates(integer)', 'execute')

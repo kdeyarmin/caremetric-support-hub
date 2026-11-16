@@ -349,7 +349,7 @@ only once the database declares it. `server/agents-growth-roster-match-integrati
 
 ## Interest and our own trials (2026-11-17)
 
-- **Intent follows what the business did** (`20261117160000_work_recovery.sql`, trigger `growth_event_intent`). It was set only by the
+- **Intent follows what the business did** (`20261117180000_work_recovery.sql`, trigger `growth_event_intent`). It was set only by the
   fit assessment, which stops once a business is researched, so it was empty on all 235 Intel opportunities, the three trials included.
   Each recorded event now sets it: a trial, a sign-up, first value, a payment or a meeting 100, a positive reply 75, a reply 60, an
   opened report 50 (at least); "not now" sets it to 25 and "no" to 0, the business's latest word standing over its earlier interest.
@@ -470,6 +470,12 @@ it (`held.top_model_later`); a repair pass stays on the agent's own tier.
 the owner of an agency like this one and scores it 1 to 5 for being specific, relevant, clear in its ask and worth a reply.
 Below 4 the email is rewritten once around its weakest sentence, on the same tier, and the better-scored version is kept. The score is
 recorded with the email (`arms.critic`, `arms.rewritten`), and the Monday memo compares replies by score once there are 20 of each.
+Since 2026-11-17 (`20261117160000_growth_diagnostics.sql`, feature `platform.agents.growth-diagnostics.v1`) what the reader said is
+kept beside the email in `private.growth_message_reviews`: the four scores and the sentence that most made them stop reading, for the
+first read and the rewrite's, and what became of the rewrite (`not_needed`, `no_time`, `no_answer`, `failed_checks` with the check's
+code, `unread`, `scored_lower` or `kept`). On the first day all four reviewed emails scored 2 or 3, each was rewritten and none scored
+higher; after about 20 first emails these rows decide whether the rewrite (about 10 cents and 30 to 45 seconds each) is kept. A
+review that cannot be recorded never holds the email (the sweep counts it as `unreviewed`).
 Since 2026-11-17 (`critic.2`, [review](AI_WORKFORCE_REVIEW_2026-11-17.md)): the first version scored all four emails it read 2 or 3,
 having been told most cold email deserves that, and kept only one number. Now each score has a description (a careful, specific email
 earns a 4), the reader sees the brief's writer part and the writer's own rules, and it names one weakness from a fixed list
@@ -484,7 +490,7 @@ about 7 to 15 cents, the review about a cent. The migration raises the Marketing
 
 ## Spending the day's cold emails well, and acting on interest (2026-11-17)
 
-Stage 2 of the [November 17 review](AI_WORKFORCE_REVIEW_2026-11-17.md) (`20261117170000_growth_priority.sql`, feature
+Stage 2 of the [November 17 review](AI_WORKFORCE_REVIEW_2026-11-17.md) (`20261117190000_growth_priority.sql`, feature
 `platform.agents.growth-priority.v1`). Ten cold emails a day is the whole machine, and on November 16 they went to whoever was approved
 first, a third of them on a Sunday afternoon. Each switch below is under Settings → Customer growth and starts off.
 
@@ -549,15 +555,18 @@ emails a day" is under 2%. Two settings, both off until you save them (`20261116
     again. Unlike "Do not contact" it says nothing about the business's wishes, so it never blocks a named person there. You can
     change it on Growth.
   - *No answer* (a greylisting or silent server): asked again after 16 hours, three times at most. Then **Check** sends as before;
-    **Strict** sends the address to your review (eligibility "Needs review") instead.
+    **Strict** sends the address to your review (eligibility "Needs review") instead. Since 2026-11-17 the contact keeps why the
+    latest unanswered try got no answer (`mailbox_reason`: `temporary`, `blocked`, `refused`, `sender_refused`, `unexpected`,
+    `dropped`, `no_mail`, `invalid`, `unreachable`, `error`, or the STARTTLS reasons below; never the server's words), also after a
+    later try answers, and each
+    run counts them (`why`). On the first day 25 of 47 addresses went unanswered; these say whether asking again ever helps.
   - It needs Railway's Pro plan (port 25), like the people finder's checks, and is not counted in "Most address checks a day". When
     three servers in a row cannot be reached the checker rests six hours and spends no tries.
   - Since 2026-11-17 ([review](AI_WORKFORCE_REVIEW_2026-11-17.md): 25 of 44 checks had no answer and nothing said why):
     - A server that offers STARTTLS is asked over TLS, as servers that refuse a plain sender expect (the certificate is not checked:
-      nothing but the questions crosses it), and one that asks for TLS without offering it says so (`tls_required`).
-    - Each run counts why addresses had no answer (`reasons` in the `growth.verify` and `growth.people` results: `temporary` for
-      greylisting, `blocked`, `tls_required`, `tls_failed`, `sender_refused`, `refused`, `dropped`, `no_mail`, `unexpected`), so a
-      paid checking service is decided on the reasons, not guessed.
+      nothing but the questions crosses it); one that asks for TLS without offering it says so (`tls_required`), and a TLS
+      conversation that fails is `tls_failed`. Both are kept on the contact and counted with the other reasons (`why` in the
+      `growth.verify` and `growth.people` results), so a paid checking service is decided on the reasons, not guessed.
     - An address the people finder already confirmed with the business's mail server is recorded as confirmed, so the check does not
       ask the same server again.
 - **Settings → Customer growth → Pause cold email at this bounce rate** (1 to 50; empty: off). When two or more cold emails sent in

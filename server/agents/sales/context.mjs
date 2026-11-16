@@ -1,7 +1,7 @@
 /**
  * What the Sales Executive may know about a growth prospect when it drafts a reply (review 2026-11-17, row 2.9; Settings → Customer
  * growth → "Give the Sales Executive the account brief", growth.sales_context). Read by `private.sales_growth_context`
- * (20261117170000_growth_priority.sql), which finds the prospect as the hand-over does:
+ * (20261117190000_growth_priority.sql), which finds the prospect as the hand-over does:
  *
  * - the account brief's writer part, as the first-email writer reads it: its summary, the problems as questions, the angle and the cited
  *   opening sentence (never the research part, so never a leader's name, a fit score or the agency's own standing);

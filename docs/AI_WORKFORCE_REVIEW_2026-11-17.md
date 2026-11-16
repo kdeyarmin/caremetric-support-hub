@@ -6,7 +6,7 @@ Reviewed November 16 and 17, 2026, against Hub `main` at `ae35e2d` and Intel `ma
 - **Earlier reviews:** this follows the [November 16 review](AI_WORKFORCE_REVIEW_2026-11-16.md). Its owner steps were done: the roster,
   briefs, the top-model writer, the reader's review, report opens, the address check, the bounce guard and budget flights are all on.
 - **Code:** stage 1 is in [kdeyarmin/caremetric-support-hub#255](https://github.com/kdeyarmin/caremetric-support-hub/pull/255). Stage 2 is
-  in its own pull request, after it (`20261117170000_growth_priority.sql`, feature `platform.agents.growth-priority.v1`).
+  in its own pull request, after it (`20261117190000_growth_priority.sql`, feature `platform.agents.growth-priority.v1`).
 
 **The owner's ask:** a comprehensive review of the AI workforce, and ways to make it more intelligent and better at winning new
 customers.
@@ -68,7 +68,7 @@ hour and acts on interest. Stage 3 waits for a week of clean data.
 Turned-down drafts stay final, as before (a prospect behind one waits for you). The watchdog now counts them, and a one-time rewrite from
 your note is listed below as not built.
 
-The database side is one migration pair (`20261117160000_work_recovery.sql`, gate `20261117160100_work_recovery_contract.sql`, feature
+The database side is one migration pair (`20261117180000_work_recovery.sql`, gate `20261117180100_work_recovery_contract.sql`, feature
 `platform.agents.work-recovery.v1`). It changes no table and adds no setting.
 
 What stays the same:
@@ -141,7 +141,7 @@ Each new behaviour has its own switch, off (or empty) until you set it; the deta
   the plan's result while LinkedIn is disconnected.
 - Images reviewed again (`requeued` on the render runs) and the image review's blocks per week.
 - The watchdog's findings in the morning brief, and fewer of them each week.
-- Why address checks went unanswered (`reasons` on the `growth.verify` runs).
+- Why address checks went unanswered (`why` on the `growth.verify` and `growth.people` runs, and `mailbox_reason` on each contact).
 - The bounce guard's state on Growth → Send guard.
 - After stage 2: sends by priority band and by hour, four reader scores and a weakness per first email, opens per arm.
 
@@ -151,7 +151,7 @@ Each new behaviour has its own switch, off (or empty) until you set it; the deta
   was called.
 - **What was tested:**
   - The Hub's unit tests for every changed area, the full check before pushing, and the growth evaluation.
-  - Against a local Supabase stack with every migration applied: all pgTAP tests (the new `111_work_recovery` included), the backend
+  - Against a local Supabase stack with every migration applied: all pgTAP tests (the new `112_work_recovery` included), the backend
     contract replay, the new `server/agents-work-recovery-integration.mjs` run twice, and the existing creative review, address check,
     social, people finder, hand-over, lifecycle, report views, inbound, creative data, hardening, growth, accounts and sales scripts.
 - **What is not known yet:**

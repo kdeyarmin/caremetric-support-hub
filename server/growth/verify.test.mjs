@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import { growthAddressCheckFeature, growthExecutors, growthHandlers } from './worker.mjs';
-import { guardAlert, verifyHandlers, verifyPerRun } from './verify.mjs';
+import { growthDiagnosticsFeature, guardAlert, verifyHandlers, verifyPerRun } from './verify.mjs';
 
 const features = new Set([growthAddressCheckFeature]);
 const task = { id: 'task', agentKey: 'marketing_manager', agent: { autonomy: 'act' }, kind: 'growth.verify' };
 const clear = { on: true, tripped: false, percent: 5, sent: 3, bounced: 0, complaints: 0, since: '2026-11-16T00:00:00.000Z' };
-const handler = ({ candidates = [], guard = clear, mailbox = null, notifier = null, record = null, clock } = {}) => {
+const handler = ({ candidates = [], guard = clear, mailbox = null, notifier = null, record = null, clock, declared = features } = {}) => {
   const store = {
     sendGuardState: vi.fn(async () => guard),
     mailboxCandidates: vi.fn(async () => candidates),
     mailboxRecord: vi.fn(record ?? (async (_id, result) => ({ result, eligibility: result === 'rejected' ? 'undeliverable' : 'permitted', cancelled: result === 'rejected' ? 1 : 0 }))),
   };
-  const run = verifyHandlers({ growth: { store, people: { mailbox } }, features, notifier, ...(clock ? { clock } : {}) })['growth.verify'];
+  const run = verifyHandlers({ growth: { store, people: { mailbox } }, features: declared, notifier, ...(clock ? { clock } : {}) })['growth.verify'];
   return { store, run };
 };
 const checker = answers => ({ configured: true, available: () => true,
@@ -34,9 +34,31 @@ describe('checking an address before the first email (20261116100000_growth_addr
       ['dead.example.org', ['info@dead.example.org']], ['live.example.org', ['jane@live.example.org']],
       ['any.example.org', ['info@any.example.org']], ['quiet.example.org', ['info@quiet.example.org']]]);
     expect(store.mailboxRecord.mock.calls).toEqual([['a', 'rejected'], ['b', 'verified'], ['c', 'catch_all'], ['d', 'unknown']]);
-    // Why the unanswered one had no answer is kept (review 2026-11-17).
-    expect(outcome.result).toEqual({ guard: 'clear', checked: 4, verified: 1, rejected: 1, catch_all: 1, unknown: 1, undeliverable: 1, cancelled: 1, reasons: { temporary: 1 } });
+    expect(outcome.result).toEqual({ guard: 'clear', checked: 4, verified: 1, rejected: 1, catch_all: 1, unknown: 1, undeliverable: 1, cancelled: 1,
+      why: { temporary: 1 } });
     expect(JSON.stringify(outcome)).not.toMatch(/@/);
+  });
+
+  it('records why a server gave no answer once the diagnostics feature is declared, as one of a few fixed reasons', async () => {
+    const mailbox = checker({ 'info@a.example.org': { result: 'unknown', reason: 'temporary' }, 'info@b.example.org': { result: 'unknown', reason: 'blocked' },
+      'info@c.example.org': { result: 'unreachable' }, 'info@d.example.org': { result: 'unknown', reason: '550 5.7.1 go away' },
+      'info@e.example.org': { result: 'unknown' }, 'info@f.example.org': 'catch_all' });
+    const { store, run } = handler({ mailbox, declared: new Set([growthAddressCheckFeature, growthDiagnosticsFeature]),
+      candidates: ['a', 'b', 'c', 'd', 'e', 'f'].map(id => ({ id, email: `info@${id}.example.org` })) });
+    const outcome = await run(task);
+    expect(store.mailboxRecord.mock.calls).toEqual([['a', 'unknown', 'temporary'], ['b', 'unknown', 'blocked'], ['c', 'unreachable', 'unreachable'],
+      ['d', 'unknown', 'error'], ['e', 'unknown', 'error'], ['f', 'catch_all', null]]);
+    expect(outcome.result).toMatchObject({ checked: 6, unknown: 4, unreachable: 1, catch_all: 1, why: { temporary: 1, blocked: 1, unreachable: 1, error: 2 } });
+    expect(JSON.stringify(outcome)).not.toMatch(/@|550|go away/);
+  });
+
+  it('keeps the STARTTLS reasons (a server that asks for TLS without offering it, a TLS conversation that failed) as their own', async () => {
+    const mailbox = checker({ 'info@a.example.org': { result: 'unknown', reason: 'tls_required' }, 'info@b.example.org': { result: 'unknown', reason: 'tls_failed' } });
+    const { store, run } = handler({ mailbox, declared: new Set([growthAddressCheckFeature, growthDiagnosticsFeature]),
+      candidates: ['a', 'b'].map(id => ({ id, email: `info@${id}.example.org` })) });
+    const outcome = await run(task);
+    expect(store.mailboxRecord.mock.calls).toEqual([['a', 'unknown', 'tls_required'], ['b', 'unknown', 'tls_failed']]);
+    expect(outcome.result).toMatchObject({ why: { tls_required: 1, tls_failed: 1 } });
   });
 
   it('spends no try while the mail servers are out of reach, and asks nothing without a host name to introduce the Hub', async () => {

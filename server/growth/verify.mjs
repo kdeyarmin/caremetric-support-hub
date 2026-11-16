@@ -11,16 +11,22 @@
  * 3. While the bounce guard is tripped (Settings → Customer growth → "Pause cold email at this bounce rate"), the owner is told once a
  *    day. Cold email itself waits in the send executor (worker.mjs), not here.
  *
- * Only counts are returned: never an address or a server's words.
+ * Only counts are returned: never an address or a server's words. Once platform.agents.growth-diagnostics.v1 is declared, why a server
+ * gave no answer is recorded on the contact and counted (`why`) as one of a few fixed reasons, so the retries can be judged.
  */
-import { unansweredReason } from './mailbox.mjs';
-import { growthAddressCheckFeature, growthDay } from './worker.mjs';
+import { growthAddressCheckFeature, growthDay, growthDiagnosticsFeature } from './worker.mjs';
 
-export { growthAddressCheckFeature };
+export { growthAddressCheckFeature, growthDiagnosticsFeature };
 /** Addresses asked about per run: each conversation ends within a minute, and the run stops starting new ones after two. */
 export const verifyPerRun = 6;
 const startBudgetMs = 120_000;
 const results = new Set(['verified', 'rejected', 'catch_all', 'unknown', 'unreachable']);
+/** Why a server gave no answer (mailbox.mjs), as recorded; anything else the checker said is 'error'. */
+// The STARTTLS reasons (mailbox.mjs, 20261117180000_work_recovery.sql): a server that asks for TLS without offering it, and one whose TLS
+// conversation failed.
+export const unansweredReasons = new Set(['temporary', 'blocked', 'refused', 'sender_refused', 'unexpected', 'dropped', 'no_mail', 'invalid', 'tls_required', 'tls_failed']);
+const reasonFor = (result, answer) => (result === 'unreachable' ? 'unreachable'
+  : result === 'unknown' ? (unansweredReasons.has(answer?.reason) ? answer.reason : 'error') : null);
 const domainOf = email => String(email ?? '').slice(String(email ?? '').lastIndexOf('@') + 1).toLowerCase();
 
 /** The owner's alert while the guard holds cold email: counts only, and what to do. */
@@ -40,6 +46,8 @@ export function guardAlert(guard) {
 export function verifyHandlers({ growth, features = null, notifier = null, clock = () => Date.now() }) {
   const declared = features instanceof Set ? features.has(growthAddressCheckFeature) : Array.isArray(features) && features.includes(growthAddressCheckFeature);
   if (!growth || !declared || typeof growth.store?.mailboxCandidates !== 'function') return {};
+  // Why an address got no answer is recorded once the database can hold it (20261117160000_growth_diagnostics.sql).
+  const diagnosing = features instanceof Set ? features.has(growthDiagnosticsFeature) : Array.isArray(features) && features.includes(growthDiagnosticsFeature);
   async function verify(task, { signal, now = () => new Date() } = {}) {
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
     const started = clock();
@@ -59,8 +67,7 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
     // Empty while checking is off (the database reads the owner's setting).
     const candidates = await growth.store.mailboxCandidates(verifyPerRun);
     const counts = { checked: 0, verified: 0, rejected: 0, catch_all: 0, unknown: 0, unreachable: 0, undeliverable: 0, cancelled: 0 };
-    // Why addresses went unanswered, by the checker's reason (review 2026-11-17: 25 of 44 had no answer and nothing said why).
-    const reasons = {};
+    const why = {};
     let stopped = null;
     for (const candidate of candidates) {
       signal?.throwIfAborted();
@@ -71,17 +78,17 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
       try { answer = await mailbox.check(domainOf(candidate.email), [candidate.email], { signal }); }
       catch (error) { if (signal?.aborted) throw error; answer = { result: 'unknown' }; }
       const result = results.has(answer?.result) ? answer.result : 'unknown';
-      const why = unansweredReason(answer);
-      if (why) reasons[why] = (reasons[why] ?? 0) + 1;
+      const reason = reasonFor(result, answer);
       let saved;
-      try { saved = await growth.store.mailboxRecord(candidate.id, result); }
+      try { saved = diagnosing ? await growth.store.mailboxRecord(candidate.id, result, reason) : await growth.store.mailboxRecord(candidate.id, result); }
       catch (error) { if (error?.code !== '22023') throw error; continue; }
       counts.checked++; counts[result]++;
+      if (reason) why[reason] = (why[reason] ?? 0) + 1;
       if (saved?.eligibility === 'undeliverable') counts.undeliverable++;
       counts.cancelled += Number(saved?.cancelled ?? 0);
     }
     const kept = Object.fromEntries(Object.entries(counts).filter(([key, value]) => key === 'checked' || value > 0));
-    return { result: { ...guardResult, ...kept, ...(Object.keys(reasons).length ? { reasons } : {}), ...(stopped ? { stopped } : {}) } };
+    return { result: { ...guardResult, ...kept, ...(Object.keys(why).length ? { why } : {}), ...(stopped ? { stopped } : {}) } };
   }
   return { 'growth.verify': verify };
 }

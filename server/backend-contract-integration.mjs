@@ -79,17 +79,18 @@ const marketingConnectionContracts=await Promise.all([
   ['platform.admin.app-commands.v1','20261117110100_app_command_audiences_contract.sql'],
   ['knowledge.publications.direct-storage.v1','20261117130100_publication_import_window_contract.sql'],
   ['learning.lesson-media.direct-storage.v1','20261117140000_lesson_media_direct_storage_contract.sql'],
-  ['platform.agents.work-recovery.v1','20261117160100_work_recovery_contract.sql'],
-  ['platform.agents.growth-priority.v1','20261117170100_growth_priority_contract.sql'],
+  ['platform.agents.growth-diagnostics.v1','20261117160100_growth_diagnostics_contract.sql'],
+  ['platform.agents.work-recovery.v1','20261117180100_work_recovery_contract.sql'],
+  ['platform.agents.growth-priority.v1','20261117190100_growth_priority_contract.sql'],
 ].map(async([feature,file])=>({feature,sql:await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8')})));
 // The owner's 2026-11-15 hand-over (20261115200000_autonomy_handover.sql) lifted two refusals the founder post and paid ads gates read
 // when they were declared: any automatic approval of those kinds, and any autonomy step naming a founder post. Their replays run against
 // that earlier state, restored only inside the rolled-back replay below; the hand-over migration (idempotent) is applied again before
 // its own gate is replayed.
 const handoverMigration=await readFile(new URL('../supabase/migrations/20261115200000_autonomy_handover.sql',import.meta.url),'utf8');
-// Applying the hand-over migration again redefines private.growth_person_address without the work recovery's patch (20261117160000), so
+// Applying the hand-over migration again redefines private.growth_person_address without the work recovery's patch (20261117180000), so
 // that migration (idempotent too) is applied again before its own gate is replayed.
-const workRecoveryMigration=await readFile(new URL('../supabase/migrations/20261117160000_work_recovery.sql',import.meta.url),'utf8');
+const workRecoveryMigration=await readFile(new URL('../supabase/migrations/20261117180000_work_recovery.sql',import.meta.url),'utf8');
 const beforeHandover=`delete from private.agent_autonomy_steps where requires_feature='platform.agents.autonomy-handover.v1';
 alter table private.agent_actions drop constraint agent_actions_founder_post_check, add constraint agent_actions_founder_post_check check (
   kind <> 'social.founder_post' or coalesce(agent_key = 'social_manager' and target_kind = 'social_item' and target_id ~ '^founder:[0-9]{4}-[0-9]{2}-[0-9]{2}:[1-5]$'

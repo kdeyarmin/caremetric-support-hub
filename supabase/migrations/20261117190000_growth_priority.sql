@@ -24,7 +24,7 @@
 -- 8. private.sales_growth_context: the account brief's writer part, the email that was answered and whether the report was opened, for
 --    "Give the Sales Executive the account brief".
 --
--- Nothing is sent by this migration. 20261117170100_growth_priority_contract.sql declares platform.agents.growth-priority.v1.
+-- Nothing is sent by this migration. 20261117190100_growth_priority_contract.sql declares platform.agents.growth-priority.v1.
 set local lock_timeout = '10s';
 
 insert into private.hub_settings (key, kind) values
@@ -151,7 +151,7 @@ begin
   end if;
   execute replace(d, $q$
  update private.growth_messages set status='sending',attempted_at=now() where id=m.id;$q$, $q$
- -- Send hours (20261117170000_growth_priority.sql): cold email only inside the owner's Eastern weekday hours.
+ -- Send hours (20261117190000_growth_priority.sql): cold email only inside the owner's Eastern weekday hours.
  if v_cold and private.growth_next_send_at(now())>now() then return jsonb_build_object('send',false,'status','outside_hours'); end if;
  update private.growth_messages set status='sending',attempted_at=now() where id=m.id;$q$);
 end $$;
@@ -218,7 +218,7 @@ begin
   end if;
   execute replace(d, $q$    and not exists (select 1 from private.growth_brief_log l where l.opportunity_id = o.id and l.started_at > now() - interval '1 day')
   order by$q$, $q$    and not exists (select 1 from private.growth_brief_log l where l.opportunity_id = o.id and l.started_at > now() - interval '1 day')
-    -- Only an agency that can be emailed (20261117170000_growth_priority.sql): half the briefs were for agencies with no address.
+    -- Only an agency that can be emailed (20261117190000_growth_priority.sql): half the briefs were for agencies with no address.
     and exists (select 1 from private.growth_contacts c where c.id = o.contact_id and c.eligibility = 'permitted')
   order by$q$);
 end $$;

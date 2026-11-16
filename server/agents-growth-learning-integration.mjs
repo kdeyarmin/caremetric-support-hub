@@ -69,7 +69,7 @@ try {
   await assert.rejects(store.learningFacts(product, 3), refused('22023'));
   const facts = await store.learningFacts(product, 90);
   const arm = facts.arms.find(item => item.arm === 'itest' && item.value === run);
-  // No email here linked the agency's own report, so none counts as reported or opened (20261117170000_growth_priority.sql).
+  // No email here linked the agency's own report, so none counts as reported or opened (20261117190000_growth_priority.sql).
   assert.deepEqual(arm, { arm: 'itest', value: run, sent: 4, replied: 2, positive: 1, negative: 0, notNow: 1, bounced: 1, reported: 0, opened: 0 });
   assert.ok(facts.sent >= 4 && facts.replied >= 2 && facts.bounced >= 1);
   const memo7 = facts.memos.find(item => item.version === 7);

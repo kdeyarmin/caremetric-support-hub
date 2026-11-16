@@ -246,7 +246,7 @@ was there. Now (`creative-vision.2`):
   headline and supporting line to the room between the header and the footer; the supporting line is a whole sentence or nothing, never
   cut off with "…"; and small print is never under 2.2% of the width (on a landscape canvas it was about 16 pixels).
 - Images blocked only by the first version (while the review is on) go back to the render queue once
-  (`private.creative_render_requeue`, `20261117160000_work_recovery.sql`), and are reviewed again under version 2.
+  (`private.creative_render_requeue`, `20261117180000_work_recovery.sql`), and are reviewed again under version 2.
 
 ## Approving, rejecting, asking for changes
 
@@ -402,7 +402,7 @@ Since 2026-11-16 (`20261116130000_creative_review.sql`, feature `platform.agents
   declares a feature, it does not see it: the November 15 run opened none because the data creative migration reached production that
   evening.
 
-Since 2026-11-17 (`20261117160000_work_recovery.sql`, feature `platform.agents.work-recovery.v1`; [review](AI_WORKFORCE_REVIEW_2026-11-17.md)):
+Since 2026-11-17 (`20261117180000_work_recovery.sql`, feature `platform.agents.work-recovery.v1`; [review](AI_WORKFORCE_REVIEW_2026-11-17.md)):
 
 - **Checked the same way when drafted and rendered.** Every snapshot rendered on November 16 was blocked: the render read the code-printed
   figure ("72%") as a number the fact sheet does not state. A snapshot is now checked at render against its brief's data, as it was when

@@ -58,7 +58,7 @@ try {
   await admin.query("update private.growth_brief_log set started_at = started_at - interval '2 days' where id = any($1::uuid[])", [earlier]);
 
   // ---- 1. Who is briefed first ------------------------------------------------------------------------------------------------------
-  // Only an agency that can be emailed is briefed (20261117170000_growth_priority.sql): half the briefs were for agencies with no address.
+  // Only an agency that can be emailed is briefed (20261117190000_growth_priority.sql): half the briefs were for agencies with no address.
   const borderline = await prospect('brief-borderline', { fit: 64, contact: true });
   const strong = await prospect('brief-strong', { fit: 90, contact: true });
   const unreachable = await prospect('brief-unreachable', { fit: 99 });

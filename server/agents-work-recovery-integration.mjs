@@ -1,4 +1,4 @@
-// Work recovery through the real roles (20261117160000_work_recovery.sql, AI workforce review 2026-11-17): a county whose snapshot was
+// Work recovery through the real roles (20261117180000_work_recovery.sql, AI workforce review 2026-11-17): a county whose snapshot was
 // blocked frees itself after a week and gives the week its room back; images blocked only by the first image review or by the render's
 // reading of a snapshot's own figure are rendered once more, no other; the ad platforms' refusals and reconnects are read back; the
 // bounce guard trips on two hard bounces in ten cold emails; a mail server's confirmation is recorded with the address; intent follows
@@ -20,7 +20,7 @@ const server = async (fn, values = []) => (await pool.query(`select ${fn}(${valu
 const row = async (sql, values = []) => (await admin.query(sql, values)).rows[0];
 const refused = code => error => error?.code === code;
 const digest = value => createHash('sha256').update(String(value)).digest('hex');
-const gate = await readFile(new URL('../supabase/migrations/20261117160100_work_recovery_contract.sql', import.meta.url), 'utf8');
+const gate = await readFile(new URL('../supabase/migrations/20261117180100_work_recovery_contract.sql', import.meta.url), 'utf8');
 const run = randomUUID().replace(/[^0-9]/g, '').padEnd(6, '3').slice(0, 6);
 const tag = randomUUID().slice(0, 8);
 // Synthetic five-digit county codes no real county uses (9xxxN).

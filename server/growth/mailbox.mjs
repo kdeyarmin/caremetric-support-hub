@@ -124,7 +124,7 @@ export function addressFits(email, name, domain) {
 const failure = reason => ({ result: 'unknown', reason });
 
 /**
- * Why a check got no answer, as a short code for a run's counts (`reasons`): the checker's own reason (temporary, blocked,
+ * Why a check got no answer, as a short code for a run's counts (`why`): the checker's own reason (temporary, blocked,
  * tls_required, tls_failed, sender_refused, refused, dropped, no_mail, unexpected, invalid), or 'error' when the check threw. Null for
  * any other result (an unreachable server is counted as its own result).
  */

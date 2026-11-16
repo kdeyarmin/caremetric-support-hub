@@ -13,8 +13,8 @@ declare
   helper_fns constant text[] := array['private.creative_brief_pictured(uuid)', 'private.growth_internal_address(text)', 'private.growth_event_intent()'];
   fn text;
 begin
-  if (contract @> '{"api_version":4,"features":["platform.settings.v1","platform.agents.creative-review.v1","platform.agents.ads.v1","platform.agents.growth-address-check.v1","platform.agents.growth-people-finder.v1","platform.agents.app-growth.v1","platform.agents.watchdog.v1","platform.agents.autonomy-handover.v1"]}'::jsonb) is not true then
-    raise exception 'Apply the creative review, ads, address check, people finder, app growth, watchdog and hand-over migrations first' using errcode = '55000';
+  if (contract @> '{"api_version":4,"features":["platform.settings.v1","platform.agents.growth-diagnostics.v1","platform.agents.creative-review.v1","platform.agents.ads.v1","platform.agents.growth-address-check.v1","platform.agents.growth-people-finder.v1","platform.agents.app-growth.v1","platform.agents.watchdog.v1","platform.agents.autonomy-handover.v1"]}'::jsonb) is not true then
+    raise exception 'Apply the growth diagnostics, creative review, ads, address check, people finder, app growth, watchdog and hand-over migrations first' using errcode = '55000';
   end if;
   foreach fn in array server_fns loop
     if to_regprocedure(fn) is null or not has_function_privilege('hub_app_server', fn, 'execute')
@@ -43,6 +43,12 @@ begin
   end if;
   if position('mailbox_result = ''verified''' in pg_get_functiondef('private.growth_person_address(uuid,text,text,text,text)'::regprocedure)) = 0 then
     raise exception 'A mail server''s confirmation must be recorded with the address' using errcode = '55000';
+  end if;
+  if position('''tls_required''' in pg_get_functiondef('private.growth_mailbox_record(uuid,text,text)'::regprocedure)) = 0
+    or not exists (select 1 from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
+      where c.conrelid = 'private.growth_contacts'::regclass and c.contype = 'c' and a.attname = 'mailbox_reason'
+        and position('tls_failed' in pg_get_constraintdef(c.oid)) > 0) then
+    raise exception 'Why a check got no answer must include the STARTTLS reasons' using errcode = '55000';
   end if;
   if position('private.growth_internal_address' in pg_get_functiondef('private.growth_ensure_customer(uuid,text)'::regprocedure)) = 0 then
     raise exception 'A trial from the owner''s or a CareMetric address must be internal' using errcode = '55000';

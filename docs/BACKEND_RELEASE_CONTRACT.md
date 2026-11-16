@@ -62,18 +62,19 @@ signs one-time upload addresses (`upload-sign`), so deploy that function first. 
 lesson media straight to the `hub-learning` bucket and reads it back to check it; until then it streams lesson media through
 `app-media` as before ([central learning](CENTRAL_LEARNING.md)).
 
-`20261117160100_work_recovery_contract.sql` declares `platform.agents.work-recovery.v1` once the creative review, ads, address check,
-people finder, app growth, watchdog and hand-over features are declared, `private.creative_render_requeue`,
+`20261117180100_work_recovery_contract.sql` declares `platform.agents.work-recovery.v1` once the growth diagnostics, creative review, ads,
+address check, people finder, app growth, watchdog and hand-over features are declared, `private.creative_render_requeue`,
 `private.ads_platform_refusals`, the three-argument `private.creative_data_counties` and `private.agent_watchdog_facts` are executable by
 `hub_app_server` alone and require its connection, `private.creative_brief_pictured`, `private.growth_internal_address` and
 `private.growth_event_intent` are closed to every role, and each change of the 2026-11-17 review is in place: a county counts as pictured
 only while its snapshot still pictures it, only images blocked by the first image review (while the review is on) are rendered again,
-the bounce guard counts hard bounces against at least 20 emails, the people finder's mail-server confirmation is recorded, an
+the bounce guard counts hard bounces against at least 20 emails, why a check got no answer may be one of the STARTTLS reasons
+(`tls_required`, `tls_failed`), the people finder's mail-server confirmation is recorded, an
 opportunity's intent follows each activity event, a trial from the owner's or a CareMetric address is internal, and the watchdog reads
 what the team lost. Each test fails closed. The Hub server renders the blocked images again and reads the platforms' refusals only when
 the feature is declared ([AI workforce review, November 17](AI_WORKFORCE_REVIEW_2026-11-17.md)).
 
-`20261117170100_growth_priority_contract.sql` declares `platform.agents.growth-priority.v1` once the work recovery, report views, account
+`20261117190100_growth_priority_contract.sql` declares `platform.agents.growth-priority.v1` once the work recovery, report views, account
 brief, learning, address check and colleague features are declared, the three-argument `private.growth_defer_action`,
 `private.growth_quiet_candidates`, `private.sales_growth_context`, the replaced `private.agent_actions_ready` and
 `private.growth_learning_facts` are executable by `hub_app_server` alone and require its connection, the band, score, send-hours,
@@ -257,6 +258,15 @@ growth autonomy, people finder and colleagues features are declared, the setting
 claim still writes only to permitted contacts, the guard counts cold email that bounced for good, and the Marketing Manager's
 `growth.verify` task is scheduled. Each test fails closed. The Hub server checks addresses, holds drafts and sends, and shows the
 Send guard only when the feature is declared ([Customer growth](CUSTOMER_GROWTH.md#checking-an-address-before-the-first-email-and-the-bounce-guard)).
+
+`20261117160100_growth_diagnostics_contract.sql` declares `platform.agents.growth-diagnostics.v1` only after the address check and
+account brief features are declared, contacts hold `mailbox_reason` under a check of the known reasons, the two- and three-argument
+`private.growth_mailbox_record` and `private.growth_review_record` are security definers with a pinned empty search path executable by
+`hub_app_server` alone that require the Hub server connection, the three-argument record calls the unchanged two-argument one (which
+still makes a missing mailbox undeliverable), `private.growth_message_reviews` has row level security and is closed to every role, its
+read check `private.growth_review_read_ok` is closed to every role, and the review record runs it. Each test fails closed. The Hub server
+records why an address check got no answer and the reader's review of each first email only when the feature is declared
+([Customer growth](CUSTOMER_GROWTH.md#checking-an-address-before-the-first-email-and-the-bounce-guard)).
 
 `20261106220100_learning_media_import_contract.sql` declares `learning.media-import.v1` only after `learning.runtime.v1`,
 `learning.media.v1` and `app.sms.v1` are declared, the staged-import table exists with row level security and is closed to every
