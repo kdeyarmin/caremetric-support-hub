@@ -74,8 +74,8 @@ const unitFamilies = [
   ['customer', /^(?:customers?|clients?|users?|operators?|providers?|partners?)$/], ['seat', /^seats?$/], ['county', /^count(?:y|ies)$/],
   ['state', /^states?$/], ['branch', /^branch(?:es)?$/], ['citation', /^(?:citations?|deficienc(?:y|ies)|violations?|findings?|fines?)$/],
   ['referral', /^(?:referrals?|admissions?|patients?|leads?|visits?)$/], ['course', /^(?:courses?|modules?|lessons?|videos?)$/], ['time', /^times?$/],
-  // The data-scale figures Intel's site states ("33,000+ ZIP areas", "150+ public healthcare datasets"), which the fact sheet leaves out
-  // until the owner approves them (docs/INTEL_MARKETING_PLAYBOOK.md, "Decisions for the owner").
+  // The data-scale figures Intel's site states ("33,000+ ZIP areas", "150+ public healthcare datasets"). The owner approved the dataset
+  // count on 2026-11-16 (facts.mjs `dataFigures`); the others stay off the fact sheet (docs/INTEL_MARKETING_PLAYBOOK.md, "Decisions for the owner").
   ['zip', /^zips?$/], ['dataset', /^(?:datasets?|databases?)$/],
 ];
 const unitOf = word => unitFamilies.find(([, pattern]) => pattern.test(word))?.[0] ?? null;

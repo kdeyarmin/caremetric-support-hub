@@ -366,8 +366,12 @@ The playbook keeps the vendor detail and figures for people, not for prompts.
 - Intel imports referral and admission reports from the EHR as files: an upload, an SFTP folder or email. It is not a live connection to any EHR, and no message names an EHR vendor.
 - Intel works in a phone's web browser and can be added to the home screen, where it opens like an app. It is not an app in the app stores.
 - Public Medicare data shows which physicians certify home health patients and which agencies serve a county. It does not show who referred which patient to whom.
-- Intel has no approved customer results and states no counts about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files), and point to the free county report and the free trial instead.
+- Intel has no approved customer results, and the only count about its data it states is its number of public healthcare datasets, under "Approved figures about its data". Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files), and point to the free county report and the free trial instead of results.
 - Intel is evaluated with a free trial, its prices are on its website, and questions get written answers. Describe what Intel does; never describe or compare what other products do.
+
+**Approved figures about its data** (owner approval 2026-11-16; no other count of Intel's data is approved):
+
+- More than 150 public healthcare datasets, which Intel's own site writes as "150+". It is the only count about Intel's data you may state: never give a count of its ZIP areas, counties or providers.
 
 The sales playbook gained matching written answers for EHR connection and security questions (`integration` and `security` in
 `server/growth/playbook.mjs`), and three outreach angles that follow the lead order: visit preparation, the hospital outcomes packet and
@@ -638,6 +642,10 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
   and Growth "For growing healthcare teams" instead of "The usual agency plan"; the Founders Sale's excluded add-ons say "Intel extra
   seats/locations/states" to match. Prices and the offer's scope are unchanged. The owner confirmed this wording on 2026-11-16
   (kdeyarmin/caremetric-support-hub#222).
+- [x] 2026-11-16: Intel's count of its datasets, as its own site states it: more than 150 public healthcare datasets ("150+"). It is on
+  the fact sheet ("Approved figures about its data") and back in Intel's catalog, so every draft may state it. Approved by the owner on
+  2026-11-16. No other data-scale figure is approved: not its ZIP areas, counties, NPI refresh or release checks
+  (docs/INTEL_MARKETING_PLAYBOOK.md, "Decisions for the owner").
 
 ## Feature and function reference
 
@@ -650,7 +658,7 @@ packet or a log of recorded actions, never the state's survey. Binder and survey
 than as a readiness guarantee.
 The Intel source also describes spoken visit entry, a pre-visit card read aloud and spoken questions to its AI Assistant; below, visit
 logging, debriefs and directions use the approved written workflow only. As in the catalog, the AI apps and CRM Intel connects to are
-not named, and the count of its datasets is left out until the owner approves data-scale figures.
+not named. The count of its datasets is the site's own ("150+", "More than 150"), which the owner approved on 2026-11-16.
 This preserves the owner's text-only AI rule and does not authorize voice or phone claims. Static presenter videos remain course media.
 
 ### CareBase feature and function reference
@@ -978,7 +986,7 @@ The people, providers and Medicare activity in the places you serve, within your
 
 #### Public data library
 
-Public healthcare datasets from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP.
+More than 150 public healthcare datasets from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP.
 
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |

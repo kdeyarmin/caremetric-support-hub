@@ -41,11 +41,11 @@ const first = (pattern, text) => pattern.exec(text)?.[1] ?? null;
 
 // Wording the AI team may not repeat, rewritten: other products' names (content/validate.mjs), so Intel's EMR import layouts are described
 // without the vendors' names, and the AI apps and CRM Intel connects to without theirs; demos and sales calls, which CareMetric does not
-// offer (growth/playbook.mjs offersMeeting); and counts of Intel's data, which the fact sheet's Intel boundaries rule out until the owner
-// approves data-scale figures (docs/INTEL_MARKETING_PLAYBOOK.md, "Decisions for the owner"): a catalog's numbers are ones drafts may state.
+// offer (growth/playbook.mjs offersMeeting). A catalog's numbers are ones drafts may state: Intel's count of its datasets ("150+",
+// "More than 150") is kept since the owner approved it on 2026-11-16 (docs/GTM_FACTS.md, Owner confirmation); add a rule here for any
+// other count of Intel's data its pages state, which is not approved (docs/INTEL_MARKETING_PLAYBOOK.md, "Decisions for the owner").
 const vendorEdit = replacement => `EMR vendors named on the page are written generically: "${replacement}"`;
 const productEdit = replacement => `Other products named on the page are written generically: "${replacement}"`;
-const countEdit = replacement => `A count of Intel's datasets is left out until the owner approves data-scale figures: "${replacement}"`;
 const generic = [
   [/Saved layouts cover HCHB, WellSky, Axxess and MatrixCare\./g, 'Saved layouts cover common home health and hospice EMR reports.', vendorEdit],
   [/Saved layouts support common reports from Homecare Homebase, WellSky, Axxess, and MatrixCare\. These are file-based imports; the listed layouts do not imply a live connection to those vendors\./g,
@@ -57,8 +57,6 @@ const generic = [
     'start from a saved layout for a common home health or hospice EMR report. These are file-based imports, not live EMR connections.', vendorEdit],
   [/connect Claude, ChatGPT or any MCP app to Intel/g, 'connect an AI app that supports MCP to Intel', productEdit],
   [/accounts to HubSpot as companies/g, 'accounts to a supported CRM as companies', productEdit],
-  [/with 150\+ public healthcare datasets/g, 'with public healthcare datasets', countEdit],
-  [/More than 150 public healthcare datasets/g, 'Public healthcare datasets', countEdit],
   [/ ?You can also explore demo options with fictional facility data before setting up your own organization\./g, '', () => 'A sentence offering demo options is left out: CareMetric offers no demos.'],
   [/without a sales call/g, 'on your own', () => '"Without a sales call" is written "on your own": the team never mentions sales calls.'],
 ];

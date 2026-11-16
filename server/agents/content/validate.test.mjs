@@ -199,9 +199,14 @@ describe('each check that rejects a draft', () => {
         expect(textProblems(sentence, { product: 'intel', numbers }), `${source}: ${sentence}`).toEqual([]);
       expect(textProblems('Intel draws on 200+ public healthcare datasets.', { product: 'intel', numbers }), source).toEqual(['unlisted_number']);
     }
-    // Intel's catalog leaves the count out until the owner approves data-scale figures (scripts/refresh-product-features.mjs), so until
-    // then no copy about Intel may state it.
-    expect(textProblems('Intel draws on 150+ public healthcare datasets.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual(['unlisted_number']);
+    // The owner approved Intel's count on 2026-11-16: its catalog states it as the site does, and so does the fact sheet, so copy about
+    // Intel may state it either way. A different count, and the data-scale figures that are not approved, are still refused.
+    for (const numbers of [catalogNumbers('intel'), allowedNumbers([])]) {
+      for (const sentence of ['Intel draws on 150+ public healthcare datasets.', 'Intel draws on more than 150 public healthcare datasets.'])
+        expect(textProblems(sentence, { product: 'intel', numbers }), sentence).toEqual([]);
+      expect(textProblems('Intel draws on 200+ public healthcare datasets.', { product: 'intel', numbers })).toEqual(['unlisted_number']);
+      expect(textProblems('Intel covers 3,200+ counties and 33,000+ ZIP areas.', { product: 'intel', numbers })).toEqual(['unlisted_number']);
+    }
   });
 
   it('rejects guarantees, compliance assurances and certifications', () => {

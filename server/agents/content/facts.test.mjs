@@ -5,7 +5,7 @@ import {
   allowedAmounts, allowedHost, allowedPercents, articleUrl, citationHosts, claims, factSheetText, intelFactsFromCatalog, intelReviewedFacts, legalDisclaimer,
   officialSources, productPages, products, resetAppCatalogFacts, useAppCatalogFacts, articleHomeUrl, intelArticleOrigin, intelArticleUrl, servedElsewhere,
 } from './facts.mjs';
-import { allowedNumbers, namesCompetitor, textProblems } from './validate.mjs';
+import { allowedNumbers, namesCompetitor, numbersIn, textProblems } from './validate.mjs';
 import { parseAppCatalog } from '../../app-catalog-sync.mjs';
 
 const doc = readFileSync(new URL('../../../docs/GTM_FACTS.md', import.meta.url), 'utf8');
@@ -182,6 +182,21 @@ describe('the fact sheet', () => {
     // Owner direction 2026-11-14: expenses never lead, and the AI is text only.
     expect(intel.leadWith.join(' ')).not.toMatch(/expense|stark|compliance|email/i);
     expect(intel.leadWith.join(' ')).not.toMatch(/spoken|voice|dictat/i);
+  });
+
+  it('states Intel\'s count of its datasets, the one figure about its data the owner has approved (2026-11-16), and no other', () => {
+    const text = factSheetText();
+    for (const line of products.intel.dataFigures) {
+      expect(text).toContain(`- ${line}`);
+      expect(doc, line).toContain(line);
+    }
+    // The approved count is a number every draft may state (validate.mjs allowedNumbers), however it is written; nothing else is added.
+    expect(numbersIn(products.intel.dataFigures.join('\n'))).toEqual(['150:dataset']);
+    expect(allowedNumbers([]).has('150:dataset')).toBe(true);
+    expect(textProblems('CareMetric Intel draws on 150+ public healthcare datasets.', { product: 'intel', numbers: allowedNumbers([]) })).toEqual([]);
+    for (const figure of ['33000:zip', '3200:county', '200:dataset']) expect(allowedNumbers([]).has(figure), figure).toBe(false);
+    expect(products.intel.boundaries.join(' ')).toMatch(/the only count about its data it states is its number of public healthcare datasets/);
+    expect(textProblems(products.intel.dataFigures.join('\n'), { product: 'intel' })).toEqual([]);
   });
 
   it('gives the founder\'s story in the owner\'s own words, with nothing a draft could not repeat', () => {

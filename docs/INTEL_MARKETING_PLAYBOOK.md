@@ -162,7 +162,7 @@ honestly offer today.
 | Their pattern | How they do it | How we do it |
 | --- | --- | --- |
 | A headline that names an outcome | Short outcome lines, often strings of three fragments | Complete, plain lines that open on the reader's moment or question, never on the brand or a feature. Our checks refuse fragment strings. |
-| Data-scale numbers as proof | Users, claims analyzed, provider counts | Name the publishers (CMS, NPPES, Census Bureau and the rest). Use counts only after they are added to the fact sheet (section 15). |
+| Data-scale numbers as proof | Users, claims analyzed, provider counts | Name the publishers (CMS, NPPES, Census Bureau and the rest) and the one approved count, more than 150 public healthcare datasets. Use other counts only after they are added to the fact sheet (section 15). |
 | Customer results and logos | Percent lifts, hours saved, named customers | None are approved. Show the product instead: a real screenshot, a county snapshot printed from public data, the free county report, the trial in the reader's own county. |
 | "Request a demo" everywhere | A sales meeting is the next step | The 30-day free trial, the walkthrough at `/#how-it-works`, the free county report at `/county-report`, and written answers by email. Never a call, demo or meeting. |
 | A free personalized market review | A custom report that leads into a sales meeting | The free county report: instant, self-serve, by email. Follow with the trial in that same county. |
@@ -400,11 +400,14 @@ new angle. Treat likes, clicks and generated assets as diagnostics only.
 
 ## 15. Decisions for the owner
 
-The biggest gap against the leaders is proof: they show scale numbers and customer results, and the team can show neither yet.
+The biggest gap against the leaders is proof: they show scale numbers and customer results, and the team can show one scale number (its
+dataset count) and no customer results yet.
 
-- [ ] **Approve data-scale figures for the fact sheet.** Intel's site already says 150+ public datasets, every NPI refreshed weekly,
-  33,000+ ZIP areas, 3,200+ counties and daily CMS release checks. The team cannot use them because they are not on the fact sheet. The
-  November 9 site review asked for production to be confirmed first.
+- [x] **Approve Intel's dataset count.** Approved by the owner on 2026-11-16: "more than 150 public healthcare datasets" ("150+" on
+  Intel's site) is on the fact sheet and in Intel's catalog, so the team may state it (docs/GTM_FACTS.md, Owner confirmation).
+- [ ] **Approve the other data-scale figures for the fact sheet.** Intel's site also says every NPI refreshed weekly, 33,000+ ZIP areas,
+  3,200+ counties and daily CMS release checks. The team cannot use them because they are not on the fact sheet. The November 9 site
+  review asked for production to be confirmed first.
 - [ ] **Get one permissioned pilot result.** Every leader leads with a customer outcome. One real, dated result with a stated baseline
   would be the strongest addition left.
 - [ ] **Confirm offline field capture.** Intel's backlog says offline visit capture shipped on November 10, but the fact sheet says
