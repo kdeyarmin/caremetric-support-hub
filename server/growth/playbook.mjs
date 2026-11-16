@@ -374,6 +374,24 @@ export function operatorHost(host) {
   return !notOperators.some(blocked => value === blocked || value.endsWith(`.${blocked}`));
 }
 
+/**
+ * Job boards and news sites where a dated fact about an employer is published ('jobs' or 'news'), or null. They are never a prospect
+ * (operatorHost refuses them), but "is hiring a community liaison" or "opened a Bucks County office" there is a trigger about the
+ * organization that posted it (deep-research.mjs keeps such a fact only when it names the organization and is recent).
+ */
+const jobHosts = ['indeed.com', 'glassdoor.com', 'ziprecruiter.com', 'monster.com', 'simplyhired.com', 'careerbuilder.com', 'snagajob.com', 'jooble.org',
+  'talent.com', 'lensa.com', 'vivian.com', 'myworkdayjobs.com', 'icims.com', 'greenhouse.io', 'lever.co', 'paylocity.com', 'workforcenow.adp.com',
+  'recruiting.paylocity.com', 'applytojob.com', 'jobs.lever.co', 'hiringthing.com', 'workable.com', 'bamboohr.com', 'ultipro.com', 'dayforcehcm.com'];
+const newsHosts = ['prnewswire.com', 'businesswire.com', 'globenewswire.com', 'homehealthcarenews.com', 'hospicenews.com', 'mcknightshomecare.com',
+  'mcknights.com', 'beckershospitalreview.com', 'fiercehealthcare.com', 'modernhealthcare.com', 'bizjournals.com', 'patch.com'];
+export function triggerHost(host) {
+  const value = String(host ?? '').toLowerCase().replace(/^www\./, '');
+  const on = list => list.some(listed => value === listed || value.endsWith(`.${listed}`));
+  if (on(jobHosts) || /(?:^|[.-])(?:jobs|careers)(?:[.-]|$)/.test(value)) return 'jobs';
+  if (on(newsHosts)) return 'news';
+  return null;
+}
+
 /** The playbook as the model reads it: constant text, cached with the system prompt. */
 export function playbookText(only = null) {
   const lines = [`CareMetric sales playbook (version ${playbookVersion}). Method only: every fact you state still comes from the fact sheet.`, sellingPrinciple];

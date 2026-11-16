@@ -153,14 +153,17 @@ export const minResearchRoundTokens = 1024;
  * (down to one) only when that floor leaves too little for them. Null when even that does not fit, so no round, the first included, can
  * take the run past its ceiling.
  */
-export function fitResearchRound(model, spec, inputTokens, leftCents) {
+export function fitResearchRound(model, spec, inputTokens, leftCents, lockedSearches = null) {
   const cached = spec.system.some(block => block.cache);
   const searching = spec.tools.includes('web_search');
   const worst = (maxTokens, searches) => worstCaseCents(model, { inputTokens, maxTokens, cached }) + searches * searchCents;
-  const wanted = searching ? spec.maxSearches : 0;
+  // After the first round the tool definitions are fixed (lockedSearches): a later round may only ask for fewer output tokens. Changing
+  // a tool's max_uses mid-conversation would change the request's prefix, so the cached system prompt and the conversation's earlier
+  // turns would be read again at full price, and models that bind thinking to the tool list could refuse the turn.
+  const wanted = searching ? (Number.isInteger(lockedSearches) ? lockedSearches : spec.maxSearches) : 0;
   if (worst(spec.maxTokens, wanted) <= leftCents) return { maxTokens: spec.maxTokens, searches: wanted, worst: worst(spec.maxTokens, wanted) };
   const floor = Math.min(spec.maxTokens, minResearchRoundTokens);
-  const searches = searching ? Math.min(wanted, Math.floor((leftCents - worst(floor, 0)) / searchCents)) : 0;
+  const searches = searching ? (Number.isInteger(lockedSearches) ? lockedSearches : Math.min(wanted, Math.floor((leftCents - worst(floor, 0)) / searchCents))) : 0;
   if ((searching && searches < 1) || worst(floor, searches) > leftCents) return null;
   let low = floor, high = spec.maxTokens;
   while (low < high) {
@@ -447,10 +450,13 @@ export function modelRunner({
       let outcome = 'stopped', stopped = 'rounds';
       // The text of every response, paused ones included: a turn that pauses or stops at a limit keeps what it wrote so far.
       const written = [];
+      // The search allowance the first round was sent with; every later round sends the same tool definitions.
+      let lockedSearches = null;
       for (let round = 0; round < spec.maxRounds; round++) {
         // Every round, the first included, fits what the ceiling leaves (the bound of the untrimmed body is the larger one).
-        const fit = fitResearchRound(model, spec, inputTokenBound(bodyNow()), spec.ceilingCents - totals.cents);
+        const fit = fitResearchRound(model, spec, inputTokenBound(bodyNow()), spec.ceilingCents - totals.cents, lockedSearches);
         if (!fit) { stopped = 'ceiling'; break; }
+        if (lockedSearches === null) lockedSearches = fit.searches;
         const body = bodyNow(fit);
         const worst = fit.worst;
         let reply = null, failure = null;
