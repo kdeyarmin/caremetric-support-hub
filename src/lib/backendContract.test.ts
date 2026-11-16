@@ -28,6 +28,19 @@ describe("deployed backend compatibility", () => {
     await expect(verifyBackendContract(origin, key, fetcher)).resolves.toBeUndefined();
   });
 
+  it("accepts a backend that declares more than a hundred features", () => {
+    // Production declared 86 features on 2026-11-16 and gains several a week; a fixed ceiling of 100 would stop every deploy.
+    const features = [...REQUIRED_BACKEND_FEATURES, ...Array.from({ length: 150 }, (_, index) => `future.feature-${index}.v1`)];
+    expect(features.length).toBeGreaterThan(100);
+    expect(() => assertBackendContract({ api_version: 4, features })).not.toThrow();
+  });
+
+  it("still rejects duplicate features and an absurdly long list", () => {
+    expect(() => assertBackendContract({ api_version: 4, features: [...REQUIRED_BACKEND_FEATURES, REQUIRED_BACKEND_FEATURES[0]] })).toThrow(/incompatible/);
+    const huge = [...REQUIRED_BACKEND_FEATURES, ...Array.from({ length: 1000 }, (_, index) => `future.feature-${index}.v1`)];
+    expect(() => assertBackendContract({ api_version: 4, features: huge })).toThrow(/incompatible/);
+  });
+
   it("rejects the earlier six-feature API 4 release at the shared server startup boundary", () => {
     expect(() => assertBackendContract({ api_version: 4, features: [
       "learning.runtime.v1", "platform.admin.read.v1", "app.sms.v1", "learning.sources.v1",

@@ -41,6 +41,26 @@ describe('chat connection recovery', () => {
     expect(screen.queryByRole('button', { name: 'Start chat' })).toBeNull();
   });
 
+  it('does not offer to start a second chat when the new chat cannot be shown at once', async () => {
+    const chat = client();
+    vi.mocked(chat.thread).mockResolvedValueOnce(null);
+    vi.mocked(chat.start).mockResolvedValue({ reference: 1003 });
+    render(<ChatPanel client={chat} />);
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Pat' } });
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'pat@agency.test' } });
+    fireEvent.change(screen.getByLabelText('Question'), { target: { value: 'Hello' } });
+    fireEvent.click(screen.getByRole('checkbox'));
+    // The chat starts, then reading it back fails: every start is a new conversation, so the form must not come back to be sent again.
+    vi.mocked(chat.thread).mockRejectedValueOnce(new Error('offline'));
+    fireEvent.click(screen.getByRole('button', { name: 'Start chat' }));
+    expect(await screen.findByRole('button', { name: 'Retry chat' })).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(/started/);
+    expect(screen.queryByRole('button', { name: 'Start chat' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry chat' }));
+    expect(await screen.findByText('Hello')).toBeTruthy();
+    expect(chat.start).toHaveBeenCalledOnce();
+  });
+
   it('ignores an old poll that finishes after a reply is sent', async () => {
     const poll = polling(), chat = client();
     render(<ChatPanel client={chat} />);

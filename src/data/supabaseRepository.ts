@@ -10,7 +10,7 @@ import type {
   SupportContact,
   UpdateCaseInput,
 } from "../domain";
-import { appRequest, hubClient } from "../lib/appSession";
+import { appRequest, hubClient, responseErrorMessage } from "../lib/appSession";
 
 type JsonObject = Record<string, unknown>;
 
@@ -158,7 +158,7 @@ async function aiCaseRequest<T>(caseId: string, action: string, body?: unknown):
   if (!response.ok) {
     const code = typeof data.error === "object" && data.error ? data.error.code : undefined;
     if (code === "AI_NOT_CONFIGURED") throw new AiNotConfiguredError();
-    throw new Error(typeof data.error === "string" ? data.error : "The AI request could not be completed.");
+    throw new Error(responseErrorMessage(data) ?? "The AI request could not be completed.");
   }
   return data;
 }

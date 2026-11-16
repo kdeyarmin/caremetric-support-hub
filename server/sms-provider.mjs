@@ -3,8 +3,9 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function normalizePhone(value) {
   if (typeof value !== 'string' || value.length > 32) return null;
-  const compact = value.replace(/[ ()-]/g, '');
-  const phone = /^[0-9]{10}$/.test(compact) ? `+1${compact}` : compact;
+  // Spaces, brackets, dashes and dots are formatting. A US number may be written with or without its leading 1.
+  const compact = value.replace(/[ ().-]/g, '');
+  const phone = /^[0-9]{10}$/.test(compact) ? `+1${compact}` : /^1[0-9]{10}$/.test(compact) ? `+${compact}` : compact;
   return /^\+[1-9][0-9]{7,14}$/.test(phone) ? phone : null;
 }
 

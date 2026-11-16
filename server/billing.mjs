@@ -23,6 +23,8 @@ import { trialCardOnFile } from './trial-card.mjs';
 export const appKeyPattern = /^cmb_[A-Za-z0-9_-]{43}$/;
 const trialDays = { carebase: 30, breathe: 14, 'caremetric-emr': 14, 'caremetric-go': 14, 'caremetric-intel': 30 };
 export const entitlementCacheSeconds = 300;
+/** Stripe's trial card answers kept in the database (20261116020000_billing_trial_cards.sql), so they outlast a restart. */
+export const trialCardsFeature = 'billing.trial-cards.v1';
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 // The CareMetric AI Assistant: the actor of every billing change the AI team makes (hub.profiles row seeded with the AI team).
 const aiAssistant = 'a1a00000-a1a0-4000-8000-000000000001';
@@ -68,7 +70,7 @@ function asHttpError(error) {
 }
 
 export function platformBilling({ pool, secretKey, webhookSecrets = [], accountId = STRIPE_ACCOUNT_ID, portalConfiguration,
-  publicOrigin, fetchImpl = fetch, apiBase, now = () => Date.now(), log = console, authorizeCustomerBilling, customerPurchasingEnabled = false }) {
+  publicOrigin, fetchImpl = fetch, apiBase, now = () => Date.now(), log = console, authorizeCustomerBilling, customerPurchasingEnabled = false, features = new Set() }) {
   // The customer portal configuration (Settings → Billing); `portalConfiguration` may be a function, read on each use.
   const portal = () => { const value = live(portalConfiguration); return typeof value === 'string' && /^bpc_[A-Za-z0-9]+$/.test(value) ? value : undefined; };
   const client = stripeClient({ secretKey, fetchImpl, ...(apiBase ? { apiBase } : {}) });
@@ -142,7 +144,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     return object;
   }
 
-  const customerSelfService = customerBillingService({ pool, stripe, now, publicOrigin, purchasingEnabled: customerPurchasingEnabled,
+  const customerSelfService = customerBillingService({ pool, stripe, now, publicOrigin, purchasingEnabled: customerPurchasingEnabled, log,
     authorize: authorizeCustomerBilling ?? (() => { throw new HttpError(503, 'Native purchasing verification is unavailable.'); }),
     mirrorSubscription: subscription => transaction(pool, db => mirror(db, 'subscription', subscription, new Date(now()), { live: client })),
     mirrorCustomer: customer => transaction(pool, db => mirror(db, 'customer', customer, new Date(now()), { live: client })),
@@ -175,15 +177,24 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         }
         return { received: true };
       });
-      // A duplicate receipt can retry reconciliation after a prior provider/database timeout.
-      if (eventTarget(event)?.kind === 'checkout') await customerSelfService.reconcileCheckout(event.data.object.id);
-      if (live && event.data.object.metadata?.app !== 'caremetric-go' && normalizers.invoice(event.data.object).app !== 'caremetric-go') {
-        const target = eventTarget(event);
-        if (target?.kind === 'subscription') await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${target.id}`, { expand: ['latest_invoice', 'discounts'] }));
-        if (target?.kind === 'invoice') {
-          const invoice = normalizers.invoice(event.data.object);
-          if (invoice.subscription) await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${invoice.subscription}`, { expand: ['latest_invoice', 'discounts'] }));
+      // A duplicate receipt can retry reconciliation after a prior provider/database timeout. A conflict (a 409: a paid checkout whose
+      // receipt does not match its quote) is permanent, so retrying the event cannot help: it is logged and the event acknowledged, and
+      // the one-minute Checkout sweep keeps reporting it for billing support. Before, it failed every event Stripe sent about that quote
+      // until Stripe stopped calling the endpoint. Subscription quotes settle their own conflicts (customer-billing.mjs). Anything else
+      // fails the event, so Stripe sends it again.
+      try {
+        if (eventTarget(event)?.kind === 'checkout') await customerSelfService.reconcileCheckout(event.data.object.id);
+        if (live && event.data.object.metadata?.app !== 'caremetric-go' && normalizers.invoice(event.data.object).app !== 'caremetric-go') {
+          const target = eventTarget(event);
+          if (target?.kind === 'subscription') await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${target.id}`, { expand: ['latest_invoice', 'discounts'] }));
+          if (target?.kind === 'invoice') {
+            const invoice = normalizers.invoice(event.data.object);
+            if (invoice.subscription) await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${invoice.subscription}`, { expand: ['latest_invoice', 'discounts'] }));
+          }
         }
+      } catch (error) {
+        if (!(error instanceof HttpError && error.status === 409)) throw error;
+        log.warn(`Billing webhook ${event.type} was recorded, but a customer quote it touches needs billing support: ${error.message}`);
       }
       return receipt;
     } catch (error) {
@@ -593,8 +604,11 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   async function migrateSubscribers(live, actor, request, newPrice, oldPrice) {
     let migrated = 0, failed = 0;
     const subscriptions = await live.list('/v1/subscriptions', { price: request.price, status: 'all' }, 1000);
-    for (const subscription of subscriptions) {
-      if (['canceled', 'incomplete_expired'].includes(subscription.status)) continue;
+    for (const listed of subscriptions) {
+      if (['canceled', 'incomplete_expired'].includes(listed.status)) continue;
+      // Stripe lists a subscription with its first ten items only; the old price may be further down.
+      let subscription;
+      try { subscription = await withAllSubscriptionItems(live, listed); } catch { failed++; continue; }
       for (const item of subscription.items.data.filter(entry => (entry.price?.id ?? entry.price) === request.price)) {
         try {
           await live.post(`/v1/subscription_items/${item.id}`, { price: newPrice, quantity: item.quantity,
@@ -605,7 +619,8 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       }
     }
     await transaction(pool, db => audit(db, actor, 'billing.price.migrate', oldPrice.tenant_id, null, { price_from: request.price, price_to: newPrice, migrated, failed }));
-    return { migrated, failed };
+    // More subscriptions were on the old price than one pass reads (1000): the rest are still on it, and the administrator is told so.
+    return { migrated, failed, ...(subscriptions.truncated ? { incomplete: true } : {}) };
   }
 
   // ---------------------------------------------------------------------------
@@ -640,6 +655,51 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
   const appResponse = entitlement => ({ ...entitlement, cache_ttl_seconds: entitlementCacheSeconds, checked_at: entitlement.checked_at ?? new Date(now()).toISOString() });
 
+  /**
+   * Whether a trialing Intel subscription has a card Stripe confirms (trial-card.mjs). Intel locks an organization to its Billing page
+   * whenever the Hub cannot answer its entitlement, so a Stripe failure here must not fail the whole answer: before, one Stripe hiccup
+   * locked out every trialing Intel customer. A failure never unlocks a trial: the answer falls back to Stripe's last answer for this
+   * tenant's subscription, true only if Stripe confirmed its card, else false. Every new trial needs a card, but Stripe starts the
+   * trial before the card is entered (an abandoned card setup is a trialing subscription with none), so "trialing" alone proves nothing.
+   * A confirmation stands until a check finds no card: a card removed later does not matter, as Stripe cancels a trial that ends
+   * without one. Stripe's last answer is kept in memory and, once the database declares billing.trial-cards.v1, in
+   * private.billing_trial_cards, so a restart during an outage keeps it too (before that, a restart starts with none). The database is
+   * written on every check, as another Hub instance (during a deploy, or with replicas) may have written since; one that cannot be
+   * reached never fails the entitlement either.
+   */
+  const lastCardAnswers = new Map();
+  const remember = (map, key, value) => {
+    map.delete(key);
+    map.set(key, value);
+    if (map.size > 5000) map.delete(map.keys().next().value);
+  };
+  async function trialCardAnswer(entitlement) {
+    const subscriptions = (entitlement.products ?? []).filter(product => product.kind === 'plan' && product.status === 'trialing').map(product => product.subscription).sort();
+    const key = `${entitlement.tenant_id}:${subscriptions.join(',')}`;
+    const stored = features.has(trialCardsFeature) && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entitlement.tenant_id ?? '')
+      && subscriptions.length > 0 && subscriptions.length <= 20 && subscriptions.every(id => /^sub_[A-Za-z0-9]{1,250}$/.test(id ?? ''));
+    let confirmed;
+    try {
+      confirmed = await trialCardOnFile(await stripe(), entitlement);
+    } catch {
+      let last = lastCardAnswers.get(key);
+      if (last === undefined && stored) {
+        try {
+          last = (await transaction(pool, db => one(db, 'select private.billing_trial_card_confirmed($1,$2) as confirmed', [entitlement.tenant_id, subscriptions]))).confirmed === true;
+          remember(lastCardAnswers, key, last);
+        } catch { last = false; }
+      }
+      log.warn(`Stripe could not confirm an Intel trial's card; answering ${last === true ? 'the card it confirmed earlier' : 'not confirmed'} until it can.`);
+      return last === true;
+    }
+    remember(lastCardAnswers, key, confirmed);
+    if (stored) {
+      try { await transaction(pool, db => db.query('select private.billing_trial_card_record($1,$2,$3)', [entitlement.tenant_id, subscriptions, confirmed])); }
+      catch { log.warn('An Intel trial card answer could not be saved; it is kept in memory and saved on a later check.'); }
+    }
+    return confirmed;
+  }
+
   async function entitlements(authorization, input) {
     const parsed = entitlementRequestSchema.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Send the application account id.');
@@ -648,7 +708,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       return appResponse((await one(db, 'select private.scoped_app_billing_entitlements($1,$2) as e', [app.product_id, parsed.data.account])).e);
     });
     if (answer.app === 'caremetric-intel' && answer.status === 'trialing' && answer.entitled) {
-      answer.payment_method_on_file = await trialCardOnFile(await stripe(), answer);
+      answer.payment_method_on_file = await trialCardAnswer(answer);
     }
     return answer;
   }
@@ -964,6 +1024,17 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
 
   /**
+   * The full refresh from Stripe, once per process, as soon as Stripe can be verified: at the start, or on a later sweep when Stripe could
+   * not be reached then (before, a Stripe outage at the start meant no refresh until the next deploy). Webhooks keep the mirror current
+   * after it. Resolves to null while Stripe cannot be verified, so the next call tries again.
+   */
+  let reconciled = null;
+  function reconcileOnce() {
+    reconciled ??= reconcile().then(result => { if (result === null) reconciled = null; return result; }, error => { reconciled = null; throw error; });
+    return reconciled;
+  }
+
+  /**
    * Founders Sale prices that later changes replaced keep the offer for the
    * applications in FOUNDERS_FOLLOW_APPS (server/founders-sale.mjs). Reads every
    * price, archived ones included, of the Founders products of those
@@ -1091,7 +1162,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
 
   return {
-    start: verify, reconcile, reconcileUsage, syncAppCatalog, refreshFounders,
+    start: verify, reconcile, reconcileOnce, reconcileUsage, syncAppCatalog, refreshFounders,
     reconcileCustomerCheckouts: async () => {
       const result = await customerSelfService.reconcileCheckouts();
       if (result.failed || result.unbound) log.warn(`Customer Checkout reconciliation: ${result.failed} failed and ${result.unbound} unbound pending purchases.`);

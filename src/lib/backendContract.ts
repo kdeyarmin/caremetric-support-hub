@@ -20,11 +20,17 @@ export const REQUIRED_BACKEND_FEATURES = [
   "billing.facility-entitlements.v1",
 ] as const;
 
+/**
+ * A sanity bound on the declared feature list, not a release limit. Production declared 86 features on 2026-11-16 and adds several
+ * a week, so the earlier bound of 100 would soon have stopped every deploy with a message blaming missing migrations.
+ */
+const MAX_BACKEND_FEATURES = 1000;
+
 /** Additive features share the API version; the integer alone never proves readiness. */
 export function assertBackendContract(contract: unknown): void {
   const features = contract && typeof contract === "object" && "features" in contract ? contract.features : undefined;
   if (!contract || typeof contract !== "object" || !("api_version" in contract) || contract.api_version !== REQUIRED_BACKEND_CONTRACT
-    || !Array.isArray(features) || features.length > 100
+    || !Array.isArray(features) || features.length > MAX_BACKEND_FEATURES
     || features.some(feature => typeof feature !== "string")
     || new Set(features).size !== features.length
     || REQUIRED_BACKEND_FEATURES.some(feature => !features.includes(feature))) {

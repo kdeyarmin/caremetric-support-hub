@@ -1,7 +1,8 @@
+import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { describe, expect, it } from 'vitest';
-import { databaseConfig } from './database-config.mjs';
+import { databaseConfig, guardPool, untilReachable } from './database-config.mjs';
 
 const host = 'db.xgauehtwksmnoqhgqegm.supabase.co';
 const url = `postgresql://hub_app_server:synthetic-test-password@${host}:5432/postgres`;
@@ -54,5 +55,71 @@ describe('restricted PostgreSQL connection configuration', () => {
       expect(failure.message).not.toContain('%zz');
     }
     expect(config(url.replace('synthetic-test-password', 'encoded%40password%3Avalue')).password).toBe('encoded@password:value');
+  });
+});
+
+describe('a dropped database connection', () => {
+  const lostConnection = () => new Error('Connection terminated unexpectedly: host db.example password=synthetic-secret');
+  it('is an uncaught error on an unguarded pool, which stops the process', () => {
+    const pool = new pg.Pool(config());
+    expect(() => pool.emit('error', lostConnection())).toThrow(/terminated/);
+  });
+  it('is logged once, without its text, whether the connection was idle or held in a transaction', () => {
+    const lines = [];
+    const pool = guardPool(new pg.Pool(config()), { warn: line => lines.push(line) });
+    // A connection the pool opens gets its own listener: pg-pool removes its idle listener while a connection is checked out.
+    const held = new EventEmitter();
+    pool.emit('connect', held);
+    expect(() => held.emit('error', lostConnection())).not.toThrow();
+    // An idle connection's failure reaches the pool too; that one is not counted twice.
+    expect(() => pool.emit('error', lostConnection(), held)).not.toThrow();
+    expect(lines).toEqual(['A database connection dropped; the next query opens a new one.']);
+    expect(lines.join('')).not.toContain('synthetic');
+  });
+});
+
+describe('reaching the database at startup', () => {
+  const failure = (code, message = 'failed') => Object.assign(new Error(message), code ? { code } : {});
+  // A clock that moves only when the retry waits, so the tests are instant.
+  const clock = () => { let at = 0; return { now: () => at, wait: async ms => { at += ms; } }; };
+
+  it('retries while the database cannot be reached, then carries on', async () => {
+    for (const unreachable of [failure('ECONNREFUSED'), failure('ETIMEDOUT'), failure('EAI_AGAIN'), failure('57P03'), failure('08006'),
+      failure(null, 'timeout exceeded when trying to connect'), failure(null, 'Connection terminated unexpectedly'),
+      Object.assign(new Error('wrapped'), { cause: failure('ECONNRESET') })]) {
+      const lines = [];
+      let calls = 0;
+      const result = await untilReachable(async () => { calls += 1; if (calls < 3) throw unreachable; return 'ready'; }, { ...clock(), log: { warn: line => lines.push(line) } });
+      expect([result, calls]).toEqual(['ready', 3]);
+      expect(lines).toHaveLength(2);
+      expect(lines.join('')).not.toContain('failed');
+    }
+  });
+
+  it('stops at once on anything but an unreachable database: a release that does not match, or wrong credentials', async () => {
+    for (const fatal of [failure('42P01'), failure('42703'), failure('28P01'), new Error('The Support Hub backend API is incompatible.')]) {
+      let calls = 0;
+      await expect(untilReachable(async () => { calls += 1; throw fatal; }, { ...clock(), log: { warn: () => {} } })).rejects.toBe(fatal);
+      expect(calls).toBe(1);
+    }
+  });
+
+  it('gives up by its deadline, inside the deploy healthcheck, with the last error', async () => {
+    const time = clock();
+    const last = failure('ECONNREFUSED');
+    await expect(untilReachable(async () => { throw last; }, { ...time, log: { warn: () => {} } })).rejects.toBe(last);
+    expect(time.now()).toBeGreaterThanOrEqual(60_000);
+    expect(time.now()).toBeLessThanOrEqual(75_000);
+  });
+
+  it('shares one deadline between startup reads, so the second gets only what the first left', async () => {
+    const time = clock();
+    const deadline = time.now() + 75_000;
+    let first = 0;
+    await untilReachable(async () => { first += 1; if (first < 6) throw failure('ECONNREFUSED'); return 'ok'; }, { ...time, deadline, log: { warn: () => {} } });
+    const used = time.now();
+    await expect(untilReachable(async () => { throw failure('ECONNREFUSED'); }, { ...time, deadline, log: { warn: () => {} } })).rejects.toMatchObject({ code: 'ECONNREFUSED' });
+    expect(used).toBeGreaterThan(0);
+    expect(time.now()).toBeLessThanOrEqual(75_000);
   });
 });

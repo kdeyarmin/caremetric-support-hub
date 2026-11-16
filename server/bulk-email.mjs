@@ -106,6 +106,8 @@ export function bulkEmail({ pool, delegations, mail, publicOrigin, postalAddress
   const id = value => { if (typeof value !== 'string' || !uuid.test(value)) throw new HttpError(400, 'Choose an email.'); return value; };
   const version = value => { if (!Number.isSafeInteger(value) || value < 1) throw new HttpError(400, 'Refresh the email and try again.'); return value; };
   const requireMail = () => { if (!mail?.configured) throw new HttpError(503, 'Email sending is not configured. Set up the email service in Settings → Email (its key stays in Railway).'); };
+  // CAN-SPAM: every bulk email carries the sender's postal address. Settings says bulk email is not sent without it, so it is not.
+  const requirePostal = () => { if (!postal()) throw new HttpError(503, 'Add the mailing address first: Settings → Email → Mailing address in email footers. Every bulk email must carry it.'); };
   const unsubscribeUrl = token => `${publicOrigin}/api/email/unsubscribe/${token}`;
   let sending = null;
 
@@ -157,6 +159,7 @@ export function bulkEmail({ pool, delegations, mail, publicOrigin, postalAddress
     async send(sessionToken, input) {
       only(input, ['id', 'version', 'recipients']);
       requireMail();
+      requirePostal();
       if (!Number.isSafeInteger(input.recipients) || input.recipients < 1) throw new HttpError(400, 'Review the recipient count before sending.');
       const result = await admin(sessionToken, 'select hub.queue_email_campaign($1,$2,$3) as result', [id(input.id), version(input.version), input.recipients]);
       // Start delivering now; the timer retries anything this misses.
@@ -170,7 +173,8 @@ export function bulkEmail({ pool, delegations, mail, publicOrigin, postalAddress
         const deadline = Date.now() + tickBudgetMs;
         try {
           await server('select private.email_housekeeping() as result', []);
-          while (mail?.configured && Date.now() < deadline) {
+          // Nothing is claimed while the mailing address is blank: queued messages wait for it, and housekeeping still runs.
+          while (mail?.configured && postal() && Date.now() < deadline) {
             const batch = await server('select private.claim_email_batch($1) as result', [batchSize]);
             if (!batch.length) break;
             const queue = [...batch];

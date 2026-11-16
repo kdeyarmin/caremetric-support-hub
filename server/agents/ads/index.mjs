@@ -28,6 +28,7 @@ import { playbookFor } from '../../growth/playbook.mjs';
 import { adCopyFromCreative, adImagePlacements } from '../social/content.mjs';
 import { socialExecutors } from '../social/executor.mjs';
 import { handoverDeclared, trustedWith } from '../handover.mjs';
+import { delivered } from '../notify.mjs';
 import { checkGooglePlan, editorCsv, googleAdsClient, googlePromptVersion, googleSchema, googleSystem } from './google.mjs';
 
 export const adsFeature = 'platform.agents.ads.v1';
@@ -421,7 +422,8 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
             body: `The Google Ads API is not set up yet, so here is the campaign ${automatic ? 'the team planned under your hand-over' : 'you approved'} as a file. In Google Ads Editor choose Account → Import → Paste text, paste it, review and post. It is paused until you enable it.`,
             blocks: [{ type: 'paragraph', text: 'Paste this into Google Ads Editor (Account → Import → Paste text):' }, { type: 'message', text: csv }],
             dedupeKey: `ads:google:export:${execution.id}`, agentKey: 'social_manager' });
-          if (!sent.some(item => ['sent', 'duplicate'].includes(item.delivery))) throw Object.assign(new Error('The import file could not be emailed.'), { code: 'notification_failed', transient: true });
+          // A retry of this action finds the earlier attempt by its dedupe key: that counts only if the earlier attempt was sent.
+          if (!sent.some(delivered)) throw Object.assign(new Error('The import file could not be emailed.'), { code: 'notification_failed', transient: true });
           return { exported: true, ...(automatic ? { launched: false, reason: 'google_not_configured' } : {}) };
         },
       };

@@ -1,0 +1,119 @@
+{
+  "projectId": "xgauehtwksmnoqhgqegm",
+  "sourceCommit": "d43921f637fd8e697e7bb75c4dd16f03f17a4d84",
+  "appliedOn": "2026-11-13",
+  "observedAt": "2026-11-16 00:17:13.802345+00",
+  "operation": "Applied the two merged migrations from PR 191 that production did not yet have, in source order, with Supabase apply_migration and without changing their SQL. Then compared every migration file on main with production, by name, by stored SQL and by live function definition, and recorded the four files that had no history row under their own name.",
+  "migrationHistory": "The tool assigned current timestamps to the two applied migrations; their rows were left at those versions. The four recorded files use their own source versions.",
+  "release": {
+    "pullRequest": 191,
+    "features": [
+      "platform.agents.growth-people-finder.v1"
+    ],
+    "migrations": [
+      {
+        "file": "20261113290000_growth_people_finder.sql",
+        "name": "growth_people_finder",
+        "version": "20261113193413",
+        "sha256": "b8725fd53d06ff34eabda32226814f7084013890e80a42c8416cdca2940c128e",
+        "storedSqlMatchesFile": true
+      },
+      {
+        "file": "20261113290100_growth_people_finder_contract.sql",
+        "name": "growth_people_finder_contract",
+        "version": "20261113193423",
+        "sha256": "d3d6b67c16d3383a90535458c49c227c0d20055ec1b6603c28b86407df156431",
+        "storedSqlMatchesFile": true
+      }
+    ],
+    "builtInVerification": "passed: the contract migration declared platform.agents.growth-people-finder.v1 only after all of its checks",
+    "settingChangedByMigration": {
+      "key": "growth.enrichment_provider",
+      "page": "Settings > Customer growth > Finding people's addresses",
+      "before": "apollo",
+      "after": "verify",
+      "reason": "Step 6 of the migration: the owner's saved choice Apollo becomes the built-in mail server check (owner decision 2026-11-13, PR 191)."
+    },
+    "beforeApplying": {
+      "growthPeopleRows": 0,
+      "addressFoundColumn": false,
+      "growthPersonAddressFunction": false
+    }
+  },
+  "audit": {
+    "migrationFilesOnMain": 223,
+    "everyFileRecordedByName": true,
+    "storedSql": {
+      "matchesFile": 188,
+      "commentsOrWhitespaceOnly": 16,
+      "noSqlStored": 7,
+      "oneLineNoteInsteadOfSql": 4,
+      "notRecordedBeforeThisWork": "6: the two PR 191 migrations applied here and the four files recorded below",
+      "olderWordingOfFile": 2,
+      "olderWordingFiles": [
+        "20260907143500_import_penntrain_catalog.sql",
+        "20260907145431_consolidate_support_contact_read_policy.sql"
+      ]
+    },
+    "liveFunctions": {
+      "schemas": ["hub", "private", "public"],
+      "count": 572,
+      "identicalToLatestRepositoryDefinition": 543,
+      "matchIgnoringComments": 2,
+      "matchAfterAppSmsSessionsRewrite": 8,
+      "matchAfterReplayingBillingPatches": 2,
+      "patchedInPlaceByRecordedMigrations": 11,
+      "backendContractFunction": "1, rebuilt by every contract migration; its feature list matches the repository",
+      "onlyInProduction": "5, all created by renames in the repository",
+      "onlyInRepository": "44, all dropped by retire_docstudio and platform_billing"
+    },
+    "featuresRemovedOnPurpose": [
+      "billing.portal.v1",
+      "billing.checkout.v1",
+      "platform.admin.tenants.v1",
+      "knowledge.docstudio.v1"
+    ]
+  },
+  "historyRowsAdded": {
+    "convention": "One provenance comment in place of SQL, as for sales_executive and bulk_email_3_send_and_delivery.",
+    "rows": [
+      {
+        "version": "20261017120000",
+        "name": "go_live_readiness_contract",
+        "note": "Not run under its own name; its only change, declaring support.go-live-readiness.v1, was made by ai_automation_server_contract (20261020024925).",
+        "sha256": "57364baa513895a52e7eb257727937b7dd06c657e1ab38d7d8cedc875bcacc48"
+      },
+      {
+        "version": "20261017140000",
+        "name": "carebase_course_publication_bridge",
+        "note": "Run without being recorded; its column and functions are in production, and private.learning_import_preservation_error was since replaced by billing_and_learning_review (20261107150000).",
+        "sha256": "b2a9f92e8a78fc3f02444b936ce15680f8d1e02466997b9820868cf966b18077"
+      },
+      {
+        "version": "20261020163000",
+        "name": "unified_communications",
+        "note": "Applied in six parts, unified_communications_1_tables to unified_communications_4c_chat_post_imports (20261020041536 to 20261020042239).",
+        "sha256": "3effc808f1ab6053dcb5ed1f4feb59e20393451ae74a1b21acaa72edff74ad72"
+      },
+      {
+        "version": "20261021160000",
+        "name": "bulk_email",
+        "note": "Applied in five parts, bulk_email_1_tables to bulk_email_3_send_and_delivery (20261021152444 to 20261021155902).",
+        "sha256": "ec7df0a62f5153a2cc21a638f6888b11259be6cca87e53dc8b9785f76d7b9c26"
+      }
+    ],
+    "undo": "delete from supabase_migrations.schema_migrations where version in ('20261017120000','20261017140000','20261020163000','20261021160000');"
+  },
+  "leftAsIs": [
+    "growth_reask_ready is recorded twice (20261113160625 and 20261113162202) with identical SQL; both rows are real runs.",
+    "Eleven rows hold no SQL or a one-line note, and eighteen hold an earlier wording of their file; they record what ran, and the live database matches the repository either way."
+  ],
+  "notChanged": [
+    "No migration file or other repository SQL was changed.",
+    "No credentials were configured.",
+    "No setting was changed other than the one the migration itself changes.",
+    "No deployment or restart was started."
+  ],
+  "concurrentWork": "The growth_soft_bounce pair from PR 185 was applied by another operator at 19:25 UTC on 2026-11-13, during this work.",
+  "remaining": "The Hub server reads its features once at start, so the people finder took effect at the first Railway deployment after 2026-11-13 19:34 UTC; this record does not check that deployment. The ten migrations merged on 2026-11-14 and 2026-11-15 were applied by another operator and are not covered here."
+}

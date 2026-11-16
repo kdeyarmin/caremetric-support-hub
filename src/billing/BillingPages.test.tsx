@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { BillingClient, CustomerBillingClient, MyBilling as MyBillingData } from './billingClient';
+import { billingResultSchema } from './billingProtocol';
 import { BillingWorkspace } from './BillingWorkspace';
 import { CustomerBilling } from './CustomerBilling';
 import { MyBilling } from './MyBilling';
@@ -61,6 +62,20 @@ describe('Billing workspace', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Change price' }));
     await waitFor(() => expect(client.command).toHaveBeenCalledWith(expect.objectContaining({ action: 'price.change', price: 'price_core_monthly', unit_amount: 24900, migrate: 'prorate', expected_version: 1 })));
     expect(await screen.findByText(/2 subscription item\(s\) moved/)).toBeTruthy();
+  });
+
+  it('says when Stripe had more subscribers on the old price than one pass moves', async () => {
+    // The server's answer passes the strict result schema the client parses it with.
+    const answer = billingResultSchema.parse({ ok: true, id: 'price_new', migrated: 1000, failed: 0, incomplete: true });
+    const client = adminClient({ command: vi.fn(async () => answer) });
+    render(<MemoryRouter initialEntries={['/admin/billing?tab=catalog']}><BillingWorkspace client={client} demo={false} /></MemoryRouter>);
+    const core = await screen.findByText('$199.00 per facility per month', { exact: false });
+    fireEvent.click(within(core.closest('li')!).getByRole('button', { name: /change price/i }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('New amount (USD)'), { target: { value: '249' } });
+    fireEvent.click(within(dialog).getByLabelText('Move them now, with proration'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Change price' }));
+    expect(await screen.findByText(/1000 subscription item\(s\) moved\. Stripe had more subscriptions on the old price than one pass reads/)).toBeTruthy();
   });
 
   it('shows the preview without contacting Stripe', () => {

@@ -96,6 +96,24 @@ describe("the support case queue", () => {
     expect(screen.queryByRole("heading", { name: "Open sign-in problem" })).toBeNull();
   });
 
+  it("names the application a link opened the queue on, even one outside the usual list, and accepts its repository name", async () => {
+    const advisors = product("prod-advisors", "advisors", "Healthcare Advisors");
+    const pennsync = product("prod-pennsync", "pennsync", "PennSync");
+    repo.listProducts.mockResolvedValue([carebase, breathe, advisors, pennsync]);
+    repo.listCases.mockResolvedValue([open, resolved, supportCase("case-old", 1001, "Historical agency question", "open", pennsync.id)]);
+    render(<MemoryRouter initialEntries={["/cases?product=pennsync"]}><App /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "Historical agency question" })).toBeTruthy();
+    const filter = screen.getByLabelText("Filter by application") as HTMLSelectElement;
+    expect(filter.selectedOptions[0].textContent).toBe("PennSync");
+    expect(screen.getByText("1 case")).toBeTruthy();
+    fireEvent.change(filter, { target: { value: "all" } });
+    expect(await screen.findByText("3 cases")).toBeTruthy();
+    cleanup();
+    render(<MemoryRouter initialEntries={["/cases?product=pennfit"]}><App /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "Resolved billing question" })).toBeTruthy();
+    expect((screen.getByLabelText("Filter by application") as HTMLSelectElement).selectedOptions[0].textContent).toBe("Breathe");
+  });
+
   it("opens the support request named by the customer center link", async () => {
     render(<MemoryRouter initialEntries={["/cases?case=case-done"]}><App /></MemoryRouter>);
     expect(await screen.findByRole("heading", { name: "Resolved billing question" })).toBeTruthy();
@@ -135,6 +153,17 @@ describe("the support case queue", () => {
     await screen.findByRole("heading", { name: "Freshly saved case" });
     await act(async () => { resolveRefresh([open, resolved]); });
     expect(screen.getByRole("heading", { name: "Freshly saved case" })).toBeTruthy();
+  });
+});
+
+describe("a load that keeps failing", () => {
+  it("lets a signed-in person sign out instead of only trying again", async () => {
+    repo.listCases.mockRejectedValue(new Error("temporarily unavailable"));
+    render(<MemoryRouter initialEntries={["/overview"]}><App /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "We couldn’t open the Support Hub" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(session.signOut).toHaveBeenCalledTimes(1));
   });
 });
 

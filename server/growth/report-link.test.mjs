@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { reportLinkDays, reportLinks, reportToken, rosterAgency } from './report-link.mjs';
+import { reportLinkDays, reportLinks, reportMissingMs, reportOpensMs, reportToken, rosterAgency } from './report-link.mjs';
 import { growthEmail, growthExecutors } from './worker.mjs';
 import { draftMessage, draftProblem } from './draft.mjs';
+import { touchAngle } from './playbook.mjs';
 
 const key = 'k'.repeat(40);
 const roster = (ccn = '397001', setting = 'home health agency') => ({
@@ -14,6 +15,47 @@ describe('agency report links', () => {
   it('signs exactly as Intel verifies (the same vector as Intel tests/agencyReport.test.ts)', () => {
     expect(reportToken({ ccn: '397001', setting: 'hha', expires: 1_800_000_000, ref: 'abc123' }, 'x'.repeat(32)))
       .toBe('eyJ2IjoxLCJjIjoiMzk3MDAxIiwicyI6ImhoYSIsImUiOjE4MDAwMDAwMDAsInIiOiJhYmMxMjMifQ.h66vqv89QWcLMaTDJI7xXQ');
+  });
+
+  it('offers a link only once Intel answers it with the PDF, and keeps that answer for a while', async () => {
+    let now = Date.parse('2026-11-15T15:00:00Z');
+    const answers = { '397001': { status: 200, type: 'application/pdf' }, '398405': { status: 404, type: 'text/html; charset=utf-8' } };
+    const fetchImpl = vi.fn(async url => {
+      const ccn = JSON.parse(Buffer.from(String(url).split('/report/')[1].split('.')[0], 'base64url').toString()).c;
+      const answer = answers[ccn];
+      if (!answer) throw new TypeError('fetch failed');
+      return new Response(answer.status === 200 ? '%PDF-1.3' : '<h1>No report for this link</h1>', { status: answer.status, headers: { 'content-type': answer.type } });
+    });
+    const links = reportLinks({ key, now: () => now, fetchImpl });
+    const prospect = ccn => ({ id: `o-${ccn}`, product: 'caremetric-intel', name: 'Riverbend Home Health', evidence: [roster(ccn)] });
+    expect((await links.checkedLinkFor(prospect('397001'))).url).toMatch(/\/report\//);
+    expect(fetchImpl.mock.calls[0][1]).toMatchObject({ method: 'GET', redirect: 'error' });
+    // Medicare's directory doesn't list this agency yet, so Intel has no report: no link, and the email offers the review page.
+    expect(await links.checkedLinkFor(prospect('398405'))).toBeNull();
+    // A failed request is no report either.
+    expect(await links.checkedLinkFor(prospect('397777'))).toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    // Each answer is kept: a report that opens for longer than one that doesn't.
+    await links.checkedLinkFor(prospect('397001'));
+    await links.checkedLinkFor(prospect('398405'));
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    now += reportMissingMs + 1;
+    answers['398405'] = { status: 200, type: 'application/pdf' };
+    expect(await links.checkedLinkFor(prospect('398405'))).not.toBeNull();
+    await links.checkedLinkFor(prospect('397001'));
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    now += reportOpensMs;
+    await links.checkedLinkFor(prospect('397001'));
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    // No roster record, another product or no secret: nothing is fetched.
+    expect(await links.checkedLinkFor({ product: 'caremetric-intel', evidence: [] })).toBeNull();
+    expect(await reportLinks({ key: 'short', fetchImpl }).checkedLinkFor(prospect('397001'))).toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    // The sweep stopping stops the check too.
+    const stopped = new AbortController();
+    stopped.abort(new Error('sweep stopped'));
+    const hanging = reportLinks({ key, fetchImpl: vi.fn(async (_url, init) => { init.signal.throwIfAborted(); return new Response('%PDF'); }) });
+    await expect(hanging.checkedLinkFor(prospect('397001'), { signal: stopped.signal })).rejects.toThrow('sweep stopped');
   });
 
   it('reads the agency from its Medicare roster record, and nothing else', () => {
@@ -97,6 +139,28 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     const second = reply('A different angle.\n\nhttps://www.caremetricintel.com/', ['web-1']);
     await draftMessage({ opportunity: { ...web, touches: 1 }, work, task: {}, model: second });
     expect(JSON.parse(second.run.mock.calls[0][1].user).touchPlan).toMatch(/different angle/);
+  });
+
+  it('gives a nursing home the standard first email, without the agency-only report pages (owner decision 2026-11-16)', async () => {
+    const home = { ...opportunity, name: 'Sunrise Nursing & Rehabilitation Center',
+      evidence: [{ id: 'web-1', source_url: 'https://sunrise.example', observed_at: new Date().toISOString(), confidence: 'medium', claim: 'Sunrise is a 120-bed nursing home in Riverton County.' }] };
+    const model = reply('Are your hospital relationships bringing the admissions you need?\n\nhttps://www.caremetricintel.com/', ['web-1']);
+    const draft = await draftMessage({ opportunity: home, work, task: {}, model });
+    expect(draft).toMatchObject({ modelGenerated: true });
+    const input = JSON.parse(model.run.mock.calls[0][1].user);
+    expect(input.touchPlan).toBe(touchAngle(1));
+    expect(input.touchPlan).not.toMatch(/market report/);
+    expect(input.organization).toMatchObject({ name: 'Sunrise Nursing & Rehabilitation Center', setting: 'nursing home' });
+    const offered = input.links.map(item => item.url);
+    expect(offered).not.toContain('https://www.caremetricintel.com/market-review');
+    expect(offered).not.toContain('https://www.caremetricintel.com/county-report');
+    // A draft that links one anyway is refused; an agency may still be sent there.
+    const linked = reply('Get your free market report:\nhttps://www.caremetricintel.com/market-review', ['web-1']);
+    expect(await draftMessage({ opportunity: home, work, task: {}, model: linked })).toBeNull();
+    expect(draftProblem({ subject: 'Your market', body: 'See it:\nhttps://www.caremetricintel.com/market-review', citations: ['web-1'], needsHuman: false },
+      { product: 'caremetric-intel', sources: home.evidence, outreach: true, withoutLinks: ['https://www.caremetricintel.com/market-review'] })).toBe('link');
+    expect(draftProblem({ subject: 'Your market', body: 'See it:\nhttps://www.caremetricintel.com/market-review', citations: ['web-1'], needsHuman: false },
+      { product: 'caremetric-intel', sources: home.evidence, outreach: true })).not.toBe('link');
   });
 });
 

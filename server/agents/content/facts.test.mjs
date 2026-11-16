@@ -97,7 +97,7 @@ describe('the fact sheet', () => {
     expect(text).toContain(`The bigger picture: ${intel.bigPicture}`);
     expect(text).toContain(`How to present it: ${intel.present}`);
     // Every "why it matters" area Intel publishes on its /features page.
-    for (const area of ['Market and territory research', 'Prospecting and targeting', 'Healthcare marketing CRM', 'Daily field work', 'Expenses, mileage and reimbursement',
+    for (const area of ['Market and territory research', 'Public data library', 'Prospecting and targeting', 'Healthcare marketing CRM', 'Daily field work', 'Expenses, mileage and reimbursement',
       'Referral and admission tracking', 'Competitor intelligence', 'Manager and team tools', 'Reports and analytics', 'Email campaigns', 'Administration, security and data']) {
       expect(intel.capabilities.some(line => line.startsWith(`${area}:`) || line.startsWith(`${area} [`)), area).toBe(true);
     }
@@ -112,6 +112,27 @@ describe('the fact sheet', () => {
     const added = [intel.bigPicture, ...intel.capabilities, ...intel.whoUses, intel.present].join('\n');
     expect(added).not.toMatch(/\d/);
     expect(textProblems(added, { product: 'intel' }).filter(code => code !== 'personal_information')).toEqual([]);
+  });
+
+  it('shows every agent each area CareBase publishes, with the plan it needs, and keeps the human sheet aligned', () => {
+    const text = factSheetText();
+    const carebase = products.carebase;
+    // One line per area on cmcarebase.com/features, in the page's order, with the page's own plan or add-on label in brackets.
+    const { areas } = JSON.parse(readFileSync(new URL('./carebase-features.json', import.meta.url), 'utf8'));
+    expect(carebase.capabilities.map(line => line.slice(0, line.indexOf(']:') + 1))).toEqual(areas.map(area => `${area.name} [${area.plan}]`));
+    for (const line of [...carebase.capabilities, ...carebase.whyChoose, ...carebase.whoUses]) {
+      expect(text).toContain(`- ${line}`);
+      expect(doc, line).toContain(line);
+    }
+    // The page's own conditions travel with the areas they qualify.
+    expect(carebase.capabilities.find(line => line.startsWith('Medication management'))).toMatch(/documented switch .* imported medication events are read-only/);
+    expect(carebase.capabilities.find(line => line.startsWith('Survey readiness'))).toMatch(/readiness score does not predict survey results/);
+    expect(carebase.capabilities.find(line => line.startsWith('Workforce'))).toMatch(/exclusion-list checks remain outside CareBase/);
+    expect(carebase.capabilities.find(line => line.startsWith('Resident billing'))).toMatch(/alongside the accounting ledger and claims system/);
+    // The summary states no number, so it lets no draft state one (validate.mjs allowedNumbers) and makes no claim.
+    const added = [...carebase.capabilities, ...carebase.whoUses].join('\n');
+    expect(added).not.toMatch(/\d/);
+    expect(textProblems(added, { product: 'carebase' })).toEqual([]);
   });
 
   it('delivers all priority industries and their access conditions to agents and keeps the human sheet aligned', () => {
@@ -134,7 +155,9 @@ describe('the fact sheet', () => {
       expect(doc).toContain(line);
     }
     expect(industryGuidance.join(' ')).toMatch(/not measured customer usage/);
-    expect(industryGuidance.join(' ')).toMatch(/care-specific CRM workflows require an Enterprise agreement/);
+    // Standard plans offer every healthcare service line within their count of lines (kdeyarmin/intel@8abe4c6 planCatalog.ts).
+    expect(industryGuidance.join(' ')).toMatch(/Standard plans offer CRM workflows for every healthcare service line/);
+    expect([...industryGuidance, ...industryUseCases.flatMap(item => Object.values(item))].join(' ')).not.toMatch(/Enterprise agreement/);
     expect(industryGuidance.join(' ')).toMatch(/State-licensed residential coverage depends on which state files are loaded/);
     // New targeting guidance must not expand allowed numeric claims or conflict with the shared draft checks.
     const added = [...industryGuidance, ...industryUseCases.flatMap(item => Object.values(item))].join('\n');

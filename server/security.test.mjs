@@ -8,6 +8,8 @@ const phone='+12025550101', profile='11111111-1111-4111-8111-111111111111', id='
 describe('SMS provider verification boundary',()=>{
   it('normalizes US input and rejects malformed numbers',()=>{
     expect(normalizePhone('(202) 555-0101')).toBe(phone);
+    for(const input of ['1 (202) 555-0101','12025550101','202.555.0101','+1 202.555.0101']) expect(normalizePhone(input)).toBe('+12025550101');
+    expect(normalizePhone('2025550101 ext 4')).toBeNull();
     for(const input of [null,{},'2025550101;DROP','+0123456789','javascript:2025550101']) expect(normalizePhone(input)).toBeNull();
   });
   it('only accepts the vendor code-check verdict for the intended number',async()=>{

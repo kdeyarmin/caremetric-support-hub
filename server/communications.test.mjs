@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { Readable } from 'node:stream';
-import { communications, htmlToText, inquiryImportItem, parseMailbox, phoneImportItem, productFromAddresses, replySubject, sendgridMail, sendgridSignatureValid, supportReplyEmail, twilioMessaging, twilioSignature } from './communications.mjs';
+import { communications, htmlToText, inquiryImportItem, parseMailbox, phoneImportItem, productFromAddresses, replySubject, senderAuthenticated, sendgridMail, sendgridSignatureValid, supportReplyEmail, twilioMessaging, twilioSignature } from './communications.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
 const request = (body, headers) => Object.assign(Readable.from([Buffer.from(body)]), { headers });
@@ -224,7 +224,8 @@ describe('inbound webhooks', () => {
     const { pool, calls } = fakePool();
     const service = communications({ pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
     const { payload, headers } = await signedEmail({ from: 'Pat Smith <pat@agency.test>', to: 'support+breathe@caremetric.ai', subject: 'Re: Login help [CM-1007]',
-      text: 'Still failing.', html: '<p>ignored</p>', headers: 'Message-ID: <abc@mail.test>\r\nDate: Mon, 19 Oct 2026', envelope: JSON.stringify({ to: ['support+breathe@caremetric.ai'], from: 'bounce@agency.test' }), attachments: '2' });
+      text: 'Still failing.', html: '<p>ignored</p>', headers: 'Message-ID: <abc@mail.test>\r\nDate: Mon, 19 Oct 2026', envelope: JSON.stringify({ to: ['support+breathe@caremetric.ai'], from: 'bounce@agency.test' }), attachments: '2',
+      SPF: 'pass', dkim: '{@agency.test : pass}' });
     expect(await service.emailWebhook(request(payload, headers))).toEqual({ received: true, reference: 1001 });
     expect(calls[0].values).toEqual(['email', '<abc@mail.test>', '<abc@mail.test>', '1007', 'breathe', 'Re: Login help [CM-1007]',
       'Still failing.\n\n[2 attachment(s) were not stored. Ask the sender to describe them without patient information.]', 'Pat Smith', 'pat@agency.test']);
@@ -235,12 +236,33 @@ describe('inbound webhooks', () => {
     expect(calls).toHaveLength(1);
     expect(communications({ pool, delegations: {}, sendgridInboundPublicKey: '!!!' }).emailWebhook).toBeTypeOf('function');
   });
+  it('receives an email with large attachments, up to what SendGrid posts, and still stores none of them', async () => {
+    // SendGrid Inbound Parse posts messages up to 30 MB with their attachments; a 10 MB cap answered 413 and the message never arrived.
+    const { pool, calls } = fakePool();
+    const service = communications({ pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
+    const scan = new File([Buffer.alloc(12 * 1024 * 1024, 1)], 'scan.pdf', { type: 'application/pdf' });
+    const { payload, headers } = await signedEmail({ from: 'pat@agency.test', to: 'support@caremetric.ai', subject: 'Invoice question', text: 'See the scan.', attachments: '1', attachment1: scan });
+    expect(payload.length).toBeGreaterThan(10 * 1024 * 1024);
+    expect(await service.emailWebhook(request(payload, headers))).toEqual({ received: true, reference: 1001 });
+    expect(calls[0].values[6]).toBe('See the scan.\n\n[1 attachment(s) were not stored. Ask the sender to describe them without patient information.]');
+  });
+  it('refuses a post without a current SendGrid signature before reading its body', async () => {
+    const service = communications({ pool: fakePool().pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
+    let read = false;
+    const body = () => Object.assign(Readable.from((function* () { read = true; yield Buffer.from('x'); })()), {});
+    const type = { 'content-type': 'multipart/form-data; boundary=x' };
+    const stale = String(Math.floor(Date.now() / 1000) - 3600);
+    for (const headers of [type, { ...type, 'x-twilio-email-event-webhook-signature': 'sig' }, { ...type, 'x-twilio-email-event-webhook-signature': 'sig', 'x-twilio-email-event-webhook-timestamp': stale }]) {
+      await expect(service.emailWebhook(Object.assign(body(), { headers }))).rejects.toMatchObject({ status: 403 });
+    }
+    expect(read).toBe(false);
+  });
   it('threads an HTML-only customer reply that quotes the Hub reply and stores only readable text', async () => {
     const { pool, calls } = fakePool();
     const service = communications({ pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
     const sent = supportReplyEmail({ subject: 'Login help', reference: 1042, body: 'Hi Pat,\n\nWe reset your access.' });
     const html = `<html><head><style>p{margin:0}</style></head><body><p>That worked, thanks!</p><blockquote>${sent.html}</blockquote></body></html>`;
-    const { payload, headers } = await signedEmail({ from: 'pat@agency.test', to: 'support@caremetric.ai', subject: `RE: ${sent.subject}`, html, headers: 'Message-ID: <html-only@mail.test>' });
+    const { payload, headers } = await signedEmail({ from: 'pat@agency.test', to: 'support@caremetric.ai', subject: `RE: ${sent.subject}`, html, headers: 'Message-ID: <html-only@mail.test>', dkim: '{@agency.test : pass}' });
     await service.emailWebhook(request(payload, headers));
     expect(calls[0].values[3]).toBe('1042');
     const stored = calls[0].values[6];
@@ -251,9 +273,31 @@ describe('inbound webhooks', () => {
   it('threads email by the last reference in the subject, which is the one the Hub appended', async () => {
     const { pool, calls } = fakePool();
     const service = communications({ pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
-    const { payload, headers } = await signedEmail({ from: 'pat@agency.test', to: 'support@caremetric.ai', subject: 'Re: Fwd [CM-1001] question [CM-1007]', text: 'Thanks.', headers: 'Message-ID: <last@mail.test>' });
+    const { payload, headers } = await signedEmail({ from: 'pat@agency.test', to: 'support@caremetric.ai', subject: 'Re: Fwd [CM-1001] question [CM-1007]', text: 'Thanks.', headers: 'Message-ID: <last@mail.test>', dkim: '{@agency.test : pass}' });
     await service.emailWebhook(request(payload, headers));
     expect(calls[0].values[3]).toBe('1007');
+  });
+  it('keeps a reply from an unverified sender out of the conversation it names', async () => {
+    // Anyone can write From: pat@agency.test. Without SendGrid's SPF or DKIM confirming that domain, the email starts its own conversation.
+    for (const auth of [{}, { SPF: 'fail', dkim: '{@attacker.test : pass}' }, { SPF: 'pass', envelope: JSON.stringify({ from: 'bounce@attacker.test' }) }, { dkim: '{@agency.test : fail}' }]) {
+      const { pool, calls } = fakePool();
+      const service = communications({ pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
+      const { payload, headers } = await signedEmail({ from: 'Pat Smith <pat@agency.test>', to: 'support@caremetric.ai', subject: 'Re: Login help [CM-1007]', text: 'Send the invoice to my new address.',
+        headers: 'Message-ID: <forged@mail.test>', ...auth });
+      await service.emailWebhook(request(payload, headers));
+      expect(calls[0].values[3], JSON.stringify(auth)).toBeNull();
+      expect(calls[0].values[6]).toBe("[This email names conversation CM-1007, but its sender's address could not be verified, so it was kept separate. Check who sent it before replying.]\n\nSend the invoice to my new address.");
+    }
+  });
+  it('recognizes an authenticated sender only for the From domain', () => {
+    expect(senderAuthenticated({ spf: 'pass', envelopeFrom: 'bounce@agency.test', from: 'pat@agency.test' })).toBe(true);
+    expect(senderAuthenticated({ spf: 'pass', envelopeFrom: 'bounce@mail.agency.test', from: 'pat@agency.test' })).toBe(true);
+    expect(senderAuthenticated({ dkim: '{@sendgrid.net : pass, @agency.test : pass}', from: 'pat@agency.test' })).toBe(true);
+    expect(senderAuthenticated({ spf: 'softfail', envelopeFrom: 'bounce@agency.test', from: 'pat@agency.test' })).toBe(false);
+    expect(senderAuthenticated({ spf: 'pass', envelopeFrom: 'bounce@notagency.test', from: 'pat@agency.test' })).toBe(false);
+    expect(senderAuthenticated({ dkim: '{@sendgrid.net : pass}', from: 'pat@agency.test' })).toBe(false);
+    expect(senderAuthenticated({ dkim: '{@agency.test : fail}', from: 'pat@agency.test' })).toBe(false);
+    expect(senderAuthenticated({ spf: 'pass', envelopeFrom: '', from: 'pat@agency.test' })).toBe(false);
   });
 });
 

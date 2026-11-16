@@ -118,7 +118,15 @@ answers never wait on Stripe.
   (`billing_webhook_events`) and then re-reads the object from Stripe, so a late
   or out-of-order event can never overwrite newer state. Without a key it
   applies the event's own snapshot only when it is newer than what the mirror
-  last saw.
+  last saw. It then brings any customer quote the event touches up to date. A
+  Stripe or database failure there fails the event, so Stripe sends it again. A
+  quote that can never finish (its subscription, account, schedule or renewal no
+  longer matches what was confirmed) no longer fails it: with nothing charged the
+  quote is marked failed and the customer reviews a new preview; one with a
+  payment receipt, or a paid Checkout whose receipt does not match its quote, is
+  logged for billing support and the event acknowledged. Before, one such quote
+  failed every event for its subscription until Stripe stopped calling the
+  endpoint.
 - On every start, once the key is verified, the Hub re-reads the catalog and
   every customer that carries a Hub tenant (with their subscriptions and
   invoices), so changes made in the Stripe Dashboard or while the Hub was down
@@ -440,8 +448,24 @@ No card data is handled by either application server.
 For Intel trial entitlements the Hub adds `payment_method_on_file`, after reading
 Stripe's current subscription, customer default and attached payment method. The
 subscription must collect automatically; the effective default must be a card
-belonging to that customer and the entitlement's tenant. Provider failures fail
-closed. Intel only grants a new trial after this server-side check, never from
+belonging to that customer and the entitlement's tenant. A Stripe failure never
+unlocks a trial, and it never fails the entitlement itself: Intel limits an
+organization to Billing whenever the Hub cannot answer, so one Stripe outage used
+to lock out every trialing Intel customer. While Stripe cannot be reached, the
+rest of the answer comes from the Hub's database as usual, and
+`payment_method_on_file` is Stripe's last answer for that subscription: `true` only
+if Stripe confirmed its card, otherwise `false`. Every new trial needs a card, but
+Stripe starts the trial before the card is entered, so an abandoned card setup is a
+trialing subscription with no card, and `trialing` alone never stands in for one. A
+confirmation stands until a check finds no card (Stripe cancels a trial that ends
+without a card). Stripe's last answer is kept in the server's memory and, once
+`20261116020000_billing_trial_cards.sql` and its contract
+(`billing.trial-cards.v1`) are applied, in `private.billing_trial_cards`, so a
+restart during an outage keeps it too; before that, a restart reads `false` until
+Stripe answers. The server writes Stripe's answer on every check (another Hub
+instance may have written since), a confirmation is removed once its subscription is
+no longer trialing, and a database that cannot be reached never fails the entitlement
+either. Intel only grants a new trial after this server-side check, never from
 a success query parameter. The browser can force a fresh check on returning from
 Stripe; ordinary entitlement checks retain Intel's five-minute cache limit.
 

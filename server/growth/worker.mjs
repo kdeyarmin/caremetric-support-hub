@@ -202,7 +202,8 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           const wanted=`draft:${o.id}:${work.key}:${o.version??''}:${o.contact_version??''}:${o.policy?.version??''}`;
           if(clock()-(unanswered.get(wanted)??-Infinity)<assessRetryMs)continue;
           const memo=work.kind==='outreach'?await memoFor(o.product):null;
-          const report=work.kind==='outreach'?growth.reports?.linkFor?.(o)??null:null;
+          // The agency's own report, only once Intel has opened it (report-link.mjs checkedLinkFor); otherwise the review page.
+          const report=work.kind==='outreach'&&growth.reports?(growth.reports.checkedLinkFor?await growth.reports.checkedLinkFor(o,{signal}):growth.reports.linkFor?.(o))??null:null;
           const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();

@@ -18,6 +18,15 @@ on 2026-11-14 but blocked by the network proxy; this expansion is not a new veri
 New benefit wording describes how the documented tools can help, not measured customer results or a new owner approval of claims.
 Buying guidance covers plan selection, rollout, trial evaluation, ongoing costs, exports and support, using the same reviewed sources.
 
+**CareBase reference updated 2026-11-16:** cmcarebase.com/features was redesigned, and the
+[CareBase feature and function reference](#carebase-feature-and-function-reference) now follows it: 112 capabilities across 8 areas,
+each with the plan or add-on the page names, read from the live public pages on 2026-11-16 (`npm run refresh:features`). The
+CareBase summary "Everything it does, by area" (and `capabilities` in `facts.mjs`) follows the same eight areas. Later the same day the
+[Intel feature and function reference](#intel-feature-and-function-reference) and Intel's "Everything it does, by area" were refreshed
+from caremetricintel.com: 125 features across 12 areas, 8 data families and the site's 10 care settings, with who Intel is for left as
+this sheet states. Reading the public pages is not a new verification of production availability or pricing, and the rewritten
+references and summaries await the owner's confirmation below.
+
 ## Which offering fits the company
 
 | Company need | Offering | Main reason to consider it |
@@ -62,10 +71,10 @@ This sheet covers these commercial offerings; it is not a feature sheet for the 
 
 The [feature and function reference](#feature-and-function-reference) below contains every entry in the reviewed product catalogs:
 
-| Product | Feature sources | Saved source used in this expansion |
+| Product | Feature sources | Saved source used in the reference |
 | --- | --- | --- |
-| CareBase | https://cmcarebase.com/features, https://cmcarebase.com/ and https://cmcarebase.com/faq | [carebase-features.json](../server/agents/content/carebase-features.json), reviewed 2026-11-09: 60 capabilities in 6 areas, plus roles, workflow and operating conditions. |
-| Intel | https://www.caremetricintel.com/features and https://www.caremetricintel.com/ | [intel-features.json](../server/agents/content/intel-features.json), reviewed 2026-11-09: 107 features in 11 areas, plus data coverage and care-setting guidance. |
+| CareBase | https://cmcarebase.com/features, https://cmcarebase.com/ and https://cmcarebase.com/faq | [carebase-features.json](../server/agents/content/carebase-features.json), reviewed 2026-11-16: 112 capabilities in 8 areas, each with the plan or add-on it needs, plus roles, workflow and operating conditions. |
+| Intel | https://www.caremetricintel.com/features and https://www.caremetricintel.com/ | [intel-features.json](../server/agents/content/intel-features.json), reviewed 2026-11-16: 125 features in 12 areas, plus 8 data families and the site's 10 care settings. |
 
 [features.mjs](../server/agents/content/features.mjs) presents these same catalogs to the AI team; refresh them with
 `npm run refresh:features` ([AI_TEAM.md](AI_TEAM.md), "What each product does"). Prices and offers remain governed by this sheet
@@ -137,12 +146,14 @@ CareBase connects the records and daily work a care organization needs to manage
 
 **Everything it does, by area:**
 
-- Training and requirements: maintained courses, graded quizzes, competency checklists, role-based assignments, custom requirements, reminders, a compliance matrix, reports, document storage and eligible offline training.
-- Reviewed AI assistance and live classes: the CareMetric team prepares courses from source documents for human review, with optional presenter videos. The text copilot answers from facility records and regulatory references and drafts follow-up for approval. Trainers schedule classes, manage rosters, record attendance and retain signed attendance sheets.
-- Resident care and operations: inquiries, admissions, census, room readiness, agreements, assessments, support plans, clinical notes and vitals, change-of-condition follow-up, daily services, dietary checks, transportation and resident financial records. Compatible clinical systems can supply records through configured FHIR connections. Imported medication events are read-only; native eMAR requires enrollment, clinical approval and a documented switch.
-- Credentials and workforce: clearances, qualifications, licenses, provisional-employment deadlines, continuing education, medication authorization, policy acknowledgments, shift scheduling, cross-facility staff and time-off coverage.
-- Survey, safety and facilities: binder exports, a readiness score for prioritizing recorded gaps, Survey Day Mode, documentation rooms, incidents, complaints, reporting deadlines, corrective work, fire drills, emergency operations, maintenance, quality projects and assigned work queues. The readiness score does not predict survey results.
-- Access and onboarding: organization and facility roles, scoped guest links, certificate verification, staff roster imports, invitations, online signup, configured reminders and an installable employee training player. Employees see their own records; surveyors receive scoped documentation links without a CareBase sign-in.
+- Resident care & daily operations [CareBase Core]: inquiries, admissions and move-in checklists; census and room readiness; resident assessments and support plans, with reassessment deadlines and review triggers; agreements signed through guest links; clinical charting of vitals, progress notes and care plans; daily services, care tasks and refusals; change-of-condition follow-up and provider notifications; dietary and food-safety rounds; meal and activity calendars; appointments and transportation; resident documents and history; designated-person and move-in portals; discharge records; maintenance work orders; and emergency plans with resident accountability.
+- Staff training & learning [Staff Training add-on or CareMetric Train]: a course catalog the CareMetric team maintains and maps to Pennsylvania requirements; graded quizzes, completion records and certificates; role-based plans and automatic assignments; custom requirements and renewal dates; a training-compliance matrix with export; live classes with digital sign-in, trainer-managed rosters and signed attendance sheets; outside training reviewed by a manager; retraining; an offline-capable training player; certificate verification; and training reports. Required accredited or external training still needs an eligible provider.
+- Medication management & eMAR [eMAR add-on · facility activation required]: medication rounds and passes; orders with independent review; scheduled and as-needed (PRN) medications; resident, medication and barcode checks; administration limited to staff whose medication training and insulin qualification are current; refusals, omissions and amendments; PRN follow-up; prescriber holds; controlled-substance counts with a witness; refills and leave packages; printable medication records and downtime packets; and oversight reports. Native eMAR requires facility enrollment, clinical approval and a documented switch to CareBase as the official medication record; until then the facility keeps its existing record, and imported medication events are read-only.
+- Survey readiness, safety & quality [Survey & Compliance tools; confidential incidents require Core]: the Today workspace; a readiness score for prioritizing tracked gaps; binder and survey-packet exports; Survey Day Mode with the entrance-conference checklist and an on-shift roster; resident deadlines, including medical evaluations; mock surveys and request tracking; a crosswalk to Pennsylvania's personal care home and ALF rules; time-limited, read-only documentation rooms for surveyors; incidents and reporting deadlines; confidential incidents; complaints and resident rights; violations and plans of correction; fire drills and life-safety records; document templates and DHS forms; quality projects; an assigned work queue with escalation; and policy acknowledgments. The readiness score does not predict survey results, and staff still make and document required reports.
+- Workforce, credentials & scheduling [Workforce add-on]: employee records and invitations; clearances; provisional-employment deadlines; licenses, TB and employment-eligibility records; administrator qualifications and continuing education; competency checklists and observed assessments; the medication authorization roster, practicums and annual observations; shift handoffs; shift scheduling with templates and auto-fill; coverage gaps; cross-facility float staff; time-off approvals; and schedules on a phone. Federal exclusion-list checks remain outside CareBase.
+- Resident billing & payments [Resident Billing & Payments add-on]: a resident subledger with account history; rate agreements and effective-dated charges; care-level rates; facility billing runs and batch statements; receivables and payment allocation; family payments through the portal; autopay authorization records; personal-funds transactions and statements; independent approval for protected fund actions; move-out closeout; and exports for the accounting workflow. It works alongside the accounting ledger and claims system, not in place of them.
+- AI assistance with human review [Staff Training and Survey & Compliance tools]: courses the CareMetric team drafts with AI assistance from policies and source documents, with lesson text, video scripts and graded quiz drafts, optional presenter videos, and a named reviewer's approval before publication. The text copilot answers from facility records and regulatory references, drafts plans of correction and mock-survey preparation, and proposes follow-up that a person must approve.
+- Access, integrations & onboarding [Platform tools · access depends on your plan and role]: online signup and guided setup; staff roster imports reviewed before they apply; an import center; FHIR imports of medications, allergies and diagnoses from compatible clinical systems; role-based access by facility; account verification by text message and security policies; private documents with expiring links; a record of actions taken; email, in-app and (when enabled) text alerts with escalation; time-limited guest access; an installable employee app; organization-wide reports; in-app help and product updates; and single sign-on and enterprise provisioning through a managed rollout. Employees see their own records; surveyors receive scoped documentation links without a CareBase sign-in.
 
 **Who uses it, and for what:**
 
@@ -151,7 +162,7 @@ CareBase connects the records and daily work a care organization needs to manage
 - Trainers: assign courses, schedule classes, record attendance and manage practicum documentation.
 - Employees: complete their own training, view published shifts, sign policies and upload records from a browser or phone.
 - Surveyors: review only the documentation shared through a scoped, time-limited link, without editing records or receiving a CareBase sign-in.
-- Guests and designated persons: use time-limited links for shared move-in records, agreements and documentation without a full user account.
+- Guests, families and designated persons: use time-limited links for shared move-in records, agreements and documentation without a full user account; with Resident Billing & Payments, families can also pay through the portal.
 
 **Example workflow:** import and review a staff roster, configure applicable requirements, and assign courses or a live class.
 Record completion or reviewed attendance, resolve missing requirements, and prepare the requested documentation for a surveyor.
@@ -205,14 +216,24 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
 ## CareMetric Intel
 
 - **For:** home health agencies, hospice agencies, hospitals, nursing homes and personal care homes that want more targeted
-  marketing. Site: https://www.caremetricintel.com.
+  marketing. These five are the primary audience. Site: https://www.caremetricintel.com.
+- **Secondary markets** (owner decision 2026-11-16): physician practices, behavioral health, rehabilitation and therapy,
+  diagnostics, dialysis and DME suppliers. Intel serves them too, and its site lists them after the primary five, but no outreach,
+  content or ads are aimed at them until the primary audience has been thoroughly marketed to.
+- **Prospect discovery** (`discoveryGrid` in `server/growth/playbook.mjs`) searches for home health and hospice agencies and, since
+  2026-11-16 (owner decision), nursing homes. Intel's free reports (an agency's own market report, the market review and the county
+  report) cover home health and hospice agencies only, so a prospect whose own name or research shows it is a nursing home gets the
+  standard first email instead (founder's story, a likely problem, how Intel helps, the free trial), and is never offered those
+  report pages (`intelSetting` and `draft.mjs`). Hospitals and personal care homes are not searched yet: widening discovery to them
+  is a separate owner decision.
 - **What it does:** targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data,
   plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place. Its AI features
   (briefs, supported reporting questions, drafted outreach) are text.
 - **The bigger picture** (owner direction 2026-11-12; `bigPicture`, `capabilities`, `whoUses` and `present` in `facts.mjs`, written
   from Intel's own /features page and home page with no numbers): see "CareMetric Intel: the bigger picture" below.
-- **Trial:** a **30-day** free trial covering 3 marketer seats + 1 manager, 1 branch, home health and hospice, 1 county
-  (`TRIAL_DAYS = 30`, the `trial` plan; owner decision 2026-11-12, it was 14 days). **A credit card is required to start the
+- **Trial:** a **30-day** free trial covering 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your
+  choice, 1 county (`TRIAL_DAYS = 30`, the `trial` plan; owner decision 2026-11-12, it was 14 days; the coverage as Intel's billing
+  catalog states it since 2026-11-16, where it was 1 branch, home health and hospice). **A credit card is required to start the
   trial**, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then (Hub billing
   since 2026-11-14, [Platform billing](PLATFORM_BILLING.md); Intel's site: "Credit card required · Cancel before trial end to avoid
   charges"). Never write "no credit card" for Intel (`trialCardTerms` in `facts.mjs`).
@@ -224,12 +245,12 @@ catalog moves on, the Hub logs and audits `billing.catalog.facts_stale` until th
 
 | Plan | Monthly billing | Annual billing | Includes |
 | --- | --- | --- | --- |
-| Starter | $349 per month | $290 per month ($3,480 per year) | One office. 3 marketer seats + 1 manager, 1 branch, home health or hospice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding. |
-| Growth | $899 per month | $749 per month ($8,988 per year) | The usual agency plan, with campaigns, manager tools and AI field help. 10 seats included, up to 3 branches, home health and hospice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding. |
-| Pro | $1,999 per month | $1,665 per month ($19,980 per year) | For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 branches, home health and hospice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding. |
+| Starter | $349 per month | $290 per month ($3,480 per year) | One office. 3 marketer seats + 1 manager, 1 location, 1 healthcare service line of your choice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding. |
+| Growth | $899 per month | $749 per month ($8,988 per year) | For growing healthcare teams, with campaigns, manager tools and AI field help. 10 seats included, up to 3 locations, up to 2 healthcare service lines of your choice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding. |
+| Pro | $1,999 per month | $1,665 per month ($19,980 per year) | For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 locations, up to 2 healthcare service lines of your choice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding. |
 | Enterprise | custom | annual only, from about $3,500 per month | larger footprints by agreement |
 
-Extra branches are $99 per month each ($990 per year on annual billing) and extra states $199 per month each
+Extra locations are $99 per month each ($990 per year on annual billing) and extra states $199 per month each
 ($1,990 per year on annual billing).
 
 ### Top reasons a company would choose Intel
@@ -240,7 +261,7 @@ Extra branches are $99 per month each ($990 per year on annual billing) and extr
 - Give field work a purpose and a next step. Pre-visit cards, call plans, routes, mobile visit logs and dated follow-ups connect preparation with the work after a visit.
 - See what recorded activity led to. Referral funnels, admissions, response times and lost reasons let managers review results alongside visits and outreach without treating public data as confirmed referrals.
 - Review marketing spend with the supporting records. Account-linked expenses, receipts, per-person values, policy flags, approvals and reimbursement records help managers examine spending. These tools are not legal advice.
-- Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and branches, subject to plan and role.
+- Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and locations, subject to plan and role.
 - Reduce repeated research and report assembly. Saved lists, account history, supported reporting questions, file imports and reusable reports bring the work together. Any time or cost benefit depends on use.
 
 **Example workflow:** compare counties and providers, save a target list, add relevant accounts to the marketing book, and assign an owner.
@@ -261,22 +282,23 @@ CareMetric Intel runs a healthcare organization's whole marketing program in one
 
 **Everything it does, by area** (from its own published features page; a plan in brackets is needed for that part):
 
-- Market and territory research: a territory map of providers ranked by lead score; county intelligence on the older-adult population, income and adults living alone, the hospitals residents use and where post-discharge spending goes, the post-acute providers located there and the county's top referral sources; county Medicare enrollment and Medicare Advantage share, home health, hospice and skilled nursing use and supply, spending, readmissions and each agency's market share; facility profiles with ownership, cost-report figures, star ratings and public quality scores; ready-made market briefs for expansion, acquisition, hospital relationships and referral development; and the data release behind every figure.
+- Market and territory research: a territory map of providers ranked by lead score; county intelligence on the older-adult population, income and adults living alone, the hospitals residents use and where post-discharge spending goes, the post-acute providers located there and the county's top referral sources; demographics for each county and ZIP area, with the change since the last census; each county's Medicare Advantage plans and ratings, Medicaid managed care where it is published, chronic disease, social vulnerability and shortage areas; county Medicare enrollment and Medicare Advantage share, home health, hospice and skilled nursing use and supply, spending, readmissions and each agency's market share; a Site finder that ranks counties or ZIP areas for a new office or facility by demand, growth, need and the gap in supply; facility profiles with ownership, cost-report figures, star ratings and public quality scores; ready-made market briefs for expansion, acquisition, hospital relationships and referral development; and the data release behind every figure.
+- Public data library: public healthcare datasets from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by provider, facility, county and ZIP area: every provider in the national NPI registry, with Medicare services, certifications and prescribing; facility quality, inspections, staffing, ownership and cost reports; Medicare use, spending and enrollment; demographics and growth; Medicare Advantage and other payers; community health and need; a provider's standing, such as an exclusion, an opt-out or the next revalidation, and payments from drug and device makers; state-licensed homes where a state's file is loaded; and daily checks for new releases, with outdated data retired rather than shown as current.
 - Prospecting and targeting: a directory of providers, practices and facilities by name, NPI, specialty and place; Target Builder and saved lead lists worked by status; referral-source rankings for a county built on public Medicare data; physicians newly listed in the area; referral discovery, which compares public volume with the referrals the team has logged to find under-worked hospitals and physicians and counties with high need and little local supply; physician share; and opportunity scores that show what went into them.
-- Healthcare marketing CRM: a marketing book of hospitals, nursing homes, personal care and assisted living homes, physician practices, agencies and other referral sources; home health and hospice worked as separate lines of business; relationship stages from Target to Active source and Preferred, with the reason when an account is At risk or Lost; contacts by healthcare role, from discharge planner and case manager to director of nursing; each account's full history beside its market position; a month-end view; duplicate merging and book hygiene; accounts going quiet; side-by-side comparison; handing a whole book to a teammate; and parent organizations.
-- Daily field work: a Today page with tasks, progress on goals and the accounts to visit this week, each with a reason; a weekly schedule and call plan; a suggested route built from due follow-ups, slipping sources and key accounts not visited lately; a visit log built for a phone, with check-in, visit templates and a dated next step; a pre-visit card; business card scanning; county call sheets; follow-up emails that book the next visit; calendar sync; and a weekly digest for each marketer.
+- Healthcare marketing CRM: a marketing book of hospitals, nursing homes, personal care and assisted living homes, physician practices, agencies and other referral sources; separate lines of business, with its own stage and history for an account on each; relationship stages from Target to Active source and Preferred, with the reason when an account is At risk or Lost; contacts by healthcare role, from discharge planner and case manager to director of nursing; each account's full history beside its market position; which members of a physician group certify home health or oversee hospice care, and what the book admitted from them; account tiers with a visit cadence for each, and who is behind on it; calls and texts from an account through the phone's own dialer and messages, logged in a tap, with nothing placed or sent from Intel; a month-end view; duplicate merging and book hygiene; accounts going quiet; side-by-side comparison; handing a whole book to a teammate; and parent organizations.
+- Daily field work: a Today page with tasks, progress on goals and the accounts to visit this week, each with a reason; a weekly schedule and call plan; a suggested route built from due follow-ups, slipping sources and key accounts not visited lately; a visit log built for a phone, with check-in, visit templates and a dated next step; a pre-visit card; directions to each account; business card scanning; county call sheets; follow-up emails that book the next visit; calendar sync; and a weekly digest for each marketer.
 - Expenses, mileage and reimbursement: spend logged against the referral source it was for, receipt capture, per-person value for shared meals, each physician's running total against the Stark nonmonetary-compensation limit, policy totals for discharge planners and other non-physician sources, policy checks and flags, an approval workflow, reimbursement tracking, budgets, register, compliance and payroll exports, and a mileage log built from visit check-ins. These tools support the organization's compliance program; they are not legal advice. A small part of the workspace, never the point of it.
-- Referral and admission tracking: referrals logged on the account they came from, with the service, payer and outcome; response time from arrival to first answer and decision; referral and admission reports imported from EMR exports as CSV files, with patient-identifying columns dropped; a referral funnel by account and marketer; drop-off alerts when a top source slips; a quarterly outcomes packet to share with a hospital or facility; lost reasons; an admissions forecast [Pro]; and dated confirmations of what new referrals the agency can take.
-- Competitor intelligence: the home health agencies and hospices in the territory ranked by Medicare share, with star ratings; a watchlist with alerts when a rating, owner or service area changes or a new provider opens nearby; side-by-side comparison and trends; a county roll-up and a scheduled leadership brief; and a plain-language card on how the agency compares with the largest in its county.
-- Manager and team tools: monthly visit and referral goals with a leaderboard [setting targets: Growth and Pro]; a review of each marketer's week; activity reports and a weekly email; ride-along notes and coaching; branches [Growth and Pro]; book balance across marketers [Pro]; account briefs and decision briefs; Ask the book for supported questions about the book; and a materials library that shows who opened each file.
-- Reports and analytics: results reports (performance scorecard, field activity, follow-up, mileage, referrals and admissions, top sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment), filtered and grouped by person, location, line of business, county, payer or period, each person seeing their own scope, downloaded as PDF, Excel or CSV, and a custom report builder with scheduled email.
-- Email campaigns [Growth and Pro]: campaigns to a lead list or the contacts on the book, with delivery tracking, sender settings and automatic unsubscribe handling. One part of the workspace, never the point of it.
-- Administration, security and data: roles and seats, text-message sign-in codes for managers, a record of sign-ins, changes and exports, billing and territory, guided setup and user guides, public data from CMS, NPPES, the U.S. Census Bureau and state licensing files with each release shown, and patient privacy by design: the research uses no patient-level data, and imports, briefs and exports carry no patient names.
+- Referral and admission tracking: referrals logged on the account they came from, with the service, payer and outcome; response time from arrival to first answer and decision; referral and admission reports imported from EMR exports as CSV files, with patient-identifying columns dropped; a referral funnel by account and marketer; drop-off alerts when a top source slips, and what the book shows about why, with the next step as a task; a quarterly outcomes packet to share with a hospital or facility; a shareable profile page for referral sources with intake details, current availability and public ratings; lost reasons; an admissions forecast [Pro]; and dated confirmations of what new referrals the organization can take.
+- Competitor intelligence: the home health agencies and hospices in the territory ranked by Medicare share, with star ratings; a watchlist with alerts when a rating, owner or service area changes or a new provider opens nearby; side-by-side comparison and trends; a county roll-up and a scheduled leadership brief; a plain-language card on how the agency compares with the largest in its county; and a free agency market review anyone can request on Intel's site.
+- Manager and team tools: monthly visit and referral goals with a leaderboard [setting targets: Growth and Pro]; a review of each marketer's week; activity reports and a weekly email; ride-along notes and coaching; locations [Growth and Pro]; book balance across marketers [Pro]; account briefs and decision briefs; Ask the book for supported questions about the book; an AI Assistant that answers typed questions about the market, the book and the day and proposes lists, visits, tasks and drafts that are saved only when someone confirms [Growth and Pro]; an AI playbook of pitch pillars, service lines and words to avoid; connecting an AI app that supports MCP to read Intel [Growth and Pro]; friendly activity challenges and a monthly report card, never on referrals or admissions; a calendar of healthcare observances; and a materials library that shows who opened each file.
+- Reports and analytics: results reports (performance scorecard, field activity, follow-up, mileage, referrals and admissions, top sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment), filtered and grouped by person, location, line of business, county, payer or period, each person seeing their own scope, downloaded as PDF, Excel or CSV; source quality after admission, by referral source, marketer or location (how long patients stay, short stays, hospice live discharges and revocations, home health returns to the hospital, and average daily census against each location's budget) [loading reports: owners]; and a custom report builder with scheduled email.
+- Email campaigns [Growth and Pro]: campaigns to a lead list or the contacts on the book, with delivery tracking, sender settings and automatic unsubscribe handling. Nurture sequences of calls, visits, emails and tasks on an account, which stop on a referral, a contact leaving or a marked reply, are on every plan. One part of the workspace, never the point of it.
+- Administration, security and data: roles and seats, text-message sign-in codes for owners and location managers, a record of sign-ins, changes and exports, billing and territory, guided setup and user guides, a service-line menu and search across the app, a nightly export of the organization's own accounts, referrals and visit counts to its server or a supported CRM [setting it: owners], public data from CMS, NPPES, the U.S. Census Bureau and state licensing files with each release shown, and patient privacy by design: the research uses no patient-level data, and imports, briefs and exports carry no patient names.
 
 **Who uses it, and for what:**
 
 - Owners and administrators: where to focus a small marketing team and its budget, how the market and the competition are moving, and what the team's work led to in recorded referrals and admissions.
-- Directors of business development and marketing managers: territory plans, goals, account ownership across branches, a review of each marketer's week, coaching, expense approval and the reports they bring to leadership.
+- Directors of business development and marketing managers: territory plans, goals, account ownership across locations, a review of each marketer's week, coaching, expense approval and the reports they bring to leadership.
 - Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.
 
 **How to present it.** Owner direction: show the bigger picture. Intel runs the whole marketing program, and sending emails to referral sources is not the point of it. Email campaigns are one feature, on the Growth and Pro plans. Never describe Intel as an email tool, never lead with emailing referral sources, and never make email the whole subject of a message, post, ad, article or answer: when email comes up, show it as one part of the workspace, beside the research, relationships, visits, spend and recorded results it serves. Intel is a marketing workspace, not a compliance product: its expense tools keep marketing spend in view of policy and the Stark limit, and they are a small part of the program. Never describe Intel as a compliance tool, and never lead with compliance, the Stark limit or expense tracking: when spend comes up, show it as part of the field work and relationships it serves (owner direction 2026-11-14). Across your work, cover the whole range above rather than one feature again and again, and pick the part that answers the reader. What a feature needs (a plan in brackets) still applies.
@@ -286,23 +308,26 @@ CareMetric Intel runs a healthcare organization's whole marketing program in one
 Added at the owner's request on 2026-11-14. This use-case mapping was checked against
 `kdeyarmin/intel@393b9b3cd5b19de0ede7f09846313ac11a929f60`: `src/content/featureCatalog.json`,
 `src/lib/businessLine.ts`, `src/lib/planCatalog.ts` and `src/content/marketingCopy.json`.
-It does not refresh the saved feature inventory or verify a live deployment. The machine copy is
+Service-line access was rechecked on 2026-11-16 against `kdeyarmin/intel@8abe4c6` (`src/lib/planCatalog.ts`,
+`src/lib/healthcareServiceLines.ts`): standard plans offer CRM workflows for every healthcare service line, within each
+plan's count of lines. It does not refresh the saved feature inventory or verify a live deployment. The machine copy is
 `industryUseCases` and `industryGuidance` in `server/agents/content/facts.mjs`.
 
 **Industry fit and access conditions:**
 
 - These industries are ordered by fit with the current product. The feature priorities describe likely uses, not measured customer usage or proven demand.
-- Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans support home health and hospice CRM workflows within each plan's allowances.
-- Other care settings can use market and territory research within the subscribed territory. Their care-specific CRM workflows require an Enterprise agreement. Home health and hospice workflow support does not imply equivalent CRM support for every industry.
+- Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans offer CRM workflows for every healthcare service line, within each plan's allowance of service lines the organization chooses; Enterprise covers every line.
+- Every care setting can use market and territory research within the subscribed territory. Public datasets and specialized analyses cover particular settings and geographies, so research depth varies by industry: specialized Medicare share rankings and competitor alerts cover home health and hospice.
 - Research coverage varies by dataset, geography and reporting period. State-licensed residential coverage depends on which state files are loaded. Feature access also depends on the plan, role and configured services.
 - Public provider and market data supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.
 - For each audience, lead with its relevant features and main purpose below, within these conditions. This guidance does not change prospecting eligibility, campaign audiences or outreach permissions.
+- Secondary markets, by owner decision: physician practices, behavioral health, rehabilitation and therapy (inpatient rehabilitation included), diagnostics, dialysis and DME suppliers. Use their rows only to answer a reader from one of those settings, and never aim outreach, content or ads at them until home health agencies, hospice agencies, hospitals, nursing homes and personal care homes have been thoroughly marketed to.
 
 | Industry | Most useful features, in priority order | Main purpose |
 | --- | --- | --- |
 | **1. Home health agencies** | Referral-source rankings for physicians certifying home health; marketing book and call plans; referral and admission reports and drop-off alerts; competitor rankings. | Focus marketers on promising sources and maintain productive referral relationships. |
 | **2. Hospice agencies** | Physician and facility research; relationship history and follow-up tasks; referral and admission tracking; county demand and hospice competitor analysis. | Develop consistent professional relationships and research underserved territories. |
-| **3. Skilled nursing facilities and nursing homes** | Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking under the appropriate Enterprise agreement. | Prioritize hospital relationships and understand the facility's competitive position. |
+| **3. Skilled nursing facilities and nursing homes** | Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking on the nursing home service line. | Prioritize hospital relationships and understand the facility's competitive position. |
 | **4. Assisted Living Facilities and memory care communities** | Site finder; county and ZIP-area demographics, especially older residents and people living alone; licensed-home and bed-supply research; nearby provider and facility directories. | Evaluate local demand, competition, expansion locations and community partners. |
 | **5. Personal care and residential care homes** | Local demographic research; licensed-home directories and bed counts; hospital and physician searches; territory maps. | Understand the local service area and identify professional relationships worth developing. |
 | **6. Hospitals and health systems** | Hospital service-area analysis; post-discharge spending by care setting; physician and practice directories; post-acute facility profiles and quality information. | Plan physician outreach and research potential post-acute partners. |
@@ -364,7 +389,7 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
   Growth and Pro. Small Home and single-facility eligibility and all capacity limits still apply.
 - Core example: **$99.50 per facility per month**, or **$995 for the first annual payment**, then the regular rate.
   Intel Starter example: **$174.50 per organization per month**, or **$1,740 for the first annual payment**, then the regular rate.
-- Setup fees, Intel extra seats/branches/states, taxes, legacy plans and custom contracts are excluded. Intel onboarding
+- Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Intel onboarding
   is free on every plan. Other promotional discounts cannot be combined. One introductory year per organization
   and product; cancellation/restart does not reset it. No enrollment deadline or redemption cap has been set.
 - Checkout, paid subscription creation and eligible trial conversions apply the underlying coupon automatically after
@@ -417,8 +442,8 @@ This is a guide to the existing packages, not a recommendation to buy features t
 | Training, workforce and survey work without resident-operations Core. | Compliance Suite. | Includes Staff Training, Workforce and Survey & Compliance; does not include Core. |
 | A facility with fewer than 20 licensed beds. | Small Home or Small Home Complete. | Small Home includes Core and eMAR. Eligibility uses licensed beds, not current occupancy; complete native eMAR enrollment and clinical approval before use. |
 | Staff education as a separate purchase. | CareMetric Train or Train Single Facility. | Train is per organization with unlimited learners; Single Facility is for a one-facility organization. It is not the complete resident-operations product. |
-| One office working one line of business in a county-based territory. | Intel Starter. | Select home health or hospice, within the published seat, branch and county limits. Campaigns and other labeled Growth/Pro features are not included. |
-| Both home health and hospice, more branches, campaigns and manager tools. | Intel Growth. | Check included seats, branches, state coverage and the access labels on each needed feature. |
+| One office working one line of business in a county-based territory. | Intel Starter. | Select one healthcare service line, within the published seat, location and county limits. Campaigns and other labeled Growth/Pro features are not included. |
+| Two healthcare service lines, such as home health and hospice, more locations, campaigns and manager tools. | Intel Growth. | Check included seats, locations, state coverage and the access labels on each needed feature. |
 | Several territories, admissions forecasting and book balancing. | Intel Pro. | Forecasting and book balance are Pro features. Territory, team capacity and owner/manager permissions still apply. |
 | A larger footprint requiring an individually agreed scope. | Intel Enterprise. | Annual custom agreement; confirm included services and requirements in the contract. Custom contracts are excluded from the Founders Sale. |
 
@@ -458,7 +483,7 @@ The checks below are suggested evaluation criteria, not published customer resul
 | --- | --- | --- |
 | Can managers find and follow up on missing CareBase requirements? | Review assigned requirements, overdue work, responsible staff and the supporting records. | Compare time spent finding records and assigning follow-up with the current process. Note gaps that still need manual work. |
 | Will training records reflect what staff actually completed? | Follow an assigned course or a reviewed live class through to recorded hours and certificates. Check outside-training approval separately. | Reconcile the records with attendance and completion, using the correct facility, role and credit rules. |
-| Can staff and managers work within their intended access? | Use the relevant CareBase roles or Intel owner, branch-manager and marketer views. Review shared documentation or reports within their scope. | Confirm that each person can complete their job with the records they are meant to see. |
+| Can staff and managers work within their intended access? | Use the relevant CareBase roles or Intel owner, location-manager and marketer views. Review shared documentation or reports within their scope. | Confirm that each person can complete their job with the records they are meant to see. |
 | Does Intel's research cover the territory and accounts that matter? | Search representative providers and facilities, inspect source dates and missing fields, and save a focused list. | Judge the usefulness and coverage for the actual market; public signals are not confirmed referrals. |
 | Will Intel help the team follow through on relationships? | Prepare an account, plan a visit, log activity and set a dated next step. Review open tasks and account ownership. | Compare preparation and follow-up work with the current process, including how responsibility transfers between people. |
 | Can leadership reconcile recorded marketing results? | Enter or import supported referral facts, review the funnel and lost reasons, and export a scoped report. | Check figures against the input records for the same period. Separate entered outcomes from public market estimates. |
@@ -470,7 +495,7 @@ Use the company's own labor costs and observations. Include implementation effor
 An exported report or completed task demonstrates a workflow; it does not establish a guaranteed financial return, survey result or referral increase.
 
 **Budget for the ongoing scope:** all published prices here are USD, before applicable taxes. Count billed facilities for CareBase,
-the applicable organization or single-facility basis for Train, and the plan plus needed extra seats, branches and states for Intel.
+the applicable organization or single-facility basis for Train, and the plan plus needed extra seats, locations and states for Intel.
 Compare the actual annual payment with monthly billing; Intel's displayed annual monthly equivalent is not a monthly payment schedule.
 Evaluate the first paid year and the regular renewal price separately. The Founders Sale excludes Intel expansion add-ons and other listed charges.
 Intel onboarding is free on every plan; this does not establish free custom migration, integration work or onboarding terms for another product.
@@ -592,118 +617,224 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
 - [x] CareBase's avoidance of "evidence" applies to articles and everything else the AI team writes, as well as the landing page.
 - [x] 2026-11-12: Intel's bigger picture and "How to present it" (sending emails to referral sources is never the point), the plain-language
   rules, and outreach written and signed as the founder.
-- [ ] 2026-11-14: Intel's lead order, market context and boundaries from the competitor research ("Intel: what to lead with, why now,
+- [x] 2026-11-14: Intel's lead order, market context and boundaries from the competitor research ("Intel: what to lead with, why now,
   and what it is not"), the `integration` and `security` written answers, and the three new outreach angles. Requested by the owner;
-  tick this box when you approve the pull request that adds them.
+  the owner confirmed them on 2026-11-16.
 - [x] 2026-11-14: Intel is a marketing workspace, not a compliance product; expense tracking (spend in view of policy and the Stark
   limit) is a small part of it and never leads.
 - [x] 2026-11-12: the founder's story wording. The owner confirmed: the founder built Intel, and currently runs a home health and
   hospice agency and a consulting company.
+- [x] 2026-11-16: the CareBase feature and function reference, rewritten from the redesigned cmcarebase.com/features (112 capabilities
+  across 8 areas, each with the plan or add-on the page names) and its "What the team can do" descriptions; and CareBase's "Everything
+  it does, by area" summary in the same eight areas, which the AI team reads (`capabilities` in `facts.mjs`), with families' portal
+  payments added to who uses it. The owner confirmed them on 2026-11-16.
+- [x] 2026-11-16: the Intel feature and function reference and Intel's "Everything it does, by area", refreshed from caremetricintel.com
+  (125 features across 12 areas, including the public data library, 8 data families and the site's 10 care settings). The site’s other
+  five care settings are listed as secondary markets; the pre-visit card and spoken debrief pillar never leads; the count of Intel's
+  datasets and the AI apps and CRM it connects to are written generically. The owner confirmed them on 2026-11-16.
+- [x] 2026-11-16: Intel's trial covers 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of the customer's choice
+  and 1 county, as Intel's billing catalog states it (it said 1 branch, home health and hospice); and the plans' descriptions follow
+  the catalog too: locations instead of branches, healthcare service lines of the customer's choice instead of home health and hospice,
+  and Growth "For growing healthcare teams" instead of "The usual agency plan"; the Founders Sale's excluded add-ons say "Intel extra
+  seats/locations/states" to match. Prices and the offer's scope are unchanged. The owner confirmed this wording on 2026-11-16
+  (kdeyarmin/caremetric-support-hub#222).
 
 ## Feature and function reference
 
-This is the complete functional inventory from the saved catalogs named under Sources read: 60 CareBase capabilities and 107 Intel features.
+This is the complete functional inventory from the saved catalogs named under Sources read: 112 CareBase capabilities and 125 Intel features.
 It is a reference for explaining what users do, not a statement that every feature is included in every subscription or configured for every customer.
 The plan tables, role limits, setup conditions and claim rules apply throughout. No production workflow was newly verified for this expansion.
 
-Terminology follows the approved vocabulary. CareBase document storage is described for survey review rather than as a readiness guarantee.
-The Intel source also describes spoken visit entry; below, visit logging and debriefs use the approved written workflow only.
+Terminology follows the approved vocabulary. CareBase's capability names are the page's own: "audit" in them means a medication audit
+packet or a log of recorded actions, never the state's survey. Binder and survey-packet exports are described for survey review rather
+than as a readiness guarantee.
+The Intel source also describes spoken visit entry, a pre-visit card read aloud and spoken questions to its AI Assistant; below, visit
+logging, debriefs and directions use the approved written workflow only. As in the catalog, the AI apps and CRM Intel connects to are
+not named, and the count of its datasets is left out until the owner approves data-scale figures.
 This preserves the owner's text-only AI rule and does not authorize voice or phone claims. Static presenter videos remain course media.
 
 ### CareBase feature and function reference
 
-These are functional areas, not paid-package names. Availability spans Core and optional modules; do not infer a subscription entitlement from an area heading.
-For example, the heading “Training & compliance core” does not mean every item is included in CareBase Core.
+These are the eight areas cmcarebase.com/features publishes (read 2026-11-16: 112 capabilities across 8 areas), in the page's order and
+words. Each heading gives the area's count and, in the "Plan or add-on" line, the page's own label for what it needs. The plan tables
+above set what a subscription includes; do not infer an entitlement from an area heading or promise every item to every plan.
+For example, items under "AI assistance with human review" come with the Staff Training and Survey & Compliance tools, and confidential
+incidents under "Survey readiness, safety & quality" require CareBase Core.
 
-#### Training & compliance core
+#### Resident care & daily operations (17)
+
+Plan or add-on: CareBase Core. Keep the whole resident journey together, from the first inquiry to the last follow-up.
 
 | Capability | What the team can do |
 | --- | --- |
-| Today — daily priorities and due tasks | Review daily priorities and due work in one place. |
-| Compliance tracking & automatic alerts | Track requirements and flag upcoming or overdue work for follow-up. |
-| Maintained course catalog with graded quizzes | Assign maintained courses and record graded quiz results. |
-| Competency checklists & templates | Use checklists and templates to document competency work. |
-| Role-based training plans | Assign training according to employee roles and duties. |
-| Custom requirement catalog | Configure the requirements the organization needs to track. |
-| Interactive compliance matrix + CSV export | Review requirement status across staff and export the matrix as CSV. |
-| Compliance reporting center | Prepare reports from recorded training and requirement status. |
-| Document storage for survey review | Keep supporting documents together for review. |
+| Inquiry tracking, admissions & move-in checklists | Track inquiries and preadmission requirements, and work through move-in checklists to prepare the resident record before move-in. |
+| Census, rooms & room-readiness tracking | Track occupancy and rooms, and whether each room is ready. |
+| Digital RASP / ASP assessments | Prepare resident assessments and support plans for the facility type; retain the required signed DHS form. |
+| Reassessment deadlines & support-plan review triggers | Track reassessment deadlines and the support-plan reviews that time or a change triggers; deadlines differ by facility type and admission circumstances. |
+| Resident agreements & guest e-signatures | Prepare resident agreements and have them signed through time-limited guest links. |
+| Clinical charting: vitals, progress notes & care plans | Record resident vitals, progress notes, assessments and care plans. |
+| Facility-wide vitals rounds | Record vitals across the facility during a round. |
+| Resident services, daily care tasks & refusals | Assign services and daily care tasks, and record completion, refusal or needed follow-up. |
+| Change-of-condition follow-up & provider notifications | After a fall, hospital return or other change, track provider notifications, reassessment, support-plan review and follow-up. |
+| Dietary operations & food-safety rounds | Keep dietary checks and food-safety rounds with daily operations. |
+| Meal & activity calendars | Plan meal and activity calendars. |
+| Appointments, services calendar & transportation | Organize appointments, services and transportation on a calendar. |
+| Resident documents & chronological history | Keep each resident's documents together, with the record's history in date order. |
+| Designated-person & move-in portals | Give designated persons and move-in guests time-limited access to the records shared with them, without a full user account. |
+| Discharge documentation & retained records | Complete discharge documentation and keep the resident's clinical and operational record after move-out. |
+| Maintenance work orders & QR reporting | Track maintenance needs and work orders, with reporting through QR codes. |
+| Emergency plans & resident accountability | Keep emergency plans and account for residents during an emergency; CareBase works alongside, not in place of, an emergency-call system. |
+
+#### Staff training & learning (15)
+
+Plan or add-on: Staff Training add-on or CareMetric Train. A maintained course library, clear assignments, and a complete record of learning.
+
+| Capability | What the team can do |
+| --- | --- |
+| PA-mapped course catalog maintained by the CareMetric team | Assign courses from a catalog the CareMetric team maintains and maps to Pennsylvania requirements. Required accredited or external training still needs an eligible provider. |
+| Graded quizzes, completion records & certificates | Record graded quiz results, completions and certificates. |
+| Role-based training plans & automatic assignments | Confirm each employee's duties and applicable requirements, and assign training by role automatically. |
+| Custom training requirements & renewal dates | Configure the organization's own training requirements and their renewal dates. |
+| Interactive training-compliance matrix & CSV export | Review training status across staff and export the matrix as CSV. |
+| Live class scheduling & digital sign-in | Schedule instructor-led classes and record attendance digitally, including at a shared kiosk with a name and PIN. |
+| Trainer-managed rosters & finalized attendance | Select employees for a class and let the trainer mark attendance; employees do not need a phone or to scan a code. Finalized attendance and confirmed hours create the training records. |
+| Printable meeting notices & signed attendance sheets | Print notices and attendance sheets, upload the signed sheet and confirm hours before completing the class. |
+| Outside training records & manager review | Submit outside training for a manager to review; only approved records count toward annual totals. |
+| Retraining assignments & follow-up | Assign retraining and track its follow-up. |
 | Offline-capable employee training player | Complete eligible downloaded training offline and synchronize after reconnecting. |
+| Public certificate verification & training passport | Share a public link that verifies a certificate, and keep each employee's training passport. |
+| Training reports & employee learning history | Prepare training reports and review each employee's learning history. |
+| SCORM / xAPI learning packages managed by the CareMetric team | Use learning packages in the SCORM and xAPI e-learning formats, which the CareMetric team manages. |
+| Course versions, review history & source references | See each course's versions, its review history and the sources it is based on. |
 
-#### AI, copilot & live training
+#### Medication management & eMAR (13)
 
-| Capability | What the team can do |
-| --- | --- |
-| AI curriculum generation from your documents, run by our team | The CareMetric team drafts courses from regulations, policies or reference documents; a named reviewer must approve publication. |
-| AI avatar video lessons | Optional presenter videos accompany lessons; this is course media, not a conversational voice copilot. |
-| Individual AI lesson sections revised for review | Regenerate a lesson section and submit the changed content for a new review. |
-| Compliance copilot with records and regulatory references | Ask text questions about facility records and regulatory references; review proposed actions before approval. |
-| Plan-of-correction & mock-survey drafts for human review | Prepare written corrective-work or mock-survey drafts for a person to review. |
-| Live class scheduling & digital sign-in | Schedule instructor-led classes and record attendance digitally. |
-| Employee rosters & trainer-recorded attendance | Select employees for a class and let the trainer mark attendance; employees do not need a phone. |
-| Printable meeting notices and attendance sheets | Print notices and attendance sheets, retain the signed sheet and confirm hours before finalizing training records. |
-
-#### Resident care, clinical & operations
+Plan or add-on: eMAR add-on · facility activation required. Carry the order, administration record, and follow-up through the medication
+workflow. Native eMAR requires facility enrollment, clinical approval before use, and a documented switch to CareBase as the official
+medication administration record; until then the facility keeps using its existing record, and imported medication events stay read-only.
 
 | Capability | What the team can do |
 | --- | --- |
-| Digital RASP/ASP assessment prep | Prepare resident assessments and support plans for the facility type; retain required signed DHS forms. |
-| Automatic reassessment & support-plan triggers | Track reassessment and support-plan follow-up when time or circumstances trigger it. |
-| Native clinical charting (vitals, notes, care plans) | Record resident vitals, progress notes, assessments and care plans. |
-| FHIR sync for medications, allergies & diagnoses | Import medications, allergies and diagnoses through configured connections to compatible clinical systems. |
-| Facility-wide resident compliance dashboard | Review resident assessment and support-plan requirements across a facility. |
-| Admissions, census & room readiness | Track inquiries, preadmission requirements, occupancy and room readiness. |
-| Resident agreements & e-signature workflows | Prepare resident agreements and route them for signatures. |
-| Resident services & daily work | Assign services and record completion, refusal or needed follow-up. |
-| Change-of-condition follow-up | Track notifications, reassessment, support-plan review and follow-up after a change. |
-| Dietary & food-safety operations | Keep dietary checks and food-safety work with daily operations. |
-| Services calendar & transportation | Organize appointments, services and transportation. |
-| Resident financial subledger | Maintain resident charges, payments and financial closeout records; this is not the general accounting ledger. |
-| Medication event integration; native eMAR for enrolled facilities | Review imported medication events without editing them; use native eMAR only after enrollment, clinical approval and a documented switch. |
+| Facility medication rounds & pass setup | Set up the facility's medication rounds and passes. |
+| Medication orders with independent review | Enter medication orders, each with an independent review. |
+| Daily, one-time, interval, variable & PRN schedules | Schedule medications daily, once, at intervals, on a variable schedule or as needed (PRN). |
+| Resident, medication & barcode checks | Check the resident, the medication and its barcode during administration. |
+| Medication-training & insulin-qualification checks | Limit administration to staff whose medication training is current, and insulin to staff qualified for it. |
+| Administrations, refusals, omissions & amendments | Record each administration, refusal or omission, and amend a record when needed. |
+| PRN effectiveness follow-up & escalation | Follow up on whether an as-needed (PRN) medication worked, with escalation. |
+| Prescriber holds & observation records | Record prescriber holds and observations. |
+| Controlled-substance stock, witnesses & discrepancies | Count controlled-substance stock with a witness and record discrepancies. |
+| Refill requests & leave medication packages | Request refills and prepare medication packages for a resident's leave. |
+| Printable monthly MAR, audit & downtime packets | Print the monthly medication administration record (MAR) and the medication audit and downtime packets. |
+| Supervised reconciliation of paper downtime records | Reconcile paper records kept during downtime, under supervision. |
+| Medication oversight & quality reports | Review medication oversight and quality reports. |
 
-#### Credentials & workforce
+#### Survey readiness, safety & quality (18)
+
+Plan or add-on: Survey & Compliance tools; confidential incidents require Core. Turn daily documentation into a clearer picture of what
+needs attention before a visit.
 
 | Capability | What the team can do |
 | --- | --- |
-| Credentials & clearances (Act 34 / 73 / 33, licenses, TB, I-9) | Track employee credentials, clearances and renewal requirements; federal exclusion checks must be completed separately. |
-| OAPSA provisional-employment countdown | Track Older Adults Protective Services Act provisional-employment deadlines and documented suitability decisions. |
-| Administrator qualification & CE tracking | Keep administrator qualification and continuing-education records together. |
-| Medication authorization roster | Review medication qualifications, annual practicums and insulin authorization, with missing or expired records highlighted. |
-| Policy attestation campaigns (ESIGN/UETA documentation) | Assign policy acknowledgments and retain their signature documentation. |
-| Shift scheduling & auto-fill | Set up shifts and staffing patterns, generate a draft and review it before publishing. |
+| Today workspace & compliance command center | Review daily priorities, due work and compliance status in one place. |
+| Citation-weighted readiness score & gap review | Prioritize tracked gaps by regulatory topic using default planning weights; the score does not predict survey results. |
+| Compliance binder PDF & survey-packet exports | Export recorded documentation as a PDF binder or a survey packet for review. |
+| Survey Day Mode & entrance-conference checklist | Bring together the entrance-conference checklist, latest binder, on-shift roster and prepared documentation rooms; starting and closing a session is recorded in the audit log. |
+| On-shift roster with training & clearance flags | See who is on shift, with training and clearance flags to help staff respond to questions. |
+| Resident compliance dashboard & medical-evaluation deadlines | Review resident assessment, support-plan and medical-evaluation deadlines across a facility. |
+| Mock-survey rehearsals & request tracking | Rehearse with a mock survey, and track the documents requested and what has been provided. |
+| Chapters 2600 / 2800 regulatory crosswalk | Relate records to the requirements of Chapters 2600 and 2800. |
+| Time-limited, read-only documentation rooms | Share only the records a surveyor requests through a time-limited, read-only room; surveyors never get a CareBase sign-in or edit access. |
+| Incidents & required-reporting deadlines | Track incident reporting tasks and deadlines for the relevant authorities; staff must make and document the required reports. |
+| Confidential incidents & public safety reporting | Restrict access to sensitive incidents while supporting required safety reporting work. |
+| Complaints, resident rights & follow-up | Track complaints and resident-rights concerns through follow-up. |
+| Violations & plans of correction | Track violations and corrective work through due dates, review and verification. |
+| Fire drills & life-safety inspection records | Keep fire drill and life-safety inspection records together. |
+| 60+ document templates & DHS forms | Prepare records from the published library of document templates and DHS forms. |
+| QAPI projects & quality follow-up | Manage Quality Assurance and Performance Improvement (QAPI) projects and their follow-up. |
+| Work queue with owners, due dates & escalation | Assign an owner and due date to unresolved work, with escalation. |
+| Policy documents, acknowledgments & attestations | Publish policy documents, assign acknowledgments and retain their signature documentation. |
+
+#### Workforce, credentials & scheduling (14)
+
+Plan or add-on: Workforce add-on. See who is qualified, who is available, and which requirements need a follow-up.
+
+| Capability | What the team can do |
+| --- | --- |
+| Employee records, invitations & lifecycle tracking | Keep employee records, invite staff by email with the appropriate access, and track each employee's status over time. |
+| Act 34 / 73 / 33 clearance tracking | Track Act 34, 73 and 33 clearances and their renewals; federal exclusion-list checks (OIG LEIE and SAM.gov) must be completed outside CareBase. |
+| OAPSA provisional-employment countdown | Track Older Adults Protective Services Act (OAPSA) provisional-employment deadlines and documented suitability decisions. |
+| Professional licenses, TB & I-9 records | Track professional licenses, TB records and I-9 records. |
+| Administrator qualifications & continuing education | Keep administrator qualification and continuing-education records together. |
+| Competency checklists & observed assessments | Document competencies with checklists and observed assessments. |
+| Medication authorization & pass-meds roster | See who may pass medications, with medication-administration qualifications, annual practicums and insulin authorization together and missing or expired records highlighted. |
+| Medication practicums & annual observations | Record medication practicums and annual observations. |
+| Shift handoffs with assigned follow-up | Record shift handoffs and assign the follow-up they need. |
+| Shift scheduling, templates & auto-fill | Set up units, shift types and staffing patterns, generate a draft schedule and review it before publishing. |
+| Coverage gaps & staff availability | See coverage gaps and who is available. |
 | Cross-facility float staff | Schedule staff across facilities with checks for overlapping assignments. |
-| Time-off requests & coverage awareness | Review time-off requests in the context of shift coverage. |
+| Time-off requests & approval workflows | Submit time-off requests and approve them through an approval workflow. |
+| Staff schedule & shift views on mobile | Staff see their published shifts in My Schedule, on a phone or in a browser. |
 
-#### Survey, safety & facility
+#### Resident billing & payments (12)
 
-| Capability | What the team can do |
-| --- | --- |
-| One-click compliance binder PDF | Export recorded documentation as a PDF binder for review. |
-| Citation-weighted readiness score | Prioritize tracked gaps by regulatory topic using default planning weights; the score does not predict survey results. |
-| Survey Day Mode workspace | Bring together the entrance checklist, latest binder, on-shift roster and prepared documentation rooms. |
-| Incident & complaint tracking with reporting deadlines | Track incident and complaint reporting tasks and deadlines; staff must make and document required reports. |
-| Confidential incident pathways & public safety reporting | Restrict access to sensitive incidents while supporting required safety reporting work. |
-| Violations & plan-of-correction workflow | Track violations and corrective work through due dates, review and verification. |
-| Fire drills & life-safety records | Keep fire drill and life-safety documentation together. |
-| Library of 60+ document templates | Use the published document-template library to prepare records. |
-| Emergency operations | Organize emergency-operations records and work. |
-| Maintenance & work orders | Track maintenance needs and work orders. |
-| QAPI & quality projects | Manage Quality Assurance and Performance Improvement (QAPI) work and quality projects. |
-| Work queue with owners, deadlines & follow-up | Assign responsibility, due dates and follow-up for unresolved work. |
-| Documentation rooms & regulatory crosswalk | Share scoped documentation and relate records to regulatory requirements. |
-
-#### Access, portals & onboarding
+Plan or add-on: Resident Billing & Payments add-on. Bring rates, statements, balances, and family payments into the resident record.
+This is a resident subledger: CareBase works alongside the organization's accounting ledger and claims system, not in place of them.
 
 | Capability | What the team can do |
 | --- | --- |
-| Role-based access | Limit records and actions to each role and assigned facilities. |
-| Guest portals (move-in, agreements, designated person, documentation) | Use time-limited links for move-in records, agreements, designated-person access and documentation review. |
-| Public certificate verification links | Share a link to verify a certificate. |
-| Bulk CSV employee import | Preview a CSV staff roster, resolve flagged entries and apply the import. |
-| Email, SMS & in-app alerts with escalation | Send configured reminders and review unresolved alerts and delivery status; SMS requires enablement. |
-| User invitations by email | Invite users by email and assign the appropriate access. |
-| Online organization signup | Begin online, verify email, set a password and configure the organization during the trial. |
-| Installable mobile app for employees | Use a supported browser or add the employee training player to a phone home screen. |
+| Resident financial subledger & account history | Keep each resident's charges, payments and account history. |
+| Rate agreements & effective-dated charges | Record rate agreements and charges that take effect on set dates. |
+| Care-level rate schedules & reviews | Set rates by care level and review them. |
+| Facility billing runs & batch statements | Run billing for a facility and produce statements in a batch. |
+| Receivables, balances & payment allocation | Track receivables and balances, and allocate payments. |
+| Family portal payments & payment history | Let families pay through the portal and see their payment history. |
+| Facility payment-account onboarding | Set up the facility's account for receiving payments. |
+| Autopay policy & authorization records | Set the facility's autopay policy and keep autopay authorization records. |
+| Personal-funds transactions & resident statements | Record residents' personal-funds transactions and produce resident statements. |
+| Independent approvals for protected fund actions | Require an independent approval for protected fund actions. |
+| Move-out financial closeout | Close out a resident's finances at move-out. |
+| Financial exports for your accounting workflow | Export financial records for the organization's own accounting workflow. |
+
+#### AI assistance with human review (7)
+
+Plan or add-on: Staff Training and Survey & Compliance tools. Use source documents and facility context to make preparation more useful.
+The CareMetric team prepares AI-assisted courses; customers use the reviewed catalog. Copilot actions require human approval, and AI
+drafts require review. The copilot is text only.
+
+| Capability | What the team can do |
+| --- | --- |
+| Team-prepared AI-assisted courses from policies & source documents | The CareMetric team drafts courses with AI assistance from regulations, policies or reference documents. |
+| Lesson text, video scripts & graded quiz drafts | Drafts can include lesson text, video scripts and graded quizzes; a reviewer checks the content and source references. |
+| Optional AI presenter video lessons | Optional presenter videos accompany lessons; this is course media, not a conversational voice copilot. |
+| Named-reviewer approval before course publication | A named reviewer must approve a course before publication; regenerating a section requires a new review. |
+| Compliance copilot grounded in facility records & regulatory references | Ask text questions about facility records and regulatory requirements, with references to review; an answer does not itself resolve a compliance gap. |
+| Draft plans of correction & mock-survey preparation | Prepare written plan-of-correction and mock-survey drafts for a person to review. |
+| Proposed follow-up actions for human approval | Review follow-up work the copilot proposes; a person must approve an action before it is carried out. |
+
+#### Access, integrations & onboarding (16)
+
+Plan or add-on: Platform tools · access depends on your plan and role. Start with your existing records and give each person an
+appropriate view.
+
+| Capability | What the team can do |
+| --- | --- |
+| Online organization signup & guided setup | Begin online, verify email, set a password and configure the organization during the trial, with guided setup. |
+| Bulk CSV staff import with review before completion | Upload a CSV staff roster, review the import preview and resolve flagged entries before applying it; employees can also be added one at a time. |
+| Data import center & import history | Run imports from one place and review past imports. |
+| FHIR imports for medications, allergies & diagnoses | Import medications, allergies and diagnoses through configured FHIR connections to compatible clinical systems. |
+| Read-only imported medication events | Review imported medication events without editing them. |
+| Role-based access with facility scope | Limit records and actions to each role and assigned facilities: organization administrators see every facility, facility managers their assigned sites. |
+| SMS account verification & security policies | Verify accounts by text message and set the organization's security policies. |
+| Private documents & time-limited download links | Keep documents private and share them through download links that expire. |
+| Audit trail of recorded actions | Review a log of recorded actions. |
+| Email, SMS & in-app alerts with escalation | Send configured reminders about upcoming and overdue requirements by email, in the app and, when enabled, by text message; review unresolved alerts, weekly digests and delivery status. |
+| Guest access for move-in, agreements & documentation | Use time-limited links for move-in records, agreement signing and documentation review, without a full user account. |
+| Installable employee app & mobile-friendly workflows | Use a supported browser with nothing to install, or add the employee training player to a phone's home screen. |
+| Organization-wide reports & multi-facility views | Review reports and facilities across the organization; reports follow the same access rules. |
+| In-app help, support & product updates | Get help, reach support and read product updates inside CareBase. |
+| Enterprise SAML SSO & verified domains (managed rollout) | Sign in through SAML single sign-on with verified email domains; available only through a managed rollout. |
+| Enterprise provisioning & access reviews (managed rollout) | Provision enterprise users and review their access; available only through a managed rollout. |
 
 #### Resident workflow from inquiry to move-out
 
@@ -724,8 +855,8 @@ Use the linked training-requirement guide and official sources for exact deadlin
 ### Intel feature and function reference
 
 “All plans; subject to scope” means the saved source has no additional plan or role label. Territory, purchased capacity, data coverage and organization access rules still apply.
-An owner or branch-manager label is required authority, not a feature available to every user. Configured-service conditions also apply where described.
-The source describes Pro feature access during the trial within its one-county footprint; the reviewed trial seats, branch and duration above remain the limits.
+An owner or location-manager label is required authority, not a feature available to every user. Configured-service conditions also apply where described.
+The source describes Pro feature access during the trial within its one-county footprint; the reviewed trial seats, location, service lines and duration above remain the limits.
 
 #### Healthcare marketing CRM
 
@@ -734,7 +865,7 @@ The marketing book: the accounts you keep month to month, the people you know th
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
 | Marketing book of accounts | Keep hospitals, nursing homes, personal care and assisted living homes, physician practices, agencies and other referral sources in one book. Each account holds its type, city, phone, website, NPI, CCN, tags and owner. | All plans; subject to scope |
-| Lines of business | Work home health and hospice separately. One building can sit on both lines, with its own stage and history on each. | Starter: one line |
+| Lines of business | Organize relationships by healthcare service line, including practices, hospitals, behavioral health, rehabilitation, diagnostics, senior care, home health, hospice, DME, and other healthcare services. One account can have a separate stage and history on each line. | Starter: one line |
 | Relationship stages | Move accounts through Target, Relationship, Active source, Preferred, At risk and Lost. The date of the last change is kept, and At risk or Lost asks why: competitor, service issue, staff turnover, moved or other. | All plans; subject to scope |
 | Contacts by healthcare role | Record the administrator, director of nursing, business office, social services, admissions, discharge planner, case manager, physician liaison, physician, intake, MDS coordinator and executive director. Mark someone as left to keep their history and stop email to them. | All plans; subject to scope |
 | Account page and full history | Notes, the next visit or call, referrals, expenses and campaigns on one page. Search the account’s whole activity history by note, employee or date. Print a one-page account sheet without notes. | All plans; subject to scope |
@@ -745,8 +876,11 @@ The marketing book: the accounts you keep month to month, the people you know th
 | Book hygiene | Possible duplicates are listed for a one-step merge. Chips flag accounts with no phone, no contact, no email, an invalid email or no call in 90 days, and engagement reads Healthy, Warm, Cold or No activity. | All plans; subject to scope |
 | Going quiet | Accounts whose referrals dropped, or that have gone 45 days without a visit, are listed with the reason and marked on the book and in the Monday digest. | All plans; subject to scope |
 | Compare accounts side by side | Compare two to four accounts on stage, contacts, visits, referrals and admissions, star ratings, Medicare share and recent activity. Save the comparison, print it or download a PDF. | All plans; subject to scope |
-| Claim, release and hand off | Claim accounts for your own book. When someone leaves or changes territory, move their whole book to a teammate in one step. Visits and referrals already logged stay credited to the person who logged them. | Hand-off: owners & branch managers |
+| Claim, release and hand off | Claim accounts for your own book. When someone leaves or changes territory, move their whole book to a teammate in one step. Visits and referrals already logged stay credited to the person who logged them. | Hand-off: owners & location managers |
 | Parent organizations | Group locations that belong to the same organization, from a shared parent name, practice name or people, or name the parent yourself. | All plans; subject to scope |
+| Physician group certifications | Open a physician group in the market list to see which members certify home health or oversee hospice care, the patients Medicare published for each, who is on your book, what your book admitted from them in 12 months and an estimated share. Members CMS doesn’t list show as not listed, never zero, and high-volume members not on your book go to a lead list in one step. | All plans; subject to scope |
+| Account tiers and visit cadence | Mark accounts tier A, B or C, or let Intel suggest tiers from each account's referrals. The organization sets how often each tier should be visited; Today and Team review show who is behind, the suggested route moves them up, and Monday's email lists them. | All plans; subject to scope |
+| Call or text from an account | Call and Text open the phone's dialer or messages app from the account or a person there, then log the call (or a note for a text) in one tap. Nothing is placed or sent from Intel. | All plans; subject to scope |
 
 #### Daily field work
 
@@ -767,10 +901,11 @@ The day on the road: what to do today, where to go, and a fast way to record eac
 | Calendar sync | Download your scheduled visits and calls, subscribe with a private calendar link, or sync them to Outlook or Google Calendar. Notes are never copied to the calendar. | Outlook and Google sync: where configured |
 | Weekly book digest | A Monday email for each marketer: last week’s visits, the coming week’s follow-ups, referral changes on their accounts, accounts going quiet, overdue tasks, new or moved physicians and sources falling off pace. | All plans; subject to scope |
 | On your phone’s home screen | Add CareMetric Intel to a phone’s home screen and it opens like an app. | All plans; subject to scope |
+| Directions to the account | Open directions to the account in Google Maps, Apple Maps or Waze. | All plans; subject to scope |
 
 #### Expenses, mileage and reimbursement
 
-Expense reports built for healthcare marketing: log spend against the referral source, record per-person values, review policy flags, approve expenses and record reimbursement status.
+Expense reports built for healthcare marketing: spend is logged against the referral source it was for, valued per person, checked against the Stark limit and your policy, approved, and paid.
 
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
@@ -780,12 +915,12 @@ Expense reports built for healthcare marketing: log spend against the referral s
 | Stark annual limit tracking | Each physician’s running total is measured against the Stark nonmonetary-compensation limit for the year (42 CFR 411.357(k)), with a warning as it gets close. The limit itself blocks approval unless a manager overrides it with a logged comment. | All plans; subject to scope |
 | Non-physician policy totals | Spend on discharge planners, case managers and other referral sources builds up against an internal policy alert you set. It is an alert, not a legal safe harbor: the Anti-Kickback Statute names no dollar threshold. | All plans; subject to scope |
 | Policy checks and flags | Per-meal caps by meal (breakfast, in-service lunch, out-of-office lunch, dinner), a per-diem cap, meals per person per month and per 12 months, large single benefits, entertainment, missing receipts, documentation gaps and possible duplicates are all flagged. | All plans; subject to scope |
-| Approval workflow | Save a draft, then submit. Clean, fully documented expenses under your approval threshold approve themselves; flagged ones wait in a manager’s queue to be approved or denied with a note. A denied expense can be corrected and resubmitted. | Approving: owners & branch managers |
-| Reimbursement tracking | Approved and paid are separate facts. A manager records the paid date, method (payroll, direct deposit, check) and batch, one expense or a whole batch at a time. Marketers cannot mark their own expenses reimbursed. | Owners & branch managers |
-| Budgets and compliance settings | Set a monthly budget per marketer, the approval and receipt-required thresholds, meal and per-diem caps, frequency limits, the warning percentage, the mileage rate and the non-physician policy total. | Owners & branch managers |
+| Approval workflow | Save a draft, then submit. Clean, fully documented expenses under your approval threshold approve themselves; flagged ones wait in a manager’s queue to be approved or denied with a note. A denied expense can be corrected and resubmitted. | Approving: owners & location managers |
+| Reimbursement tracking | Approved and paid are separate facts. A manager records the paid date, method (payroll, direct deposit, check) and batch, one expense or a whole batch at a time. Marketers cannot mark their own expenses reimbursed. | Owners & location managers |
+| Budgets and compliance settings | Set a monthly budget per marketer, the approval and receipt-required thresholds, meal and per-diem caps, frequency limits, the warning percentage, the mileage rate and the non-physician policy total. | Owners & location managers |
 | Who you’ve spent on | Every marketer sees each person they have spent on this year, their running value against the limit, and their meal counts. The same totals appear on each account’s page. | All plans; subject to scope |
-| Expense reports and exports | An itemized register, totals by marketer and by account, a compliance report and a payroll / AP export, for any date range, marketer, category or status. Download CSV or PDF. | Owners & branch managers |
-| Scheduled expense reports | Email any expense report daily, weekly or monthly to the managers you choose. Send a test, pause or edit a schedule at any time. | Owners & branch managers |
+| Expense reports and exports | An itemized register, totals by marketer and by account, a compliance report and a payroll / AP export, for any date range, marketer, category or status. Download CSV or PDF. | Owners & location managers |
+| Scheduled expense reports | Email any expense report daily, weekly or monthly to the managers you choose. Send a test, pause or edit a schedule at any time. | Owners & location managers |
 | Mileage log | Adds the straight-line miles between each day’s visit check-ins and prices them at your organization’s mileage rate. Turn a day into a mileage expense draft in one step, then submit it like any other expense. Download the log as CSV. | All plans; subject to scope |
 
 #### Referral and admission tracking
@@ -797,13 +932,15 @@ Your organization’s own results: the referrals each source sends, what became 
 | Log referrals and outcomes | Record a referral on the account it came from, with the service, payer and a note. Mark it admitted or not admitted, with the reason, when you know. | All plans; subject to scope |
 | Response time | Each referral keeps the time it came in, when it was first answered and when it was decided. Results reports median hours to first answer and to decision, the share answered within an hour, after-hours arrivals and the slowest sources. | All plans; subject to scope |
 | EMR report imports | Import referrals and admissions from CSV reports with column mapping and a preview. Saved layouts cover common home health and hospice EMR reports. Upload a file, pick one up from an SFTP drop folder, or forward it to an email-in address. Patient-identifying columns are dropped and never stored. | Owners |
-| Scheduled EMR report delivery | Some EMR reports can be delivered on a schedule your agency controls, with a delivery health page that shows the interval, observed dates and source totals. A file with rejected rows is held instead of imported. | Owners |
+| Scheduled EMR report delivery | Some EMR reports can be delivered on a schedule your organization controls, with a delivery health page that shows the interval, observed dates and source totals. A file with rejected rows is held instead of imported. | Owners |
 | Referral funnel | Referrals received, admitted and not admitted, and why, by account and by marketer. | All plans; subject to scope |
 | Referral drop-off alerts | Flags a top source when its last 30 days fall at least 30% below its average month from the 90 days before. An owner can set the drop anywhere from 10% to 90%. | All plans; subject to scope |
-| Outcomes packet | A one-page quarterly PDF for a hospital or facility: the referrals they sent, how many were admitted and how fast they were answered, your agency’s public star rating, readmissions and quality scores, and the availability you confirmed. Hospitals in CMS’s TEAM model are flagged, with a list of TEAM hospitals to target. No patient names, notes or clinical detail. | All plans; subject to scope |
+| Outcomes packet | A one-page quarterly PDF for a hospital or facility: the referrals they sent, how many were admitted and how fast they were answered, your organization’s public star rating, readmissions and quality scores, and the availability you confirmed. Hospitals in CMS’s TEAM model are flagged, with a list of TEAM hospitals to target. No patient names, notes or clinical detail. | All plans; subject to scope |
 | Lost reasons | Totals the reasons behind every lost and at-risk account, shows how many have no reason recorded, and lists the accounts. | All plans; subject to scope |
 | Admissions forecast | Estimates how many open referrals will be admitted, from your last 180 days, as a range that stays wide when the history is short. | Pro |
-| Availability | A dated confirmation of what your agency can take: accepting, limited or closed to new referrals, confirmed openings, earliest start, counties, disciplines, payers, languages and weekend coverage. Expired confirmations read as unconfirmed. | Confirming: owners & branch managers |
+| Availability | A dated confirmation of what your organization can take: accepting, limited or closed to new referrals, confirmed openings, earliest start, counties, disciplines, payers, languages and weekend coverage. Expired confirmations read as unconfirmed. | Confirming: owners & location managers |
+| Why a source is slipping | For a source on the drop-off list, see what the book shows over the same months: a contact who left, referrals not admitted, availability you gave, fewer visits, a service ticket, slower responses, a physician who moved and a watched competitor nearby. Add the next step as a task in one tap. | All plans; subject to scope |
+| Shareable profile link | A revocable page for referral sources, by location: intake phone and fax, services, current confirmed availability, public CMS ratings and the median first response to referrals, with a QR code and a view count. No patient information. | All plans; subject to scope |
 
 #### Prospecting and targeting
 
@@ -827,14 +964,33 @@ The people, providers and Medicare activity in the places you serve, within your
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
 | Territory map | Providers on a map of a state in your territory, highest lead scores first. Filter by specialty group, entity type, score range and patient volume, color by score, or switch on a heat map. A county-density tab ranks counties by practice locations. | All plans; subject to scope |
-| County intelligence | A county’s older-adult population, income and adults living alone; the hospitals its residents use and where their post-discharge spending goes; the post-acute providers located there; and its top referral sources. | All plans; subject to scope |
-| Market data and market share | Each county’s Medicare enrollment and Medicare Advantage share, home health, hospice and skilled nursing use and supply, spending and readmissions, and each agency’s share of the Medicare beneficiaries served by providers located in the county. | All plans; subject to scope |
-| Facility directory | Hospitals, home health agencies, hospices, nursing homes, inpatient rehab, long-term care hospitals, DME suppliers, community health centers, dialysis facilities, and state-licensed personal care and assisted living homes where loaded. | All plans; subject to scope |
+| County intelligence | A county’s older-adult population, income and adults living alone; the hospitals its residents use and where their post-discharge spending goes; current Medicare facility listings with published-county or labeled ZIP-based membership; historical post-acute providers assigned by their reported ZIP; and top referral sources. | All plans; subject to scope |
+| Demographics by county and ZIP area | Residents 65+, 75+ and 85+, median age, household income and home value, poverty, uninsured, disability, Medicare-Medicaid dual coverage and 65+ households living alone, for a county and each of its ZIP areas, with the change in residents since 2020. | All plans; subject to scope |
+| Community and payer context | On each county: Medicare Advantage plans, penetration, star ratings and supplemental benefits, Medicaid managed care where CMS publishes it, chronic disease prevalence, social vulnerability, shortage areas, healthcare wages, Part D prescribing and the most common Medicare services. | All plans; subject to scope |
+| Site finder | Rank a state’s counties, or the ZIP areas of a state or county, for a new office or facility. Pick a service line and compare demand, growth since 2020, need and the supply gap; the opportunity index averages each area’s percentile among the areas compared. Download it as CSV. | All plans; subject to scope |
+| Market data and market share | Each county’s Medicare enrollment and Medicare Advantage share, home health, hospice and skilled nursing use and supply, spending and readmissions, and agency shares using the displayed service-area or provider-ZIP method. Historical post-acute county assignments use the provider ZIP from the utilization year and the Census county containing most of that ZIP area; they can differ from current directory office counties. | All plans; subject to scope |
+| Facility directory | Hospitals, home health agencies, hospices, nursing homes, inpatient rehab, long-term care hospitals, DME suppliers, community health centers, dialysis facilities, and state-licensed personal care and assisted living homes where loaded. Export DME suppliers to CSV or Excel from the DME report. | All plans; subject to scope |
 | Facility profiles | Ownership, cost-report revenue and expenses, beds and visits, star ratings and quality measures, service areas and rank in the county and state. Print a branded profile. | All plans; subject to scope |
 | Public quality scores | A hospice's Hospice Care Index and its Service and Spending Variation Index from CMS's FY2027 hospice rule, a home health agency's value-based purchasing score and payment adjustment, and whether a hospital is in CMS's TEAM model, on each facility page. | All plans; subject to scope |
 | Utilization and CMS data | Medicare payments and service volume by specialty, and any clinician’s Medicare service lines by NPI. | All plans; subject to scope |
 | Market briefs | Ready-made briefs for expansion (where to grow), acquisition (the largest operators in a state), hospital relationships and referral development. | All plans; subject to scope |
 | Data freshness | Every market view shows which release it uses and when it was loaded, so you can judge the figures before using them. | All plans; subject to scope |
+
+#### Public data library
+
+Public healthcare datasets from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP.
+
+| Feature | Function | Plan or role condition |
+| --- | --- | --- |
+| Providers and clinicians | Every individual and organization in the national NPI registry, with practice locations, NUCC specialties and affiliations, kept current from CMS’s weekly files. Add Medicare services and payments by clinician, home health certifications, hospice care-plan oversight, Order & Referring enrollment, Part D prescribing and MIPS scores. | All plans; subject to scope |
+| Facilities, quality and ownership | Provider of Services and Care Compare files for hospitals, home health agencies, hospices, nursing homes, inpatient rehab and long-term care hospitals: star ratings, patient surveys, readmissions, inspections, penalties, nurse staffing, ownership and chains, plus cost reports for hospitals, home health agencies, hospices and nursing homes. | All plans; subject to scope |
+| Medicare use and market activity | Home health, hospice and skilled nursing use and supply by county, post-acute utilization by provider, spending and readmissions by county, Hospital Service Areas, inpatient diagnosis groups and outpatient services, DME by supplier and referring provider, and monthly Medicare enrollment. | All plans; subject to scope |
+| Demographics and growth | American Community Survey 5-year estimates for every county and ZIP area (ages 65+, 75+ and 85+, median age, income, home value, poverty, uninsured, disability, living alone and dual coverage) and Census population estimates of the change since April 2020. | All plans; subject to scope |
+| Payers and Medicare Advantage | Medicare Advantage enrollment by organization, contract and county, penetration, plan star ratings and supplemental benefits; Medicaid managed care plans where CMS publishes them; and marketplace insurers by county. | All plans; subject to scope |
+| Community health and need | CDC PLACES disease and disability prevalence, the CDC Social Vulnerability Index, AHRQ social determinants of health, HRSA shortage and medically underserved areas, the HRSA Area Health Resources File, Mapping Medicare Disparities, BLS healthcare wages, County Business Patterns and VA facilities. | All plans; subject to scope |
+| Provider standing and payments | A provider’s page flags an OIG exclusion, a Medicare opt-out or revocation and the next revalidation date, and shows Open Payments totals from drug and device makers, so you can check standing before you invest in a relationship. | All plans; subject to scope |
+| State-licensed homes | Personal care, assisted living, memory care and domiciliary care homes and their beds, imported from each state’s licensing file and counted in county and ZIP area figures. In a state whose file is loaded, an area with none reads 0. | All plans; subject to scope |
+| Releases checked daily | The CMS catalogs are checked every day for new releases, and stored rows are refreshed when one arrives. Data years more than ten years old are removed, and a dataset its publisher stopped releasing is retired instead of shown as current. | All plans; subject to scope |
 
 #### Competitor intelligence
 
@@ -846,8 +1002,9 @@ Who you compete with for referrals, how they are moving, and what to say about i
 | Watchlist and alerts | Follow the competitors that matter and get alerts when a star rating, owner or service area changes, a change of ownership is filed, or a new provider opens nearby. | All plans; subject to scope |
 | Compare and trends | Put competitors side by side on market rank, Medicare patients, share and its change, star rating, locations and ZIP codes served, and follow their share over time. | All plans; subject to scope |
 | County roll-up | Every county in a state with its market leader, number of agencies and biggest mover, as CSV or a leadership-brief PDF. | All plans; subject to scope |
-| Scheduled leadership brief | Email the county roll-up as a PDF to your managers daily, weekly or monthly. | Owners & branch managers |
-| What to say | On a home health agency or hospice, a card lines your agency up with the three largest in the county on star rating, patient survey and Medicare patient totals, in plain sentences. | All plans; subject to scope |
+| Scheduled leadership brief | Email the county roll-up as a PDF to your managers daily, weekly or monthly. | Owners & location managers |
+| What to say | On a home health agency or hospice, a card lines your organization up with the three largest in the county on star rating, patient survey and Medicare patient totals, in plain sentences. | All plans; subject to scope |
+| Free agency market review | On the public site, anyone can type a home health or hospice CCN and get a PDF by email: the agency's Medicare patients, share and rank in its county and state, the largest local agencies and its public CMS ratings. | All plans; subject to scope |
 
 #### Manager and team tools
 
@@ -856,14 +1013,19 @@ Set expectations, see where the effort goes, and coach the people doing the work
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
 | Goals and leaderboard | Monthly visit and referral targets for each marketer, a leaderboard, Met / On pace / Behind for the open month and a six-month trend. Everyone sees their own progress on Today. | Setting targets: Growth & Pro |
-| Team review | One marketer’s week in one place: visits and calls with their notes, saved routes, open tasks and assigned accounts. | Owners & branch managers |
-| Activity report and weekly email | Visits, calls, tasks done and overdue, referrals and admissions by person and source, new and lost sources, stage changes and accounts not visited. Download a spreadsheet or PDF, or turn on a weekly email. | Weekly email: owners & branch managers |
-| Coaching | Ride-along notes, comments on a visit and 1-on-1s for one marketer. | Owners & branch managers |
-| Branches | Add branches and assign each person as a marketer or manager. People then see their branches’ accounts, and reports follow the same rule. | Owners · Growth: 3, Pro: 10 |
-| Book balance | Proposes a split of accounts across the marketers you choose by referral potential and drive time. Nothing moves until a manager applies it. | Pro · owners & branch managers |
+| Team review | One marketer’s week in one place: visits and calls with their notes, saved routes, open tasks and assigned accounts. | Owners & location managers |
+| Activity report and weekly email | Visits, calls, tasks done and overdue, referrals and admissions by person and source, new and lost sources, stage changes and accounts not visited. Download a spreadsheet or PDF, or turn on a weekly email. | Weekly email: owners & location managers |
+| Coaching | Ride-along notes, comments on a visit and 1-on-1s for one marketer. | Owners & location managers |
+| Locations | Add locations and assign each person as a marketer or manager. People then see their locations’ accounts, and reports follow the same rule. | Owners · Growth: 3, Pro: 10 |
+| Book balance | Proposes a split of accounts across the marketers you choose by referral potential and drive time. Nothing moves until a manager applies it. | Pro · owners & location managers |
 | Account briefs and Ask the book | A short factual brief on any account (stage, visits, calls and referral outcomes over 90 days, with notes left out), and answers to supported questions about your book, such as the top ten sources last quarter. | All plans; subject to scope |
 | Decision briefs | Prioritized accounts to prepare for, manager exceptions such as overdue tasks and falling referrals, and changes on the accounts you watch. Download a branded PDF or CSV, or have it emailed. | All plans; subject to scope |
-| Materials library | Brochures, physician one-pagers, service-line flyers and video links in one searchable place. New versions replace old ones, marketers note what they left on a visit, and managers see who opened each file. | Adding materials: owners & branch managers |
+| Materials library | Brochures, physician one-pagers, service-line flyers and video links in one searchable place. New versions replace old ones, marketers note what they left on a visit, and managers see who opened each file. | Adding materials: owners & location managers |
+| Healthcare observances | A calendar of the days, weeks and months that honor the people marketers call on (Doctors’ Day, Nurse Practitioner Week, Case Management Week, Social Work Month, Nurses Week and more), care settings, health awareness months and Medicare enrollment periods, worked out each year from the sponsor’s rule. Today and the Monday digest show what is coming up; Remind me adds a task two weeks ahead, and the calendar downloads for Outlook, Google Calendar or a phone. | Everyone, every plan |
+| AI Assistant | Ask about your market, your book and your day in plain English. It looks answers up in the app’s data inside your plan’s territory, says when a figure is an estimate, and proposes lead lists, visits, tasks, call plans and outreach drafts that are saved only when you confirm. Each question uses one of your organization’s daily AI requests. | Growth & Pro · organization admins, and the team when turned on |
+| AI playbook | An organization admin sets the pitch pillars, the service lines to mention and the words to avoid. The pre-visit card adds a pillar when it has room, and the notes summary and debrief follow the playbook and flag an avoided word. | Setting it: owners |
+| Use your own AI app with Intel | Make a personal token in Account and connect an AI app that supports MCP to Intel. It reads providers, lead scores, county and market facts, your day, account briefs, lead lists and your book as you, with your role and your plan’s places, and can’t change anything. Each question counts toward your organization’s AI requests. | Growth & Pro · whoever can open the AI Assistant |
+| Activity challenges and report card | Set a friendly target for visits, calls, accounts touched or tier A visits for a location or the whole organization, with standings for everyone in it. Never referrals or admissions, with a reminder about contractors paid on a 1099. Each person's report card compares their month's activity with the month before. | All plans; subject to scope |
 
 #### Email campaigns
 
@@ -872,9 +1034,10 @@ Reach the contacts on a lead list or your book, with sending rules that protect 
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
 | Campaigns to lists and contacts | Email a lead list, the contacts on one line of your book, or both. People marked as left are skipped. | Owners · Growth & Pro |
-| Delivery tracking | Track deliveries, opens, clicks, responses and bounces for each campaign, and link campaigns to the accounts they touched. | Owners · Growth & Pro |
+| Delivery tracking | Track deliveries, opens, clicks and bounces for each campaign, and link campaigns to the accounts they touched. | Owners · Growth & Pro |
 | Sender and unsubscribe | Set the name recipients see, where replies go and your postal address. Every email carries an unsubscribe link that is honored automatically. | Owners · Growth & Pro |
 | Queue contacts from an account | Any marketer can add a contact to a draft campaign from the account page; an owner prepares and sends it. | Growth & Pro |
+| Nurture sequences | Start a sequence of calls, visits, emails and tasks on an account, from four starters (new physician welcome, in-service thank-you, quarterly outcomes packet, re-engage a slipping source) or your own. Email steps carry a draft you send from Follow-up. A sequence stops on its own on a referral, a contact leaving or every contact unsubscribing, or when you mark a reply. | All plans; subject to scope |
 
 #### Reports and analytics
 
@@ -883,7 +1046,8 @@ Your book turned into reports that managers, owners and marketers can each trust
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
 | Results reports | Performance scorecard, field activity, tasks and follow-up, mileage, referrals and admissions, top referral sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment. | All plans; subject to scope |
-| Filter and group | Choose dates, then filter and group by person, location, line of business, account type, county, payer, source type, month or week. Members see their own work; managers see their branches; owners see the company. | All plans; subject to scope |
+| Source quality after admission | Load a stays report (or have a supported EMR deliver it on a schedule) and see, by referral source, marketer or location, how long patients stay, short stays, hospice live discharges and revocations, and home health returns to the hospital, plus average daily census against each location's budget. A group is rated only with 10 or more endings, a flag means 10 points above your own average, and patient columns are never read or stored. | Loading and organization budgets: owners · by marketer and location: managers |
+| Filter and group | Choose dates, then filter and group by person, location, line of business, account type, county, payer, source type, month or week. Members see their own work; managers see their locations; owners see the company. | All plans; subject to scope |
 | PDF, Excel and CSV | Every report downloads with the same figures as the screen and the source of the data printed on it. | All plans; subject to scope |
 | Custom report builder | Save charts and email them on a schedule to up to 25 people in your organization. | All plans; subject to scope |
 
@@ -894,32 +1058,44 @@ Control who can see what, keep a record of it, and know where every figure comes
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
 | Organization, people and roles | Invite people up to your plan’s seats, make someone an owner or a member, disable accounts, send password reset links and sign someone out everywhere. | Owners |
-| Text-message sign-in codes | Owners and branch managers can add a six-digit code, sent by text, to their own sign-in. | All plans; subject to scope |
+| Text-message sign-in codes | Owners and location managers can add a six-digit code, sent by text, to their own sign-in. | All plans; subject to scope |
 | Security audit | Sign-ins, account changes, exports and other recorded actions for your organization, with filters. | Owners |
-| Billing and territory | Choose your plan, counties or states and add-ons (extra seats, branches and states) from Billing. | Owners |
+| Billing and territory | Choose your plan, counties or states and add-ons (extra seats, locations and states) from Billing. | Owners |
 | Guided setup and help | A guided setup for a new organization, an in-app help guide, and illustrated user guides for marketers and administrators as PDFs. | All plans; subject to scope |
+| Business menu and search | Pick a healthcare service line to focus your CRM, referral tracking, and available research views. Use Other healthcare services for an unlisted specialty. Public datasets and specialized reports vary by setting. Press Ctrl+K anywhere to search accounts, providers, NPIs, lead lists and pages. | All plans; subject to scope |
 | Public data, clearly sourced | Provider, facility and market figures come from CMS, NPPES, the U.S. Census Bureau and state licensing files, with each dataset’s release shown. Public research uses no patient-level data. | All plans; subject to scope |
 | Patient privacy by design | Patient-identifying columns are dropped from referral imports, briefs and scorecards leave notes out, and exports carry no patient names. | All plans; subject to scope |
+| Send data out | An organization admin sends the organization’s own accounts, referrals and visit counts out every night: three CSV files to an SFTP server whose host key you pin, or accounts to a supported CRM as companies. Notes, check-in positions and patient details never leave Intel; passwords and tokens are stored encrypted. | Setting it: owners |
 
 #### Data, sources and what they can tell the company
 
 | Data family | Included information and source | Business use and limit |
 | --- | --- | --- |
-| Providers | Provider and organization names, NPI identifiers, and specialties; Practice locations, taxonomy, and available affiliations; Eligible ordering/referring providers and available public Medicare activity. Source: NPPES, NUCC taxonomy, and relevant CMS public files. | Build a target list based on location, service focus, and available market evidence instead of starting each search from scratch. A provider’s presence or activity is a research signal, not a promise of referrals. |
-| Facilities | Hospitals, home health agencies, hospices, and nursing homes; Available ownership, quality, capacity, and facility details; State-licensed personal care homes and assisted living facilities where loaded. Source: CMS facility files, Care Compare, and available state licensing files. | Prepare for relationship-building with a clearer view of the organizations already serving the territory. Licensed-home coverage and available detail vary by state and source. |
-| Territories | County and ZIP-area geography; Older-adult population measures, including ages 65+ and 85+; Income and older adults living alone, where available. Source: U.S. Census Bureau geography and American Community Survey estimates. | Compare local population context with care supply and current account coverage before directing the team’s time and resources. Demographic estimates provide planning context; they do not identify individual prospects or establish demand. |
-| Utilization & quality | Available county-level care utilization and provider supply; Hospital service-area and post-discharge spending context; Available quality, readmission, and facility performance measures. Source: Relevant CMS public use files and Care Compare releases. | Use the source’s reporting period and market context to ask better questions about service areas, competition, and potential relationships. Post-discharge spending is a proxy for care use, not a count of transfers. |
-| Your results | Accounts, contacts, ownership, calls, visits, and follow-ups; Expenses, receipts, approvals, reimbursements, and mileage; Recorded or CSV-imported referrals and admissions; Source trends, conversion, lost reasons, and team activity. Source: The information your organization records or imports. | Reduce the time spent reconstructing account history and bring recorded results into the conversation about marketing priorities. Results reflect your records. CSV imports are file-based, not live EMR connections; patient-identifying columns are dropped. |
+| Providers | Every individual and organization in the national NPI registry, with practice locations, specialties and affiliations, refreshed from CMS’s weekly files; Medicare services, patients and payments by clinician, home health certifications and hospice care-plan oversight by physician; Order & Referring enrollment, Part D prescribing, MIPS quality scores and Open Payments totals; OIG exclusions, Medicare opt-outs and revocations, flagged on the provider’s page. Source: NPPES, the NUCC taxonomy, CMS Physician & Other Practitioners, Order & Referring, Part D Prescribers, the Quality Payment Program, Open Payments and the OIG exclusion list. | Compare clinicians by specialty, location, and available Medicare activity, see who opened or moved a practice, and review public standing before investing in a relationship. A provider’s presence or activity is a research signal, not a promise of referrals. CMS lists a clinician’s counts only above ten patients. |
+| Facilities | Hospitals, home health agencies, hospices, nursing homes, inpatient rehab, long-term care hospitals, DME suppliers and community health centers; Star ratings, patient surveys, readmissions, inspections, penalties and nurse staffing; Ownership, chains, changes of ownership and cost-report revenue, expenses, beds and visits; The Hospice Care Index, home health value-based purchasing scores and CMS TEAM hospitals; State-licensed personal care, assisted living and memory care homes and beds, where loaded. Source: CMS Provider of Services, Care Compare, cost reports (HCRIS), ownership and staffing files, and available state licensing files. | Walk into a hospital or nursing home already knowing its ratings, ownership, size and service area, and print a branded profile for the visit. Licensed-home coverage and available detail vary by state and source. Measures describe the periods CMS publishes. |
+| Medicare use & share | Home health, hospice and skilled nursing use and supply by county; Medicare spending per beneficiary and readmissions by county; Where each county’s residents are hospitalized and where post-discharge spending goes; Each agency’s share of the Medicare patients served, from Care Compare ZIP service areas; Inpatient diagnosis groups, outpatient services, and DME by supplier and referring provider. Source: CMS Market Saturation, Geographic Variation, Hospital Service Area, Post-Acute Care utilization, inpatient, outpatient and DME files. | Review the Medicare volume available for your service line alongside local provider supply and hospital activity before assigning outreach resources. Post-discharge spending is a planning indicator, not a count of transfers. Medicare populations and coverage vary by dataset and service line. |
+| Demographics | Residents 65+, 75+ and 85+, median age, household income and home value for every county and ZIP area; Poverty, uninsured, disability, Medicare-Medicaid dual coverage and older adults living alone; Population change since the 2020 Census, for all ages and for 65+, 75+ and 85+; A Site finder that ranks counties or ZIP areas by demand, growth, need and supply gap for your service line. Source: U.S. Census Bureau 2020 geography, American Community Survey 5-year estimates and population estimates. | Compare local demand with the providers already there before you hire, open an office or redraw territories. Demographic estimates provide planning context; they do not identify individual prospects. A ZIP area carries its county’s growth. |
+| Payers & Medicare Advantage | Medicare enrollment and Medicare Advantage share by county; Medicare Advantage enrollment by organization and plan, plan star ratings and supplemental benefits; Medicaid managed care plans where CMS publishes them, and marketplace insurers by county. Source: CMS Medicare Monthly Enrollment, Medicare Advantage enrollment, star rating and plan benefit files, and marketplace public use files. | Plan payer conversations and outreach with the county’s current Medicare Advantage penetration and the plans that hold the most members. Enrollment is by county of residence, for the period CMS published. |
+| Community need | Chronic disease and disability prevalence and Social Vulnerability Index ranks; Health professional shortage areas and medically underserved areas; Social determinants of health, Mapping Medicare Disparities rates and Older Americans Act services by state; Healthcare wages and employers, VA facilities and the home health wage index. Source: CDC PLACES and Social Vulnerability Index, HRSA, AHRQ, the CMS Office of Minority Health, ACL, BLS, Census County Business Patterns and the VA. | Find the communities that most need your services, and see local wage levels for the staff you would hire before you expand. Measures are county-level estimates from each publisher’s latest release. |
+| Competitors | Home health agencies and hospices ranked by Medicare share, with star ratings and change from the prior period; Alerts when a competitor’s star rating, owner or service area changes, or a new provider opens nearby; Side-by-side comparisons, share trends and a county roll-up of each market leader and biggest mover; A plain-language card comparing your agency with the three largest in the county. Source: CMS Care Compare, ZIP service areas, Provider of Services and ownership files. | Spot a rival’s weakness or a new entrant early, and give marketers facts to use in the next conversation. Rankings describe the periods CMS publishes, not this week’s referrals. |
+| Your results | Accounts, contacts, ownership, calls, visits, and follow-ups; Expenses, receipts, approvals, reimbursements, and mileage; Recorded or CSV-imported referrals and admissions, with response times; Source trends, conversion, lost reasons, team activity, and goals. Source: The information your organization records or imports. | Reduce the time spent reconstructing account history and bring recorded results into the conversation about marketing priorities. Results reflect your records. CSV imports are file-based, not live EMR connections; patient-identifying columns are dropped. |
 
 #### How the focus changes by care setting
 
+The first five are Intel’s primary audience. The other five, which Intel’s site also describes, are secondary markets (“Secondary markets” above, owner decision 2026-11-16): describe them only to answer a reader from one, and aim no outreach, content or ads at them until the primary audience has been thoroughly marketed to.
+
 | Care setting | Relevant use |
 | --- | --- |
-| Home health agencies | Research physicians, hospitals, and community providers in your service area. Use local market context and available Medicare activity signals to prioritize potential referral relationships and plan follow-up. |
-| Hospice agencies | Explore physicians, hospitals, and care organizations around your market. Build a focused relationship plan and track the referral and admission facts your team records. |
-| Hospitals | Support your marketing plan with territory demographics, local provider research, and available hospital and post-acute utilization context. Identify physician practices and community organizations for focused relationship development. |
-| Nursing homes | Analyze local hospital activity, provider presence, nursing-home supply, and available utilization measures. Focus your team’s outreach on relevant accounts and keep relationship history and recorded referrals together. |
-| Personal care homes | Analyze your territory using available licensed-home information, bed supply, and older-adult demographics. Research local care organizations, focus relationship-building, and keep account history and follow-up organized. |
+| Home health agencies | See which physicians certify the most Medicare home health patients, which hospitals your county’s residents use and how much post-discharge spending goes to home health. Rank competing agencies by Medicare share, and track the referrals and admissions each source sends. |
+| Hospice agencies | Find physicians by hospice care-plan oversight, hospitals by where residents are admitted, and counties with high need and few hospices. See each hospice’s Hospice Care Index and CMS spending-variation index, and keep every relationship and recorded referral together. |
+| Hospitals | Map where your county’s residents are hospitalized and where their post-discharge Medicare spending goes. Research the physician practices, post-acute partners and community organizations around you, see which hospitals are in CMS’s TEAM model, and plan physician outreach by territory. |
+| Nursing homes | Analyze the hospitals that serve your area, skilled nursing use and supply, and every competing nursing home’s star ratings, staffing, inspections and ownership. Focus outreach on the hospitals and physicians that matter and keep relationship history and recorded referrals together. |
+| Personal care homes | Find the counties and ZIP areas with the most residents 75 and over, older adults living alone and the fewest licensed beds, using the Site finder and state licensing files where loaded. Research nearby hospitals, physicians and senior-care organizations and organize community outreach. |
+| Physician practices & clinics (secondary market) | Find referring clinicians and practices by specialty and location. Build an outreach list, assign relationship owners, prepare visits, and track the referrals your team records. |
+| Behavioral health (secondary market) | Research primary care practices, hospitals, and community providers. Coordinate relationship development, follow-ups, and referral tracking around your services and territory. |
+| Rehabilitation & therapy (secondary market) | Identify physician practices, hospitals, and other potential referral partners. Keep contacts, visits, follow-ups, and recorded referrals together across your locations. |
+| Diagnostics, dialysis & DME (secondary market) | Research clinicians and organizations relevant to your specialty. Use available provider activity and directory information to plan outreach and follow the relationships that generate referrals. |
+| Other healthcare organizations (secondary market) | Use the same market research, account management, field work, and referral tracking tools for your healthcare services. Choose Other healthcare services when your specialty is not listed. |
 
 Research coverage is not universal: an absent field or an unscored provider is not a negative assessment of that organization.
 Results reflect the source reporting period or the organization’s recorded activity, not a real-time census of the whole market.

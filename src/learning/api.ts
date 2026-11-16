@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { appRequest, hubRpc } from "../lib/appSession";
 import { config } from "../lib/config";
+import { sendInParts } from "../lib/uploadParts";
 import { catalogSchema, certificateSchema, courseSchema, draftListSchema, draftSchema, id as learningId, myLearningSchema, submissionSchema, type DraftDocument } from "./model";
 import { governedStageResultSchema } from "../imports/governedLearningImport";
 
@@ -15,7 +16,8 @@ export const learningApi = {
     { p_payload: payload, p_source_revision: sourceRevision, p_expected_revision: expectedRevision }),
   importDraft: (sourceCourseId: string, sourceVersionId: string, document: DraftDocument) => rpc("import_learning_draft", draftSchema, { p_source_course_id: sourceCourseId, p_source_version_id: sourceVersionId, p_document: document }),
   mediaList: () => rpc("list_learning_media", z.array(z.object({ id: learningId, title: z.string() }))),
-  async uploadMedia(title: string, video: File, captions: File, transcript: File, reviewed: boolean) {
+  /** onProgress gets the video bytes the Hub has received after each part. */
+  async uploadMedia(title: string, video: File, captions: File, transcript: File, reviewed: boolean, onProgress?: (received: number, total: number) => void) {
     if (config.demoMode || !reviewed) throw new Error("Review all media files before uploading.");
     if (video.size === 0 || video.size > 268435456 || video.type !== "video/mp4") throw new Error("Choose an MP4 video under 256 MB.");
     if (captions.size > 2000000 || transcript.size > 1000000) throw new Error("Caption or transcript file is too large.");
@@ -25,7 +27,10 @@ export const learningApi = {
     const sha256 = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
     // New object names and no upsert preserve previously published videos.
     for (const [name, file, mime] of [["video.mp4", video, "video/mp4"], ["captions.vtt", captions, "text/vtt"], ["transcript.txt", transcript, "text/plain"]] as const) {
-      const response = await fetch(`/api/media/learning/${id}/${name}`, { method:"POST",body:file,credentials:"same-origin",headers:{"Content-Type":mime},redirect:"error" });
+      // In parts (src/lib/uploadParts.ts): one request could not carry a large video over a slow connection.
+      let response: Response;
+      try { response = await sendInParts(fetch, `/api/media/learning/${id}/${name}`, file, { "Content-Type": mime }, { onProgress: name === "video.mp4" ? onProgress : undefined }); }
+      catch { throw new Error("Upload did not complete. Retry with a new upload."); }
       if (!response.ok) throw new Error("Upload did not complete. Retry with a new upload.");
     }
     const stored = await fetch(`/api/media/learning/${id}/video.mp4`,{ credentials:"same-origin",redirect:"error",cache:"no-store" });

@@ -1,14 +1,15 @@
 import { useCallback,useEffect,useRef,useState } from 'react';
 import { appRequest } from '../lib/appSession';
-import { registrationProducts,registrationAdminRequest,registrationPreview,registrationInvitation,registrationList,normalizeRegistrationPhone,type RegistrationPreview,type RegistrationInvitation } from './registrationProtocol';
+import { registrationAdminRequest,registrationPreview,registrationInvitation,registrationList,normalizeRegistrationPhone,type RegistrationPreview,type RegistrationInvitation } from './registrationProtocol';
 import { CustomerOnboarding } from './CustomerOnboarding';
+import { applicationChoices, connectedOnboardingProducts, type onboardingProducts } from './onboardingProtocol';
 
 const labels={carebase:'CareBase',breathe:'CareMetric Breathe','caremetric-emr':'CareMetric EMR','caremetric-go':'CareMetric Go',pennsync:'PennSync',intel:'CareMetric Intel'};
 const send=(body:unknown,signal:AbortSignal)=>appRequest('admin/registration',body,signal);
 const randomCode=()=>btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
 const errorText=(error:unknown)=>error instanceof Error?error.message:'The invitation could not be confirmed.';
 export function CustomerRegistration({onLinked,request=send}:{onLinked:()=>void;request?:typeof send}){
-  const [product,setProduct]=useState<typeof registrationProducts[number]>('breathe');
+  const [product,setProduct]=useState<typeof onboardingProducts[number]>('breathe');
   const [user,setUser]=useState(''),[account,setAccount]=useState(''),[phone,setPhone]=useState(''),[name,setName]=useState(''),[tenant,setTenant]=useState('');
   const [preview,setPreview]=useState<RegistrationPreview|null>(null),[reviewed,setReviewed]=useState(false),[expired,setExpired]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [issued,setIssued]=useState<{invitation:RegistrationInvitation;code:string}|null>(null);
@@ -32,7 +33,7 @@ export function CustomerRegistration({onLinked,request=send}:{onLinked:()=>void;
   return <section className="support-onboarding" aria-label="Invite a new Hub customer">
     <h3>Invite a new Hub customer</h3><p>Review an existing app account and the person’s mobile number. They verify their phone first; you then review and connect app access.</p>
     <form onSubmit={event=>{event.preventDefault();void run({operation:'preview',product,sourceUserId:user.trim(),sourceAccountId:product==='intel'?user.trim():account.trim(),phone:normalizeRegistrationPhone(phone),displayName:name,tenantName:tenant});}}>
-      <fieldset disabled={busy}><label>Invitation application<select value={product} onChange={e=>{clear();setProduct(e.target.value as typeof product);setUser('');setAccount('');}}>{registrationProducts.map(value=><option key={value} value={value}>{labels[value]}</option>)}</select></label>
+      <fieldset disabled={busy}><label>Invitation application<select value={product} onChange={e=>{clear();setProduct(e.target.value as typeof product);setUser('');setAccount('');}}>{applicationChoices(product).map(value=><option key={value} value={value} disabled={!connectedOnboardingProducts.includes(value)}>{connectedOnboardingProducts.includes(value)?labels[value]:`${labels[value]} (disconnected)`}</option>)}</select></label>
         <label>Invited app user ID<input value={user} maxLength={128} required onChange={e=>{clear();setUser(e.target.value);}}/></label>
         {product!=='intel'&&<label>Invited app {product==='pennsync'?'agency':'organization'} ID<input value={account} maxLength={128} required onChange={e=>{clear();setAccount(e.target.value);}}/></label>}
         <label>Customer mobile number<input type="tel" autoComplete="off" value={phone} maxLength={32} required onChange={e=>{clear();setPhone(e.target.value);}}/></label>

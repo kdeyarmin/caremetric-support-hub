@@ -121,8 +121,10 @@ let the attempt count decrease (backend feature `support.ai-automation-server.v1
 migrations `20261020120000` / `20261020120100`). The active batch returns only cases
 with something to do (a due attempt or escalation, an unclassified customer reply, a
 due follow-up, or a halt), and posting a reply consumes its attempt or follow-up in
-the same transaction, so concurrent Hub processes cannot double-post
-(`20261020140000`).
+the same transaction, so concurrent Hub processes, or a retry after the database was
+lost between posting and saving state, cannot double-post (`20261020140000`). In
+that second case the follow-up the loop would have saved is missing; recording the
+failure schedules it, so a customer who never answers still gets the one nudge.
 
 A draft longer than the 5,000-character reply limit is cut back to a paragraph
 or sentence boundary and closed with the "did this fix it" question and the
@@ -169,7 +171,7 @@ Provider webhooks (POST only; any `Origin`, `Cookie` or query string is refused)
 - `POST /api/channels/sms/twilio` — Twilio form post, verified with
   `X-Twilio-Signature` against `HUB_PUBLIC_ORIGIN`. Returns empty TwiML.
 - `POST /api/channels/email/inbound` — SendGrid Inbound Parse (parsed mode,
-  signed webhook, at most 10 MiB), verified with
+  signed webhook, at most 32 MiB, as SendGrid posts up to 30 MB; attachments are never stored), verified with
   `X-Twilio-Email-Event-Webhook-Signature` and `-Timestamp` (ten-minute window).
 
 Website chat (same-origin; the visitor's token is the `__Host-caremetric_chat` cookie):

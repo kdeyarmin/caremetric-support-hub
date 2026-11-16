@@ -31,3 +31,12 @@ it('clears a reviewed pairing when an identity field or app changes',async()=>{
   expect(screen.queryByRole('button',{name:'Confirm customer link'})).toBeNull();expect(request).toHaveBeenCalledOnce();
   fireEvent.change(screen.getByLabelText('Application'),{target:{value:'intel'}});expect(screen.queryByLabelText('Native organization ID')).toBeNull();
 });
+it('offers only connected applications, and shows a disconnected one from an earlier invitation as unavailable',()=>{
+  const {unmount}=render(<CustomerOnboarding request={vi.fn()} onLinked={()=>{}} />);
+  const options=()=>Array.from((screen.getByLabelText('Application') as HTMLSelectElement).options).map(option=>[option.value,option.disabled]);
+  expect(options()).toEqual([['carebase',false],['breathe',false],['intel',false]]);
+  unmount();
+  render(<CustomerOnboarding request={vi.fn()} onLinked={()=>{}} initial={{product:'pennsync',sourceUserId:'agency-user',sourceAccountId:'agency',hubUserId:id,tenantName:'Earlier agency'}} />);
+  expect(options()).toEqual([['pennsync',true],['carebase',false],['breathe',false],['intel',false]]);
+  expect(screen.getByRole('option',{name:'PennSync (disconnected)'})).toBeTruthy();
+});
