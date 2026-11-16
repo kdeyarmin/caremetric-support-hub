@@ -53,6 +53,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Customer growth | Most people to email at one organization | none: a setting from the start (three, the contact included, until you save a number; [Customer growth](CUSTOMER_GROWTH.md#several-decision-makers-at-one-organization)) |
 | Billing | Customers can buy subscriptions | `HUB_CUSTOMER_PURCHASING_ENABLED` |
 | Billing | Keep Stripe in step with Intel's prices | `HUB_APP_CATALOG_SYNC` (`off` meant switched off) |
+| Billing | Intel price catalog address (empty: Intel's live prices; staging only) | `INTEL_CATALOG_URL` |
 | Billing | Stripe customer portal configuration | `STRIPE_PORTAL_CONFIGURATION_ID` |
 | Social media | Facebook Page id | `HUB_META_PAGE_ID` |
 | Social media | Instagram account id | `HUB_META_INSTAGRAM_ID` |
@@ -74,6 +75,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Creative | Most renders a day | none: a setting from the start |
 | Creative | How videos are made | none: a setting from the start |
 | Course distribution | Allow legacy opt-in distribution | `HUB_LEGACY_DISTRIBUTION_OPT_IN` |
+| Course distribution | Lesson video import hosts (one per line; empty: HeyGen's) | `HUB_MEDIA_IMPORT_HOSTS` (comma separated) |
 
 Settings added with the AI workforce build-out (2026-11-13), all settings from the start and all off or empty until you choose
 ([AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md) has the order to turn them on):
@@ -145,8 +147,6 @@ The service's wiring, which has to be right before the Hub can start or sign you
 - `HUB_TELNYX_VERIFY_PROFILE_ID`: the sign-in codes depend on it, so a wrong value saved in the Hub could lock you out of
   the page you would fix it on.
 - `HUB_PUBLIC_ORIGIN` (optional): must match the webhook addresses Twilio and SendGrid hold.
-- `HUB_MEDIA_IMPORT_HOSTS` (optional): the hosts bulk lesson-video import may fetch from.
-- `INTEL_CATALOG_URL` (optional, staging only): reads another Intel's price catalog.
 - The `VITE_*` build arguments, which are compiled into the web app.
 
 ## For developers

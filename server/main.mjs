@@ -43,7 +43,7 @@ import { nativeVisitorReader } from './agents/scorecard/visitors.mjs';
 import { googleAnalyticsReader, websiteVisitors } from './agents/scorecard/google-analytics.mjs';
 import { creativeConfig } from './agents/creative/index.mjs';
 import { creativeAdmin } from './agents/creative/admin.mjs';
-import { learningMediaImport, mediaImportFeature, mediaImportHosts } from './learning-media-import.mjs';
+import { learningMediaImport, mediaImportFeature } from './learning-media-import.mjs';
 import { hubSettings } from './hub-settings.mjs';
 import { socialConnections } from './social-connections.mjs';
 
@@ -164,7 +164,8 @@ const billing=platformBilling({pool,features,secretKey:process.env.STRIPE_SECRET
   publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin});
 // Intel sets its own plan prices (src/lib/planCatalog.ts in kdeyarmin/intel). After the start and every 15 minutes the Hub reads
 // them and keeps Stripe in step, grandfathering current subscribers (server/app-catalog-sync.mjs). Switching off "Keep Stripe in step
-// with Intel's prices" (Settings → Billing) stops it; INTEL_CATALOG_URL reads another Intel (staging) instead of www.caremetricintel.com.
+// with Intel's prices" (Settings → Billing) stops it; "Intel price catalog address" (Settings → Billing) reads another Intel (staging)
+// instead of www.caremetricintel.com.
 let catalogSyncRunning=false;
 // Each tick also refreshes which replaced Founders Sale prices keep the offer (Intel and CareBase), sync or not.
 const syncCatalogs=async()=>{
@@ -173,8 +174,9 @@ const syncCatalogs=async()=>{
   try{
     // The full refresh from Stripe, once: a no-op after it has run, and the retry when Stripe could not be reached at the start.
     await billing.reconcileOnce();
+    const catalogUrl=settings.get('billing.intel_catalog_url');
     const result=!settings.get('billing.intel_price_sync')?null
-      :await billing.syncAppCatalog('caremetric-intel',process.env.INTEL_CATALOG_URL?{url:process.env.INTEL_CATALOG_URL}:{});
+      :await billing.syncAppCatalog('caremetric-intel',catalogUrl?{url:catalogUrl}:{});
     if(result?.applied) console.info(`Intel prices: ${result.applied} Stripe product(s) and price(s) brought in step with catalog ${result.version}.`);
     // A sync that read the catalog has refreshed them already.
     if(!result?.version) await billing.refreshFounders();
@@ -198,11 +200,9 @@ const leadDesk=leadAdmin({pool,enabled:features.has(leadFeature)});
 // Leads and website conversations are deleted twelve months on (docs/LEAD_INTAKE.md, "Retention"), from the cleanup below.
 const leadRetentionJob=leadRetention({pool,enabled:features.has(leadFeature)});
 console.info(`Website leads: ${leads.enabled()?'database ready':'waiting for the support.leads.v1 migration'}; secrets set for ${leads.configured().join(', ')||'no product'}.`);
-// Bulk lesson-media import: answered only when the database declares learning.media-import.v1. MP4s are fetched only
-// from the exact hosts in HUB_MEDIA_IMPORT_HOSTS (default: HeyGen's asset hosts); an unusable value disables fetching.
-const importHosts=mediaImportHosts(process.env.HUB_MEDIA_IMPORT_HOSTS);
-if(!importHosts) console.warn('HUB_MEDIA_IMPORT_HOSTS must list exact host names separated by commas; bulk media import will refuse every source.');
-const mediaImport=learningMediaImport({pool,hosts:importHosts,enabled:features.has(mediaImportFeature),
+// Bulk lesson-media import: answered only when the database declares learning.media-import.v1. MP4s are fetched only from the
+// exact hosts in "Lesson video import hosts" (Settings → Course distribution; empty: HeyGen's asset hosts), read on each request.
+const mediaImport=learningMediaImport({pool,hosts:setting('learning.media_import_hosts'),enabled:features.has(mediaImportFeature),
   storage:{upload:(sessionToken,path,body,contentType)=>capabilities.media(sessionToken,path,'upload',body,contentType),
     download:(sessionToken,path)=>capabilities.media(sessionToken,path,'download')}});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken),env:connections.resolvedEnv});
