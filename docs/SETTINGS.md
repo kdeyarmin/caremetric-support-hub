@@ -64,6 +64,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Social media | LinkedIn app client id | `HUB_LINKEDIN_CLIENT_ID` |
 | Social media | LinkedIn advertising app client id | `HUB_LINKEDIN_ADS_CLIENT_ID` |
 | Social media | LinkedIn API version | `HUB_LINKEDIN_API_VERSION` |
+| Social media | LinkedIn API tier (Development or Standard) | none: a setting from the start ([Social media](SOCIAL_MEDIA.md#linkedins-development-and-standard-tiers)) |
 | Social media | Approved brand images (one per line) | `HUB_SOCIAL_IMAGE_URLS` |
 | Social media | Target cost per lead or sign-up (dollars) | `HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS` |
 | Social media | Most any ad may spend per day (dollars) | `HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS` |

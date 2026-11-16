@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { slotFor, socialHandlers } from './tasks.mjs';
+import { linkedinDue, slotFor, socialHandlers } from './tasks.mjs';
 import { socialConfig, socialTeam } from './index.mjs';
 import { catalogBlocks } from '../content/features.mjs';
 
@@ -154,6 +154,31 @@ describe('comments and messages', () => {
     expect((await refused.handlers['social.inbox'](task('social.inbox'), { now })).result).toEqual({ seen: 1, enqueued: 1, comments: 1, messages: 0, refused: ['linkedin_token_invalid'] });
     expect(refused.sent[0]).toMatchObject({ severity: 'warning', subject: 'The Social Media Manager cannot reach LinkedIn', dedupeKey: 'social:access:linkedin_token_invalid:2026-11-09' });
     expect(refused.sent[0].body).toContain('Settings → Social media → LinkedIn');
+  });
+
+  it('on LinkedIn\'s Development tier, reads LinkedIn at one scheduled run every two hours and whenever the owner runs it, and Meta every run', async () => {
+    const scheduled = at => task('social.inbox', { requestKey: `schedule:11111111-1111-4111-8111-111111111111:${at}` });
+    // A grid of 15-minute runs with any offset: exactly one in each two hours reads LinkedIn.
+    for (const offset of [0, 7, 14]) {
+      const reads = Array.from({ length: 96 }, (_, i) => new Date(Date.UTC(2026, 10, 9, 0, offset + i * 15)))
+        .filter(moment => linkedinDue(scheduled(moment.toISOString().replace(/[-:]|\.\d{3}/g, '')), 'development'));
+      expect(reads.length, `offset ${offset}`).toBe(12);
+      expect(reads.every(moment => moment.getUTCHours() % 2 === 0 && moment.getUTCMinutes() === offset)).toBe(true);
+    }
+    expect(linkedinDue(scheduled('20261109T131500Z'), 'standard')).toBe(true);
+    expect(linkedinDue(task('social.inbox', { sourceKind: 'owner', requestKey: 'owner:run' }), 'development')).toBe(true);
+
+    const onLinkedIn = { platform: 'linkedin', kind: 'comment', id: linkedinComment, parentId: linkedinPost, url: 'https://www.linkedin.com/feed/update/x/' };
+    const linkedin = linkedinOf({ tier: 'development', recentInbox: vi.fn(async () => [onLinkedIn]) });
+    const both = harness({ meta: metaOf({ recentInbox: vi.fn(async () => [item]) }), linkedin });
+    expect((await both.handlers['social.inbox'](scheduled('20261109T131500Z'), { now })).result).toEqual({ seen: 1, enqueued: 1, comments: 1, messages: 0 });
+    expect(linkedin.recentInbox).not.toHaveBeenCalled();
+    expect((await both.handlers['social.inbox'](scheduled('20261109T140000Z'), { now })).result).toEqual({ seen: 2, enqueued: 2, comments: 2, messages: 0 });
+    expect(linkedin.recentInbox).toHaveBeenCalledTimes(1);
+    // With LinkedIn alone, a run between its two-hourly reads skips without a call.
+    const alone = harness({ meta: metaOf({ configured: { pages: false, instagram: false, ads: false } }), linkedin });
+    expect((await alone.handlers['social.inbox'](scheduled('20261109T151500Z'), { now })).result).toEqual({ skipped: 'linkedin_not_due' });
+    expect(linkedin.recentInbox).toHaveBeenCalledTimes(1);
   });
 
   it('on LinkedIn, replies through LinkedIn and proposes deleting spam (LinkedIn has no hide), but never once deletions would be automatic', async () => {

@@ -44,6 +44,8 @@ export function socialConfig(env = {}, setting = null) {
       memberToken: env.HUB_LINKEDIN_MEMBER_ACCESS_TOKEN ?? '',
       organizationId: text('social.linkedin_organization_id', 'HUB_LINKEDIN_ORGANIZATION_ID'), adAccountId: text('social.linkedin_ad_account_id', 'HUB_LINKEDIN_AD_ACCOUNT_ID'),
       version: text('social.linkedin_api_version', 'HUB_LINKEDIN_API_VERSION') || '202609',
+      // Settings → Social media → LinkedIn API tier. Anything but Standard (no setting, or none saved) keeps to the Development tier's limits.
+      tier: setting && setting('social.linkedin_api_tier') === 'standard' ? 'standard' : 'development',
     },
     imageUrls,
     settings: { maxDailyBudgetCents: cents(value('social.max_daily_budget_cents', 'HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS')) ?? 0, targetCostCents: cents(value('social.target_cost_cents', 'HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS')) || null,

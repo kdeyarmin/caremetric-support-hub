@@ -317,6 +317,17 @@ describe('the social media configuration', () => {
     // Without settings (tests and older callers), the variables as before.
     expect(socialConfig({ HUB_META_PAGE_ID: '999', HUB_SOCIAL_IMAGE_URLS: 'https://a.test/2.png' }).meta.pageId).toBe('999');
   });
+
+  it('keeps LinkedIn to its Development tier until the owner chooses Standard (20261117150000_linkedin_api_tier.sql)', () => {
+    const tier = entry('social.linkedin_api_tier');
+    expect([tier.group, tier.default, tier.env, tier.choices.map(choice => choice.value)]).toEqual(['social', 'development', null, ['development', 'standard']]);
+    expect(settingInput(tier, 'standard')).toBe('standard');
+    expect(() => settingInput(tier, 'enterprise')).toThrow();
+    expect(socialConfig({}, key => (key === 'social.linkedin_api_tier' ? 'standard' : null)).linkedin.tier).toBe('standard');
+    expect(socialConfig({}, key => (key === 'social.linkedin_api_tier' ? 'development' : null)).linkedin.tier).toBe('development');
+    expect(socialConfig({}, () => null).linkedin.tier).toBe('development');
+    expect(socialConfig({}).linkedin.tier).toBe('development');
+  });
 });
 
 describe('the settings route', () => {

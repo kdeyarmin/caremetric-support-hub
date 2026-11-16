@@ -38,7 +38,7 @@ const linkedinSteps: Step[] = [
   { title: "Request access to manage Company Page content", body: <>
     <p>In the app’s <strong>Products</strong> tab, find <strong>Community Management API</strong> and choose <strong>Request access</strong>. Complete LinkedIn’s application using your legal business details, business email, website and privacy policy.</p>
     <p><strong>Wait for LinkedIn to approve access before generating the Page token.</strong> If the product is unavailable because the app already has another product, LinkedIn directs applicants to use a new app for Community Management.</p>
-    <p className="muted">Sign In with LinkedIn and Share on LinkedIn alone do not provide this Company Page integration. Development tier supports initial testing; this Hub’s full engagement reporting needs Standard tier access.</p>
+    <p className="muted">Sign In with LinkedIn and Share on LinkedIn alone do not provide this Company Page integration. LinkedIn approves the Development tier first, and that is enough to connect: keep <strong>LinkedIn API tier</strong> (below the cards) on Development until LinkedIn upgrades the app to Standard.</p>
     <a href="https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-api-migration-guide" target="_blank" rel="noreferrer">LinkedIn’s approval requirements and tiers</a>
   </> },
   { title: "Generate your LinkedIn access token", body: <>
