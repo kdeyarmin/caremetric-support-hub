@@ -179,6 +179,13 @@ under the hand-over and never past an unsubscribe or an opt-out, a memo is used 
 post handed back keeps its approval. Each test fails closed. Declaring it changes nothing by itself: the steps ship held. The Hub
 server launches campaigns live and publishes automatically approved founder posts only when the feature is declared.
 
+`20261116120100_growth_report_views_contract.sql` declares `platform.agents.growth-report-views.v1` only after the settings, growth autonomy
+and roster features are declared, the `growth.report_views` setting exists, an activity event may be `report_viewed`, the read cursor has row
+level security and is closed to every role, `private.growth_report_views_cursor` and `private.growth_report_views_record` are executable by
+`hub_app_server` alone and require the Hub server connection, an open counts only two minutes or more after the opportunity's first email,
+and the Marketing Manager's `growth.views` task is scheduled. Each test fails closed. The Hub server reads opens and shapes second emails by
+them only when the feature is declared.
+
 `20261116110100_growth_brief_contract.sql` declares `platform.agents.growth-brief.v1` only after the settings, growth autonomy, roster and
 research features are declared, the five settings exist (`growth.account_brief`, `growth.brief_per_day`, `growth.brief_cents`,
 `growth.quality_writer`, `growth.draft_critic`), `private.growth_briefs` and `private.growth_brief_log` have row level security and are

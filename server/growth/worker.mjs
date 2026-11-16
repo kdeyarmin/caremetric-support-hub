@@ -6,6 +6,7 @@ import { planOpportunity, products } from './policy.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
 import { draftMessage } from './draft.mjs';
 import { growthBriefFeature } from './brief.mjs';
+import { growthReportViewsFeature } from './views.mjs';
 import { growthLearningFeature } from './learning.mjs';
 import { renderEmail, themeFor } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
@@ -99,6 +100,8 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   // An account brief for each Intel agency's first email (brief.mjs; Settings → Customer growth).
   const briefing=(features instanceof Set?features.has(growthBriefFeature):Array.isArray(features)&&features.includes(growthBriefFeature))
     &&typeof growth.store.briefWriter==='function';
+  // A second email that follows whether the agency opened its report (views.mjs; Settings → Customer growth).
+  const viewing=features instanceof Set?features.has(growthReportViewsFeature):Array.isArray(features)&&features.includes(growthReportViewsFeature);
   // First emails wait for their address's check, and cold email for a tripped bounce guard (Settings → Customer growth).
   const holding=(features instanceof Set?features.has(growthAddressCheckFeature):Array.isArray(features)&&features.includes(growthAddressCheckFeature))
     &&typeof growth.store.draftHold==='function';
@@ -235,7 +238,8 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           // The agency's own report, only once Intel has opened it (report-link.mjs checkedLinkFor); otherwise the review page.
           const report=work.kind==='outreach'&&growth.reports?(growth.reports.checkedLinkFor?await growth.reports.checkedLinkFor(o,{signal}):growth.reports.linkFor?.(o))??null:null;
           if(quality)topDrafts++;
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
+          const views=viewing&&live(growth.views?.enabled)===true;
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,views,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           let saved;

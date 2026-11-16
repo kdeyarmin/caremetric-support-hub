@@ -100,7 +100,11 @@ export function reportLinks({ key = null, now = () => Date.now(), fetchImpl = gl
     async checkedLinkFor(opportunity, { signal } = {}) {
       const link = linkFor(opportunity);
       if (!link) return null;
-      return (await opens(rosterAgency(opportunity.evidence).ccn, link.url, signal)) ? link : null;
+      // The check opens a link for the same agency signed without the reference, so Intel never records the Hub's own check as an open
+      // of the agency's report (Intel docs/HUB_MARKETING_FEED.md "Report views").
+      const agency = rosterAgency(opportunity.evidence);
+      const probe = `${reportOrigin}/report/${reportToken({ ...agency, expires: Math.floor(now() / 1000) + 3_600 }, key)}`;
+      return (await opens(agency.ccn, probe, signal)) ? link : null;
     },
   };
 }

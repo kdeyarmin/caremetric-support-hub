@@ -374,6 +374,29 @@ Checking needs outbound connections to mail servers (port 25), which Railway all
 every server unreachable, rests for six hours, and the AI team page's "Named decision-makers" row and the Growth screen say so;
 choose "Addresses businesses publish on their own websites" to stop trying.
 
+## Which agencies opened their market report
+
+Owner decision 2026-11-16: Intel may record when an agency's market report link is opened (which agency and when, never who or an IP
+address) and tell the Hub. Open and click tracking stay off in both mail services, so before this the team knew nothing between an email
+and a reply (`20261116120000_growth_report_views.sql`, gate `20261116120100_growth_report_views_contract.sql`, feature
+`platform.agents.growth-report-views.v1`; Intel's side is `docs/HUB_MARKETING_FEED.md` "Report views" in the Intel repository).
+
+- **Settings → Customer growth → Learn which agencies opened their report.** Every 15 minutes the Marketing Manager's `growth.views` task
+  (`server/growth/views.mjs`) reads the opens Intel recorded since its last read (`POST /api/hub/report-views`, signed with the roster's
+  shared secret). Intel counts only a person's browser: never a prefetch, a link scanner or a bot, once an hour at most per link.
+- **What counts.** An open counts for a CareMetric Intel opportunity only when its first email went out at least two minutes earlier (your
+  own preview and a mail service's scan at delivery come before that), once per open. It is recorded as a `report_viewed` activity
+  event, raises the opportunity's intent to at least 50 and notes when its report was first opened. The Hub's own check that a report
+  opens before offering it is signed without the reference, so it is never counted.
+- **You are told** the first time an agency opens its report ("<agency> opened its market report").
+- **The second email follows it.** For an agency whose first email carried its own report, the second email either picks up from the
+  report (one concrete way Intel turns it into a plan, a question, the trial) when someone opened it, or brings a new angle with the report
+  link again when nobody did. It never says or hints that you know. Which one is recorded as an arm (`viewed`: `yes` or `no`), so the
+  Monday memo can compare replies.
+- An open does not stop or start any email.
+
+`server/agents-growth-report-views-integration.mjs` runs the database side through the real roles in CI.
+
 ## An account brief before the first email, written and reviewed on the top model
 
 Owner decision 2026-11-16 ([review](AI_WORKFORCE_REVIEW_2026-11-16.md)): research every Intel agency before it is first written to,

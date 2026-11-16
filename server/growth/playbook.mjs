@@ -224,6 +224,12 @@ export const sequencePlan = deepFreeze([
   { touch: 3, angle: 'A short, polite close-the-loop note: ask whether the topic is a priority this year or whether someone else handles it. Make it easy to say "not now". No new pitch.' },
 ]);
 export const touchAngle = touch => sequencePlan[Math.min(Math.max(Number(touch) || 1, 1), sequencePlan.length) - 1].angle;
+/**
+ * The second email to a CareMetric Intel agency whose first offered its own market report, by whether someone there opened it (Intel
+ * records opens; views.mjs, 2026-11-16). Never say or hint that you know whether it was opened.
+ */
+export const viewedTouchAngle = 'Second email to an agency whose market report was sent with the first. Do not say or hint that you know whether anyone opened it. Pick up where a report leaves an agency: it shows where they stand, and the next step is acting on it. Name one concrete way Intel turns that into a plan (the physicians who certify the most patients in their county with their practice locations, the hospitals their residents use, a visit plan for the team), ask one qualifying question, and offer the free trial. Do not repeat touch 1\'s opening or retell the founder\'s story.';
+export const unviewedTouchAngle = 'Second email to an agency whose market report was sent with the first. Do not say or hint that you know whether anyone opened it. Bring a new subject and a different angle from touch 1 (one concrete capability or one useful free resource page), then mention in a few words that its free market report is still there, with the report link again on its own line. Do not repeat touch 1\'s opening.';
 
 /**
  * The first email to a CareMetric Intel prospect, built around a market report (owner direction 2026-11-15): make the reader ask

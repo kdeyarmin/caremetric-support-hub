@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { playbooks, qualify } from './policy.mjs';
-import { experimentAngles, inboundAngle, lifecyclePlay, linkablePages, offersMeeting, playbookFor, playbookText, reaskAngle, reportTouchAngle, reviewTouchAngle, sequencePlan, touchAngle } from './playbook.mjs';
+import { experimentAngles, inboundAngle, lifecyclePlay, linkablePages, offersMeeting, playbookFor, playbookText, reaskAngle, reportTouchAngle, reviewTouchAngle, sequencePlan, touchAngle, unviewedTouchAngle, viewedTouchAngle } from './playbook.mjs';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import { factSheetText, products as factProducts } from '../agents/content/facts.mjs';
 import { allowedNumbers, normalizeTerms, percentsOf, textProblems, unclearCopy } from '../agents/content/validate.mjs';
@@ -191,7 +191,7 @@ weakestSentence: the one sentence, copied exactly, that most makes you stop read
 const criticThreshold=4;
 const criticValid=output=>['specific','relevant','clearAsk','wouldReply'].every(key=>Number.isInteger(output[key])&&output[key]>=1&&output[key]<=5)||'score_range';
 
-export async function draftMessage({ opportunity:o, work, task, model, signal, onReject=null, memo=null, report=null, brief=null, quality=false, critic=false }) {
+export async function draftMessage({ opportunity:o, work, task, model, signal, onReject=null, memo=null, report=null, brief=null, quality=false, critic=false, views=false }) {
   const rejected=code=>{try{onReject?.(code);}catch{/* reporting never stops a draft */}return null;};
   const approved=o.policy?.approved_claim?.trim();
   if (!approved || screenIdentifiers(approved).flagged || !o.contact_id || !qualify(o.evidence).canDraft && work.kind==='outreach') return null;
@@ -239,11 +239,16 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   const touch=outreach?outreachTouch:null;
   // The first cold email to a CareMetric Intel prospect is built around a market report (owner direction 2026-11-15).
   const reportLed=outreach&&o.product==='caremetric-intel'&&touch===1&&!reask&&!lead;
+  // The second email to an agency whose first carried its own report follows whether someone there opened it (views.mjs). Recorded as an
+  // arm, so the memo can compare replies; the email never says it.
+  const viewed=views&&outreach&&o.product==='caremetric-intel'&&touch===2&&!reask&&!lead&&offered
+    ?(o.events??[]).some(event=>event.kind==='report_viewed'):null;
+  if(viewed!==null)arms.viewed=viewed?'yes':'no';
   const input={
     kind:work.kind, product:product.name, style:reportLed?'Keep the body under one hundred seventy words.':variant==='concise'?'Keep the body under eighty words.':'Keep the body under one hundred twenty words.',
     approvedClaim:approved, links:[...draftLinks(o.product),...(offered?[{label:offered.label,url:offered.url}]:[])], nextStep:book?.nextStep??null,
     ...(offered?{report:true}:{}),
-    ...(outreach?{touch,maxTouches:reask?1:Number(o.policy?.max_touches??3),touchPlan:reask?reaskAngle:lead?inboundAngle(touch):reportLed?(offered?reportTouchAngle:reviewTouchAngle):touchAngle(touch),
+    ...(outreach?{touch,maxTouches:reask?1:Number(o.policy?.max_touches??3),touchPlan:reask?reaskAngle:lead?inboundAngle(touch):reportLed?(offered?reportTouchAngle:reviewTouchAngle):viewed!==null?(viewed?viewedTouchAngle:unviewedTouchAngle):touchAngle(touch),
       ...(lead?{lead:{kind:String(lead.kind??''),place:lead.place??null,at:lead.at??null}}:{}),...(reask?{reask:true}:{}),
       ...(arms.angle?{focus:arms.angle.replace(/_/g,' ')}:{}),...(arms.subject?{subjectStyle:arms.subject}:{})}:{play:lifecyclePlay(work.kind)}),
     stage:o.stage??null, organization:{name:o.name??null,domain:o.domain??null},

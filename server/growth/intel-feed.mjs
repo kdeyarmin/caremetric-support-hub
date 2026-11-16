@@ -15,6 +15,8 @@ import { live } from '../live.mjs';
 export const intelFeedFeature = 'platform.agents.growth-roster.v1';
 export const intelFeedUrl = 'https://www.caremetricintel.com/api/hub/marketing-feed';
 export const intelFeedContract = 'caremetric.marketing-feed.v1';
+/** Which agency report links the Hub emailed were opened (Intel docs/HUB_MARKETING_FEED.md "Report views"), signed like the feed. */
+export const intelReportViewsUrl = 'https://www.caremetricintel.com/api/hub/report-views';
 /** The feed allows 60 requests a minute per caller; pages are read at most one a second. */
 export const intelFeedPaceMs = 1100;
 const maxBytes = 2_000_000;
@@ -88,6 +90,11 @@ const briefSchema = z.object({ contract: z.literal(intelFeedContract), action: z
     moves: z.array(z.object({ title: z.string().max(200), body: z.string().max(1500) })).max(3).default([]),
   }).nullable() });
 
+const viewsSchema = z.object({ contract: z.literal('caremetric.report-views.v1'),
+  views: z.array(z.object({ id: z.number().int().nonnegative(), ref: z.string().regex(/^[A-Za-z0-9_-]{1,40}$/), ccn: z.string().max(10).nullable(),
+    county_fips: z.string().max(5).nullable(), setting: z.string().max(10).nullable(), viewed_at: z.string().max(40) })).max(500),
+  next_after_id: z.number().int().nonnegative() });
+
 async function readJson(response) {
   const declared = Number(response.headers?.get?.('content-length'));
   if (declared > maxBytes) throw failure('feed_response_too_large');
@@ -111,10 +118,10 @@ async function readJson(response) {
  * `enabled` is a live setting (Settings → Customer growth → Find prospects from the Medicare roster); `key` the process secret.
  * Readiness makes no request.
  */
-export function intelFeedReader({ features = null, enabled = false, key = '', fetchImpl = fetch, now = Date.now, timeoutMs = 30_000, url = intelFeedUrl } = {}) {
+export function intelFeedReader({ features = null, enabled = false, key = '', fetchImpl = fetch, now = Date.now, timeoutMs = 30_000, url = intelFeedUrl, viewsUrl = intelReportViewsUrl } = {}) {
   const readiness = () => ({ declared: features?.has?.(intelFeedFeature) === true, enabled: live(enabled) === true, signing: validKey(key) });
   const configured = () => Object.values(readiness()).every(Boolean);
-  async function call(body, schema, { signal } = {}) {
+  async function call(body, schema, { signal, target = url } = {}) {
     if (!configured()) throw failure('feed_not_configured');
     signal?.throwIfAborted();
     const raw = JSON.stringify(body);
@@ -122,7 +129,7 @@ export function intelFeedReader({ features = null, enabled = false, key = '', fe
     const bounded = signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
     let response;
     try {
-      response = await fetchImpl(url, { method: 'POST', redirect: 'error', cache: 'no-store', signal: bounded,
+      response = await fetchImpl(target, { method: 'POST', redirect: 'error', cache: 'no-store', signal: bounded,
         headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CareMetric-Timestamp': timestamp,
           'X-CareMetric-Signature': leadSignature(key, timestamp, raw) }, body: raw });
     } catch (error) {
@@ -161,5 +168,7 @@ export function intelFeedReader({ features = null, enabled = false, key = '', fe
     agencyFacts: ({ ccns, signal } = {}) => call({ action: 'agency_facts', ccns }, factsSchema, { signal }),
     /** One agency's market report as data (share, rank, county leaders, hospitals, ratings, moves): research only, never quoted to it. */
     agencyBrief: ({ ccn, signal } = {}) => call({ action: 'agency_brief', ccn }, briefSchema, { signal }),
+    /** One page of the report opens Intel recorded after `afterId`: { views: [{ id, ref, ccn, viewed_at }], next_after_id }. */
+    reportViews: ({ afterId = 0, limit = 200, signal } = {}) => call({ after_id: afterId, limit }, viewsSchema, { signal, target: viewsUrl }),
   };
 }

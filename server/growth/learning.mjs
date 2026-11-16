@@ -39,7 +39,9 @@ const armNames = {
   critic: { 1: 'first emails the reader scored 1 of 5', 2: 'first emails the reader scored 2 of 5', 3: 'first emails the reader scored 3 of 5',
     4: 'first emails the reader scored 4 of 5', 5: 'first emails the reader scored 5 of 5' },
 };
-const armOrder = ['angle_by', 'critic', 'angle', 'subject', 'length'];
+// Whether someone at the agency had opened its market report before its second email (views.mjs).
+armNames.viewed = { yes: 'second emails to agencies that had opened their market report', no: 'second emails to agencies that had not opened it' };
+const armOrder = ['viewed', 'angle_by', 'critic', 'angle', 'subject', 'length'];
 const percent = (part, whole) => `${Math.round((100 * part) / whole)}%`;
 const replyRate = arm => arm.replied / arm.sent;
 

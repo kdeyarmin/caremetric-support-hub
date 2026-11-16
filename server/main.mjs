@@ -109,6 +109,8 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   // The weekly "what is working" memo, used in drafts once the owner approves it (Settings → Customer growth → Write from what is working).
   learning:{enabled:setting('growth.learning_memo')},
   // An account brief per agency, and first emails written from it on the quality tier with a reader's review (Settings → Customer growth).
+  // Which agencies opened their market report, read from Intel with the feed's secret (Settings → Customer growth).
+  views:{enabled:setting('growth.report_views'),feed:intelFeedReader({features,enabled:setting('growth.report_views'),key:process.env.HUB_INTEL_FEED_SECRET})},
   briefs:{enabled:setting('growth.account_brief'),perDay:setting('growth.brief_per_day'),cents:setting('growth.brief_cents'),
     qualityWriter:setting('growth.quality_writer'),critic:setting('growth.draft_critic')},
   // Each Medicare roster agency's free market report on Intel, linked in its outreach (growth/report-link.mjs; the feed's shared secret).
