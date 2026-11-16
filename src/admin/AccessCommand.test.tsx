@@ -11,11 +11,18 @@ const pending = vi.hoisted(() => ({ apply: null as null | ((result: CommandResul
 const first = "99400000-0000-4000-8000-000000000011", second = "99400000-0000-4000-8000-000000000012";
 const preview: CommandPreview = { commandId: "99400000-0000-4000-8000-000000000013", action: "users.setActive", targetId: first, reason: "Departed staff member",
   expiresAt: "2099-01-01T00:00:00Z", previewDigest: "a".repeat(64), changes: [{ field: "active", before: "true", after: "false" }] };
+const organizationPreview = vi.hoisted(() => ({ commandId: "99400000-0000-4000-8000-000000000014", action: "organizations.setSuspension" as const, targetId: "000000000000000000000002",
+  reason: "Contract ended at the end of October", expiresAt: "2099-01-01T00:00:00Z", previewDigest: "b".repeat(64), changes: [{ field: "status" as const, before: "active", after: "disabled" }] }));
 vi.mock("./commandClient", () => ({ commandClient: {
-  preview: vi.fn(async (_command: unknown, _signal: unknown, product?: string) => { if (product === "intel") throw new AdminApiError("refused", "This is the last active administrator. Make someone else an administrator first."); return preview; }),
+  preview: vi.fn(async (command: { action: string }, _signal: unknown, product?: string) => {
+    if (product === "intel" && command.action === "organizations.setSuspension") return organizationPreview;
+    if (product === "intel") throw new AdminApiError("refused", "This is the last active administrator. Make someone else an administrator first.");
+    return preview;
+  }),
   apply: vi.fn(() => new Promise<CommandResult>(resolve => { pending.apply = resolve; })),
 } }));
 import { AdminWorkspace } from "./AdminWorkspace";
+import { commandClient } from "./commandClient";
 import { AdminApiError } from "./transport";
 
 afterEach(cleanup);
@@ -62,5 +69,28 @@ describe("changing application access", () => {
     fireEvent.change(within(panel).getByLabelText("Reason"), { target: { value: "Left the agency last week" } });
     fireEvent.click(within(panel).getByRole("button", { name: /preview/i }));
     expect((await within(panel).findByRole("alert")).textContent).toBe("This is the last active administrator. Make someone else an administrator first.");
+  });
+
+  it("suspends an Intel organization in Intel's words, with each organization's status in words", async () => {
+    const intel: PortfolioClient = {
+      capabilities: async () => ({ apiVersion: 1, sourceRevision: null, operations: ["overview", "organizations.list", "users.list", "commands.preview", "commands.apply"] }),
+      overview: async () => ({ organizationCount: null, activeUserCount: null, registeredUserCount: 1 }), users: unexpected,
+      organizations: async () => ({ items: [{ id: organizationPreview.targetId, name: "Lakeside Home Health", slug: "lakeside", status: "active", createdAt: null },
+        { id: "000000000000000000000003", name: "Riverbend Hospice", slug: "riverbend", status: "disabled", createdAt: null }], total: 2, limit: 20, offset: 0 }),
+    };
+    render(<MemoryRouter initialEntries={["/admin/apps?product=intel&view=organizations"]}><AdminWorkspace client={courseClient} portfolio={intel} /></MemoryRouter>);
+    const buttons = await screen.findAllByRole("button", { name: "Change access" });
+    expect(screen.getByRole("cell", { name: "Suspended" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "Active" })).toBeTruthy();
+    fireEvent.click(buttons[0]);
+    const panel = await screen.findByRole("region", { name: "Review application access change" });
+    expect(within(panel).getByRole("option", { name: "Restore the organization and check its billing again" })).toBeTruthy();
+    fireEvent.change(within(panel).getByLabelText("Desired access"), { target: { value: "suspended" } });
+    fireEvent.change(within(panel).getByLabelText("Reason"), { target: { value: organizationPreview.reason } });
+    fireEvent.click(within(panel).getByRole("button", { name: /preview/i }));
+    expect(await within(panel).findByText(/members keep their sign-ins but can open only Billing/)).toBeTruthy();
+    const status = within(panel).getByRole("row", { name: /Status/ });
+    expect(within(status).getAllByRole("cell").map(cell => cell.textContent)).toEqual(["Status", "Active", "Suspended"]);
+    expect(commandClient.preview).toHaveBeenLastCalledWith(expect.objectContaining({ action: "organizations.setSuspension", targetId: organizationPreview.targetId, parameters: { suspended: true } }), expect.anything(), "intel");
   });
 });
