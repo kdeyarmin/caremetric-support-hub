@@ -29,7 +29,7 @@ const gate = await readFile(new URL('../supabase/migrations/20261116100100_growt
 const seedAgents = (await admin.query("select key,status,autonomy,config from private.agents where key='marketing_manager'")).rows;
 const seedPolicies = (await admin.query('select * from private.growth_policies')).rows;
 const seedSettings = (await admin.query("select key,value,changed_at from private.hub_settings where key in ('growth.presend_check','growth.bounce_guard_percent','growth.cold_email_daily_cap')")).rows;
-const seedGuard = await row('select resumed_at,resumed_by from private.growth_send_guard where id');
+const seedGuard = await row('select resumed_at,resumed_by,tripped_at from private.growth_send_guard where id');
 const runStart = (await row('select now() as t')).t;
 const domains = [], tasks = [];
 const domainOf = label => { const value = `${label}-${run}.example.org`; domains.push(value); return value; };
@@ -202,6 +202,12 @@ try {
   const seen = await withSession(pool, token, async db => (await db.query('select hub.growth_send_guard() as r')).rows[0].r);
   assert.deepEqual([seen.tripped, seen.mode, seen.bounced], [true, 'check', 2], 'the owner sees the guard on Growth');
   assert.ok(seen.addresses.undeliverable >= 1 && seen.addresses.verified >= 2);
+  // The bounces leave the seven days: the trip holds until the owner resumes, so cold email never starts again by itself.
+  await admin.query("update private.growth_messages set attempted_at=now()-interval '8 days' where opportunity_id=$1", [opportunity.id]);
+  state = await store.sendGuardState();
+  assert.deepEqual([state.tripped, state.over, state.bounced], [true, false, 0], `the trip holds after its bounces age out (${JSON.stringify(state)})`);
+  assert.ok(state.trippedAt, 'and says when it tripped');
+  assert.equal(await store.sendHold(guardedTouch.id), 'bounce_guard', 'cold email still waits for the owner');
   const resumed = await withSession(pool, token, async db => (await db.query('select hub.growth_send_guard_resume() as r')).rows[0].r);
   assert.deepEqual([resumed.tripped, resumed.sent], [false, 0], 'resuming starts the seven days afresh');
   assert.equal((await row("select count(*)::int as n from private.audit_events where action='growth.cold_email_resumed' and actor_id=$1", [owner])).n, 1);
@@ -226,6 +232,8 @@ try {
       'alter table private.growth_contacts drop constraint growth_contacts_eligibility_check',
       rewrite('private.growth_bounce_guard()', "'growth.cold_email'", "'growth.sales_followup'"),
       rewrite('private.growth_send_hold(uuid)', 'perform private.require_hub_app_server();', ' '),
+      rewrite('private.growth_send_hold(uuid)', 'perform private.growth_bounce_guard_latch();', ' '),
+      'grant execute on function private.growth_bounce_guard_latch() to hub_app_server',
       "delete from private.agent_schedules where agent_key='marketing_manager' and task_kind='growth.verify'",
     ]) {
       await client.query('begin');
@@ -258,7 +266,7 @@ try {
   await admin.query('delete from private.agent_evaluations where created_at>=$1', [runStart]);
   await admin.query("delete from private.audit_events where (action='growth.auto_qualified' and created_at>=$1) or actor_id=$2", [runStart, owner]);
   for (const s of seedSettings) await admin.query('update private.hub_settings set value=$2,changed_at=$3 where key=$1', [s.key, s.value, s.changed_at]);
-  await admin.query('update private.growth_send_guard set resumed_at=$1,resumed_by=$2 where id', [seedGuard?.resumed_at ?? null, seedGuard?.resumed_by ?? null]);
+  await admin.query('update private.growth_send_guard set resumed_at=$1,resumed_by=$2,tripped_at=$3 where id', [seedGuard?.resumed_at ?? null, seedGuard?.resumed_by ?? null, seedGuard?.tripped_at ?? null]);
   for (const a of seedAgents) await admin.query('update private.agents set status=$2,autonomy=$3,config=$4 where key=$1', [a.key, a.status, a.autonomy, a.config]);
   for (const p of seedPolicies) await admin.query('update private.growth_policies set enabled=$2,auto_send=$3,daily_limit=$4,min_gap_hours=$5,max_touches=$6,booking_url=$7,approved_claim=$8,version=$9 where product=$1', [p.product, p.enabled, p.auto_send, p.daily_limit, p.min_gap_hours, p.max_touches, p.booking_url, p.approved_claim, p.version]);
   await admin.query('delete from private.sms_sessions where user_id=$1', [owner]);

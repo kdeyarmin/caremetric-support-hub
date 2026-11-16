@@ -407,7 +407,10 @@ saw about four web snippets, and research went only to borderline prospects, nev
 **The brief** (Settings → Customer growth → Write an account brief before the first email; Most account briefs a day, 25; Most to spend
 on one account brief, 60 cents). Every 20 minutes the Marketing Manager's `growth.brief` task (`server/growth/brief.mjs`) briefs one
 agency: qualified ones with a permitted contact first (they are about to be written to), then the best fit, then agencies the Medicare
-roster confirmed; never one already emailed, and each at most once in 30 days.
+roster confirmed; never one already emailed. A saved brief rests the agency 30 days; an attempt that saved none (a timeout, a failure,
+today's budget spent) rests it a day, then it is tried again. Writer-part sentences that state any rating, rank or share are left out
+whatever their numbers (`server/growth/standing.mjs`), and an Intel email that states an agency's star rating or rank is refused
+(`own_standing`); asking where the agency stands is fine.
 
 1. **Code gathers** the agency's market report as data from Intel's feed (`agency_brief`: its Medicare share and rank and how they have
    moved, the county's leaders, the hospitals its residents use, its public ratings and three moves; never physician names or the
@@ -470,7 +473,8 @@ emails a day" is under 2%. Two settings, both off until you save them (`20261116
   email is drafted and every approved cold email is held before the send claim, tried again every 15 minutes. A soft bounce (a full
   mailbox, a server that was down) does not count. Replies to people who wrote in and customer emails are never held. You are told
   once a day ("Cold email is paused") and resume it on Growth → Send guard → **Resume cold email**, which starts the seven days
-  afresh (audited as `growth.cold_email_resumed`). Saving the number also starts them afresh, so bounces from before you switched the
+  afresh (audited as `growth.cold_email_resumed`). A trip holds until you resume or change the number: the bounces behind it leaving
+  the seven days never start cold email again by themselves (`private.growth_send_guard.tripped_at`). Saving the number also starts them afresh, so bounces from before you switched the
   guard on never trip it. 5 suits a small volume: at 20 emails one bounce is 5%.
 
 The send claim (`private.growth_claim_message`) is unchanged and still decides every send; the checks above only make an email wait.

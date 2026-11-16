@@ -223,7 +223,8 @@ shown to a model (`server/agents/creative/vision.mjs`, prompt `creative-vision.1
 A defect a reader would see blocks the image, so it is never shown to you (`vision_defect`; the server logs the defects and the layout so
 a layout that keeps failing can be fixed). A softer one, or a score below **Least score from the image review** (default 3), is a warning
 beside the image, and the database never approves an image with a warning on its own. When the review cannot run (today's budget is
-spent, the model is unavailable, the file is over 5 MB) the image is shown with a warning that it was not reviewed. The Creative screen
+spent, the model is unavailable or not set up, the file is over 5 MB) the image is shown with a warning that it was not reviewed, never
+passed unseen. The Creative screen
 shows the score and the reader's sentence on the card. The model's answer is kept in the asset's compliance result (`review`); the
 picture is not kept anywhere else. Videos are not reviewed this way: their captions and frames are checked by code.
 

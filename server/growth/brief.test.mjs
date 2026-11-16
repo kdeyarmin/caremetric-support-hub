@@ -61,6 +61,11 @@ describe('the brief\'s two parts', () => {
     const elsewhere = briefParts({ ...output, hookSourceUrl: 'https://made-up.example.org/' }, { evidence, countyFigures: [], people: [], setting: 'home_health' });
     expect(elsewhere.writer.hook).toBeNull();
   });
+  it('keeps the agency\'s own rating, rank or share out of the writer part even with no number the check would catch', () => {
+    const parts = briefParts({ ...output, summary: 'Valley Home Health has a 4.5-star quality rating.', serviceArea: 'It ranks ninth in Erie County.',
+      ownership: 'It is the third-largest agency in the county.' }, { evidence, countyFigures: [], people: [], setting: 'home_health' });
+    expect([parts.writer.summary, parts.writer.serviceArea, parts.writer.ownership]).toEqual(['', '', '']);
+  });
 });
 
 describe('growth.brief', () => {
@@ -136,6 +141,22 @@ describe('a first email written from the brief', () => {
     expect(input.focus).toBe('referral sources');
     expect(result.citations).toEqual(['e2']);
     expect(result.arms).toMatchObject({ angle: 'referral_sources', angle_by: 'brief' });
+  });
+
+  it('in the experiment\'s holdout, tells the writer the hashed angle it records, never the brief\'s', async () => {
+    const seen = [];
+    const differs = item => item.arms.angle_by === 'hash' && item.arms.angle !== 'referral_sources';
+    for (let i = 0; i < 200 && !seen.some(differs); i += 1) {
+      const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: draft })) };
+      const opportunity = { ...o, id: `opp-${i}`, organization_id: `org-${i}`, policy: { ...o.policy, experiment_enabled: true } };
+      const result = await draftMessage({ opportunity, work, task: { id: 't' }, model, brief });
+      if (result) seen.push({ arms: result.arms, input: JSON.parse(model.run.mock.calls[0][1].user) });
+    }
+    // A holdout whose hashed angle is not the brief's, so the test tells the two apart.
+    const holdout = seen.find(differs);
+    expect(holdout).toBeTruthy();
+    expect(holdout.input.brief.angle).toBe(holdout.arms.angle);
+    for (const item of seen.filter(entry => entry.arms.angle_by === 'brief')) expect(item.input.brief.angle).toBe('referral_sources');
   });
 
   it('refuses a draft that cites only the county figure', async () => {

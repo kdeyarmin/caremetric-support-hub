@@ -190,6 +190,11 @@ describe('the work', () => {
     expect(failed.finish[4].reasons.map(item => item.rule)).toContain('vision_unreviewed');
     expect(failed.store.proposeAction.mock.calls[0][0].kind).toBe('creative.asset_review');
 
+    // On with no model to look: shown with a warning, never passed unseen (a pass could be approved on its own).
+    const unconfigured = await go({ configured: false, run: vi.fn() });
+    expect(unconfigured.finish[4]).toMatchObject({ verdict: 'warn', review: { skipped: 'model_not_configured' } });
+    expect(unconfigured.store.proposeAction.mock.calls[0][0].kind).toBe('creative.asset_review');
+
     const model = review(ok);
     const off = await go(model, false);
     expect(model.run).not.toHaveBeenCalled();

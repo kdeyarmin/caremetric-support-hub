@@ -1,3 +1,4 @@
+import { emailStatesStanding } from './standing.mjs';
 import { createHash } from 'node:crypto';
 import { playbooks, qualify } from './policy.mjs';
 import { experimentAngles, inboundAngle, lifecyclePlay, linkablePages, offersMeeting, playbookFor, playbookText, reaskAngle, reportTouchAngle, reviewTouchAngle, sequencePlan, touchAngle, unviewedTouchAngle, viewedTouchAngle } from './playbook.mjs';
@@ -113,6 +114,8 @@ export function draftProblem(answer, { product, sources, outreach, organization 
   const words=`${answer.subject}\n${answer.body}`.replace(/https?:\/\/[^\s<>"]+/g,' ');
   if (screenIdentifiers(words).flagged) return 'identifier';
   if (offersMeeting(words)) return 'meeting_offer';
+  // An agency's own rating or rank, or another's, never goes in an email (owner rule); the county's own figures do.
+  if (product==='caremetric-intel'&&emailStatesStanding(words)) return 'own_standing';
   // The prospect's own name is theirs, not our copy: "Valley Hospice Solutions" never reads as a buzzword or a competitor.
   const ownName=String(organization??'').trim();
   const plain=ownName.length>=3?words.replace(new RegExp(ownName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'),' '):words;
@@ -143,6 +146,7 @@ export const problemHints=Object.freeze({
   unclear:'Use plain words (no buzzwords such as solution, journey, seamless or transform), full sentences of at most 30 words, and no runs of one-word sentences.',
   claim:'State only facts from the fact sheet or the cited sources, exactly as written: no other number, price or percentage, no promise or guarantee, no compliance claim, no competitor. A number from the sources belongs only in a sentence about the organization, never in one about CareMetric or the product or written as I, we or our.',
   other_product_price:'Mention only this product\'s own prices, or none.',
+  own_standing:'Do not state any agency\'s star rating, score or rank, or call one the largest or the first. A county figure from the sources may stay, stated about the county.',
 });
 /**
  * The experiment arms a message is written under, as short codes (growth_messages.arms): its length (the existing control/concise split)
@@ -259,7 +263,9 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   const hookSource=briefed?.hook?.sourceUrl?sources.find(source=>source.source_url===briefed.hook.sourceUrl):null;
   if(briefed) input.brief={summary:briefed.summary||null,serviceArea:briefed.serviceArea||null,ownership:briefed.ownership||null,
     triggers:(briefed.triggers??[]).map(trigger=>({fact:trigger.fact,date:trigger.date||null,sourceId:sources.find(source=>source.source_url===trigger.sourceUrl)?.id??null})),
-    pains:(briefed.pains??[]).map(pain=>pain.question),angle:briefed.angle??null,...(hookSource?{hook:briefed.hook.sentence,hookSourceId:hookSource.id}:{})};
+    // The angle the message was assigned (messageArms): the brief's, or in the experiment's holdout the hashed one, so the prompt and the
+    // recorded arm always agree.
+    pains:(briefed.pains??[]).map(pain=>pain.question),angle:arms.angle??briefed.angle??null,...(hookSource?{hook:briefed.hook.sentence,hookSourceId:hookSource.id}:{})};
   if(input.brief&&screenIdentifiers(JSON.stringify(input.brief)).flagged) delete input.brief;
   const draftSources=county?[...sources,county]:sources;
   if(county) input.sources=draftSources;

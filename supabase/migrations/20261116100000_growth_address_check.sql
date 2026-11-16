@@ -53,12 +53,15 @@ update private.growth_contacts c set mailbox_result = 'verified', mailbox_checke
   from private.growth_people p
  where p.contact_id = c.id and p.address_found = 'mail_server' and c.mailbox_result is null;
 
--- The owner's last "Resume cold email". One row.
+-- The owner's last "Resume cold email", and when the guard last tripped. One row. A trip holds until the owner resumes (or changes or
+-- clears the guard's setting), even after the bounces behind it leave the seven days.
 create table if not exists private.growth_send_guard (
   id boolean primary key default true check (id),
   resumed_at timestamptz,
-  resumed_by uuid
+  resumed_by uuid,
+  tripped_at timestamptz
 );
+alter table private.growth_send_guard add column if not exists tripped_at timestamptz;
 insert into private.growth_send_guard (id) values (true) on conflict (id) do nothing;
 alter table private.growth_send_guard enable row level security;
 revoke all on private.growth_send_guard from public, anon, authenticated, service_role, hub_app_server;
@@ -75,15 +78,18 @@ revoke all on function private.growth_presend_mode() from public, anon, authenti
 create or replace function private.growth_mailbox_tries() returns integer language sql immutable set search_path = '' as $$ select 3 $$;
 revoke all on function private.growth_mailbox_tries() from public, anon, authenticated, service_role, hub_app_server;
 
--- The bounce guard: whether cold email waits, and the counts behind it. Hard bounces only (the address was suppressed for good).
+-- The bounce guard: whether cold email waits, and the counts behind it. Hard bounces only (the address was suppressed for good). It is
+-- tripped while the last seven days are over the line, and stays tripped from the moment it was (`tripped_at`, written by
+-- growth_bounce_guard_latch) until the owner resumes or changes the setting, so bounces ageing out never resume cold email by themselves.
 create or replace function private.growth_bounce_guard() returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
-declare v_pct integer; v_saved timestamptz; v_resumed timestamptz; v_since timestamptz; v_sent integer; v_bounced integer; v_complaints integer; begin
+declare v_pct integer; v_saved timestamptz; v_resumed timestamptz; v_tripped timestamptz; v_since timestamptz; v_sent integer; v_bounced integer; v_complaints integer;
+  v_now boolean; v_held boolean; begin
  select case when jsonb_typeof(s.value) = 'number' and (s.value #>> '{}') ~ '^[0-9]{1,2}$' and (s.value #>> '{}')::integer between 1 and 50
              then (s.value #>> '{}')::integer end, s.changed_at
    into v_pct, v_saved from private.hub_settings s where s.key = 'growth.bounce_guard_percent';
  if v_pct is null then return jsonb_build_object('on', false, 'tripped', false); end if;
- select resumed_at into v_resumed from private.growth_send_guard where id;
+ select resumed_at, tripped_at into v_resumed, v_tripped from private.growth_send_guard where id;
  v_since := greatest(now() - interval '7 days', coalesce(v_saved, '-infinity'::timestamptz), coalesce(v_resumed, '-infinity'::timestamptz));
  select count(*),
         count(*) filter (where x.status = 'bounced' and exists (select 1 from private.email_suppressions s where s.email_hash = encode(extensions.digest(xc.email, 'sha256'), 'hex'))),
@@ -91,10 +97,23 @@ declare v_pct integer; v_saved timestamptz; v_resumed timestamptz; v_since times
    into v_sent, v_bounced, v_complaints
    from private.growth_messages x join private.growth_contacts xc on xc.id = x.contact_id
   where x.attempted_at >= v_since and private.growth_message_class('marketing_manager', x.purpose, xc.source_kind) = 'growth.cold_email';
+ v_now := v_complaints > 0 or (v_sent >= 20 and v_bounced * 100 > v_pct * v_sent);
+ v_held := v_tripped is not null and v_tripped > greatest(coalesce(v_saved, '-infinity'::timestamptz), coalesce(v_resumed, '-infinity'::timestamptz));
  return jsonb_build_object('on', true, 'percent', v_pct, 'since', v_since, 'sent', v_sent, 'bounced', v_bounced, 'complaints', v_complaints,
-   'tripped', v_complaints > 0 or (v_sent >= 20 and v_bounced * 100 > v_pct * v_sent));
+   'tripped', v_now or v_held, 'over', v_now, 'trippedAt', case when v_held then v_tripped end);
 end; $$;
 revoke all on function private.growth_bounce_guard() from public, anon, authenticated, service_role, hub_app_server;
+
+-- Notes when the guard trips, so the trip holds after the bounces behind it leave the seven days. Called before any cold email is drafted
+-- or sent and by the 30-minute check, so a trip is noted as soon as anything looks.
+create or replace function private.growth_bounce_guard_latch() returns void
+language plpgsql security definer set search_path = '' as $$
+declare v jsonb := private.growth_bounce_guard(); begin
+ if (v ->> 'over')::boolean and v -> 'trippedAt' = 'null'::jsonb then
+   update private.growth_send_guard set tripped_at = now() where id;
+ end if;
+end; $$;
+revoke all on function private.growth_bounce_guard_latch() from public, anon, authenticated, service_role, hub_app_server;
 
 -- Why an email of this purpose to this contact should wait now, or null. Cold email only: a reply to someone who wrote in, or a
 -- customer's email, never waits here.
@@ -118,9 +137,10 @@ revoke all on function private.growth_hold_for(uuid, text) from public, anon, au
 
 -- Server, before the send claim: why this message should wait (the executor defers it for 15 minutes), or null.
 create or replace function private.growth_send_hold(p_message uuid) returns text
-language plpgsql stable security definer set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
 declare m private.growth_messages%rowtype; begin
  perform private.require_hub_app_server();
+ perform private.growth_bounce_guard_latch();
  select * into m from private.growth_messages where id = p_message;
  -- The claim decides everything else, a message already sent or cancelled included.
  if not found or m.status not in ('draft', 'proposed') then return null; end if;
@@ -131,8 +151,9 @@ grant execute on function private.growth_send_hold(uuid) to hub_app_server;
 
 -- Server, before a first outreach email is drafted: why to wait (no model call is paid for an address that may not exist), or null.
 create or replace function private.growth_draft_hold(p_contact uuid) returns text
-language plpgsql stable security definer set search_path = '' as $$ begin
+language plpgsql security definer set search_path = '' as $$ begin
  perform private.require_hub_app_server();
+ perform private.growth_bounce_guard_latch();
  return private.growth_hold_for(p_contact, 'marketing');
 end; $$;
 revoke all on function private.growth_draft_hold(uuid) from public, anon, authenticated, service_role;
@@ -202,8 +223,9 @@ grant execute on function private.growth_mailbox_record(uuid, text) to hub_app_s
 
 -- Server: the guard's state, for the Marketing Manager's daily alert.
 create or replace function private.growth_send_guard_state() returns jsonb
-language plpgsql stable security definer set search_path = '' as $$ begin
+language plpgsql security definer set search_path = '' as $$ begin
  perform private.require_hub_app_server();
+ perform private.growth_bounce_guard_latch();
  return private.growth_bounce_guard();
 end; $$;
 revoke all on function private.growth_send_guard_state() from public, anon, authenticated, service_role;

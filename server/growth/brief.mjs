@@ -19,6 +19,7 @@
  *
  * Only counts and the brief's version are returned. Nothing is sent and no stage changes here.
  */
+import { statesStanding } from './standing.mjs';
 import { live } from '../live.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
@@ -120,8 +121,8 @@ export function figuresFor(county, setting) {
 }
 
 /**
- * The brief's two parts from the model's answer, checked. Writer-part sentences that state a number no citable source states are left
- * out, and so are sources the brief was not given; the research part keeps the rest for the team.
+ * The brief's two parts from the model's answer, checked. Writer-part sentences that state a number no citable source states, or any
+ * rating, rank or share, are left out, and so are sources the brief was not given; the research part keeps the rest for the team.
  */
 export function briefParts(output, { evidence, countyFigures, people, intel, setting }) {
   const citable = (evidence ?? []).filter(item => !String(item.claim ?? '').startsWith(researchOnlyPrefix));
@@ -130,7 +131,8 @@ export function briefParts(output, { evidence, countyFigures, people, intel, set
   const numbers = allowedNumbers(facts), percents = percentsOf(facts.join('\n'));
   const clean = value => {
     const sentence = String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 600);
-    return sentence && !screenIdentifiers(sentence).flagged && !textProblems(sentence, { product: 'intel', numbers, percents }).includes('unlisted_number') ? sentence : '';
+    // The agency's own rating, rank or share stays in the research part, whatever the number check finds (standing.mjs).
+    return sentence && !screenIdentifiers(sentence).flagged && !statesStanding(sentence) && !textProblems(sentence, { product: 'intel', numbers, percents }).includes('unlisted_number') ? sentence : '';
   };
   const named = new Set((people ?? []).map(person => String(person.name ?? '').toLowerCase()));
   const triggers = (output.triggers ?? []).map(trigger => ({ fact: clean(trigger.fact), sourceUrl: String(trigger.sourceUrl ?? ''),

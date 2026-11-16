@@ -75,8 +75,9 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
   const snapshotsNow = () => (Number.isInteger(settings.countySnapshotsPerWeek) && settings.countySnapshotsPerWeek >= 0 ? Math.min(settings.countySnapshotsPerWeek, 7) : 0);
   // Read on each run: the cap and the video provider are Hub settings (Settings → Creative) that change without a restart.
   const capNow = () => (Number.isInteger(settings.dailyRenderCap) && settings.dailyRenderCap >= 0 ? settings.dailyRenderCap : 40);
-  // Settings → Creative: the vision review and the least score it lets through without a warning. Off without a model.
-  const visionNow = () => settings.visionReview === true && model?.configured === true;
+  // Settings → Creative: the vision review and the least score it lets through without a warning. On without a model, an image is shown
+  // with a warning that it was not reviewed, never passed unseen (so it is never approved on its own).
+  const visionNow = () => settings.visionReview === true;
   const visionMinScore = () => (Number.isInteger(settings.visionMinScore) && settings.visionMinScore >= 1 && settings.visionMinScore <= 5 ? settings.visionMinScore : 3);
   const offeredNow = async () => { const list = await marketedNow(marketed); return creativeProducts.filter(product => markets(list, product)); };
   const effort = task => (['low', 'medium', 'high'].includes(task.agent?.config?.effort) ? task.agent.config.effort : 'medium');
@@ -329,6 +330,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       if (signal?.aborted) throw aborted();
       // Never retried here: an image the model could not look at is shown with a warning that it was not reviewed.
       const run = async request => {
+        if (!model?.configured) return { outcome: 'unavailable', code: 'model_not_configured' };
         try { return await model.run(task, request, { signal }); }
         catch (error) { if (signal?.aborted) throw aborted(); return { outcome: 'unavailable', code: /^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'ai_error' }; }
       };

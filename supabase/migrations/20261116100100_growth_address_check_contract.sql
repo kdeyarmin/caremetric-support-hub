@@ -9,7 +9,7 @@ declare
   server_fns constant text[] := array['private.growth_send_hold(uuid)', 'private.growth_draft_hold(uuid)', 'private.growth_mailbox_candidates(integer)',
     'private.growth_mailbox_record(uuid,text)', 'private.growth_send_guard_state()'];
   helper_fns constant text[] := array['private.growth_presend_mode()', 'private.growth_mailbox_tries()', 'private.growth_bounce_guard()',
-    'private.growth_hold_for(uuid,text)'];
+    'private.growth_hold_for(uuid,text)', 'private.growth_bounce_guard_latch()'];
   owner_fns constant text[] := array['hub.growth_send_guard()', 'hub.growth_send_guard_resume()'];
   fn text;
 begin
@@ -52,6 +52,11 @@ begin
   end if;
   if position('c.eligibility<>''permitted''' in pg_get_functiondef('private.growth_claim_message(uuid,uuid)'::regprocedure)) = 0 then
     raise exception 'The send claim must still write only to permitted contacts' using errcode = '55000';
+  end if;
+  -- A trip holds until the owner resumes: sending notes it, and the guard reads it.
+  if position('private.growth_bounce_guard_latch()' in pg_get_functiondef('private.growth_send_hold(uuid)'::regprocedure)) = 0
+    or position('tripped_at' in pg_get_functiondef('private.growth_bounce_guard()'::regprocedure)) = 0 then
+    raise exception 'A tripped bounce guard must hold until the owner resumes' using errcode = '55000';
   end if;
   -- The guard counts cold email only, and never a soft bounce.
   if position('''growth.cold_email''' in pg_get_functiondef('private.growth_bounce_guard()'::regprocedure)) = 0

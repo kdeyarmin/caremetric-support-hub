@@ -72,7 +72,7 @@ try {
   assert.deepEqual(first.agencies, []);
   assert.ok(first.evidence.length >= 1 && first.evidence[0].sourceUrl === `https://${ready.domain}/about`);
   assert.deepEqual(await mine(10), [strong.domain, borderline.domain], 'then the best fit; never one below 60 without a roster record, one already emailed or another product');
-  assert.deepEqual(await mine(10), [], 'once in 30 days');
+  assert.deepEqual(await mine(10), [], 'an attempt rests the agency a day');
   void weak; void carebase;
 
   // ---- 2. Two parts, a new version, the writer reads only its own ---------------------------------------------------------------------
@@ -80,6 +80,10 @@ try {
     research: { fit: 82, intel: { position: { county_rank: 9, county_share: 0.041 } } }, model: 'claude-opus-5-5', promptVersion: 'brief.1', costCents: 31.5 };
   assert.deepEqual(await store.briefSave(ready.opportunity, brief), { version: 1 });
   assert.deepEqual(await store.briefSave(ready.opportunity, { ...brief, writer: { ...brief.writer, summary: 'A family-owned home health agency in Erie.' } }), { version: 2 });
+  // A day on: the attempts that saved nothing are tried again; the agency with a saved brief rests 30 days.
+  await admin.query("update private.growth_brief_log set started_at = started_at - interval '2 days' where opportunity_id = any($1::uuid[])",
+    [[ready.opportunity, strong.opportunity, borderline.opportunity]]);
+  assert.deepEqual(await mine(10), [strong.domain, borderline.domain], 'a failed or deferred attempt is tried again the next day; a saved brief rests 30 days');
   const writer = await store.briefWriter(ready.opportunity);
   assert.deepEqual(writer, { summary: 'A family-owned home health agency in Erie.', angle: 'referral_sources', hook: brief.writer.hook, briefVersion: 2 });
   assert.equal(JSON.stringify(writer).includes('county_rank'), false, 'the writer never reads the agency\'s own figures');
@@ -114,7 +118,7 @@ try {
     }
   } finally { client.release(); }
 
-  console.log('Account brief integration passed: agencies about to be written to are briefed first, within the day\'s number and once in 30 days, never one already emailed or of another product; a brief is saved in two parts with a new version; the writer reads only its part; the owner reads both; the budget covers the quality tier; and gate drift. No model was called and nothing was sent.');
+  console.log('Account brief integration passed: agencies about to be written to are briefed first, within the day\'s number, a saved brief once in 30 days and a failed attempt again the next day, never one already emailed or of another product; a brief is saved in two parts with a new version; the writer reads only its part; the owner reads both; the budget covers the quality tier; and gate drift. No model was called and nothing was sent.');
 } finally {
   for (const domain of domains) {
     const org = (await row('select id from private.growth_organizations where domain=$1', [domain]))?.id;

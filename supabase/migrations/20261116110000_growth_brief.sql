@@ -74,7 +74,10 @@ declare v_used integer; v_pick record; begin
     and not g.internal and g.tenant_id is null and g.domain !~ '\.invalid$'
     and (o.fit is null or o.fit >= 60 or exists (select 1 from private.growth_roster_targets t where t.organization_id = g.id))
     and not exists (select 1 from private.growth_messages m where m.opportunity_id = o.id and m.purpose = 'marketing' and m.attempted_at is not null)
-    and not exists (select 1 from private.growth_brief_log l where l.opportunity_id = o.id and l.started_at > now() - interval '30 days')
+    -- A saved brief rests the agency 30 days; an attempt that saved none (a timeout, a failure, a spent budget) rests it a day, then it is
+    -- tried again, so a bad day never costs an agency its brief for a month.
+    and not exists (select 1 from private.growth_briefs b where b.opportunity_id = o.id and b.created_at > now() - interval '30 days')
+    and not exists (select 1 from private.growth_brief_log l where l.opportunity_id = o.id and l.started_at > now() - interval '1 day')
   order by (o.stage = 'qualified' and exists (select 1 from private.growth_contacts c where c.id = o.contact_id and c.eligibility = 'permitted')) desc,
            o.fit desc nulls last,
            exists (select 1 from private.growth_roster_targets t where t.organization_id = g.id) desc,
