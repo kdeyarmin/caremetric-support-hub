@@ -1206,9 +1206,10 @@ articles step switches.
 The fact sheet keeps prices, offers and who each product is for. What each product **does**, and why it matters, comes from the products'
 own published pages, kept in `server/agents/content/features.mjs` (`intel-features.json`, `carebase-features.json`):
 
-- **CareMetric Intel**: all 97 features on https://www.caremetricintel.com/features, by area, with the plan or role each needs; why each
-  part matters; the data behind it (providers, facilities, territories, utilization and quality, and the organization's own results), each
-  with its sources, the decision it helps make and its limit; each care setting; the manager view; the questions and answers; the caveats.
+- **CareMetric Intel**: all 125 features on https://www.caremetricintel.com/features, by area, with the plan or role each needs; why each
+  part matters; the data behind it (providers, facilities, Medicare use and share, demographics, payers and Medicare Advantage, community
+  need, competitors, and the organization's own results), each with its sources, the decision it helps make and its limit; each care
+  setting the site describes; the manager view; the questions and answers; the caveats.
 - **CareMetric CareBase**: all 112 capabilities on https://cmcarebase.com/features, by area, with the plan or add-on each area needs; why
   it matters and the tools that set it apart; the newest tools; a resident's record from inquiry to move-out; what each role sees and
   does; before and with CareBase; each chapter's requirements; the questions and answers from /faq; the caveats.

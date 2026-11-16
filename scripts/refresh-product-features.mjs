@@ -40,8 +40,12 @@ const pageText = html => clean(html.replace(/<script[\s\S]*?<\/script>|<style[\s
 const first = (pattern, text) => pattern.exec(text)?.[1] ?? null;
 
 // Wording the AI team may not repeat, rewritten: other products' names (content/validate.mjs), so Intel's EMR import layouts are described
-// without the vendors' names; and demos and sales calls, which CareMetric does not offer (growth/playbook.mjs offersMeeting).
+// without the vendors' names, and the AI apps and CRM Intel connects to without theirs; demos and sales calls, which CareMetric does not
+// offer (growth/playbook.mjs offersMeeting); and counts of Intel's data, which the fact sheet's Intel boundaries rule out until the owner
+// approves data-scale figures (docs/INTEL_MARKETING_PLAYBOOK.md, "Decisions for the owner"): a catalog's numbers are ones drafts may state.
 const vendorEdit = replacement => `EMR vendors named on the page are written generically: "${replacement}"`;
+const productEdit = replacement => `Other products named on the page are written generically: "${replacement}"`;
+const countEdit = replacement => `A count of Intel's datasets is left out until the owner approves data-scale figures: "${replacement}"`;
 const generic = [
   [/Saved layouts cover HCHB, WellSky, Axxess and MatrixCare\./g, 'Saved layouts cover common home health and hospice EMR reports.', vendorEdit],
   [/Saved layouts support common reports from Homecare Homebase, WellSky, Axxess, and MatrixCare\. These are file-based imports; the listed layouts do not imply a live connection to those vendors\./g,
@@ -51,6 +55,10 @@ const generic = [
   [/\(or have MatrixCare deliver it on a schedule\)/g, '(or have a supported EMR deliver it on a schedule)', vendorEdit],
   [/start from a saved layout for Homecare Homebase, WellSky, Axxess, or MatrixCare\. These are file-based imports; the listed layouts do not imply a live vendor connection\./g,
     'start from a saved layout for a common home health or hospice EMR report. These are file-based imports, not live EMR connections.', vendorEdit],
+  [/connect Claude, ChatGPT or any MCP app to Intel/g, 'connect an AI app that supports MCP to Intel', productEdit],
+  [/accounts to HubSpot as companies/g, 'accounts to a supported CRM as companies', productEdit],
+  [/with 150\+ public healthcare datasets/g, 'with public healthcare datasets', countEdit],
+  [/More than 150 public healthcare datasets/g, 'Public healthcare datasets', countEdit],
   [/ ?You can also explore demo options with fictional facility data before setting up your own organization\./g, '', () => 'A sentence offering demo options is left out: CareMetric offers no demos.'],
   [/without a sales call/g, 'on your own', () => '"Without a sales call" is written "on your own": the team never mentions sales calls.'],
 ];
@@ -89,9 +97,14 @@ export function extractIntel(home, features) {
   const pillars = [...home.matchAll(/<article class="cm-capability-card">([\s\S]*?)<\/article>/g)].map(([, card]) => card)
     .filter(card => /cm-feature-number/.test(card) && /cm-feature-tag/.test(card))
     .map(card => ({ title: clean(first(/<h3>([\s\S]*?)<\/h3>/, card)), why: clean(first(/<\/h3>\s*<p>([\s\S]*?)<\/p>/, card)), area: clean(first(/<span class="cm-feature-tag">([\s\S]*?)<\/span>/, card)) }));
-  let cards = home.slice(home.indexOf('cm-care-settings-grid'));
-  cards = cards.slice(0, cards.indexOf('</div></div>'));
-  const settingCards = [...cards.matchAll(/<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map(([, name, text]) => ({ name: clean(name), text: clean(text) }));
+  const cardsOf = html => [...html.matchAll(/<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map(([, name, text]) => ({ name: clean(name), text: clean(text) }));
+  // Each care setting the home page names: the cards of its care-settings grid, which ends with the grid's last card. The note under the
+  // grid (every plan welcomes other specialties; coverage varies by setting) is one of the site's caveats.
+  const grid = home.slice(home.indexOf('cm-care-settings-grid'));
+  const settings = cardsOf(grid.slice(0, grid.indexOf('</article></div>')));
+  const settingsNote = clean(first(/<p class="cm-plan-note">([\s\S]*?)<\/p>/, sectionOf(home, 'care-settings')));
+  // The manager view: its own section's numbered outcomes ("Focus the work before the week starts", ...).
+  const managers = cardsOf(first(/<ul class="cm-outcome-list">([\s\S]*?)<\/ul>/, sectionOf(home, 'for-managers')) ?? '');
   const tabs = Object.fromEntries([...home.matchAll(/id="(_R_[^"]+-tab-\d+)"[^>]*>(?:<svg[\s\S]*?<\/svg>)?\s*<span>([\s\S]*?)<\/span>/g)].map(([, tab, label]) => [tab, clean(label)]));
   const data = [...home.matchAll(/role="tabpanel" aria-labelledby="([^"]+)"[^>]*class="cm-data-panel"[^>]*>([\s\S]*?<p class="cm-data-limit">[\s\S]*?<\/p>)/g)].map(([, tab, panel]) => ({
     family: tabs[tab] ?? null,
@@ -117,13 +130,14 @@ export function extractIntel(home, features) {
       if (!caveats.includes(text)) caveats.push(text);
     }
   }
+  if (settingsNote && !caveats.includes(settingsNote)) caveats.push(settingsNote);
   const count = /<p>(\d+)(?:<!-- -->)?\s*features in/.exec(features);
   return sanitize({
     overview: clean(first(/<p class="cm-hero-description">([\s\S]*?)<\/p>/, home)),
     legend: clean(first(/<p class="cm-features-legend">([\s\S]*?)<\/p>/, features)),
     publishedCount: count ? Number(count[1]) : null,
     pillars, areas, data,
-    settings: settingCards.slice(0, 5), managers: settingCards.slice(5),
+    settings, managers,
     // Purchasing and the end of the trial are the fact sheet's (prices come from Intel's catalog); the rest are product answers.
     faq: faq.filter(item => !/^(How do we purchase|What happens when the trial ends)/.test(item.question)),
     caveats,
@@ -223,8 +237,10 @@ export const products = {
     extract: ({ home, features }) => extractIntel(home, features),
     check: body => {
       const total = body.areas.reduce((sum, area) => sum + area.features.length, 0);
-      if (body.areas.length < 5 || total < 50 || body.data.length < 5 || body.pillars.length < 5 || body.settings.length !== 5) {
-        throw new Error(`Intel's pages changed shape (areas ${body.areas.length}, features ${total}, data ${body.data.length}, pillars ${body.pillars.length}, settings ${body.settings.length}); update the extractor.`);
+      // A pillar read as a care setting or a manager outcome: the grid or the manager section was misread.
+      const strays = [...body.settings, ...body.managers].filter(card => body.pillars.some(pillar => pillar.title === card.name)).length;
+      if (body.areas.length < 5 || total < 50 || body.data.length < 5 || body.pillars.length < 5 || body.settings.length < 5 || !body.managers.length || strays) {
+        throw new Error(`Intel's pages changed shape (areas ${body.areas.length}, features ${total}, data ${body.data.length}, pillars ${body.pillars.length}, settings ${body.settings.length}, managers ${body.managers.length}${strays ? `, ${strays} pillars read as settings or managers` : ''}); update the extractor.`);
       }
       if (body.publishedCount && body.publishedCount !== total) throw new Error(`Intel's features page says ${body.publishedCount} features but ${total} were read.`);
       return `${body.areas.length} areas, ${total} features, ${body.data.length} data families and ${body.faq.length} answers`;

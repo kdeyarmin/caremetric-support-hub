@@ -97,7 +97,7 @@ describe('the fact sheet', () => {
     expect(text).toContain(`The bigger picture: ${intel.bigPicture}`);
     expect(text).toContain(`How to present it: ${intel.present}`);
     // Every "why it matters" area Intel publishes on its /features page.
-    for (const area of ['Market and territory research', 'Prospecting and targeting', 'Healthcare marketing CRM', 'Daily field work', 'Expenses, mileage and reimbursement',
+    for (const area of ['Market and territory research', 'Public data library', 'Prospecting and targeting', 'Healthcare marketing CRM', 'Daily field work', 'Expenses, mileage and reimbursement',
       'Referral and admission tracking', 'Competitor intelligence', 'Manager and team tools', 'Reports and analytics', 'Email campaigns', 'Administration, security and data']) {
       expect(intel.capabilities.some(line => line.startsWith(`${area}:`) || line.startsWith(`${area} [`)), area).toBe(true);
     }

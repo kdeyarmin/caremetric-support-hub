@@ -11,7 +11,10 @@ const featuresPage = (extra = '') => `<nav class="cm-features-jump"><p>2<!-- -->
 <p>Feature availability, territory and usage limits vary by plan.</p>`;
 const homePage = `<p class="cm-hero-description">A healthcare marketing CRM, market intelligence, territory analysis, and referral tracking in one workspace.</p>
 <article class="cm-capability-card"><div><span class="cm-feature-number">01</span></div><h3>Understand the market</h3><p>Analyze your market first.</p><span class="cm-feature-tag">Marketing &amp; territory analysis</span></article>
-<div class="cm-capability-grid cm-care-settings-grid"><article class="cm-capability-card"><h3>Hospitals</h3><p>Support your marketing plan.</p></article></div></div>
+<section id="care-settings" class="cm-section"><div class="cm-capability-grid cm-care-settings-grid"><article class="cm-capability-card"><div class="cm-capability-top"><span class="cm-feature-icon"></span></div><h3>Hospitals</h3><p>Support your marketing plan.</p></article><article class="cm-capability-card"><div class="cm-capability-top"></div><h3>Behavioral health</h3><p>Research primary care practices.</p></article></div>
+<p class="cm-plan-note">Every plan welcomes healthcare organizations across specialties.</p></div></section>
+<section id="for-managers" class="cm-section cm-managers"><p class="cm-eyebrow">FOR MANAGERS</p><ul class="cm-outcome-list"><li><span>0<!-- -->1</span><div><h3>Focus the work before the week starts</h3><p>Set priorities.</p></div></li></ul>
+<figure class="cm-manager-report"><div class="cm-report-header"><div><h3>Activity, relationships, and recorded results</h3></div><span class="cm-sample-badge">SAMPLE DATA</span></div></figure></section>
 <button id="_R_1_-tab-0"><span>Providers</span></button>
 <div id="_R_1_-panel-0" role="tabpanel" aria-labelledby="_R_1_-tab-0" class="cm-data-panel"><h3>Know who is practicing.</h3><ul><li>NPI identifiers</li></ul>
 <div class="cm-data-source-line"><strong>Source</strong><p>NPPES</p></div><h4>Who should we research?</h4><p>Build a target list.</p><p class="cm-data-limit">A research signal, not a promise.</p></div>
@@ -27,11 +30,23 @@ describe('reading Intel\'s published features', () => {
     ] }]);
     expect(catalog.pillars).toEqual([{ title: 'Understand the market', why: 'Analyze your market first.', area: 'Marketing & territory analysis' }]);
     expect(catalog.data).toEqual([{ family: 'Providers', headline: 'Know who is practicing.', includes: ['NPI identifiers'], source: 'NPPES', question: 'Who should we research?', decision: 'Build a target list.', limit: 'A research signal, not a promise.' }]);
-    expect(catalog.settings).toEqual([{ name: 'Hospitals', text: 'Support your marketing plan.' }]);
+    // Every card in the care-settings grid, however many; the manager view from its own section, not the sample report beside it.
+    expect(catalog.settings).toEqual([{ name: 'Hospitals', text: 'Support your marketing plan.' }, { name: 'Behavioral health', text: 'Research primary care practices.' }]);
+    expect(catalog.managers).toEqual([{ name: 'Focus the work before the week starts', text: 'Set priorities.' }]);
     // Purchasing belongs to the fact sheet, which reads Intel's own catalog.
     expect(catalog.faq).toEqual([{ question: 'Is CareMetric Intel a CRM?', answer: 'Yes.' }]);
-    expect(catalog.caveats).toEqual(['Feature availability, territory and usage limits vary by plan.']);
+    expect(catalog.caveats).toEqual(['Feature availability, territory and usage limits vary by plan.', 'Every plan welcomes healthcare organizations across specialties.']);
     expect(JSON.stringify(catalog)).not.toMatch(/WellSky|MatrixCare|HCHB|Axxess/);
+  });
+
+  it('fails loudly when a pillar is read as a care setting or a manager outcome', () => {
+    const { check } = products['caremetric-intel'];
+    const committed = JSON.parse(readFileSync(new URL('../server/agents/content/intel-features.json', import.meta.url), 'utf8'));
+    expect(check(committed)).toMatch(/^\d+ areas, \d+ features, \d+ data families and \d+ answers$/);
+    const strayed = structuredClone(committed);
+    strayed.managers.push({ name: strayed.pillars[0].title, text: strayed.pillars[0].why });
+    expect(() => check(strayed)).toThrow(/1 pillars read as settings or managers/);
+    expect(() => check({ ...committed, managers: [] })).toThrow(/managers 0/);
   });
 
   it('stops rather than let another product\'s name through', () => {
