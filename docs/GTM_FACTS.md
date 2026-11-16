@@ -205,7 +205,12 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
 ## CareMetric Intel
 
 - **For:** home health agencies, hospice agencies, hospitals, nursing homes and personal care homes that want more targeted
-  marketing. Site: https://www.caremetricintel.com.
+  marketing. These five are the primary audience. Site: https://www.caremetricintel.com.
+- **Secondary markets** (owner decision 2026-11-16): physician practices, behavioral health, rehabilitation and therapy,
+  diagnostics, dialysis and DME suppliers. Intel serves them too, and its site lists them after the primary five, but no outreach,
+  content or ads are aimed at them until the primary audience has been thoroughly marketed to. Prospect discovery stays on home
+  health and hospice agencies for now (`discoveryGrid` in `server/growth/playbook.mjs`); widening it to the other primary
+  settings is a separate owner decision.
 - **What it does:** targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data,
   plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place. Its AI features
   (briefs, supported reporting questions, drafted outreach) are text.
@@ -297,6 +302,7 @@ It does not refresh the saved feature inventory or verify a live deployment. The
 - Research coverage varies by dataset, geography and reporting period. State-licensed residential coverage depends on which state files are loaded. Feature access also depends on the plan, role and configured services.
 - Public provider and market data supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.
 - For each audience, lead with its relevant features and main purpose below, within these conditions. This guidance does not change prospecting eligibility, campaign audiences or outreach permissions.
+- Secondary markets, by owner decision: physician practices, behavioral health, rehabilitation and therapy (inpatient rehabilitation included), diagnostics, dialysis and DME suppliers. Use their rows only to answer a reader from one of those settings, and never aim outreach, content or ads at them until home health agencies, hospice agencies, hospitals, nursing homes and personal care homes have been thoroughly marketed to.
 
 | Industry | Most useful features, in priority order | Main purpose |
 | --- | --- | --- |

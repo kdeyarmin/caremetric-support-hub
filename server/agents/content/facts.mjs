@@ -160,7 +160,9 @@ export const products = deepFreeze({
   intel: {
     slug: 'caremetric-intel', name: 'CareMetric Intel', site: 'https://www.caremetricintel.com',
     source: 'kdeyarmin/intel@f50b3eb src/lib/planCatalog.ts, read live from https://www.caremetricintel.com/api/billing/catalog (reviewed copy: intelReviewedFacts)',
-    forWhom: 'Home health agencies, hospice agencies, hospitals, nursing homes and personal care homes that want more targeted marketing.',
+    // Owner decision 2026-11-16 (docs/GTM_FACTS.md, "For" and "Secondary markets"): these five are the primary audience; the
+    // secondary settings get no marketing of their own until the primary audience has been thoroughly marketed to.
+    forWhom: 'Home health agencies, hospice agencies, hospitals, nursing homes and personal care homes that want more targeted marketing. These five are the primary audience. Physician practices, behavioral health, rehabilitation and therapy, diagnostics, dialysis and DME suppliers can use it too, but they are secondary markets: no outreach, content or ads aimed at them until the primary audience has been thoroughly marketed to.',
     does: 'Targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data, plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place.',
     // Owner direction 2026-11-12 (docs/GTM_FACTS.md, "CareMetric Intel: the bigger picture"): every agent sees the whole product, and
     // email is never the point of it. Written from Intel's own published /features page and home page (intel-features.json), in words
@@ -193,6 +195,8 @@ export const products = deepFreeze({
       'Research coverage varies by dataset, geography and reporting period. State-licensed residential coverage depends on which state files are loaded. Feature access also depends on the plan, role and configured services.',
       'Public provider and market data supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.',
       'For each audience, lead with its relevant features and main purpose below, within these conditions. This guidance does not change prospecting eligibility, campaign audiences or outreach permissions.',
+      // Owner decision 2026-11-16 (docs/GTM_FACTS.md, "Secondary markets"). No digits here: the test keeps numbers out of this list.
+      'Secondary markets, by owner decision: physician practices, behavioral health, rehabilitation and therapy (inpatient rehabilitation included), diagnostics, dialysis and DME suppliers. Use their rows only to answer a reader from one of those settings, and never aim outreach, content or ads at them until home health agencies, hospice agencies, hospitals, nursing homes and personal care homes have been thoroughly marketed to.',
     ],
     industryUseCases: [
       {

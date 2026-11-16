@@ -89,9 +89,15 @@ export function extractIntel(home, features) {
   const pillars = [...home.matchAll(/<article class="cm-capability-card">([\s\S]*?)<\/article>/g)].map(([, card]) => card)
     .filter(card => /cm-feature-number/.test(card) && /cm-feature-tag/.test(card))
     .map(card => ({ title: clean(first(/<h3>([\s\S]*?)<\/h3>/, card)), why: clean(first(/<\/h3>\s*<p>([\s\S]*?)<\/p>/, card)), area: clean(first(/<span class="cm-feature-tag">([\s\S]*?)<\/span>/, card)) }));
-  let cards = home.slice(home.indexOf('cm-care-settings-grid'));
-  cards = cards.slice(0, cards.indexOf('</div></div>'));
-  const settingCards = [...cards.matchAll(/<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map(([, name, text]) => ({ name: clean(name), text: clean(text) }));
+  // The care-setting cards end at the section's plan note; the manager outcomes are their own section.
+  const between = (start, end) => {
+    const from = home.indexOf(start);
+    const to = from < 0 ? -1 : home.indexOf(end, from);
+    return to < 0 ? '' : home.slice(from, to);
+  };
+  const cardsIn = html => [...html.matchAll(/<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map(([, name, text]) => ({ name: clean(name), text: clean(text) }));
+  const settingCards = cardsIn(between('cm-care-settings-grid', 'cm-plan-note'));
+  const managerCards = cardsIn(between('id="for-managers"', '</section>'));
   const tabs = Object.fromEntries([...home.matchAll(/id="(_R_[^"]+-tab-\d+)"[^>]*>(?:<svg[\s\S]*?<\/svg>)?\s*<span>([\s\S]*?)<\/span>/g)].map(([, tab, label]) => [tab, clean(label)]));
   const data = [...home.matchAll(/role="tabpanel" aria-labelledby="([^"]+)"[^>]*class="cm-data-panel"[^>]*>([\s\S]*?<p class="cm-data-limit">[\s\S]*?<\/p>)/g)].map(([, tab, panel]) => ({
     family: tabs[tab] ?? null,
@@ -123,7 +129,9 @@ export function extractIntel(home, features) {
     legend: clean(first(/<p class="cm-features-legend">([\s\S]*?)<\/p>/, features)),
     publishedCount: count ? Number(count[1]) : null,
     pillars, areas, data,
-    settings: settingCards.slice(0, 5), managers: settingCards.slice(5),
+    // Intel's site lists its primary audience's five settings first, then the secondary ones (owner decision 2026-11-16,
+    // kdeyarmin/intel docs/public-marketing-site.md "Audience order"); the tests hold the five to the fact sheet's segments.
+    settings: settingCards.slice(0, 5), otherSettings: settingCards.slice(5), managers: managerCards,
     // Purchasing and the end of the trial are the fact sheet's (prices come from Intel's catalog); the rest are product answers.
     faq: faq.filter(item => !/^(How do we purchase|What happens when the trial ends)/.test(item.question)),
     caveats,
@@ -223,8 +231,8 @@ export const products = {
     extract: ({ home, features }) => extractIntel(home, features),
     check: body => {
       const total = body.areas.reduce((sum, area) => sum + area.features.length, 0);
-      if (body.areas.length < 5 || total < 50 || body.data.length < 5 || body.pillars.length < 5 || body.settings.length !== 5) {
-        throw new Error(`Intel's pages changed shape (areas ${body.areas.length}, features ${total}, data ${body.data.length}, pillars ${body.pillars.length}, settings ${body.settings.length}); update the extractor.`);
+      if (body.areas.length < 5 || total < 50 || body.data.length < 5 || body.pillars.length < 5 || body.settings.length !== 5 || body.managers.length < 3) {
+        throw new Error(`Intel's pages changed shape (areas ${body.areas.length}, features ${total}, data ${body.data.length}, pillars ${body.pillars.length}, settings ${body.settings.length}, managers ${body.managers.length}); update the extractor.`);
       }
       if (body.publishedCount && body.publishedCount !== total) throw new Error(`Intel's features page says ${body.publishedCount} features but ${total} were read.`);
       return `${body.areas.length} areas, ${total} features, ${body.data.length} data families and ${body.faq.length} answers`;

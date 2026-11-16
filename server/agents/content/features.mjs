@@ -89,6 +89,11 @@ function intelText(catalog) {
     lines.push(`- ${family.family}: ${family.headline} Includes: ${family.includes.join('; ')}. Source: ${family.source}. The decision it helps make: ${family.question} ${family.decision} Limit: ${family.limit}`);
   }
   lines.push('', 'By care setting:', ...catalog.settings.map(setting => `- ${setting.name}: ${setting.text}`));
+  // Owner decision 2026-11-16: secondary markets are described so a reader from one gets an accurate answer, never as a target.
+  if (catalog.otherSettings?.length) {
+    lines.push('', 'Also served (secondary markets: answer a reader from one of these, but aim no outreach, content or ads at them until the primary settings above have been thoroughly marketed to):',
+      ...catalog.otherSettings.map(setting => `- ${setting.name}: ${setting.text}`));
+  }
   lines.push('', 'For managers:', ...catalog.managers.map(item => `- ${item.name}: ${item.text}`));
   lines.push('', 'Questions and answers:', ...catalog.faq.map(item => `- ${item.question} ${item.answer}`));
   lines.push('', 'What the site itself says not to imply:', ...catalog.caveats.map(caveat => `- ${caveat}`));
