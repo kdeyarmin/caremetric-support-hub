@@ -6,6 +6,8 @@ import pg from 'pg';
 import { smsAuth, ownerAccess, sessionCookie, digest, token } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { appServer, privateHubMessage } from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
 assert.equal(local.hostname, '127.0.0.1'); assert.equal(local.port, '54322');
@@ -13,9 +15,9 @@ const admin = new pg.Pool({ connectionString: databaseUrl });
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl = new URL(databaseUrl); appUrl.username = 'hub_app_server'; appUrl.password = 'ephemeral-test-only';
 const pool = new pg.Pool({ connectionString: appUrl.href });
-// Numbers are unique per run so the script can run again against the same stack.
+// Emails are unique per run so the script can run again against the same stack.
 const run = String(Math.floor(Math.random() * 9000) + 1000);
-const owner = randomUUID(), customer = randomUUID(), ownerPhone = `+1202559${run}`, customerPhone = `+1202558${run}`;
+const owner = randomUUID(), customer = randomUUID(), ownerPhone = phones.owner, customerPhone = phones.customer;
 await admin.query(`insert into auth.users(id,email,raw_user_meta_data,is_anonymous) values($1,$3,'{"display_name":"Hub owner"}',false),($2,$4,'{"display_name":"Customer"}',false)`, [owner, customer, `owner-only-owner-${run}@test.invalid`, `owner-only-customer-${run}@test.invalid`]);
 await admin.query("insert into private.staff_permissions(user_id,permission,granted_by) values($1,'platform.admin',$1)", [owner]);
 await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2),($3,$4)', [owner, ownerPhone, customer, customerPhone]);
@@ -71,6 +73,7 @@ try {
   console.log('Owner-only sign-in integration passed.');
 } finally {
   server.close();
+  await removeTestIdentities(admin, [owner, customer]);
   await pool.end();
   await admin.end();
 }

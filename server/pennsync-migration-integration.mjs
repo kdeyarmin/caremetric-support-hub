@@ -7,12 +7,14 @@ import {smsAuth,sessionCookie,digest,withSession} from './sms-auth.mjs';
 import {gateway} from './gateway.mjs';
 import {delegations} from './delegations.mjs';
 import {appServer} from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL,local=new URL(databaseUrl);
 assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:databaseUrl});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(databaseUrl);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
-const pool=new pg.Pool({connectionString:appUrl.href}),owner=randomUUID(),phone='+12025550731';
+const pool=new pg.Pool({connectionString:appUrl.href}),owner=randomUUID(),phone=phones.owner;
 const source=JSON.parse(readFileSync(new URL('../src/imports/fixtures/pennsyncLearningSource.json',import.meta.url)));
 let payload=JSON.stringify(source),nativeRevoked=false,revokeAfterRead=false,nativeCalls=0;
 await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'pennsync-source-owner@test.invalid',false)",[owner]);
@@ -53,4 +55,4 @@ try{
  assert.equal(nativeCalls,0,'retired native source does not receive a capability or request');
  assert.equal(await snapshotCount(),before,'disconnecting does not modify preserved learning history');
  console.log('PennSync native migration is disconnected: no transport, delegated authority or source/history mutations.');
-}finally{await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
+}finally{await new Promise(resolve=>server.close(resolve));await removeTestIdentities(admin,[owner]);await pool.end();await admin.end();}

@@ -10,11 +10,13 @@ import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
 import { parseMediaOperation } from '../supabase/functions/_shared/courseMediaProtocol.ts';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const database=new URL(process.env.HUB_TEST_DATABASE_URL);assert.equal(database.hostname,'127.0.0.1');assert.equal(database.port,'54322');
 const admin=new pg.Pool({connectionString:database.href});await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(database);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
-const pool=new pg.Pool({connectionString:appUrl.href}),owner=randomUUID(),phone='+12025550841';
+const pool=new pg.Pool({connectionString:appUrl.href}),owner=randomUUID(),phone=phones.owner;
 await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'media-sms-owner@test.invalid',false)",[owner]);
 await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin'),($1,'content.write')",[owner]);
 await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)',[owner,phone]);
@@ -113,4 +115,4 @@ try{
   await admin.query("update private.sms_sessions set created_at=now()-interval '9 hours' where token_hash=$1",[digest(jar[sessionCookie])]);
   const beforeExpired=calls;assert.equal((await run(finish)).status,401);assert.equal(calls,beforeExpired);
   console.log('Course media actual PostgreSQL/SMS/HTTP passed: source preservation, raw bytes/ranges, exact one-use audience, separate attach, revoked-write recovery, new-session observation and eight-hour authority.');
-}finally{await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
+}finally{await new Promise(resolve=>server.close(resolve));await removeTestIdentities(admin,[owner],{also:['delete from private.learning_source_snapshots where staged_by = any($1::uuid[])']});await pool.end();await admin.end();}

@@ -9,11 +9,13 @@ import {gateway} from './gateway.mjs';
 import {delegations} from './delegations.mjs';
 import {appServer} from './http.mjs';
 import {providerContext,providerPreview,providerResult} from '../src/learning/testFixtures/provider.ts';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const local=new URL(process.env.HUB_TEST_DATABASE_URL);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:local.href});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(local);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
-const pool=new pg.Pool({connectionString:appUrl.href}),owner=randomUUID(),phone='+12025550821';
+const pool=new pg.Pool({connectionString:appUrl.href}),owner=randomUUID(),phone=phones.owner;
 await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'provider-sms-owner@test.invalid',false)",[owner]);
 await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
 await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)',[owner,phone]);
@@ -91,4 +93,4 @@ try{
   assert.equal((await run(status)).body.result.commandId,apply.commandId);
   await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner]);assert.equal((await run(status)).status,401);
   console.log('Provider PostgreSQL/SMS/HTTP passed: closed domain, current one-use authority, exact impact, uncertain-write recovery, new-session read-only status, native and Hub revocation, and no duplicate writes.');
-}finally{await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
+}finally{await new Promise(resolve=>server.close(resolve));await removeTestIdentities(admin,[owner]);await pool.end();await admin.end();}

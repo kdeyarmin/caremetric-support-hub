@@ -12,6 +12,8 @@ import { gateway } from './gateway.mjs';
 import { aiAssistance } from './ai-assistance.mjs';
 import { aiAssistantUserId, aiAutomation, sqlAutomationStore } from './ai-automation.mjs';
 import { goLiveReadiness } from './go-live-readiness.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL;
 const local=new URL(databaseUrl);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
@@ -95,7 +97,7 @@ const aiMessages=async caseId=>(await messages(caseId)).filter(message=>message.
 try {
   await admin.query(`insert into auth.users(id,email,is_anonymous) values($1,'automation-owner@test.invalid',false),($2,'automation-customer@test.invalid',false)`,[owner,customer]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550501',now()),($2,'+12025550502',now())",[owner,customer]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$3,now()),($2,$4,now())',[owner,customer,phones.owner,phones.customer]);
   for(const [user,sessionToken] of [[owner,ownerToken],[customer,customerToken]]) {
     await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[randomUUID(),digest(sessionToken),user]);
   }

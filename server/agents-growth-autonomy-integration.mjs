@@ -12,6 +12,8 @@ import { sqlAgentStore } from './agents/store.mjs';
 import { growthHandlers, growthAutonomyFeature, unchangedSinceCancelled } from './growth/worker.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
 import { discoveryQueriesPerDay } from './growth/playbook.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -80,7 +82,7 @@ const finder = growthContactFinder({ fetchImpl, lookup: async () => [{ address: 
 try {
   await admin.query('insert into auth.users(id,email,is_anonymous) values($1,$2,false)', [owner, `growth-autonomy-owner-${run}@test.invalid`]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550972',now())", [owner]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())', [owner, phones.owner]);
   await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3", [randomUUID(), digest(token), owner]);
   await admin.query("update private.agents set status='active',autonomy='propose',config=jsonb_set(config,'{auto_approve_kinds}','[]') where key in ('marketing_manager','account_manager')");
   for (const p of await admin.query('select * from private.growth_policies').then(r => r.rows)) {

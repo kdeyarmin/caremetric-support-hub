@@ -21,6 +21,8 @@ import { composeGrowthReport } from './agents/growth/report.mjs';
 import { formTargets } from './agents/targets.mjs';
 import { growthHandlers } from './agents/tasks/growth.mjs';
 import { agentSchema, scheduleSchema } from '../src/admin/teamProtocol.ts';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -38,11 +40,11 @@ const gate = await readFile(new URL('../supabase/migrations/20261103130100_agent
 const run = randomBytes(4).toString('hex');
 const owner = randomUUID();
 const ownerToken = `growth-owner-${randomUUID()}`;
-const ownerPhone = `+1202557${String(1000 + Math.floor(Math.random() * 9000))}`;
+const ownerPhone = phones.owner;
 const secrets = { carebase: randomBytes(32).toString('hex'), intel: randomBytes(32).toString('hex'), advisors: randomBytes(32).toString('hex') };
 // What a visitor may write or give, which must reach nothing the agent keeps (the organization may: it names a business).
 const canary = `GROWTH-CANARY-${run}`;
-const contact = { name: `Canary Visitor ${run}`, email: `growth-visitor-${run}@example.test`, phone: '+12025550188', role: `Canary Role ${run}` };
+const contact = { name: `Canary Visitor ${run}`, email: `growth-visitor-${run}@example.test`, phone: phones.contact, role: `Canary Role ${run}` };
 const organization = `Growth <b>IT</b> & "Co" ${run}`;
 const campaign = `growth-${run}`;
 const external = name => `growth-int-${run}-${name}`;

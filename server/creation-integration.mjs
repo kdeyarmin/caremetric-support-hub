@@ -8,11 +8,13 @@ import { smsAuth,sessionCookie,digest,token,withSession } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const local=new URL(process.env.HUB_TEST_DATABASE_URL);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:local.href});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 local.username='hub_app_server';local.password='ephemeral-test-only';const pool=new pg.Pool({connectionString:local.href});
-const owner=randomUUID(),phone='+12025550801',commands=new Map(),sources=new Map();
+const owner=randomUUID(),other=randomUUID(),phone=phones.owner,commands=new Map(),sources=new Map();
 let bridge,nativeAllowed=true,loseApply=false,sourceUnavailable=false,revokeAtSource=false,writes=0;
 const auth=smsAuth({pool,provider:{send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'}});
 const fetchImpl=async(url,options)=>{
@@ -115,10 +117,10 @@ try {
   const absent=request(),unused=ok(await create(absent));assert.equal(ok(await create({operation:'recover',requestId:absent.requestId})).status,'absent');
   ok(await create({operation:'discard',requestId:absent.requestId}));assert.equal((await create(apply(unused))).status,403);
   assert.ok(ok(await create({operation:'resume'})).rows.length>=4);
-  const other=randomUUID(),otherToken=token();
+  const otherToken=token();
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'creation-other-admin@test.invalid',false)",[other]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[other]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550802',now())",[other]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())',[other,phones.other]);
   await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[randomUUID(),digest(otherToken),other]);
   const otherHeaders={Cookie:`${sessionCookie}=${otherToken}`};
   assert.deepEqual(ok(await create({operation:'resume'},otherHeaders)),{rows:[],nextOffset:null});
@@ -156,4 +158,4 @@ try {
   await admin.query('update private.sms_sessions set revoked_at=now() where token_hash=$1',[digest(originalToken)]);
   assert.equal((await create({operation:'resume'},{Cookie:`${sessionCookie}=${originalToken}`})).status,401);
   console.log('Course creation PostgreSQL/SMS/HTTP passed: immutable identity, lost response, new-session recovery, exact empty snapshot, changed-source manual review, mapping conflict, private grants, Origin and current authority.');
-} finally {await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
+} finally {await new Promise(resolve=>server.close(resolve));await removeTestIdentities(admin,[owner,other],{also:['delete from private.learning_source_snapshots where staged_by = any($1::uuid[])']});await pool.end();await admin.end();}

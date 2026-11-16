@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { digest, withSession } from './sms-auth.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 /** Exercise the real server login; Supabase's postgres role cannot impersonate it. */
 export async function exercisePennSyncNoPayments({ admin, pool }) {
@@ -11,7 +13,7 @@ export async function exercisePennSyncNoPayments({ admin, pool }) {
   try {
     await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'support-only@example.invalid',false)", [user]);
     await admin.query("insert into hub.tenants(id,slug,name) values($1,$2,'Disposable support-only agency')", [tenant, `support-only-${tenant}`]);
-    await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550191',now())", [user]);
+    await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())', [user, phones.user]);
     await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3", [randomUUID(), digest(token), user]);
     await admin.query("insert into hub.tenant_products(tenant_id,product_id) select $1,id from hub.products where slug in ('pennsync','carebase')", [tenant]);
     await admin.query("insert into hub.tenant_product_memberships(tenant_id,product_id,user_id,role,case_scope) select $1,id,$2,'tenant_admin','own' from hub.products where slug='pennsync'", [tenant, user]);

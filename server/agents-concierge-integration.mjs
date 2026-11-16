@@ -10,6 +10,8 @@ import { digest, withSession } from './sms-auth.mjs';
 import { communications } from './communications.mjs';
 import { gateway } from './gateway.mjs';
 import { agentTeam } from './agents/index.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -27,10 +29,10 @@ const gate = await readFile(new URL('../supabase/migrations/20261102160100_agent
 const owner = randomUUID();
 const ownerToken = `concierge-owner-${randomUUID()}`, staleToken = `concierge-stale-${randomUUID()}`;
 const run = randomUUID().slice(0, 8);
-const ownerPhone = `+1202555${String(1000 + Math.floor(Math.random() * 9000))}`;
+const ownerPhone = phones.owner;
 // Text that must never leave the conversation table: the body, the contact details, the organization and an internal note.
 const canary = `CANARY-${run}`;
-const secrets = { name: `Pat Example ${run}`, email: `pat.${run}@example.test`, phone: '+12025550142', organization: `Example Facility ${run}`, note: `NOTE-${canary}`, body: `BODY-${canary}` };
+const secrets = { name: `Pat Example ${run}`, email: `pat.${run}@example.test`, phone: phones.contact, organization: `Example Facility ${run}`, note: `NOTE-${canary}`, body: `BODY-${canary}` };
 
 const call = async (fn, args = []) => (await pool.query(`select ${fn}(${args.map((_, i) => `$${i + 1}`).join(',')}) as r`, args)).rows[0].r;
 const refused = (code, pattern) => error => { assert.equal(error.code, code, error.message); if (pattern) assert.match(error.message, pattern); return true; };

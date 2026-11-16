@@ -7,6 +7,8 @@ import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { digest, withSession } from './sms-auth.mjs';
 import { agentTeam } from './agents/index.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -23,6 +25,7 @@ const run = randomUUID().slice(0, 8);
 const owners = [randomUUID(), randomUUID()];
 const customer = randomUUID();
 const users = [...owners, customer];
+const userPhones = [phones.owner, phones.secondOwner, phones.customer];
 const tokens = users.map(() => `external-email-${randomUUID()}`);
 const ownerToken = tokens[0];
 const actions = new Set();
@@ -91,8 +94,7 @@ try {
   for (const [index, user] of users.entries()) {
     await admin.query('insert into auth.users(id,email,is_anonymous) values ($1,$2,false)', [user, `external-email-${index}-${run}@test.invalid`]);
     await admin.query("insert into hub.profiles(id,display_name) values ($1,'External email integration fixture') on conflict (id) do nothing", [user]);
-    const phone = `+1202${String(1_000_000 + Math.floor(Math.random() * 9_000_000))}`;
-    await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values ($1,$2,now())', [user, phone]);
+    await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values ($1,$2,now())', [user, userPhones[index]]);
     await admin.query(`insert into private.sms_sessions(id,token_hash,user_id,identity_version,created_at,expires_at)
       select $1,$2,user_id,identity_version,now(),now()+interval '1 hour' from private.sms_identities where user_id=$3`,
     [randomUUID(), digest(tokens[index]), user]);

@@ -9,13 +9,15 @@ import { smsAuth,sessionCookie,digest,transaction,withSession } from './sms-auth
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const databaseUrl=process.env.HUB_TEST_DATABASE_URL,local=new URL(databaseUrl);
 assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:databaseUrl});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl=new URL(databaseUrl);appUrl.username='hub_app_server';appUrl.password='ephemeral-test-only';
 const pool=new pg.Pool({connectionString:appUrl.href});
-const owner=randomUUID(),item=randomUUID(),phone='+12025550401';
+const owner=randomUUID(),item=randomUUID(),phone=phones.owner;
 const source=JSON.parse(readFileSync(new URL('../src/imports/fixtures/governedCourse.json',import.meta.url)));
 source.sourceCourseId=randomUUID();source.sourceVersionId=randomUUID();
 const course=source.sourceCourseId,version=source.sourceVersionId;
@@ -287,4 +289,4 @@ try {
   await admin.query('update private.sms_identities set revoked_at=now() where user_id=$1',[owner]);assert.equal((await author(apply)).status,401);
   assert.equal(Number((await admin.query("select count(*) from private.audit_events where actor_id=$1 and action='learning.authoring.applied'",[owner])).rows[0].count),8);
   console.log('Authoring PostgreSQL/HTTP integration passed: source preservation, unpublish and published-lesson correction, clone/edit/review/structure/credit policy, explicit credit removals and lossless preservation, post-write revocation recovery, incomplete draft assessments, complete weighted answers, exact digest receipts, large bounded edits, native/Hub revocation and immutable replay.');
-} finally {await new Promise(resolve=>server.close(resolve));await pool.end();await admin.end();}
+} finally {await new Promise(resolve=>server.close(resolve));await removeTestIdentities(admin,[owner],{also:['delete from private.learning_source_snapshots where staged_by = any($1::uuid[])']});await pool.end();await admin.end();}
