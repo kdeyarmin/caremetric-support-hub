@@ -128,3 +128,40 @@ it('actual HTTP upload deadline destroys a client that sends two bytes and never
     expect(f.writes()).toBe(0);expect(f.issue.mock.calls.some(([, ,op])=>op.operation==='media.upload')).toBe(true);
   }finally{client?.destroy();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 });
+it('takes an upload in parts: each part is authorized, and only the whole, matching file goes to CareBase',async()=>{
+  const f=setup(),send=(offset,slice,total=8)=>f.run.uploadPart(token,f.upload,{offset,total,length:slice.length},Readable.from(slice.length?[slice]:[]),'application/pdf');
+  const authorizations=()=>f.query.mock.calls.filter(([sql])=>sql==='select hub.authorize_app_command()').length;
+  expect(await send(0,bytes.subarray(0,5))).toEqual({received:5});
+  expect(authorizations()).toBe(1);expect(f.fetchImpl).not.toHaveBeenCalled();
+  const staged=await send(5,bytes.subarray(5));
+  expect(staged).toMatchObject({result:{state:'staged',operationId:f.intent.operationId}});expect(authorizations()).toBeGreaterThan(2);
+  expect(f.fetchImpl.mock.calls.filter(([,options])=>options.headers['x-caremetric-media-request']).length).toBe(1);
+  await expect(send(0,bytes,9)).rejects.toMatchObject({status:400});
+  await expect(f.run.uploadPart(token,f.upload,{offset:0,total:8,length:8},Readable.from([bytes]),'video/mp4')).rejects.toMatchObject({status:400});
+});
+it('refuses a part from a session that lost access, and discards a whole file that does not match its hash',async()=>{
+  const f=setup(),send=(offset,slice)=>f.run.uploadPart(token,f.upload,{offset,total:8,length:slice.length},Readable.from([slice]),'application/pdf');
+  expect(await send(0,Buffer.from('%PDF'))).toEqual({received:4});
+  await expect(send(4,Buffer.from('-9.9'))).rejects.toMatchObject({status:409,code:'artifact_mismatch'});
+  expect(f.fetchImpl.mock.calls.some(([,options])=>options.headers['x-caremetric-media-request'])).toBe(false);
+  expect(await send(4,bytes.subarray(4))).toEqual({received:0});
+  f.query.mockImplementation(async sql=>{if(sql==='select hub.authorize_app_command()')throw Object.assign(new Error('private'),{code:'42501'});return {rows:[{id:mediaBase.courseId,user_id:mediaBase.courseId}]};});
+  await expect(send(0,bytes.subarray(0,4))).rejects.toMatchObject({status:403});
+});
+it('answers parts over HTTP: 202 with where the next part starts, then the staged upload',async()=>{
+  const f=setup(),server=appServer({delegations:{courseMedia:f.run},origins:['https://hub.test']});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try{
+    const send=async(offset,slice,extra={})=>{
+      const response=await fetch(`http://127.0.0.1:${server.address().port}/api/course-media/upload`,{method:'POST',body:slice,headers:{Origin:'https://hub.test',
+        Cookie:'__Host-caremetric_session='+token,'Content-Type':'application/pdf','x-caremetric-media-request':Buffer.from(JSON.stringify(f.upload)).toString('base64url'),
+        'Upload-Offset':String(offset),'Upload-Length':'8',...extra}});
+      return [response.status,await response.json()];
+    };
+    expect(await send(0,bytes.subarray(0,3))).toEqual([202,{received:3}]);
+    expect(await send(0,bytes.subarray(0,3))).toEqual([202,{received:3}]);
+    expect((await send(3,bytes.subarray(3),{'Upload-Offset':'3.0'}))[0]).toBe(400);
+    const [status,body]=await send(3,bytes.subarray(3));
+    expect(status).toBe(200);expect(body).toMatchObject({state:'staged',operationId:f.intent.operationId});
+  }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});

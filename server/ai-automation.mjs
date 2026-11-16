@@ -258,6 +258,13 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
     await store.saveState(work.caseId, { stage: 'exhausted', escalatedAt: now() });
   }
 
+  // A reply posted just before its step failed has already used up the step (private.ai_automation_post_message moves the case to
+  // awaiting_response, counts the attempt and clears the follow-up in the same transaction), so it is never posted again. Only the
+  // follow-up the loop would have scheduled next is missing, and without it the case never comes due again for a customer who does
+  // not answer. That is the one state with neither a follow-up due nor one sent; schedule it from now, moments after the post.
+  const missedFollowUp = (state) => (state.stage === 'awaiting_response' && !state.followUpDueAt && !state.followUpSentAt
+    ? { followUpDueAt: new Date(now().getTime() + live(followUpDelayMs)) } : {});
+
   // Records a failed step. The case stays at its stage and waits out a doubling
   // backoff; after maxConsecutiveFailures failures that are not provider outages it
   // is due for escalation instead, which the next sweep carries out like any other
@@ -270,7 +277,7 @@ export function aiAutomation({ ai, store, enabled = false, followUpDelayMs = 24 
     const failures = (work.state.consecutiveFailures ?? 0) + 1;
     if (error?.transient === true || failures < maxConsecutiveFailures || work.state.stage === 'escalate_due') {
       const delay = Math.min(retryDelayMs * 2 ** (failures - 1), maxRetryDelayMs);
-      await store.saveState(caseId, { consecutiveFailures: failures, retryAt: new Date(now().getTime() + delay) });
+      await store.saveState(caseId, { ...missedFollowUp(work.state), consecutiveFailures: failures, retryAt: new Date(now().getTime() + delay) });
       return;
     }
     await store.saveState(caseId, { stage: 'escalate_due', consecutiveFailures: failures, retryAt: null });

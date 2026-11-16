@@ -173,9 +173,11 @@ objection; a three-touch outreach plan; and a play for each customer moment. It 
 claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the copy of [GTM facts](GTM_FACTS.md)).
 
 - **Discovery** runs six different segment-and-place searches per marketed product every Eastern day, twenty results each
-  (`discoveryQueriesPerDay`; four segments by 36 Pennsylvania places for CareBase, so it never leaves Pennsylvania; six segments by
-  104 markets across the country for Intel). No search repeats until the whole grid has been searched; the next pass reads the next
-  page of each search. Calls to the search provider are paced a second apart. If a later search fails, the day's searching stops and
+  (`discoveryQueriesPerDay`; four segments by 36 Pennsylvania places for CareBase, so it never leaves Pennsylvania; eight segments by
+  104 markets across the country for Intel: six for home health and hospice agencies and, since 2026-11-16, two for nursing homes,
+  the first of them right after the first agency segment). No search repeats until the whole grid has been searched; the next pass
+  reads the next page of each search. Intel's free reports serve home health and hospice agencies only, so a prospect that is clearly a
+  nursing home gets the standard first email and no report page (`intelSetting` in `playbook.mjs`). Calls to the search provider are paced a second apart. If a later search fails, the day's searching stops and
   what was found is kept; only a failure of the first search fails the run. Discovery drops directories, listing and review sites,
   provider-number and company-data lookups, trade associations and trade press, social networks, job boards and government or school
   sites, and any host that names itself a directory, a listing, a review or a jobs site, so the contact finder never writes to a
@@ -279,8 +281,9 @@ directory doesn't list yet has no report, so its email offers the market review 
 this link".
 
 **The first email is built around the report** (owner direction 2026-11-15; `reportTouchAngle` and `reviewTouchAngle` in
-`playbook.mjs`, `growth.11`). It goes to the agency's best contact: a named owner, administrator or marketing leader when the team
-found one, else the role address, and, as separate emails, the other decision-makers there (see
+`playbook.mjs`, `growth.11`; since `growth.12`, a prospect that is clearly a nursing home gets the standard first email instead, as
+Intel's reports serve home health and hospice agencies only). It goes to the agency's best contact: a named owner, administrator or
+marketing leader when the team found one, else the role address, and, as separate emails, the other decision-makers there (see
 [Several decision-makers at one organization](#several-decision-makers-at-one-organization)).
 
 1. It opens with the founder's story in one or two sentences.
@@ -415,7 +418,9 @@ whatever their numbers (`server/growth/standing.mjs`), and an Intel email that s
 1. **Code gathers** the agency's market report as data from Intel's feed (`agency_brief`: its Medicare share and rank and how they have
    moved, the county's leaders, the hospitals its residents use, its public ratings and three moves; never physician names or the
    SSVI), the county's public figures for the agency's own setting (home health figures to a home health agency, hospice figures to a
-   hospice; never a dollar figure), the evidence the Hub holds and the leaders already found.
+   hospice; never a dollar figure), the evidence the Hub holds and the leaders already found. A nursing home found on the web (one
+   `intelSetting` reads as a nursing home, with no roster agency) is briefed as a nursing home: no market report is asked for, the
+   writer is told it is not an agency, and only nursing home figures are its own.
 2. **Web research** on the draft tier looks for dated triggers: a job listing for a liaison or marketer, a new location or service
    line, a leadership change, an award, news (`research.2`, shared with `growth.research`). What it keeps becomes evidence.
 3. **The top model** (Opus, high effort, `brief.1`) writes the brief: what the agency is, where, who owns it, its triggers, two or
@@ -431,7 +436,8 @@ written as before.
 
 **The first email** (Settings → Customer growth → Write first emails on the top model). An Intel agency's first cold email that has a
 brief is written on the top model at high effort (`growth.12`), from the brief: its opening, one of its questions, its angle, and the
-county figure (the writer may state it once, as a fact about the county with its source, never about the agency). The brief's angle
+county figure (the writer may state it once, as a fact about the county with its source, never about the agency; a brief written for
+an agency gives a nursing home no figure, and one written for a nursing home gives an agency none). The brief's angle
 replaces the hashed angle; while experiments run, a quarter of agencies keep the hashed one (`arms.angle_by`: `brief` or `hash`), so the
 learning memo can tell whether the brief's choice draws more replies. At most one such email per fifteen-minute sweep, started early in
 it (`held.top_model_later`); a repair pass stays on the agent's own tier.

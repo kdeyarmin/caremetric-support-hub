@@ -6,8 +6,9 @@ into the workspace that manages each thing. Nothing on it is estimated. A read
 that failed, or that an application's connection never advertised, is shown as
 unavailable or not provided; a silent application never contributes a zero.
 
-The per-application workspace (organizations, users, billing, courses, facility
-training, jobs, releases, audit) now lives at `/admin/apps?product=<id>`. Links
+The per-application workspace (organizations, users, consultation requests, courses,
+facility training, jobs, releases, audit) now lives at `/admin/apps?product=<id>`;
+billing for every application is in `/admin/billing`. Links
 that still carry the old `/admin?product=…&view=…` query redirect there.
 
 ## What it shows and where it comes from

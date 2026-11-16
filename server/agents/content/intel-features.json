@@ -7,8 +7,6 @@
   },
   "contentSha256": "a9b9dc8bb7011db6",
   "edits": [
-    "A count of Intel's datasets is left out until the owner approves data-scale figures: \"Public healthcare datasets\"",
-    "A count of Intel's datasets is left out until the owner approves data-scale figures: \"with public healthcare datasets\"",
     "EMR vendors named on the page are written generically: \"(or have a supported EMR deliver it on a schedule)\"",
     "EMR vendors named on the page are written generically: \"Saved layouts cover common home health and hospice EMR reports.\"",
     "EMR vendors named on the page are written generically: \"Scheduled EMR report delivery\"",
@@ -17,7 +15,7 @@
     "Other products named on the page are written generically: \"accounts to a supported CRM as companies\"",
     "Other products named on the page are written generically: \"connect an AI app that supports MCP to Intel\""
   ],
-  "overview": "For home health agencies, hospice agencies, hospitals, nursing homes and personal care homes ready to earn a greater share of referrals. Find the right sources with public healthcare datasets, focus your outreach, and turn consistent follow-up into stronger relationships. Bring market research, daily activity, and referral tracking together in one healthcare CRM.",
+  "overview": "For home health agencies, hospice agencies, hospitals, nursing homes and personal care homes ready to earn a greater share of referrals. Find the right sources with 150+ public healthcare datasets, focus your outreach, and turn consistent follow-up into stronger relationships. Bring market research, daily activity, and referral tracking together in one healthcare CRM.",
   "legend": "Features without a label are available to every role on every plan, within the plan’s territory and service-line allowance. Labels name additional role or plan requirements. The 30-day trial includes Pro features in one county, with your choice of healthcare service lines.",
   "publishedCount": 125,
   "pillars": [
@@ -508,7 +506,7 @@
     {
       "key": "data",
       "name": "Public data library",
-      "intro": "Public healthcare datasets from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP.",
+      "intro": "More than 150 public healthcare datasets from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP.",
       "features": [
         {
           "name": "Providers and clinicians",
@@ -908,6 +906,28 @@
       "limit": "Results reflect your records. CSV imports are file-based, not live EMR connections; patient-identifying columns are dropped."
     }
   ],
+  "scale": [
+    {
+      "figure": "150+",
+      "label": "public healthcare datasets",
+      "text": "From CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP."
+    },
+    {
+      "figure": "Every NPI",
+      "label": "in the national provider registry",
+      "text": "Physicians, practices and organizations with their practice locations and specialties, kept current from CMS’s weekly update files."
+    },
+    {
+      "figure": "33,000+",
+      "label": "ZIP areas and 3,200+ counties",
+      "text": "Each with Census age, income, disability, living-alone and growth figures beside the providers and facilities located there."
+    },
+    {
+      "figure": "Daily",
+      "label": "checks for new CMS releases",
+      "text": "Every view names the release it uses and when it was loaded, so your team can judge a figure before acting on it."
+    }
+  ],
   "settings": [
     {
       "name": "Home health agencies",
@@ -977,7 +997,7 @@
     },
     {
       "question": "What data does CareMetric Intel include?",
-      "answer": "Public healthcare datasets, linked by NPI, CCN, county and ZIP. Providers: every individual and organization in the national NPI registry, with Medicare services by clinician, home health certifications, hospice care-plan oversight, Order & Referring enrollment, Part D prescribing, MIPS scores, Open Payments totals and OIG exclusions. Facilities: hospitals, home health agencies, hospices, nursing homes, inpatient rehab, long-term care hospitals, DME suppliers and community health centers, with star ratings, patient surveys, inspections, staffing, ownership and cost reports, plus state-licensed personal care and assisted living homes where loaded. Markets: Medicare use, supply, spending, readmissions and market share by county. People: Census demographics and growth for every county and ZIP area. Payers: Medicare Advantage enrollment, penetration, star ratings and benefits. Community: CDC, HRSA, AHRQ and BLS measures of health, need and workforce. Coverage varies by dataset and geography, and the Data sources & use page lists every source."
+      "answer": "More than 150 public healthcare datasets, linked by NPI, CCN, county and ZIP. Providers: every individual and organization in the national NPI registry, with Medicare services by clinician, home health certifications, hospice care-plan oversight, Order & Referring enrollment, Part D prescribing, MIPS scores, Open Payments totals and OIG exclusions. Facilities: hospitals, home health agencies, hospices, nursing homes, inpatient rehab, long-term care hospitals, DME suppliers and community health centers, with star ratings, patient surveys, inspections, staffing, ownership and cost reports, plus state-licensed personal care and assisted living homes where loaded. Markets: Medicare use, supply, spending, readmissions and market share by county. People: Census demographics and growth for every county and ZIP area. Payers: Medicare Advantage enrollment, penetration, star ratings and benefits. Community: CDC, HRSA, AHRQ and BLS measures of health, need and workforce. Coverage varies by dataset and geography, and the Data sources & use page lists every source."
     },
     {
       "question": "How is this different from a general-purpose CRM?",

@@ -19,3 +19,11 @@ it('accepts only explicit reviewed apply and closed preview parameters',()=>{
   expect(onboardingRequest.safeParse(apply).success).toBe(true);
   for(const invalid of [{...apply,reviewed:false},{...apply,hubUserId:id},{...apply,intakeEnabled:true},{operation:'preview',product:'carebase'}])expect(onboardingRequest.safeParse(invalid).success).toBe(false);
 });
+it('offers only applications whose administration connection can verify an account', async ()=>{
+  const { applicationChoices, connectedOnboardingProducts } = await import('./onboardingProtocol');
+  // EMR, Go and PennSync were disconnected on 2026-10-28: the server refuses their capabilities, so linking one can only fail.
+  expect(connectedOnboardingProducts).toEqual(['carebase','breathe','intel']);
+  expect(applicationChoices('breathe')).toEqual(['carebase','breathe','intel']);
+  // An earlier invitation for a disconnected application still shows which one it names.
+  expect(applicationChoices('caremetric-go')).toEqual(['caremetric-go','carebase','breathe','intel']);
+});

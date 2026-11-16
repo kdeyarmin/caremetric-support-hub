@@ -4,17 +4,17 @@ This increment extends the existing authenticated `/admin` workspace with applic
 
 ## Contract and authority
 
-The browser submits a flat `{ product, operation, ...parameters }` request to the Hub `platform-admin` function. Omitting `product` retains the deployed CareBase behavior. The proxy validates current Hub authorization, resolves a checked-in destination, strips the product selector before forwarding the native operation, and validates the returned product, operation, page window, and declared fields. Unconfigured products never receive the Hub token. Existing browser-origin restrictions, deadlines, body bounds, session revocation checks, and native account mappings remain in force.
+The browser submits a flat `{ product, operation, ...parameters }` request to the Hub server's same-origin `POST /api/admin/read`, authorized by the owner's Hub sign-in; the server issues a one-use capability for that exact read (`server/delegations.mjs`). The `platform-admin` Edge function remains only for older JWT integrations. Omitting `product` retains the deployed CareBase behavior. The proxy validates current Hub authorization, resolves a checked-in destination, strips the product selector before forwarding the native operation, and validates the returned product, operation, page window, and declared fields. Unconfigured products never receive the Hub token. Existing browser-origin restrictions, deadlines, body bounds, session revocation checks, and native account mappings remain in force.
 
 | Product | Native route | New reads | User scope |
 | --- | --- | --- | --- |
-| CareBase | `https://cmcarebase.com/api/platform-admin/read` | capabilities, organizations, profiles, billing summary/subscriptions | Native profiles; profile activity is not a claim about Auth eligibility |
-| Breathe | `https://cmbreathe.com/resupply-api/central-admin/read` | capabilities, overview, organizations, staff, billing summary/subscriptions | Active/inactive staff accounts with native `admin` or `agent` roles; customer/patient accounts are excluded |
+| CareBase | `https://cmcarebase.com/api/platform-admin/read` | capabilities, organizations, profiles | Native profiles; profile activity is not a claim about Auth eligibility |
+| Breathe | `https://cmbreathe.com/resupply-api/central-admin/read` | capabilities, overview, organizations, staff, phone-line messages | Active/inactive staff accounts with native `admin` or `agent` roles; customer/patient accounts are excluded |
 | CareMetric Intel | `https://www.caremetricintel.com/functions/centralAdminRead` | capabilities, overview, registered users ([connection](INTEL_ADMIN_CONNECTION.md)) | Registered application users; no organizations |
 | Healthcare Advisors | `https://caremetricadvisors.com/api/hub/admin-read` | capabilities, overview, consultation requests ([connection](ADVISORS_ADMIN_CONNECTION.md)) | No software accounts |
 | EMR, PennSync, Go | Not connected; these applications use their own support | No calls forwarded | No records or totals invented |
 
-Both billing views report the application's database snapshot and historical records. Provider status is the latest state recorded by that application, not a fresh payment-provider query. Nullable provider IDs and missing period dates remain explicit. No revenue, currencies, charges, refunds, or new subscription ownership are inferred from these records. CareBase excludes provider-placeholder rows; application subscription states retain their native semantics.
+Applications' own billing reads are no longer requested: platform billing moved into the Hub (the CareMetric Stripe account, [platform billing](PLATFORM_BILLING.md)), and the control center reads subscriptions from there.
 
 Breathe native user IDs are case-sensitive TEXT values; its legacy bounded alphanumeric, underscore, and hyphen IDs are preserved. Hub actor IDs and Breathe organization/subscription IDs remain UUIDs. Native grants are checked separately; a directory record never grants authority.
 

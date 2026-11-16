@@ -1,7 +1,7 @@
 import { emailStatesStanding } from './standing.mjs';
 import { createHash } from 'node:crypto';
 import { playbooks, qualify } from './policy.mjs';
-import { experimentAngles, inboundAngle, lifecyclePlay, linkablePages, offersMeeting, playbookFor, playbookText, reaskAngle, reportTouchAngle, reviewTouchAngle, sequencePlan, touchAngle, unviewedTouchAngle, viewedTouchAngle } from './playbook.mjs';
+import { experimentAngles, inboundAngle, intelSetting, lifecyclePlay, linkablePages, offersMeeting, playbookFor, playbookText, reaskAngle, reportTouchAngle, reviewTouchAngle, sequencePlan, touchAngle, unviewedTouchAngle, viewedTouchAngle } from './playbook.mjs';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import { factSheetText, products as factProducts } from '../agents/content/facts.mjs';
 import { allowedNumbers, normalizeTerms, percentsOf, textProblems, unclearCopy } from '../agents/content/validate.mjs';
@@ -95,18 +95,20 @@ export const productAmounts=factsKey=>new Set(amountsIn([...(factProducts[factsK
 export function draftLinks(product) {
   return linkablePages(product).map(page=>({label:page.label,url:page.url}));
 }
+/** Intel's free market review and county report, which serve home health and hospice agencies only: never offered to a nursing home. */
+export const agencyOnlyPage=url=>/^https:\/\/www\.caremetricintel\.com\/(?:market-review|county-report)\/?$/.test(url);
 
 /**
  * Why a model draft may not be offered, or null when it passes. Checks the words, the links and the citations, and that it offers no
  * demo, call, meeting or conversation.
  */
-export function draftProblem(answer, { product, sources, outreach, organization = null, extraLinks = [] }) {
+export function draftProblem(answer, { product, sources, outreach, organization = null, extraLinks = [], withoutLinks = [] }) {
   if (!answer || answer.needsHuman) return 'needs_human';
   if (!answer.subject.trim() || answer.subject.length>150 || /[\r\n]/.test(answer.subject) || /^(?:re|fwd?):/i.test(answer.subject.trim())) return 'subject';
   if (!answer.body.trim() || answer.body.length>3500) return 'body';
   if (answer.citations.some(id=>!sources.some(s=>s.id===id)) || (outreach && !answer.citations.some(id=>id!=='county'))) return 'citation';
-  // The product's own pages, and the agency's own report link when the draft was given one.
-  const allowed=new Set([...draftLinks(product).map(link=>link.url),...extraLinks]);
+  // The product's own pages (less any this organization may not be offered), and the agency's own report link when the draft was given one.
+  const allowed=new Set([...draftLinks(product).map(link=>link.url).filter(url=>!withoutLinks.includes(url)),...extraLinks]);
   // A tagged product link is read as the page it points to; a tag that is not well formed leaves the address as written, and it fails.
   const links=(untagLinks(answer.body).match(/https?:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(trailing,''));
   if (links.some(url=>!allowed.has(url))) return 'link';
@@ -222,7 +224,6 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   // The writer part of the agency's account brief (brief.mjs), for its first cold email only. The county figure for the agency's own
   // setting becomes a source of its own (id "county"), so its numbers pass the checks; it is never stored as a citation.
   const briefed=work.kind==='outreach'&&brief&&typeof brief==='object'&&Number(o.touches??0)===0&&!o.memory?.reengagedAt&&!o.memory?.lead?brief:null;
-  const county=briefed?.countyFact?.claim?{id:'county',claim:String(briefed.countyFact.claim).slice(0,400),source_url:'https://data.cms.gov/',observed_at:new Date().toISOString()}:null;
   const arms=messageArms(o,sources,briefed);
   const variant=arms.length;
   const armTag=work.kind==='outreach'?[arms.trigger,arms.angle,arms.subject].filter(Boolean).join('-').replace(/_/g,'-').slice(0,60):null;
@@ -235,6 +236,14 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   if(variant==='concise' && work.kind==='outreach')fallback.body=`${approved}\n\nTry it free:${trialPage?` ${trialPage}`:' reply and we will send the link.'}`;
   // An agency's own market report (report-link.mjs) is the first touch's next step when there is one.
   const offered=work.kind==='outreach'&&report?.url&&/^https:\/\/www\.caremetricintel\.com\/report\/[A-Za-z0-9_.-]+$/.test(report.url)?report:null;
+  // Intel's reports cover home health and hospice agencies only: a nursing home (owner decision 2026-11-16) gets the standard first touch
+  // and none of the agency-only report pages. Anything not clearly a nursing home keeps the agency's report-led email.
+  const nursingHome=o.product==='caremetric-intel'&&!offered&&intelSetting({name:o.name,evidence:sources})==='nursing_home';
+  const withoutLinks=nursingHome?draftLinks(o.product).map(link=>link.url).filter(agencyOnlyPage):[];
+  // The brief's county figure goes in only when the brief was written for the same kind of organization this email is to: a nursing home
+  // never reads an agency's figures, nor an agency a nursing home's.
+  const sameSetting=briefed&&(nursingHome?briefed.setting==='nursing_home':briefed.setting!=='nursing_home');
+  const county=sameSetting&&briefed.countyFact?.claim?{id:'county',claim:String(briefed.countyFact.claim).slice(0,400),source_url:'https://data.cms.gov/',observed_at:new Date().toISOString()}:null;
   if(offered&&outreachTouch===1&&!reask)fallback.body=`${approved}\n\nAre you getting your share of the referrals in your county? I put together a free market report for your agency from public Medicare data: where you stand, who leads the county and the hospitals and physicians who refer the most.\n${offered.url}\n\nAny question, just reply to this email.`;
   fallback.body=tagLinks(fallback.body,tags);
   if (!model?.configured) return fallback;
@@ -242,7 +251,7 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   const outreach=work.kind==='outreach';
   const touch=outreach?outreachTouch:null;
   // The first cold email to a CareMetric Intel prospect is built around a market report (owner direction 2026-11-15).
-  const reportLed=outreach&&o.product==='caremetric-intel'&&touch===1&&!reask&&!lead;
+  const reportLed=outreach&&o.product==='caremetric-intel'&&touch===1&&!reask&&!lead&&!nursingHome;
   // The second email to an agency whose first carried its own report follows whether someone there opened it (views.mjs). Recorded as an
   // arm, so the memo can compare replies; the email never says it.
   const viewed=views&&outreach&&o.product==='caremetric-intel'&&touch===2&&!reask&&!lead&&offered
@@ -250,12 +259,12 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   if(viewed!==null)arms.viewed=viewed?'yes':'no';
   const input={
     kind:work.kind, product:product.name, style:reportLed?'Keep the body under one hundred seventy words.':variant==='concise'?'Keep the body under eighty words.':'Keep the body under one hundred twenty words.',
-    approvedClaim:approved, links:[...draftLinks(o.product),...(offered?[{label:offered.label,url:offered.url}]:[])], nextStep:book?.nextStep??null,
+    approvedClaim:approved, links:[...draftLinks(o.product).filter(link=>!withoutLinks.includes(link.url)),...(offered?[{label:offered.label,url:offered.url}]:[])], nextStep:book?.nextStep??null,
     ...(offered?{report:true}:{}),
     ...(outreach?{touch,maxTouches:reask?1:Number(o.policy?.max_touches??3),touchPlan:reask?reaskAngle:lead?inboundAngle(touch):reportLed?(offered?reportTouchAngle:reviewTouchAngle):viewed!==null?(viewed?viewedTouchAngle:unviewedTouchAngle):touchAngle(touch),
       ...(lead?{lead:{kind:String(lead.kind??''),place:lead.place??null,at:lead.at??null}}:{}),...(reask?{reask:true}:{}),
       ...(arms.angle?{focus:arms.angle.replace(/_/g,' ')}:{}),...(arms.subject?{subjectStyle:arms.subject}:{})}:{play:lifecyclePlay(work.kind)}),
-    stage:o.stage??null, organization:{name:o.name??null,domain:o.domain??null},
+    stage:o.stage??null, organization:{name:o.name??null,domain:o.domain??null,...(nursingHome?{setting:'nursing home'}:{})},
     goal:o.goal, memory:o.memory, work:{action:work.action,success:work.success}, sources,
   };
   // Structured business context only; free-form customer conversation is not included here.
@@ -269,7 +278,7 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   if(input.brief&&screenIdentifiers(JSON.stringify(input.brief)).flagged) delete input.brief;
   const draftSources=county?[...sources,county]:sources;
   if(county) input.sources=draftSources;
-  const checks={product:o.product,sources:draftSources,outreach,organization:o.name??null,extraLinks:offered?[offered.url]:[]};
+  const checks={product:o.product,sources:draftSources,outreach,organization:o.name??null,extraLinks:offered?[offered.url]:[],withoutLinks};
   const learned=outreach?usableMemo(memo):null;
   const system=[{text:growthSystem,cache:true},...(learned?[{text:memoBlock(learned),cache:true}]:[])];
   const promptVersion=learned?`${growthPromptVersion}-m${learned.version}`:growthPromptVersion;

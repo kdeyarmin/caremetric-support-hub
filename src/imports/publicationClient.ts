@@ -3,6 +3,7 @@ import {
   publicationReceiptSchema, type PublicationCommitRequest, type PublicationPart, type PublicationReceipt, type PublicationStage,
 } from "./publicationProtocol.ts";
 import { validatePublicationManifest, type PublicationManifest } from "./publicationImportPreview.ts";
+import { sendInParts } from "../lib/uploadParts.ts";
 
 export class PublicationError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
@@ -10,7 +11,8 @@ export class PublicationError extends Error {
 export interface PublicationClient {
   access(signal?: AbortSignal): Promise<{ maxVideoBytes: number }>;
   stage(manifest: PublicationManifest, signal?: AbortSignal): Promise<PublicationStage>;
-  upload(stage: PublicationStage, part: PublicationPart, file: File, signal?: AbortSignal): Promise<PublicationStage>;
+  /** Sends the file in parts; onProgress gets the bytes the Hub has received after each part. */
+  upload(stage: PublicationStage, part: PublicationPart, file: File, signal?: AbortSignal, onProgress?: (received: number, total: number) => void): Promise<PublicationStage>;
   preview(id: string, signal?: AbortSignal): Promise<PublicationStage>;
   commit(id: string, request: PublicationCommitRequest, signal?: AbortSignal): Promise<PublicationReceipt>;
 }
@@ -26,10 +28,12 @@ const messages: Record<number, string> = {
   429: "Another import is in progress. Try again when it finishes.",
 };
 export function createPublicationClient(fetcher: typeof fetch = fetch): PublicationClient {
-  async function call(path: string, options: RequestInit) {
-    const response = await fetcher(`/api/publications/${path}`, { ...options, credentials: "same-origin", redirect: "error", cache: "no-store" });
+  function answer(response: Response) {
     if (!response.ok) throw new PublicationError(response.status, messages[response.status] ?? "The publication service is temporarily unavailable. If you submitted a commit, retry the same publication to retrieve its result.");
     return response.json() as Promise<unknown>;
+  }
+  async function call(path: string, options: RequestInit) {
+    return answer(await fetcher(`/api/publications/${path}`, { ...options, credentials: "same-origin", redirect: "error", cache: "no-store" }));
   }
   const post = (path: string, body: unknown, signal?: AbortSignal) => call(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
   return {
@@ -45,11 +49,17 @@ export function createPublicationClient(fetcher: typeof fetch = fetch): Publicat
       return { maxVideoBytes: result.maxVideoBytes };
     },
     async stage(manifest, signal) { return parsePublicationStage(await post("imports/stage", { manifest: validatePublicationManifest(manifest), sourceReviewConfirmed: true }, signal)); },
-    async upload(stage, part, file, signal) {
+    async upload(stage, part, file, signal, onProgress) {
       publicationId.parse(stage.id); publicationPart.parse(part);
       const rule = publicationPartRules(stage.manifest, part);
       if (!file.size || file.size > rule.maxBytes || (rule.byteLength !== null && file.size !== rule.byteLength)) throw new PublicationError(422, "The selected file size does not match the manifest or upload limit.");
-      return parsePublicationStage(await call(`imports/${stage.id}/assets/${part}`, { method: "POST", headers: { "Content-Type": rule.contentType }, body: file, signal }));
+      let response: Response;
+      try { response = await sendInParts(fetcher, `/api/publications/imports/${stage.id}/assets/${part}`, file, { "Content-Type": rule.contentType }, { signal, onProgress }); }
+      catch (cause) {
+        if (signal?.aborted) throw cause;
+        throw new PublicationError(503, "The upload lost its connection to the Hub. Retry the same file; the Hub keeps what it received for ten minutes.");
+      }
+      return parsePublicationStage(await answer(response));
     },
     async preview(id, signal) { return parsePublicationStage(await post(`imports/${publicationId.parse(id)}/preview`, {}, signal)); },
     async commit(id, request, signal) { return publicationReceiptSchema.parse(await post(`imports/${publicationId.parse(id)}/commit`, publicationCommitSchema.parse(request), signal)); },

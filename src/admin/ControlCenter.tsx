@@ -70,7 +70,7 @@ function Row({ icon: Icon, label, children }: { icon: typeof Activity; label: st
   return <div><dt><Icon size={14} aria-hidden="true" />{label}</dt><dd>{children}</dd></div>;
 }
 
-function ApplicationPanel({ card, communicationsLoading, intakeLoading, usageLoading, preview }: { card: ApplicationCard; communicationsLoading: boolean; intakeLoading: boolean; usageLoading: boolean; preview: boolean }) {
+function ApplicationPanel({ card, communicationsLoading, intakeLoading, usageLoading, preview, recordsStale = false }: { card: ApplicationCard; communicationsLoading: boolean; intakeLoading: boolean; usageLoading: boolean; preview: boolean; recordsStale?: boolean }) {
   const connection = card.connection.state;
   const { support, intake, directory, integration, subscriptions, health, links } = card;
   return <article className="panel control-app" aria-label={`${card.name} controls`}>
@@ -103,7 +103,7 @@ function ApplicationPanel({ card, communicationsLoading, intakeLoading, usageLoa
       </Row>
       <Row icon={Headphones} label="Support">
         {support ? <>
-          <div>{support.conversations === null ? <span className="control-muted">{communicationsLoading ? "Loading conversations…" : "Conversations unavailable"}</span> : <><strong>{formatNumber.format(support.conversations)}</strong> conversations waiting</>} · <strong>{formatNumber.format(support.openCases)}</strong> open cases{support.urgentCases > 0 && <> (<strong>{formatNumber.format(support.urgentCases)}</strong> urgent)</>} · <strong>{formatNumber.format(support.publishedArticles)}</strong> published articles <small>({support.appSpecificArticles} app-specific)</small>{" · "}{support.aiCalls === null ? <span className="control-muted">{preview ? "AI usage not available in the preview" : usageLoading ? "Loading AI usage…" : "AI usage unavailable"}</span> : <><strong>{formatNumber.format(support.aiCalls)}</strong> AI calls</>}</div>
+          <div>{support.conversations === null ? <span className="control-muted">{communicationsLoading ? "Loading conversations…" : "Conversations unavailable"}</span> : <><strong>{formatNumber.format(support.conversations)}</strong> conversations waiting</>} · <strong>{formatNumber.format(support.openCases)}</strong> open cases{support.urgentCases > 0 && <> (<strong>{formatNumber.format(support.urgentCases)}</strong> urgent)</>} · <strong>{formatNumber.format(support.publishedArticles)}</strong> published articles <small>({support.appSpecificArticles} app-specific{recordsStale ? "; cases and articles as of sign-in, refresh failed" : ""})</small>{" · "}{support.aiCalls === null ? <span className="control-muted">{preview ? "AI usage not available in the preview" : usageLoading ? "Loading AI usage…" : "AI usage unavailable"}</span> : <><strong>{formatNumber.format(support.aiCalls)}</strong> AI calls</>}</div>
           <div className="control-links">{links.communications && <Link to={links.communications}>Communications</Link>}{links.cases && <Link to={links.cases}>Support cases</Link>}{links.knowledge && <Link to={links.knowledge}>Knowledge</Link>}{card.product === "advisors" && connection === "verified" && <Link to={links.inquiries}>Consultation requests</Link>}</div>
         </> : <span className="control-muted">No Hub product is registered for this connection, so no cases, conversations or articles can belong to it.</span>}
       </Row>
@@ -174,6 +174,8 @@ export function ControlCenter({ data, portfolio = portfolioClient, billing = bil
   const records = useAdminRead(readHub);
   const cases = records.status === "ready" ? records.data.cases : data.cases;
   const content = records.status === "ready" ? records.data.content : data.content;
+  // A failed re-read leaves the sign-in counts on screen: say so, rather than pass them off as current.
+  const recordsStale = records.status === "error";
 
   const input: ControlCenterInput = {
     apps: apps.status === "ready" ? apps.data : [], products, cases, content,
@@ -194,7 +196,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, billing = bil
     <section className="metric-grid control-center-metrics" aria-label="Portfolio at a glance">
       <Figure icon={Boxes} tone="metric-teal" label="Applications connected" state={apps} value={() => formatNumber.format(summary.connected)} detail={() => `of ${summary.total} administration connections`} />
       <Figure icon={Inbox} tone="metric-amber" label="Conversations waiting" state={inbox} value={() => formatNumber.format(summary.conversations ?? 0)} detail={() => "Phone, text, email, chat and web forms"} />
-      <article className="metric-card metric-blue"><span className="metric-icon"><Headphones /></span><div><p>Open support cases</p><strong>{formatNumber.format(summary.openCases)}</strong><small>{summary.urgentCases ? `${formatNumber.format(summary.urgentCases)} urgent` : "No urgent cases"}</small></div></article>
+      <article className="metric-card metric-blue"><span className="metric-icon"><Headphones /></span><div><p>Open support cases</p><strong>{formatNumber.format(summary.openCases)}</strong><small>{recordsStale ? "Could not refresh · counts from when you signed in" : summary.urgentCases ? `${formatNumber.format(summary.urgentCases)} urgent` : "No urgent cases"}</small></div></article>
       <Figure icon={CreditCard} tone="metric-violet" label="Subscriptions" state={apps} value={() => summary.subscriptions === null ? "Unavailable" : formatNumber.format(summary.subscriptions)} detail={() => summary.subscriptions === null ? "Hub billing could not be loaded" : "Billed by the Hub across every application"} />
       <Figure icon={Radio} tone="metric-teal" label="Channels live" state={inbox} value={() => `${summary.channelsLive ?? 0} of ${summary.channelsTotal}`} detail={() => "Live channels reach the Communications inbox"} />
     </section>
@@ -207,7 +209,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, billing = bil
         {inbox.status === "ready" && <ul className="control-list">{channelCards(inbox.data).map(card => { const Icon = channelIcons[card.channel]; return <li key={card.channel}>
           <Icon size={16} aria-hidden="true" /><div><strong>{card.label}</strong><span className="control-detail">{card.detail}</span></div>
           <Status done={card.ready} yes="Live" no="Not live" />
-          <Link className="control-count" to={card.href} aria-label={`Open ${card.label} conversations`}>{formatNumber.format(card.waiting)} waiting</Link></li>; })}</ul>}
+          <Link className="control-count" to={card.href} aria-label={`${formatNumber.format(card.waiting)} waiting: open ${card.label} conversations`}>{formatNumber.format(card.waiting)} waiting</Link></li>; })}</ul>}
         <div className="control-panel-footer"><Link className="text-link" to="/admin/email">Bulk email to application users</Link><Link className="text-link" to="/phone-numbers">Phone numbers and routing</Link><Link className="text-link" to="/phone">AI phone inbox</Link><Link className="text-link" to="/cases">Support case queue</Link><Link className="text-link" to="/knowledge">Knowledge articles</Link></div>
       </section>
 
@@ -240,7 +242,7 @@ export function ControlCenter({ data, portfolio = portfolioClient, billing = bil
       <div className="admin-section-title"><div><h2>Applications</h2><p>Each card is read through that application's administration connection and the Hub's own records{apps.status === "ready" ? ` · loaded ${timeLabel(apps.receivedAt)}` : ""}. Open a workspace to manage users, organizations, billing, courses and more.</p></div><Link className="text-link" to="/admin/apps">Per-application workspace <ArrowRight size={14} aria-hidden="true" /></Link></div>
       {apps.status === "loading" && <Loading label="Checking every application connection" app="portfolio" />}
       {apps.status === "error" && <ReadFailure error={apps.error} retry={retry} />}
-      {apps.status === "ready" && <div className="control-app-grid">{cards.map(card => <ApplicationPanel key={card.product} card={card} communicationsLoading={inbox.status === "loading"} intakeLoading={intake.status === "loading"} usageLoading={usage.status === "loading"} preview={demo} />)}</div>}
+      {apps.status === "ready" && <div className="control-app-grid">{cards.map(card => <ApplicationPanel key={card.product} card={card} communicationsLoading={inbox.status === "loading"} intakeLoading={intake.status === "loading"} usageLoading={usage.status === "loading"} preview={demo} recordsStale={recordsStale} />)}</div>}
     </section>
   </div>;
 }

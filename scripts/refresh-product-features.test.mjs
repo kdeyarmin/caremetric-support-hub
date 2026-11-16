@@ -18,6 +18,7 @@ const homePage = `<p class="cm-hero-description">A healthcare marketing CRM, mar
 <section id="for-managers" class="cm-section cm-managers"><p class="cm-eyebrow">FOR MANAGERS</p><ul class="cm-outcome-list"><li><span>0<!-- -->1</span><div><h3>Focus the work before the week starts</h3><p>Set priorities.</p></div></li>
 <li><span>0<!-- -->2</span><div><h3>See the effort</h3><p>Review the team.</p></div></li></ul>
 <figure class="cm-manager-report"><div class="cm-report-header"><div><h3>Activity, relationships, and recorded results</h3></div><span class="cm-sample-badge">SAMPLE DATA</span></div></figure></section>
+<section id="by-the-numbers" class="cm-proof-band"><div class="cm-container"><h2 class="cm-eyebrow">THE DATA BEHIND EVERY DECISION</h2><dl class="cm-proof-grid"><div><dt><strong>150+</strong><span>public healthcare datasets</span></dt><dd>From CMS and NPPES.</dd></div><div><dt><strong>33,000+</strong><span>ZIP areas and 3,200+ counties</span></dt><dd>Each with Census figures.</dd></div></dl><a href="#data" class="cm-text-link">See everything</a></div></section>
 <button id="_R_1_-tab-0"><span>Providers</span></button>
 <div id="_R_1_-panel-0" role="tabpanel" aria-labelledby="_R_1_-tab-0" class="cm-data-panel"><h3>Know who is practicing.</h3><ul><li>NPI identifiers</li></ul>
 <div class="cm-data-source-line"><strong>Source</strong><p>NPPES</p></div><h4>Who should we research?</h4><p>Build a target list.</p><p class="cm-data-limit">A research signal, not a promise.</p></div>
@@ -40,6 +41,8 @@ describe('reading Intel\'s published features', () => {
     expect(catalog.otherSettings).toEqual([{ name: 'Behavioral health', text: 'Research primary care practices.' }]);
     // Manager outcomes come from their own section, not the sample report beside them or the cards after the care settings.
     expect(catalog.managers).toEqual([{ name: 'Focus the work before the week starts', text: 'Set priorities.' }, { name: 'See the effort', text: 'Review the team.' }]);
+    // The site's own figures about its data, which the owner approved (2026-11-16) as the only ones the team may state.
+    expect(catalog.scale).toEqual([{ figure: '150+', label: 'public healthcare datasets', text: 'From CMS and NPPES.' }, { figure: '33,000+', label: 'ZIP areas and 3,200+ counties', text: 'Each with Census figures.' }]);
     // Purchasing belongs to the fact sheet, which reads Intel's own catalog.
     expect(catalog.faq).toEqual([{ question: 'Is CareMetric Intel a CRM?', answer: 'Yes.' }]);
     expect(catalog.caveats).toEqual(['Feature availability, territory and usage limits vary by plan.', 'Every plan welcomes healthcare organizations across specialties.']);
@@ -54,6 +57,7 @@ describe('reading Intel\'s published features', () => {
     strayed.managers.push({ name: strayed.pillars[0].title, text: strayed.pillars[0].why });
     expect(() => check(strayed)).toThrow(/1 pillars read as settings or managers/);
     expect(() => check({ ...committed, managers: [] })).toThrow(/managers 0/);
+    expect(() => check({ ...committed, scale: [] })).toThrow(/figures 0/);
   });
 
   it('stops rather than let another product\'s name through', () => {

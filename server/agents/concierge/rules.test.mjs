@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { categorize, ownWords, withoutTrialPhrase } from './rules.mjs';
+import { intelReviewedFacts, trialCardTerms } from '../content/facts.mjs';
+import { salesPlaybook, reportTouchAngle, reviewTouchAngle } from '../../growth/playbook.mjs';
 
 const category = (text, subject = null) => categorize({ text, subject }).category;
 
@@ -134,6 +136,85 @@ describe('a reply with the original email quoted under it', () => {
     // A credit card that is the sender's own matter is billing, with or without the word "no".
     for (const words of ['Please update the credit card on our account.', 'I have no credit card on file. How do I pay?', 'There is no credit card charge on my statement, but you sent a receipt.'])
       expect(categorize({ text: words }).category, words).toBe('billing');
+  });
+  it('keeps card-management requests during a trial as billing in the subject or body', () => {
+    for (const request of [
+      'How do I update my credit card during the free trial?',
+      'Please change the credit card for my trial.',
+      'Please try another credit card.',
+      'I have no credit card on file during my free trial.',
+      'Please update the credit card required for my trial.',
+    ]) {
+      expect(withoutTrialPhrase(request)).toBe(request);
+      for (const message of [{ text: request }, { subject: request, text: 'Please help.' }])
+        expect(categorize(message)).toEqual({ category: 'billing', reasons: ['billing.invoice'] });
+      expect(category(`I am out of the office. ${request}`)).toBe('billing');
+    }
+  });
+  it('neutralizes old and new disclosures without hiding adjacent card requests', () => {
+    const request = 'Please change the credit card for my trial.';
+    for (const disclosure of [
+      'You can try CareMetric Intel free for 30 days, no credit card needed.',
+      'A 30-day free trial with no credit card.',
+      'The free trial needs no credit card.',
+      'A 30-day free trial (credit card required; canceling before it ends avoids any charge).',
+      'A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.',
+    ]) {
+      for (const original of [disclosure, `> ${disclosure}`, `-----Original Message-----\n${disclosure}`]) {
+        expect(category(`Tell me more about the free trial.\n\n${original}`)).toBe('sales');
+        expect(category(`${request}\n\n${original}`)).toBe('billing');
+        expect(category(`See below.\n\n${original}\n\n${request}`)).toBe('billing');
+        expect(category(original, request)).toBe('billing');
+      }
+      // Both card occurrences share a sentence; only the disclosure may be neutralized.
+      const adjacent = `${disclosure.replace(/\.$/, '')}; ${request}`;
+      expect(withoutTrialPhrase(adjacent)).toContain(request);
+      expect(category(adjacent)).toBe('billing');
+      expect(category(`I am out of the office. ${adjacent}`)).toBe('billing');
+    }
+  });
+  it('recognizes every current playbook and fact-sheet disclosure in an unmarked reply', () => {
+    const book = salesPlaybook['caremetric-intel'];
+    const disclosures = [
+      ...book.valuePoints,
+      ...book.objections.map(objection => objection.answer),
+      ...intelReviewedFacts.offers,
+      trialCardTerms,
+      reportTouchAngle,
+      reviewTouchAngle,
+      // docs/INTEL_MARKETING_PLAYBOOK.md trial terms and the site wording cited in docs/GTM_FACTS.md.
+      '30-day free trial, one county, 3 marketer seats and 1 manager seat. A credit card is required to start it, and the plan chosen at sign-up bills automatically when it ends unless canceled first.',
+      'Credit card required · Cancel before trial end to avoid charges',
+    ].filter(disclosure => /credit card/i.test(disclosure));
+    expect(disclosures.length).toBeGreaterThanOrEqual(9);
+    const request = 'Please change the credit card for my trial.';
+    for (const disclosure of disclosures) {
+      expect(withoutTrialPhrase(disclosure), disclosure).not.toMatch(/credit card/i);
+      expect(category(`Tell me more about the free trial.\n\n-----Original Message-----\n${disclosure}`), disclosure).toBe('sales');
+      for (const text of [`${request}\n${disclosure}`, `${disclosure}\n${request}`, `${disclosure}; ${request}`, `I am out of the office. ${request}\n${disclosure}`])
+        expect(category(text), text).toBe('billing');
+      expect(category(disclosure, request)).toBe('billing');
+    }
+  });
+  it('does not treat card-management wording inside a trial clause as a disclosure', () => {
+    for (const text of [
+      'A free trial (please update my credit card).',
+      'A free trial on one county (change the credit card required for it).',
+      'A free trial on one county, my credit card is required to be updated.',
+      'My free trial has ended. A credit card is required to start it again; please change mine.',
+      'Please change the credit card required to start the trial.',
+    ]) {
+      expect(withoutTrialPhrase(text)).toBe(text);
+      expect(category(text)).toBe('billing');
+    }
+  });
+  it('preserves urgent priority and machine labels for trial card requests', () => {
+    const request = 'Please change the credit card for my trial.';
+    for (const [urgent, expected] of [['Our account was hacked.', 'security'], ['My attorney will contact you.', 'legal'], ['The site is down.', 'outage']])
+      expect(category(`${request}\n> ${urgent}`, 'Automatic reply: trial')).toBe(expected);
+    for (const subject of ['Automatic reply: trial', 'Out of office: trial', 'Undeliverable: trial'])
+      expect(category(request, subject)).toBe('auto_reply');
+    expect(category(`From: MAILER-DAEMON@example.test\n${request}`)).toBe('auto_reply');
   });
   it('drops only marked quotes and the line that introduces them', () => {
     expect(ownWords(`${quoted}\n\nPlease refund my invoice.`)).toBe('Please refund my invoice.');

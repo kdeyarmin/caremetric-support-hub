@@ -36,6 +36,9 @@ describe('the county figures an agency may be told', () => {
     // An older Intel that labels no setting: a figure naming another setting is left out.
     const unlabeled = { ...county, figures: county.figures.map(({ setting, ...figure }) => figure) };
     expect(figuresFor(unlabeled, 'hospice').map(figure => figure.key)).toEqual(['hospices_in_county', 'medicare_advantage_share']);
+    // A nursing home is told its own setting's figures, never an agency's (owner decision 2026-11-16).
+    expect(figuresFor(county, 'nursing_home').map(figure => figure.key)).toEqual(['nursing_homes_in_county', 'medicare_advantage_share']);
+    expect(figuresFor(unlabeled, 'nursing_home').map(figure => figure.key)).toEqual(['nursing_homes_in_county', 'medicare_advantage_share']);
     expect(figureSentence({ label: 'Standardized Medicare home health spending per FFS beneficiary', value: 1234.4, unit: 'usd_per_beneficiary' }, 'Erie County'))
       .toBe('Standardized Medicare home health spending per FFS beneficiary in Erie County: $1,234 per beneficiary.');
   });
@@ -106,6 +109,17 @@ describe('growth.brief', () => {
     expect(result).toEqual({ briefed: 1, version: 1, facts: 1, triggers: 1, hook: true, countyFact: true, intel: true, cents: 23 });
   });
 
+  it('briefs a nursing home found on the web as a nursing home: no market report to ask for, never an agency\'s figures', async () => {
+    const { store, feed, model, run } = setup({ pick: { id: 'o2', organizationId: 'g2', product: 'caremetric-intel', fit: 80, stage: 'qualified',
+      name: 'Maple Ridge Nursing and Rehabilitation Center', domain: 'mapleridge.example.org', agencies: [], evidence, people: [] } });
+    await run();
+    expect(feed.agencyBrief).not.toHaveBeenCalled();
+    const sent = JSON.parse(model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.1')[1].user);
+    expect(sent.agency.setting).toBe('nursing home');
+    expect(sent.countyFigures).toEqual([]);
+    expect(store.briefSave.mock.calls[0][1].writer.setting).toBe('nursing_home');
+  });
+
   it('does nothing when off, in Observe, or with nobody to brief', async () => {
     expect((await setup({ enabled: false }).run()).result).toEqual({ skipped: 'off' });
     expect((await setup().run({ id: 't', agent: { autonomy: 'observe' } })).result).toEqual({ skipped: 'observe_only' });
@@ -157,6 +171,23 @@ describe('a first email written from the brief', () => {
     expect(holdout).toBeTruthy();
     expect(holdout.input.brief.angle).toBe(holdout.arms.angle);
     for (const item of seen.filter(entry => entry.arms.angle_by === 'brief')) expect(item.input.brief.angle).toBe('referral_sources');
+  });
+
+  it('gives a nursing home only a county figure for nursing homes, never one from a brief written for an agency', async () => {
+    const home = { ...o, name: 'Maple Ridge Nursing and Rehabilitation Center', domain: 'mapleridge.example.org',
+      evidence: [{ id: 'e1', claim: 'Maple Ridge Nursing and Rehabilitation Center admits patients from Allegheny County hospitals.', source_url: 'https://mapleridge.example.org/about', confidence: 'high', observed_at: now }] };
+    const sources = async given => {
+      const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: { ...draft, citations: ['e1'] } })) };
+      await draftMessage({ opportunity: home, work, task: { id: 't' }, model, brief: given });
+      return JSON.parse(model.run.mock.calls[0][1].user).sources.map(source => source.id);
+    };
+    expect(await sources(brief)).toEqual(['e1']);
+    const ownFigure = { ...brief, setting: 'nursing_home', countyFact: { key: 'nursing_homes_in_county', claim: '70 nursing homes located in Allegheny County (CMS, 2023).', source: 'CMS' } };
+    expect(await sources(ownFigure)).toEqual(['e1', 'county']);
+    // And an agency never reads a nursing home's.
+    const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: draft })) };
+    await draftMessage({ opportunity: o, work, task: { id: 't' }, model, brief: ownFigure });
+    expect(JSON.parse(model.run.mock.calls[0][1].user).sources.map(source => source.id)).toEqual(['e1', 'e2']);
   });
 
   it('refuses a draft that cites only the county figure', async () => {

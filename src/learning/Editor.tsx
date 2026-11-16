@@ -50,6 +50,21 @@ export function CourseEditor({ products }: { products: Product[] }) {
     const warn = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
+  useEffect(() => {
+    // Links inside the Hub change pages without unloading it, so beforeunload never fires for them: ask before one discards edits.
+    // Captured on the document, ahead of the router's own click handling.
+    if (!dirty) return;
+    const guard = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!link || (link.target && link.target !== "_self") || link.hasAttribute("download")) return;
+      const destination = new URL(link.href, window.location.href);
+      if (destination.origin !== window.location.origin || destination.pathname === window.location.pathname) return;
+      if (!window.confirm("Leave this course without saving? Your unsaved changes will be lost.")) { event.preventDefault(); event.stopPropagation(); }
+    };
+    // `document` in this component is the course draft, so the page's document is named through window.
+    window.document.addEventListener("click", guard, true); return () => window.document.removeEventListener("click", guard, true);
+  }, [dirty]);
   function edit(next: DraftDocument) { setDocument(next); setDirty(true); setReviewed(false); setStatus(""); }
   function editUnit(index: number, next: DraftUnit) { edit({ ...document, units: document.units.map((unit, i) => i === index ? next : unit) }); }
   async function save(event: FormEvent) {
@@ -127,7 +142,10 @@ function MediaUpload({ onUploaded }: { onUploaded: () => Promise<void> }) {
   async function upload(event: FormEvent) {
     event.preventDefault(); if (!files.video || !files.captions || !files.transcript) return;
     setBusy(true); setError(""); setStatus("");
-    try { await learningApi.uploadMedia(title, files.video, files.captions, files.transcript, reviewed); await onUploaded(); setReviewed(false); setStatus("Video uploaded. Select it in a video lesson above."); }
+    try {
+      await learningApi.uploadMedia(title, files.video, files.captions, files.transcript, reviewed, (received, total) => setStatus(`Uploading the video: ${Math.floor(received * 100 / total)}%`));
+      await onUploaded(); setReviewed(false); setStatus("Video uploaded. Select it in a video lesson above.");
+    }
     catch (caught) { setError(message(caught)); }
     finally { setBusy(false); }
   }

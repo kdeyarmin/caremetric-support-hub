@@ -20,10 +20,12 @@
  * Also on 2026-11-16 Intel's reviewed trial follows its billing catalog: 1 location and up to 2 healthcare service lines of the
  * customer's choice, where it said 1 branch, home health and hospice, and so do the plans' descriptions: locations instead of
  * branches, service lines of the customer's choice, and Growth "for growing healthcare teams" (it said "the usual agency plan").
- * The Founders Sale terms name the same add-on: "Intel extra seats/locations/states".
+ * The Founders Sale terms name the same add-on: "Intel extra seats/locations/states". Later on 2026-11-16 the owner approved
+ * data-scale figures: Intel's boundaries let the team state the figures about its data that its site publishes ("By the numbers" on
+ * its home page), which the features catalog carries.
  */
 
-export const factsVersion = '2026-11-16.3';
+export const factsVersion = '2026-11-16.4';
 
 /**
  * Where public help articles live. An article's help-center address is `${helpCenterOrigin}/help/articles/<slug>`; that is its
@@ -286,7 +288,7 @@ export const products = deepFreeze({
       'Intel imports referral and admission reports from the EHR as files: an upload, an SFTP folder or email. It is not a live connection to any EHR, and no message names an EHR vendor.',
       'Intel works in a phone\'s web browser and can be added to the home screen, where it opens like an app. It is not an app in the app stores.',
       'Public Medicare data shows which physicians certify home health patients and which agencies serve a county. It does not show who referred which patient to whom.',
-      'Intel has no approved customer results and states no counts about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files), and point to the free county report and the free trial instead.',
+      'Intel has no approved customer results: point to the free county report and the free trial instead. The only figures about its data the team may state are the ones Intel\'s own site publishes ("By the numbers" in its catalog: its public healthcare datasets, every NPI in the national registry, its ZIP areas and counties, and daily checks for new releases), worded as the site words them (owner approval); state no other count about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files).',
       'Intel is evaluated with a free trial, its prices are on its website, and questions get written answers. Describe what Intel does; never describe or compare what other products do.',
     ],
     whyChoose: [

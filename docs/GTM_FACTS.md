@@ -219,9 +219,13 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   marketing. These five are the primary audience. Site: https://www.caremetricintel.com.
 - **Secondary markets** (owner decision 2026-11-16): physician practices, behavioral health, rehabilitation and therapy,
   diagnostics, dialysis and DME suppliers. Intel serves them too, and its site lists them after the primary five, but no outreach,
-  content or ads are aimed at them until the primary audience has been thoroughly marketed to. Prospect discovery stays on home
-  health and hospice agencies for now (`discoveryGrid` in `server/growth/playbook.mjs`); widening it to the other primary
-  settings is a separate owner decision.
+  content or ads are aimed at them until the primary audience has been thoroughly marketed to.
+- **Prospect discovery** (`discoveryGrid` in `server/growth/playbook.mjs`) searches for home health and hospice agencies and, since
+  2026-11-16 (owner decision), nursing homes. Intel's free reports (an agency's own market report, the market review and the county
+  report) cover home health and hospice agencies only, so a prospect whose own name or research shows it is a nursing home gets the
+  standard first email instead (founder's story, a likely problem, how Intel helps, the free trial), and is never offered those
+  report pages (`intelSetting` and `draft.mjs`). Hospitals and personal care homes are not searched yet: widening discovery to them
+  is a separate owner decision.
 - **What it does:** targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data,
   plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place. Its AI features
   (briefs, supported reporting questions, drafted outreach) are text.
@@ -362,7 +366,7 @@ The playbook keeps the vendor detail and figures for people, not for prompts.
 - Intel imports referral and admission reports from the EHR as files: an upload, an SFTP folder or email. It is not a live connection to any EHR, and no message names an EHR vendor.
 - Intel works in a phone's web browser and can be added to the home screen, where it opens like an app. It is not an app in the app stores.
 - Public Medicare data shows which physicians certify home health patients and which agencies serve a county. It does not show who referred which patient to whom.
-- Intel has no approved customer results and states no counts about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files), and point to the free county report and the free trial instead.
+- Intel has no approved customer results: point to the free county report and the free trial instead. The only figures about its data the team may state are the ones Intel's own site publishes ("By the numbers" in its catalog: its public healthcare datasets, every NPI in the national registry, its ZIP areas and counties, and daily checks for new releases), worded as the site words them (owner approval); state no other count about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files).
 - Intel is evaluated with a free trial, its prices are on its website, and questions get written answers. Describe what Intel does; never describe or compare what other products do.
 
 The sales playbook gained matching written answers for EHR connection and security questions (`integration` and `security` in
@@ -613,27 +617,32 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
 - [x] CareBase's avoidance of "evidence" applies to articles and everything else the AI team writes, as well as the landing page.
 - [x] 2026-11-12: Intel's bigger picture and "How to present it" (sending emails to referral sources is never the point), the plain-language
   rules, and outreach written and signed as the founder.
-- [ ] 2026-11-14: Intel's lead order, market context and boundaries from the competitor research ("Intel: what to lead with, why now,
+- [x] 2026-11-14: Intel's lead order, market context and boundaries from the competitor research ("Intel: what to lead with, why now,
   and what it is not"), the `integration` and `security` written answers, and the three new outreach angles. Requested by the owner;
-  tick this box when you approve the pull request that adds them.
+  the owner confirmed them on 2026-11-16.
 - [x] 2026-11-14: Intel is a marketing workspace, not a compliance product; expense tracking (spend in view of policy and the Stark
   limit) is a small part of it and never leads.
 - [x] 2026-11-12: the founder's story wording. The owner confirmed: the founder built Intel, and currently runs a home health and
   hospice agency and a consulting company.
-- [ ] 2026-11-16: the CareBase feature and function reference, rewritten from the redesigned cmcarebase.com/features (112 capabilities
+- [x] 2026-11-16: the CareBase feature and function reference, rewritten from the redesigned cmcarebase.com/features (112 capabilities
   across 8 areas, each with the plan or add-on the page names) and its "What the team can do" descriptions; and CareBase's "Everything
   it does, by area" summary in the same eight areas, which the AI team reads (`capabilities` in `facts.mjs`), with families' portal
-  payments added to who uses it. Tick this box when you approve the pull request that adds them.
-- [ ] 2026-11-16: the Intel feature and function reference and Intel's "Everything it does, by area", refreshed from caremetricintel.com
+  payments added to who uses it. The owner confirmed them on 2026-11-16.
+- [x] 2026-11-16: the Intel feature and function reference and Intel's "Everything it does, by area", refreshed from caremetricintel.com
   (125 features across 12 areas, including the public data library, 8 data families and the site's 10 care settings). The site’s other
   five care settings are listed as secondary markets; the pre-visit card and spoken debrief pillar never leads; the count of Intel's
-  datasets and the AI apps and CRM it connects to are written generically. Tick this box when you approve the pull request that adds them.
-- [ ] 2026-11-16: Intel's trial covers 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of the customer's choice
+  datasets and the AI apps and CRM it connects to are written generically. The owner confirmed them on 2026-11-16.
+- [x] 2026-11-16: Intel's trial covers 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of the customer's choice
   and 1 county, as Intel's billing catalog states it (it said 1 branch, home health and hospice); and the plans' descriptions follow
   the catalog too: locations instead of branches, healthcare service lines of the customer's choice instead of home health and hospice,
   and Growth "For growing healthcare teams" instead of "The usual agency plan"; the Founders Sale's excluded add-ons say "Intel extra
-  seats/locations/states" to match. Prices and the offer's scope are unchanged. Tick this box when you approve the pull request that
-  changes them.
+  seats/locations/states" to match. Prices and the offer's scope are unchanged. The owner confirmed this wording on 2026-11-16
+  (kdeyarmin/caremetric-support-hub#222).
+- [x] 2026-11-16: data-scale figures. The team may state the figures about its data that Intel's own site publishes, worded as the site
+  words them, and no other count about its data: 150+ public healthcare datasets, every NPI in the national provider registry, 33,000+
+  ZIP areas and 3,200+ counties, and daily checks for new CMS releases (the home page's "by the numbers" band, which the features catalog
+  carries). Intel still has no approved customer results. Approved by the owner on 2026-11-16. Also confirmed that day: the pre-visit card and spoken
+  debrief pillar never leads a brief.
 
 ## Feature and function reference
 
@@ -646,7 +655,7 @@ packet or a log of recorded actions, never the state's survey. Binder and survey
 than as a readiness guarantee.
 The Intel source also describes spoken visit entry, a pre-visit card read aloud and spoken questions to its AI Assistant; below, visit
 logging, debriefs and directions use the approved written workflow only. As in the catalog, the AI apps and CRM Intel connects to are
-not named, and the count of its datasets is left out until the owner approves data-scale figures.
+not named; the figures about its data are the site's own ("Intel's data, by the numbers" below), approved by the owner on 2026-11-16.
 This preserves the owner's text-only AI rule and does not authorize voice or phone claims. Static presenter videos remain course media.
 
 ### CareBase feature and function reference
@@ -974,7 +983,7 @@ The people, providers and Medicare activity in the places you serve, within your
 
 #### Public data library
 
-Public healthcare datasets from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP.
+More than 150 public healthcare datasets from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP.
 
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
@@ -1062,6 +1071,17 @@ Control who can see what, keep a record of it, and know where every figure comes
 | Public data, clearly sourced | Provider, facility and market figures come from CMS, NPPES, the U.S. Census Bureau and state licensing files, with each dataset’s release shown. Public research uses no patient-level data. | All plans; subject to scope |
 | Patient privacy by design | Patient-identifying columns are dropped from referral imports, briefs and scorecards leave notes out, and exports carry no patient names. | All plans; subject to scope |
 | Send data out | An organization admin sends the organization’s own accounts, referrals and visit counts out every night: three CSV files to an SFTP server whose host key you pin, or accounts to a supported CRM as companies. Notes, check-in positions and patient details never leave Intel; passwords and tokens are stored encrypted. | Setting it: owners |
+
+#### Intel's data, by the numbers
+
+The site's own figures about its data (owner approval 2026-11-16): the only figures about its data the team may state, worded as the site words them.
+
+| Figure | What it counts | On the site |
+| --- | --- | --- |
+| 150+ | public healthcare datasets | From CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP. |
+| Every NPI | in the national provider registry | Physicians, practices and organizations with their practice locations and specialties, kept current from CMS’s weekly update files. |
+| 33,000+ | ZIP areas and 3,200+ counties | Each with Census age, income, disability, living-alone and growth figures beside the providers and facilities located there. |
+| Daily | checks for new CMS releases | Every view names the release it uses and when it was loaded, so your team can judge a figure before acting on it. |
 
 #### Data, sources and what they can tell the company
 

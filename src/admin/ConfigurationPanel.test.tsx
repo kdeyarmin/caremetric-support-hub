@@ -81,3 +81,22 @@ it('clearing an expired feature stop sends no new expiry and retains historical 
   const sent=request.mock.calls.find(([op])=>op.operation==='preview')![0];expect(sent).toMatchObject({parameters:{isDisabled:false,expiresAt:null}});
   expect(screen.getAllByText('2000-01-01T00:00:00Z').length).toBeGreaterThan(0);
 });
+it('a review after an expired one is a new request, so the application cannot hand back the expired review',async()=>{
+  const f=fixture();f.state.expired=true;await review();await screen.findByText(/This review expired/);
+  f.state.expired=false;
+  fireEvent.click(screen.getByRole('button',{name:'Load current settings'}));await screen.findByText('Current settings');
+  fireEvent.click(screen.getByRole('checkbox',{name:'Set job stop switch'}));fireEvent.change(screen.getByLabelText('Reason for change'),{target:{value:preview.reason}});
+  fireEvent.click(screen.getByRole('button',{name:'Review configuration change'}));await screen.findByText('Reviewed change');
+  const previews=f.request.mock.calls.filter(([op])=>op.operation==='preview').map(([op])=>op as Extract<ConfigurationOperation,{operation:'preview'}>);
+  expect(previews).toHaveLength(2);expect(previews[1].requestId).not.toBe(previews[0].requestId);
+});
+it('loads a cohort release as not enabled globally, and says a change replaces the cohort',async()=>{
+  const target={kind:'release' as const,featureKey:'fixture'};
+  const state={configured:true,rolloutMode:'cohort' as const,isEnabled:true,owner:'Owner',expiresAt:null,changeReason:'Pilot'};
+  const impact={kind:'feature' as const,definitionActive:true,organizationName:null,globalKillSwitchActive:false,organizationKillSwitchCount:'0',retainedCohortCount:'2',retainedMembershipCount:'4',nextBoundaryAt:null};
+  const request=vi.fn(async(op:ConfigurationOperation)=>op.operation==='context'?{target,displayName:'Release',configurationRevision:context.configurationRevision,state,impact}:{items:[],nextOffset:null});
+  render(<ConfigurationPanel target={target} label="Release" client={{request}} onApplied={vi.fn()} onClose={vi.fn()}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Load current settings'}));await screen.findByText('Current settings');
+  expect((screen.getByRole('checkbox',{name:'Enable release globally'}) as HTMLInputElement).checked).toBe(false);
+  expect(screen.getByRole('note').textContent).toMatch(/rolled out to a cohort/);
+});
