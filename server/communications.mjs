@@ -237,12 +237,15 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
     async emailWebhook(req) {
       if (!inboundKey) throw new HttpError(503, 'Inbound email is not configured.');
       if (req.headers['content-type']?.split(';')[0] !== 'multipart/form-data') throw new HttpError(415, 'Unsupported message format.');
-      const payload = await rawBody(req, 10485760);
+      // A post without a current signature is refused before its body is read; the signature itself covers the exact bytes, so it is
+      // checked once they are all here.
       const signature = req.headers['x-twilio-email-event-webhook-signature'], timestamp = req.headers['x-twilio-email-event-webhook-timestamp'];
       if (typeof signature !== 'string' || typeof timestamp !== 'string' || !/^\d{9,11}$/.test(timestamp)
-        || Math.abs(now().getTime() / 1000 - Number(timestamp)) > 600 || !sendgridSignatureValid(inboundKey, signature, timestamp, payload)) {
-        throw new HttpError(403, 'Invalid signature.');
-      }
+        || Math.abs(now().getTime() / 1000 - Number(timestamp)) > 600) throw new HttpError(403, 'Invalid signature.');
+      // SendGrid Inbound Parse posts messages of up to 30 MB, attachments included; the attachments are not stored (below), but a message
+      // refused for its size is retried and then dropped, and never reaches Communications.
+      const payload = await rawBody(req, 32 * 1024 * 1024);
+      if (!sendgridSignatureValid(inboundKey, signature, timestamp, payload)) throw new HttpError(403, 'Invalid signature.');
       let form;
       try { form = await new Response(payload, { headers: { 'content-type': req.headers['content-type'] } }).formData(); }
       catch { throw new HttpError(400, 'Unsupported message.'); }

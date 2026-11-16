@@ -169,7 +169,7 @@ Provider webhooks (POST only; any `Origin`, `Cookie` or query string is refused)
 - `POST /api/channels/sms/twilio` — Twilio form post, verified with
   `X-Twilio-Signature` against `HUB_PUBLIC_ORIGIN`. Returns empty TwiML.
 - `POST /api/channels/email/inbound` — SendGrid Inbound Parse (parsed mode,
-  signed webhook, at most 10 MiB), verified with
+  signed webhook, at most 32 MiB, as SendGrid posts up to 30 MB; attachments are never stored), verified with
   `X-Twilio-Email-Event-Webhook-Signature` and `-Timestamp` (ten-minute window).
 
 Website chat (same-origin; the visitor's token is the `__Host-caremetric_chat` cookie):
