@@ -5,7 +5,8 @@
  * - `social.plan` (each morning, once a week): drafts the week's posts for Facebook, Instagram and LinkedIn from the fact sheet, the
  *   sales playbook and what earned engagement in the last four weeks; checks every word; proposes each post held for its time slot; and
  *   emails the owner the plan. Without a LinkedIn connection the LinkedIn posts are in that email, ready to paste.
- * - `social.inbox` (every 15 minutes): finds new comments and messages from other people and gives each its own task.
+ * - `social.inbox` (every 15 minutes): finds new comments and messages from other people and gives each its own task. On LinkedIn's
+ *   Development tier (Settings → Social media → LinkedIn API tier) LinkedIn is read at one run every two hours (`linkedinDue`).
  * - `social.interaction`: reads one comment or message again, and with the owner's switch for customer text to AI on, drafts a
  *   checked reply (or proposes hiding spam); a public comment that appears to carry personal or health information is proposed for
  *   hiding and the owner is warned. Without the switch the owner is told and answers on the platform. LinkedIn has no "hide", so there
@@ -37,6 +38,18 @@ import { live } from '../../live.mjs';
 
 const day = 86_400_000;
 const labels = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', linkedin: 'LinkedIn' };
+
+/**
+ * Whether this inbox run reads LinkedIn. On the Standard tier, every run. On the Development tier (100 calls a day for the Page's
+ * token), only the scheduled run due in the first quarter hour of an even UTC hour, one in eight of the 15-minute runs (a schedule's
+ * runs keep to one grid: agent_schedule_next), and any run the owner starts. The inbox looks back 48 hours, so a comment waits up to
+ * two hours, and is never missed.
+ */
+export function linkedinDue(task, tier) {
+  if (tier !== 'development') return true;
+  const due = dueMoment(task);
+  return !due || (due.getUTCHours() % 2 === 0 && due.getUTCMinutes() < 15);
+}
 const productNames = { carebase: 'CareBase', 'caremetric-intel': 'CareMetric Intel' };
 // Posts per platform per week. Four on the two pages buyers read at work, three on Instagram (each needs an image).
 const weekly = { facebook: 4, instagram: 3, linkedin: 4 };
@@ -311,10 +324,12 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
   async function inbox(task, { now = () => new Date(), signal } = {}) {
     if (!metaPosts() && !li.configured.page) return { result: { skipped: 'meta_not_configured' } };
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
+    const linkedinNow = li.configured.page && linkedinDue(task, li.tier);
+    if (!metaPosts() && !linkedinNow) return { result: { skipped: 'linkedin_not_due' } };
     let items = [];
     const refused = [];
     let reached = 0;
-    for (const [on, client] of [[metaPosts(), meta], [li.configured.page, li]]) {
+    for (const [on, client] of [[metaPosts(), meta], [linkedinNow, li]]) {
       if (!on) continue;
       try { items = items.concat(await client.recentInbox({ signal, now: now() })); reached += 1; }
       catch (error) {
