@@ -53,6 +53,21 @@ describe('upload parts', () => {
     expect(uploads.reserved).toBe(0);
   });
 
+  it('answers a repeated part with upload_busy while the whole file is still being checked and stored', async () => {
+    const uploads = partUploads({ budget: 100, dir });
+    let finish;
+    const storing = new Promise(resolve => { finish = resolve; });
+    const slow = vi.fn(async () => { await storing; return { stored: true }; });
+    const first = uploads.receive('k', ...part(0, bytes), slow);
+    await vi.waitFor(() => expect(slow).toHaveBeenCalledOnce());
+    // The browser gave up waiting and asks again: it must keep waiting, not count a failure (src/lib/uploadParts.ts).
+    const repeat = await uploads.receive('k', ...part(0, bytes), slow).catch(error => error);
+    expect(repeat).toBeInstanceOf(HttpError);
+    expect(repeat).toMatchObject({ status: 503, code: 'upload_busy', publicMessage: 'This upload is still receiving a part. Retry shortly.' });
+    finish();
+    expect(await first).toEqual({ result: { stored: true } });
+  });
+
   it('answers where to resume instead of writing a part out of order', async () => {
     const uploads = partUploads({ budget: 100, dir }), complete = vi.fn();
     expect(await uploads.receive('k', ...part(8, bytes.subarray(8, 16)), complete)).toEqual({ received: 0 });
