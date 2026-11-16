@@ -67,6 +67,9 @@ const leadsElsewhere = (url, marketedList) => hostOf(url) !== null && !(productO
 // Story images (the Creative Director's 1080×1920 meta.story placement) proposed a week, at most, across Instagram and Facebook.
 export const storiesPerWeek = 2;
 
+/** One skipped ad recommendation, counted in all and by its reason. */
+const skip = (counts, reason) => { counts.skipped += 1; counts.skips[reason] = (counts.skips[reason] ?? 0) + 1; };
+
 export function socialHandlers({ store, notifier, model = null, meta, linkedin = null, settings = {}, imageUrls: imageUrlsOption = [], customerTextToAi = false, publicOrigin = null, marketed = null, log = line => console.warn(line), creative = null, feed = null }) {
   // The approved brand images (Settings → Social media) may be a function, read each time they are used.
   const images = () => live(imageUrlsOption) ?? [];
@@ -446,16 +449,20 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const marketedList = await marketedNow(marketed);
     const targets = await open();
     const today = easternDate(moment);
-    const counts = { pause: 0, budget: 0, create: 0, skipped: 0, rejected: 0 };
+    // Why each recommendation was skipped is counted by reason (review 2026-11-17: 18 of 18 were skipped daily and nothing said why), and
+    // the access error each platform answered is kept by platform, for the flight planner (ads/index.mjs) and the watchdog.
+    const counts = { pause: 0, budget: 0, create: 0, skipped: 0, rejected: 0, skips: {} };
     let adsetCount = 0;
     let recommendationCount = 0;
     const refused = [];
+    const refusedBy = {};
     for (const source of sources) {
       let overview;
       try { overview = await source.client.adsOverview({ signal, now: moment }); }
       catch (error) {
         if (signal?.aborted || error?.transient) throw error;
         refused.push(error?.code ?? 'social_error');
+        refusedBy[source.platform] = /^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'social_error';
         await tellAboutAccess(task, error?.code ?? 'social_error', moment);
         continue;
       }
@@ -467,23 +474,23 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       for (const rec of recommendations) {
         signal?.throwIfAborted();
         if (rec.kind === 'pause') {
-          if (targets.has(`social.ad_pause:${source.key(rec.adId)}`)) { counts.skipped += 1; continue; }
+          if (targets.has(`social.ad_pause:${source.key(rec.adId)}`)) { skip(counts, 'already_proposed'); continue; }
           if (await propose(task, { kind: 'social.ad_pause', targetKind: 'social_ad', targetId: source.key(rec.adId),
             preview: `Pause the ${source.name} ad "${rec.adName}" in the ${where} "${rec.adsetName}": it ${rec.reason}.`, input: { adId: rec.adId, adsetId: rec.adsetId, reason: rec.reason, ...platform } })) counts.pause += 1;
         } else if (rec.kind === 'budget') {
-          if (targets.has(`social.ad_budget:${source.key(rec.adsetId)}`)) { counts.skipped += 1; continue; }
+          if (targets.has(`social.ad_budget:${source.key(rec.adsetId)}`)) { skip(counts, 'already_proposed'); continue; }
           // No more money for an ad set that sends people to a product the team is not marketing.
-          if (overview.ads.some(ad => ad.adsetId === rec.adsetId && leadsElsewhere(ad.copy?.link, marketedList))) { counts.skipped += 1; continue; }
+          if (overview.ads.some(ad => ad.adsetId === rec.adsetId && leadsElsewhere(ad.copy?.link, marketedList))) { skip(counts, 'leads_elsewhere'); continue; }
           if (await propose(task, { kind: 'social.ad_budget', targetKind: 'social_adset', targetId: source.key(rec.adsetId),
             preview: `Raise the daily budget of the ${source.name} ${where} "${rec.adsetName}" from ${money(rec.from)} to ${money(rec.to)}: ${rec.reason}. Your cap is ${money(settings.maxDailyBudgetCents)} a day. Only you can approve a budget change.`,
             input: { adsetId: rec.adsetId, from: rec.from, to: rec.to, reason: rec.reason, ...platform } })) counts.budget += 1;
         } else if (rec.kind === 'refresh') {
-          if ([...targets].some(value => value.startsWith(`social.ad_create:${source.key(rec.adsetId)}:`))) { counts.skipped += 1; continue; }
+          if ([...targets].some(value => value.startsWith(`social.ad_create:${source.key(rec.adsetId)}:`))) { skip(counts, 'already_proposed'); continue; }
           counts.create += await refresh(task, rec, overview, today, signal, counts, source, marketedList);
         }
       }
     }
-    if (!adsetCount && refused.length === sources.length) return { result: { skipped: refused[0] } };
+    if (!adsetCount && refused.length === sources.length) return { result: { skipped: refused[0], refusedBy } };
     const proposed = counts.pause + counts.budget + counts.create;
     if (proposed && notifier) {
       await notifier.send({ severity: 'info', subject: `Ad review: ${plural(proposed, 'change')} to approve`,
@@ -494,19 +501,22 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     // The review finishes once it has proposed: its proposals wait on the Team screen, and tomorrow's review is not held back by them.
     // A budget change is never approved on its own, so a task that waited for it would stop the daily review, and with it the pausing
     // of ads that are losing money, for up to seven days. What is already proposed is skipped above (`targets`), never proposed twice.
-    return { status: 'done', result: { adsets: adsetCount, recommendations: recommendationCount, ...counts, ...(refused.length ? { refused } : {}) } };
+    return { status: 'done', result: { adsets: adsetCount, recommendations: recommendationCount, ...counts, ...(refused.length ? { refused, refusedBy } : {}) } };
   }
 
   async function refresh(task, rec, overview, today, signal, counts, source, marketedList) {
     const base = overview.ads.find(ad => ad.id === rec.basedOn);
     const product = productOf(base?.copy?.link);
-    if (!base || !product || !markets(marketedList, product)) { counts.skipped += 1; return 0; }
+    if (!base) { skip(counts, 'no_base_ad'); return 0; }
+    // An ad that links to no CareMetric product page (an ad the Hub did not make, a lead form) or to a product the team is not marketing.
+    if (!product) { skip(counts, 'leads_elsewhere'); return 0; }
+    if (!markets(marketedList, product)) { skip(counts, 'product_not_marketed'); return 0; }
     // Approved Creative Director creative for this product and platform is used before writing new copy: its words already passed the
     // creative checks, its image is the one the owner approved, and its link carries the asset's id for the weekly report.
     const fromCreative = await creativeAd(task, rec, overview, today, source, product);
     if (fromCreative !== null) return fromCreative;
     // Already approved copy and images need no model. Only the fallback that writes fresh copy needs an AI connection.
-    if (!model?.configured) { counts.skipped += 1; return 0; }
+    if (!model?.configured) { skip(counts, 'model_not_configured'); return 0; }
     const allowed = socialLinks(product).map(link => link.url);
     // The base ad's page (read through any campaign tags it already carries), else the product's next step, tagged as a paid ad.
     const page = [base.copy.link, untaggedUrl(base.copy.link)].find(url => allowed.includes(url)) ?? playbookFor(product).nextStep.url;
@@ -520,7 +530,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     });
     const result = await runModel(task, { promptVersion: adPromptVersion, system: [{ text: adSystem, cache: true }, ...catalogBlocks([product])], user, schema: adSchema, maxTokens: 3000, effort: effort(task),
       describe: output => `Wrote ${plural(output.variants.length, 'ad variant')} for a ${source.name} ad set.` }, signal);
-    if (result.outcome !== 'completed') { counts.skipped += 1; return 0; }
+    if (result.outcome !== 'completed') { skip(counts, `model_${/^[a-z_]{1,40}$/.test(result.outcome ?? '') ? result.outcome : 'error'}`); return 0; }
     let made = 0;
     for (const [index, variant] of (result.output.variants ?? []).slice(0, 2).entries()) {
       const parts = [checkSocialText(variant.message, { surface: 'ad_message', product }), checkSocialText(variant.headline, { surface: 'ad_headline', product }), checkSocialText(variant.description, { surface: 'ad_description', product })];

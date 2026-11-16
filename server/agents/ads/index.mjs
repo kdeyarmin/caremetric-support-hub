@@ -56,6 +56,34 @@ const fallbackWords = {
   google_refused_live: 'Google Ads refused to create it running.',
 };
 
+/**
+ * Whether a campaign action takes the month's flight: a campaign that was created (whatever its pacing), or a flight still proposed,
+ * approved or turned down. A proposal that failed or expired, or one paced over the whole month that was never created, does not.
+ */
+export const takesFlight = item => item.status === 'executed' || item.status === 'executing' || (item.flight === true && !['failed', 'expired'].includes(item.status));
+/** At most this many flights are tried in a month: one that fails is tried again the next day, on a platform that is not failing. */
+export const flightAttempts = 3;
+// A platform's answer that says the team's sign-in or permission is not good there: no campaign is planned on it until it is reconnected.
+const accessRefusal = /^(linkedin|meta|google)_(?:token_invalid|permission|not_configured)$/;
+
+/**
+ * The ad platforms the team cannot use now (20261117180000_work_recovery.sql, review 2026-11-17): one whose last refusal of the team's
+ * sign-in or permission (the daily ad review's `refusedBy`, or a campaign it refused in the last 30 days) is newer than its last reconnect
+ * (Settings → Social media for LinkedIn and Meta, Settings → Paid ads for Google). November's only flight went to LinkedIn while its token
+ * was invalid. A database without the operation answers none.
+ */
+export function failingPlatforms(answer) {
+  const failing = new Set();
+  for (const item of Array.isArray(answer?.refusals) ? answer.refusals : []) {
+    const match = accessRefusal.exec(String(item?.code ?? ''));
+    if (!match || match[1] !== item?.platform) continue;
+    const back = Date.parse(answer?.reconnected?.[item.platform] ?? '');
+    if (Number.isFinite(back) && back >= Date.parse(item.at ?? '')) continue;
+    failing.add(item.platform);
+  }
+  return failing;
+}
+
 /** Settings → Paid ads, with the Google Ads secrets from Railway. */
 export function adsConfig(env = {}, setting = null) {
   const value = key => (setting ? setting(key) : undefined);
@@ -168,12 +196,23 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
       async function plan(task, { signal, now = () => new Date() } = {}) {
         if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
         const moment = now();
-        if (task.sourceKind === 'schedule' && easternWeekday.format(moment) !== 'Mon') return { result: { skipped: 'not_monday' } };
         const monthly = config().monthlyBudgetCents;
+        const month = easternDate(moment).slice(0, 7);
+        if (task.sourceKind === 'schedule' && easternWeekday.format(moment) !== 'Mon') {
+          // A flight that failed this month is tried again the next day, on a platform that is not failing, up to flightAttempts times
+          // (review 2026-11-17: November's only flight failed on a Monday and the next plan was a week away).
+          const tried = monthly && config().flightDays > 0 ? await store.adsMonthCampaigns(month).catch(error => { if (error?.transient) throw error; return null; }) : null;
+          const failed = Array.isArray(tried) ? tried.filter(item => item.flight === true && item.status === 'failed').length : 0;
+          if (!failed || failed >= flightAttempts || tried.some(takesFlight)) return { result: { skipped: 'not_monday' } };
+        }
         if (!monthly) return { result: { skipped: 'no_monthly_budget' } };
         const list = await marketedNow(marketed);
         const products = ['caremetric-intel', 'carebase'].filter(product => markets(list, product));
-        const month = easternDate(moment).slice(0, 7);
+        let failing = new Set();
+        if (typeof store.adsPlatformRefusals === 'function') {
+          try { failing = failingPlatforms(await store.adsPlatformRefusals()); }
+          catch (error) { if (error?.transient) throw error; log(JSON.stringify({ event: 'hub_ads_refusals_unread', code: codeOf(error) })); }
+        }
         const left = monthLeft(moment);
         const skipped = {};
         const skip = reason => { skipped[reason] = (skipped[reason] ?? 0) + 1; };
@@ -189,7 +228,6 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         const history = flights ? await store.adsMonthCampaigns(month) : null;
         // Not knowing the month's campaigns, the plan proposes no flight rather than risk a second one.
         if (flights && !Array.isArray(history)) return { result: { proposed: 0, skipped: { flight_history_unread: 1 } } };
-        const takesFlight = item => item.status === 'executed' || item.status === 'executing' || (item.flight === true && !['failed', 'expired'].includes(item.status));
         const taken = (kind, targetId) => (flights ? history.some(item => item.kind === kind && item.targetId === targetId && takesFlight(item)) : store.socialCampaignProposed(kind, targetId));
 
         // 1. This month's campaigns not yet proposed, product by product: LinkedIn, Meta, then Google search.
@@ -201,6 +239,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           for (const platform of ['linkedin', 'meta']) {
             const client = platform === 'linkedin' ? linkedin : meta;
             if (!client?.configured?.ads || typeof client.createCampaign !== 'function') { skip(`${platform}_not_connected`); continue; }
+            if (failing.has(platform)) { skip(`${platform}_connection_failing`); continue; }
             if (platform === 'meta' && !/^[0-9]{5,30}$/.test(config().metaAudienceId)) { skip('meta_audience_missing'); continue; }
             const targetId = `${platform}:${product}:${month}`;
             if (await taken('social.campaign_create', targetId)) { proposedAlready += 1; continue; }
@@ -208,6 +247,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
               name: `CareMetric ${productNames[product]} ${platform === 'meta' ? 'retargeting' : 'prospecting'} ${month}` });
           }
           if (!model?.configured) { skip('model_not_configured'); continue; }
+          if (failing.has('google')) { skip('google_connection_failing'); continue; }
           const targetId = `google:${product}:${month}`;
           if (await taken('social.google_campaign', targetId)) { proposedAlready += 1; continue; }
           slots.push({ product, page, platform: 'google', kind: 'social.google_campaign', targetId, name: `CareMetric ${productNames[product]} search ${month}` });
@@ -463,10 +503,31 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         return { created: true, ...created, launched: true, dailyBudgetCents: daily, endsOn: left.lastDay };
       }
 
+      // A campaign the platform refused outright: nothing was created and nothing spends, and the owner hears of it (review 2026-11-17:
+      // November's flight failed on LinkedIn's permission and nobody was told). A transient failure is retried and says nothing yet; an
+      // approval taken back says nothing.
+      const reported = run => async execution => {
+        try { return await run(execution); }
+        catch (error) {
+          if (error?.transient !== true && !['approval_required', 'budget_changed', 'google_unconfirmed'].includes(error?.code)) {
+            const input = execution.input ?? {};
+            const platform = execution.kind === 'social.google_campaign' ? 'google' : input.platform;
+            const name = platformNames[platform] ?? 'The ad platform';
+            const code = codeOf(error);
+            const access = accessRefusal.test(code);
+            await tell(execution, 'warning', `New ${platformNames[platform] ? `${platformNames[platform]} ` : ''}campaign not created${input.name ? `: ${input.name}` : ''}`,
+              `${name} refused it (${code.replaceAll('_', ' ')}), so nothing was created and nothing spends.${access
+                ? ` Reconnect ${name} (${platform === 'google' ? 'Settings → Paid ads' : 'Settings → Social media'}). Until then the plan proposes this month's campaign on another platform the next day.`
+                : ' The plan tries this month\'s campaign again the next day.'}`);
+          }
+          throw error;
+        }
+      };
+
       return {
         // A LinkedIn or Meta campaign, within the limits as they stand when it is created: paused (LinkedIn as a draft) when the owner approved
         // it, launched live when the database approved it under the owner's hand-over.
-        'social.campaign_create': async execution => {
+        'social.campaign_create': reported(async execution => {
           const input = execution.input ?? {};
           const automatic = execution.autoApproved === true;
           if (automatic && !(await trusted(execution))) throw failure('approval_required');
@@ -486,10 +547,10 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
             return automatic ? launchSocial(execution, input, linkedin, createPaused) : { created: true, ...(await createPaused()) };
           }
           throw failure('invalid_campaign');
-        },
+        }),
         // A Google search campaign: created through the API (paused when the owner approved it, running under the owner's hand-over), or
         // emailed as an import file, paused, until the API is set up. Launching live needs the API, so without it the hand-over changes nothing here.
-        'social.google_campaign': async execution => {
+        'social.google_campaign': reported(async execution => {
           const input = execution.input ?? {};
           const automatic = execution.autoApproved === true;
           if (automatic && !(await trusted(execution))) throw failure('approval_required');
@@ -513,7 +574,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           // A retry of this action finds the earlier attempt by its dedupe key: that counts only if the earlier attempt was sent.
           if (!sent.some(delivered)) throw Object.assign(new Error('The import file could not be emailed.'), { code: 'notification_failed', transient: true });
           return { exported: true, ...(automatic ? { launched: false, reason: 'google_not_configured' } : {}) };
-        },
+        }),
       };
     },
   };

@@ -22,7 +22,9 @@ export const verifyPerRun = 6;
 const startBudgetMs = 120_000;
 const results = new Set(['verified', 'rejected', 'catch_all', 'unknown', 'unreachable']);
 /** Why a server gave no answer (mailbox.mjs), as recorded; anything else the checker said is 'error'. */
-export const unansweredReasons = new Set(['temporary', 'blocked', 'refused', 'sender_refused', 'unexpected', 'dropped', 'no_mail', 'invalid']);
+// The STARTTLS reasons (mailbox.mjs, 20261117180000_work_recovery.sql): a server that asks for TLS without offering it, and one whose TLS
+// conversation failed.
+export const unansweredReasons = new Set(['temporary', 'blocked', 'refused', 'sender_refused', 'unexpected', 'dropped', 'no_mail', 'invalid', 'tls_required', 'tls_failed']);
 const reasonFor = (result, answer) => (result === 'unreachable' ? 'unreachable'
   : result === 'unknown' ? (unansweredReasons.has(answer?.reason) ? answer.reason : 'error') : null);
 const domainOf = email => String(email ?? '').slice(String(email ?? '').lastIndexOf('@') + 1).toLowerCase();

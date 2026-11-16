@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { adsConfig, adsFeature, adsTeam, campaignWindow, flightBudget, leastFlightDays } from './index.mjs';
+import { adsConfig, adsFeature, adsTeam, campaignWindow, failingPlatforms, flightAttempts, flightBudget, leastFlightDays } from './index.mjs';
 import { handoverFeature } from '../handover.mjs';
 
 // Ad budget flights (Settings → Paid ads → "Run each month's campaign as a short flight", 2026-11-16): the month's number spent in one
@@ -16,11 +16,12 @@ const asset = platform => ({ id: metaAsset, token, product: 'caremetric-intel', 
   cta: 'Get your report', landingUrl: `https://www.caremetricintel.com/market-review?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}` });
 const trusted = { autonomy: 'act', config: { auto_approve_kinds: ['social.campaign_create', 'social.google_campaign'] } };
 
-function setup({ values = {}, linkedinConnected = true, metaConnected = true, googleConfigured = false, proposed = () => false, history = [], handover = false, status = 'proposed' } = {}) {
+function setup({ values = {}, linkedinConnected = true, metaConnected = true, googleConfigured = false, proposed = () => false, history = [], handover = false, status = 'proposed', refusals = undefined } = {}) {
   const store = {
     socialCampaignProposed: vi.fn(async (kind, target) => proposed(target)), adsMonthCampaigns: vi.fn(async () => history), proposeAction: vi.fn(async input => ({ id: `a-${input.targetId}`, created: true, status })),
     actionTrusted: vi.fn(async () => true), adsLaunchReserve: vi.fn(async (id, execution, daily, least, days) => ({ reserved: true, dailyBudgetCents: daily, days })),
     adsLaunchRelease: vi.fn(async () => true), creativeLiveAssets: vi.fn(async () => [{ id: metaAsset, platform: 'meta', status: 'approved' }]),
+    ...(refusals === undefined ? {} : { adsPlatformRefusals: vi.fn(async () => refusals) }),
   };
   const notifier = { send: vi.fn(async () => [{ channel: 'email', delivery: 'sent' }]) };
   const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: googlePlan })) };
@@ -178,5 +179,59 @@ describe('creating a flight', () => {
     expect(h.store.adsLaunchReserve).toHaveBeenCalledWith('a9', 2, 500, 500, 10);
     expect(h.meta.createCampaign).toHaveBeenCalledWith({ name: metaFlight.name, dailyBudgetCents: 500, audienceId: '1234567', endAt: '2026-11-26T04:59:59.000Z' });
     expect(h.notifier.send.mock.calls.at(-1)[0].body).toContain('ends on 2026-11-25');
+  });
+});
+
+// Review 2026-11-17: November's only flight went to LinkedIn while LinkedIn refused the team's sign-in; it failed, nobody was told, and the
+// next plan was a week away.
+describe('a platform that refuses the team', () => {
+  const linkedinRefused = { refusals: [{ platform: 'linkedin', code: 'linkedin_permission', at: '2026-11-16T14:21:00Z' }], reconnected: {} };
+
+  it('is a failing platform until it is reconnected after its last refusal, and only a refusal of sign-in or permission counts', () => {
+    expect([...failingPlatforms(linkedinRefused)]).toEqual(['linkedin']);
+    expect([...failingPlatforms({ ...linkedinRefused, reconnected: { linkedin: '2026-11-16T15:00:00Z' } })]).toEqual([]);
+    expect([...failingPlatforms({ ...linkedinRefused, reconnected: { linkedin: '2026-11-10T15:00:00Z' } })]).toEqual(['linkedin']);
+    expect([...failingPlatforms({ refusals: [{ platform: 'meta', code: 'meta_invalid_request', at: '2026-11-16T14:21:00Z' }] })]).toEqual([]);
+    expect([...failingPlatforms({ refusals: [{ platform: 'meta', code: 'linkedin_permission', at: '2026-11-16T14:21:00Z' }] })]).toEqual([]);
+    expect([...failingPlatforms(null)]).toEqual([]);
+  });
+
+  it('never gets the month\'s flight: the next platform carries it', async () => {
+    const h = setup({ refusals: linkedinRefused });
+    const done = await h.handlers['ads.plan'](task(), { now: monday });
+    expect(h.store.proposeAction.mock.calls.map(([item]) => [item.targetId, item.input.dailyBudgetCents, item.input.flightDays])).toEqual([['meta:caremetric-intel:2026-11', 500, 10]]);
+    expect(done.result.skipped).toMatchObject({ linkedin_connection_failing: 1, flight_taken: 1 });
+  });
+
+  it('a flight that failed is tried again the next weekday, on another platform, at most three times a month', async () => {
+    const tuesday = () => new Date('2026-11-17T14:20:00Z');
+    const failed = { kind: 'social.campaign_create', targetId: 'linkedin:caremetric-intel:2026-11', status: 'failed', flight: true };
+    const retry = setup({ history: [failed], refusals: linkedinRefused });
+    await retry.handlers['ads.plan'](task(), { now: tuesday });
+    expect(retry.store.proposeAction.mock.calls.map(([item]) => item.targetId)).toEqual(['meta:caremetric-intel:2026-11']);
+    // Without a failed flight, with one still waiting or created, or after three attempts, a weekday plan does nothing.
+    for (const history of [[], [failed, { ...failed, targetId: 'meta:caremetric-intel:2026-11', status: 'proposed' }], Array.from({ length: flightAttempts }, () => failed)]) {
+      const h = setup({ history, refusals: linkedinRefused });
+      expect((await h.handlers['ads.plan'](task(), { now: tuesday })).result, JSON.stringify(history)).toEqual({ skipped: 'not_monday' });
+      expect(h.store.proposeAction).not.toHaveBeenCalled();
+    }
+    // Flights off: a weekday plan never reads the month.
+    const off = setup({ values: { 'ads.flight_days': null }, history: [failed] });
+    expect((await off.handlers['ads.plan'](task(), { now: tuesday })).result).toEqual({ skipped: 'not_monday' });
+    expect(off.store.adsMonthCampaigns).not.toHaveBeenCalled();
+  });
+
+  it('tells the owner when a platform refuses a campaign, and says nothing for a failure that will be retried', async () => {
+    const metaFlight = { platform: 'meta', product: 'caremetric-intel', name: 'CareMetric Intel retargeting 2026-11', dailyBudgetCents: 500, audienceId: '1234567', flightDays: 10 };
+    const h = setup();
+    h.meta.createCampaign.mockRejectedValueOnce(Object.assign(new Error('no'), { code: 'meta_permission' }));
+    await expect(h.executors['social.campaign_create']({ id: 'a1', kind: 'social.campaign_create', input: metaFlight })).rejects.toMatchObject({ code: 'meta_permission' });
+    const told = h.notifier.send.mock.calls.at(-1)[0];
+    expect(told).toMatchObject({ severity: 'warning', subject: `New Meta campaign not created: ${metaFlight.name}`, dedupeKey: 'ads:launch:a1' });
+    expect(told.body).toContain('Reconnect Meta (Settings → Social media)');
+    const quiet = setup();
+    quiet.meta.createCampaign.mockRejectedValueOnce(Object.assign(new Error('later'), { code: 'meta_unavailable', transient: true }));
+    await expect(quiet.executors['social.campaign_create']({ id: 'a2', kind: 'social.campaign_create', input: metaFlight })).rejects.toMatchObject({ code: 'meta_unavailable' });
+    expect(quiet.notifier.send).not.toHaveBeenCalled();
   });
 });

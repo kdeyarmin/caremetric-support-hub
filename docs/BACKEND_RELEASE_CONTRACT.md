@@ -62,6 +62,18 @@ signs one-time upload addresses (`upload-sign`), so deploy that function first. 
 lesson media straight to the `hub-learning` bucket and reads it back to check it; until then it streams lesson media through
 `app-media` as before ([central learning](CENTRAL_LEARNING.md)).
 
+`20261117180100_work_recovery_contract.sql` declares `platform.agents.work-recovery.v1` once the growth diagnostics, creative review, ads,
+address check, people finder, app growth, watchdog and hand-over features are declared, `private.creative_render_requeue`,
+`private.ads_platform_refusals`, the three-argument `private.creative_data_counties` and `private.agent_watchdog_facts` are executable by
+`hub_app_server` alone and require its connection, `private.creative_brief_pictured`, `private.growth_internal_address` and
+`private.growth_event_intent` are closed to every role, and each change of the 2026-11-17 review is in place: a county counts as pictured
+only while its snapshot still pictures it, only images blocked by the first image review (while the review is on) are rendered again,
+the bounce guard counts hard bounces against at least 20 emails, why a check got no answer may be one of the STARTTLS reasons
+(`tls_required`, `tls_failed`), the people finder's mail-server confirmation is recorded, an
+opportunity's intent follows each activity event, a trial from the owner's or a CareMetric address is internal, and the watchdog reads
+what the team lost. Each test fails closed. The Hub server renders the blocked images again and reads the platforms' refusals only when
+the feature is declared ([AI workforce review, November 17](AI_WORKFORCE_REVIEW_2026-11-17.md)).
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a

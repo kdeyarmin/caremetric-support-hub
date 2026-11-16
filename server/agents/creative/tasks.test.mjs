@@ -162,6 +162,21 @@ describe('the work', () => {
     expect(store.creativeMarkLive).not.toHaveBeenCalled();
   }, 60_000);
 
+  it('queues images blocked only by checks this release corrects once, with the review on or off, before rendering', async () => {
+    for (const visionReview of [true, false]) {
+      const h = harness();
+      h.store.creativeRenderRequeue = vi.fn(async () => 3);
+      const handlers = creativeHandlers({ store: h.store, notifier: h.notifier, model: null, settings: { dailyRenderCap: 40, videoProvider: 'internal', visionReview },
+        publicOrigin: 'https://help.caremetric.ai', log: () => {} });
+      const done = await handlers['creative.render'](h.task('creative.render'), { now });
+      expect(h.store.creativeRenderRequeue).toHaveBeenCalledWith(visionReview);
+      expect(done.result.requeued).toBe(3);
+    }
+    // A database without the operation renders as before.
+    const plain = await harness().handlers['creative.render'](task('creative.render'), { now });
+    expect(plain.result.requeued).toBeUndefined();
+  });
+
   it('has a model look at each finished image while the review is on: a visible defect blocks it, a weak one warns, an unreviewed one warns', async () => {
     const asset = { id: assetId, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static', layout: 'checklist', width: 1080, height: 1080,
       variantLabel: 'A', hookType: 'proof', ...copyOf('proof'), overlay: copyOf('proof').overlay, offerCode: null, brandKit: fullKit, landingUrl: 'https://www.caremetricintel.com/?utm_content=x' };
@@ -367,4 +382,26 @@ describe('county snapshots', () => {
     expect(rows.some(row => row.compliance.verdict !== 'block')).toBe(true);
     void handlers;
   });
+
+  // Review 2026-11-17: every county snapshot was blocked at render, because the render read the code-printed figure as a number the fact
+  // sheet does not state. It now checks a snapshot as the draft was checked, against its brief's data.
+  it('renders a snapshot\'s stat image against its brief\'s data, and still blocks a figure that differs from it', async () => {
+    const facts = { stat: '72%', statLabel: 'of the Medicare patients of Erie County, PA hospices went to the 3 largest', statSource: 'CMS post-acute utilization, 2024',
+      dataYear: '2024', place: 'Erie County, PA', setting: 'hospice', landing: 'intel-market-review' };
+    const asset = { id: assetId, briefId, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static', layout: 'stat', width: 1080, height: 1080,
+      variantLabel: 'A', hookType: 'curiosity', headline: 'How crowded is your county?', primaryText: 'See where your hospice stands in its county, from public Medicare data.',
+      description: 'Free market report', cta: 'Get the report', altText: `County snapshot: ${facts.stat} ${facts.statLabel}. Source: ${facts.statSource}.`,
+      overlay: { kicker: '', stat: facts.stat, statLabel: facts.statLabel, statSource: facts.statSource, quote: '', quoteSource: '', offerLine: '', checklist: [], screenshotId: '', beats: [] },
+      offerCode: null, brandKit: fullKit, landingUrl: 'https://www.caremetricintel.com/market-review?utm_content=x' };
+    const changed = { ...asset, id: '33333333-3333-4333-8333-333333333333', overlay: { ...asset.overlay, stat: '73%' } };
+    const { store, handlers, task: make } = harness({ claimed: [asset, changed] });
+    store.creativeBriefContext.mockResolvedValue({ brief: { ...brief, source: 'data.county', facts }, brandKit: fullKit, parent: null, learnings: [], recentHeadlines: [] });
+    const done = await handlers['creative.render'](make('creative.render'), { now });
+    expect(store.creativeBriefContext).toHaveBeenCalledWith(briefId);
+    expect(done.result).toMatchObject({ rendered: 1, proposed: 1, blocked: 1 });
+    expect(store.creativeRenderFinish).toHaveBeenCalledWith(asset.id, 'ready', expect.any(Buffer), 'image/png', expect.anything(), expect.anything());
+    const blocked = store.creativeRenderFinish.mock.calls.find(([id]) => id === changed.id);
+    expect(blocked[1]).toBe('blocked');
+    expect(blocked[4].reasons.map(item => item.rule)).toContain('data_figure');
+  }, 60_000);
 });

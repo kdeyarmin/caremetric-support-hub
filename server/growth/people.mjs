@@ -26,7 +26,7 @@
  */
 import { live } from '../live.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
-import { addressFits, addressGuesses, learnPattern, nameParts } from './mailbox.mjs';
+import { addressFits, addressGuesses, learnPattern, nameParts, unansweredReason } from './mailbox.mjs';
 import { titleRank } from './team.mjs';
 
 export { titleRank } from './team.mjs';
@@ -127,6 +127,8 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
     const counts = { searched: 0, people: 0, found: 0, published: 0, verified: 0, permitted: 0, noCredit: 0, unreachable: 0 };
     // What the mail servers answered, so the run shows why an agency yielded no address (2026-11-16: 17 checks gave 3 addresses).
     const answers = {};
+    // Why the mail server gave no answer, by the checker's reason (mailbox.mjs `unansweredReason`), named as the address check names it.
+    const why = {};
     for (const org of candidates) {
       signal?.throwIfAborted();
       if (clock() - started > startBudgetMs) break;
@@ -167,6 +169,8 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
           try { answer = await mailbox.check(org.domain, list, { signal }); } catch (error) { if (signal?.aborted) throw error; answer = { result: 'unknown' }; }
           const result = ['verified', 'rejected', 'catch_all', 'unreachable'].includes(answer?.result) ? answer.result : 'unknown';
           answers[result] = (answers[result] ?? 0) + 1;
+          const reason = unansweredReason(answer);
+          if (reason) why[reason] = (why[reason] ?? 0) + 1;
           if (result === 'verified') { found = { email: answer.email, how: 'mail_server', sourceUrl: null }; break; }
           if (result === 'unreachable') counts.unreachable++;
           if (result !== 'rejected') break;
@@ -187,7 +191,7 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
         }
       } catch (error) { if (error?.code !== '22023') throw error; }
     }
-    return { result: { ...counts, ...(Object.keys(answers).length ? { answers } : {}) } };
+    return { result: { ...counts, ...(Object.keys(answers).length ? { answers } : {}), ...(Object.keys(why).length ? { why } : {}) } };
   }
   return { 'growth.people': people };
 }
