@@ -116,6 +116,13 @@ const yearLike = /^(?:19|20)\d{2}$/;
 // work ("5 staff roles", "5 staff training tips", but "40 staff complete annual trainings").
 const measures = new Set(['minute', 'hour', 'day', 'week', 'month', 'year', 'time', 'seat', 'bed']);
 const restating = /^(?:members?|workers?|individuals?|professionals?|personnel|hires?|positions?|openings?|accounts?|codes?|markets?)$/;
+// A word in -ing among them may be a verb instead ("40 staff meeting families each week" are 40 staff), so after one of those only a plain
+// thing shows the count is the thing's ("5 staff training tips", "staff meeting notes").
+const plainThings = new Set(['tips', 'sessions', 'programs', 'plans', 'materials', 'records', 'requirements', 'topics', 'ideas', 'guides',
+  'resources', 'templates', 'checklists', 'steps', 'logs', 'schedules', 'budgets', 'costs', 'goals', 'mistakes', 'questions', 'practices',
+  'strategies', 'policies', 'tools', 'options', 'notes', 'agendas', 'rooms', 'calendars', 'forms', 'reports', 'lessons', 'courses', 'modules', 'videos']);
+// A plain thing is a plural noun however it ends ("ideas" and "agendas" end like "Texas").
+const pluralNoun = word => plural(word) || plainThings.has(word);
 const unitOfWord = word => unitOf(word) ?? (word.includes('-') ? unitOf(word.split('-')[0]) : null);
 const eitherNumber = new Set(['staff', 'personnel', 'people']);
 // Nouns that describe staff work and are never a verb after them, so the next word after them still decides: "5 staff training tips" are
@@ -124,17 +131,19 @@ const staffWork = new Set(['training', 'care', 'onboarding', 'orientation', 'sch
   'development', 'management', 'safety', 'wellness', 'engagement', 'compliance', 'turnover', 'communication', 'education', 'performance',
   'payroll', 'coverage', 'competency', 'certification', 'documentation', 'satisfaction', 'appreciation', 'recognition', 'meeting', 'huddle',
   'handbook', 'policy', 'burnout', 'morale', 'productivity', 'shortage']);
-/** The words after "staff", "personnel" or "people" that decide what it describes: the nouns of staff work, then the next word. */
-const afterStaff = rest => {
-  let skipped = 0;
-  while (skipped < 2 && staffWork.has(rest[skipped])) skipped += 1;
-  return rest.slice(0, skipped + 1);
+/** True when "staff", "personnel" or "people" describes the plural noun after it (through the nouns of staff work), not counts itself. */
+const staffDescribes = rest => {
+  let skipped = 0, verbLike = false;
+  while (skipped < 2 && staffWork.has(rest[skipped])) { verbLike ||= rest[skipped].endsWith('ing'); skipped += 1; }
+  const head = rest[skipped];
+  if (!head || head === ',' || phraseEnds.has(head) || unitOfWord(head) || restating.test(head) || !pluralNoun(head)) return false;
+  return !verbLike || plainThings.has(head);
 };
 /** True when the words after a counted unit lead to a plural noun it describes, before the phrase ends or another unit. */
 const describesNoun = rest => {
   for (const word of rest.slice(0, 3)) {
     if (word === ',' || phraseEnds.has(word) || unitOfWord(word) || restating.test(word)) return false;
-    if (plural(word)) return true;
+    if (pluralNoun(word)) return true;
   }
   return false;
 };
@@ -184,7 +193,7 @@ export function numbersIn(value) {
         // number keeps it ("a 3-county region").
         const count = numberWords[match[1].toLowerCase()] ?? numberOf(match[1]);
         const describesNext = !dash && !measures.has(unit) && count !== 1 && !plural(word)
-          && describesNoun(eitherNumber.has(word) ? afterStaff(tokens.slice(index + 1)) : tokens.slice(index + 1));
+          && (eitherNumber.has(word) ? staffDescribes(tokens.slice(index + 1)) : describesNoun(tokens.slice(index + 1)));
         if (!listed && !describesNext) found.add(`${count}:${unit}`);
         break;
       }
