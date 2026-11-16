@@ -56,6 +56,9 @@ async function readPart(body, limit, length) {
  * Spools for one kind of upload. `budget` caps the bytes all live spools may grow to (their declared totals), so slow or
  * abandoned uploads cannot fill the disk.
  */
+const busyMessage = 'This upload is still receiving a part. Retry shortly.';
+const busyAnswer = () => Object.assign(new HttpError(503, busyMessage, 'upload_busy'), { publicMessage: busyMessage });
+
 export function partUploads({ budget, idleMs = 10 * 60 * 1000, dir = tmpdir() }) {
   const live = new Map();
   const reserved = () => [...live.values()].reduce((sum, spool) => sum + spool.total, 0);
@@ -79,7 +82,9 @@ export function partUploads({ budget, idleMs = 10 * 60 * 1000, dir = tmpdir() })
      */
     async receive(key, part, body, complete) {
       let spool = live.get(key);
-      if (spool?.busy) throw new HttpError(503, 'This upload is still receiving a part. Retry shortly.');
+      // upload_busy tells the browser (src/lib/uploadParts.ts) to keep waiting, not to count a failure: the other request may be
+      // checking and storing the whole file, which for a publication sent straight to Storage can take minutes.
+      if (spool?.busy) throw busyAnswer();
       if (spool && spool.total !== part.total) { await drop(key, spool); spool = undefined; }
       if (!spool) {
         if (part.offset !== 0) return { received: 0 };

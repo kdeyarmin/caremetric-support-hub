@@ -49,6 +49,13 @@ integer alone does not establish compatibility. Both entry points require these
 foundations are declared. It is optional: the Hub server reads it at boot and, until it is present, refuses those audiences and
 hides Breathe's and Intel's change capabilities from the browser ([central access commands](CENTRAL_ADMIN_COMMANDS.md)).
 
+`20261117130100_publication_import_window_contract.sql` declares `knowledge.publications.direct-storage.v1` only after
+`20261117130000_publication_import_window.sql` has added `private.keep_publication_import_open` and the four-hour import window,
+and `knowledge.publications.v1` is declared. It is optional: the Hub server reads it at boot and, while it is present, keeps an import
+open as its parts arrive and sends a checked file straight to Storage through a one-time address the publication-media function signs,
+then reads it back to hash it before recording it. Until then it streams files through that function as before
+([publication imports](PUBLICATION_IMPORTS.md)). Deploy the publication-media function first.
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a

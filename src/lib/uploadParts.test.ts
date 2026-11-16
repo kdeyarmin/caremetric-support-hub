@@ -80,6 +80,35 @@ describe("sending a file in parts", () => {
     expect(forgetful.state.calls).toHaveLength(8);
   });
 
+  it("waits while the Hub is still checking and storing the whole file, without counting it as a failure", async () => {
+    // Storing a large publication straight to Storage can take minutes: the last part times out, and the Hub answers its repeats
+    // with upload_busy until the file is stored, then with the stage.
+    const size = UPLOAD_PART_BYTES + 1, wait = vi.fn<(ms: number) => Promise<void>>(async () => {});
+    const busy = () => Response.json({ error: { code: "upload_busy", message: "This upload is still receiving a part. Retry shortly." } }, { status: 503 });
+    let repeats = 0;
+    const h = hub(size, call => {
+      if (call.offset !== UPLOAD_PART_BYTES) return undefined;
+      if (++repeats === 1) return new TypeError("The operation timed out.");
+      return repeats <= 12 ? busy() : Response.json({ stored: true });
+    });
+    const response = await sendInParts(h.fetcher, "/api/upload", file(size), {}, { wait, now: () => 0 });
+    expect(await response.json()).toEqual({ stored: true });
+    expect(wait.mock.calls.map(([ms]) => ms)).toEqual([1000, ...Array(11).fill(15000)]);
+  });
+
+  it("returns the busy answer after 22 minutes of it, and still counts other server errors as failures", async () => {
+    const busy = () => Response.json({ error: { code: "upload_busy", message: "Still receiving." } }, { status: 503 });
+    let clock = 0;
+    const stuck = hub(20, () => busy());
+    const response = await sendInParts(stuck.fetcher, "/api/upload", file(20), {}, { wait: async ms => { clock += ms; }, now: () => clock });
+    expect(response.status).toBe(503); expect((await response.json()).error.code).toBe("upload_busy");
+    expect(clock).toBeGreaterThanOrEqual(22 * 60 * 1000); expect(clock).toBeLessThan(23 * 60 * 1000);
+    // A 503 without the code, such as a failed store, keeps the ordinary five retries.
+    const failing = hub(20, () => Response.json({ error: "Publication storage verification failed." }, { status: 503 }));
+    expect((await sendInParts(failing.fetcher, "/api/upload", file(20), {}, { wait: noWait })).status).toBe(503);
+    expect(failing.state.calls).toHaveLength(6);
+  });
+
   it("stops when the person cancels", async () => {
     const controller = new AbortController();
     const h = hub(UPLOAD_PART_BYTES + 1, call => { if (call.offset === 0) controller.abort(); return undefined; });
