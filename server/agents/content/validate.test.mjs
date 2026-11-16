@@ -255,6 +255,16 @@ describe('each check that rejects a draft', () => {
     for (const [text, pair] of [['500 homes use CareBase workflows.', '500:facility'], ['500 customers receive updates', '500:customer'],
       ['40 staff complete annual trainings', '40:staff'], ['1 resident needs help', '1:resident']]) expect(numbersIn(text), text).toEqual([pair]);
     expect(textProblems('500 homes use CareBase workflows.', { numbers: allowedNumbers([]) })).toEqual(['unlisted_number']);
+    // After "staff", "personnel" or "people", the nouns of staff work are stepped over, and the next word decides; a verb keeps the count.
+    expect(numbersIn('5 staff training tips; 5 key staff training tips; 10 staff onboarding steps; 3 people management tips; 40 staff training sessions')).toEqual([]);
+    for (const [text, pair] of [['40 staff working weekends', '40:staff'], ['40 staff need training', '40:staff'], ['12 staff training hours', '12:staff'],
+      ['40 staff training', '40:staff']]) expect(numbersIn(text), text).toEqual([pair]);
+    // A word in -ing may be a verb: only a plain thing after it ("tips", "notes") shows the count is the thing's.
+    for (const text of ['CareBase supports 40 staff meeting families each week.', '40 staff training residents', '40 staff hiring nurses'])
+      expect(numbersIn(text), text).toEqual(['40:staff']);
+    expect(textProblems('CareBase supports 40 staff meeting families each week.', { numbers: allowedNumbers([]) })).toEqual(['unlisted_number']);
+    expect(numbersIn('5 staff meeting notes; 5 staff retention ideas; 10 home safety ideas')).toEqual([]);
+    expect(numbersIn('3,200 Texas counties; 500 Texas homes')).toEqual(['3200:county', '500:facility']);
     // A count no source states is refused; one the catalog states may be written with a describing word.
     expect(reasons(withSentence('CareBase is used in 500 Pennsylvania homes.'))).toEqual(['unlisted_number']);
     expect(reasons(withSentence('CareBase is used in 500 rural and urban homes.'))).toEqual(['unlisted_number']);
