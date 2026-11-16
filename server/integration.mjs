@@ -215,6 +215,8 @@ try {
   await assert.rejects(appCaps.consume(intelChangeCapability,'carebase.command'),'an Intel change capability cannot authorize a CareBase change');
   const intelActor=await appCaps.consume(intelChangeCapability,'intel.command');
   assert.deepEqual(intelActor.operation,intelOperation); assert.equal(intelActor.session_id,session);
+  // The Advisors check replays an earlier migration whose audience constraint predates these two; leave no rows that it would refuse.
+  await admin.query("delete from private.app_delegations where audience in ('breathe.command','intel.command')");
   const commandAuthority=()=>withSession(pool,editorToken,async db=>(await db.query('select hub.authorize_app_command() as actor')).rows[0].actor);
   const recordedTimes=(await admin.query('select created_at,expires_at from private.sms_sessions where id=$1',[session])).rows[0];
   await admin.query("update private.sms_sessions set created_at=now()-interval '8 hours 1 second',expires_at=now()+interval '1 hour' where id=$1",[session]);
