@@ -276,6 +276,16 @@ describe('a first email written from the brief', () => {
     const failed = await reviewOf([{ wouldReply: 2 }], { ...draft, citations: ['nowhere'] });
     expect(failed.review).toMatchObject({ outcome: 'failed_checks', rewrite: null });
     expect(failed.review.problem).toMatch(/^[a-z_]+$/);
+    // A rewrite refused for its words comes back without an answer, but it is a failed check, not the model's silence.
+    const worded = await reviewOf([{ wouldReply: 2 }], { ...draft, body: `${draft.body} Ask your financial auditor.` });
+    expect(worded.review).toMatchObject({ outcome: 'failed_checks', problem: 'vocabulary', rewrite: null });
+    expect(worded.subject).toBe(draft.subject);
+    let read = 0;
+    const silent = vi.fn(async (_task, request) => (request.promptVersion === 'critic.1' ? reader([{ wouldReply: 2 }][read++])
+      : request.promptVersion.endsWith('-c') ? { outcome: 'failed', output: null } : { outcome: 'completed', output: draft }));
+    const unanswered = await draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run: silent }, brief, critic: true });
+    expect(unanswered.review).toMatchObject({ outcome: 'no_answer', rewrite: null });
+    expect(unanswered.review).not.toHaveProperty('problem');
   });
 });
 

@@ -343,7 +343,8 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
           const weakest=String(first.weakestSentence??'').slice(0,400);
           const again=await write(JSON.stringify({...input,previousDraft:{subject:kept.subject,body:kept.body,citations:kept.citations},
             fix:`A reader who runs an agency like this one scored this email ${first.wouldReply} of 5 for whether they would reply.${weakest?` The sentence that most made them stop reading: "${weakest}".`:''} Rewrite it so every sentence is specific to this agency and earns its place, with one plain next step.`}),`${promptVersion}-c`,'Rewrote',top);
-          if(!again.answer) outcome='no_answer';
+          // A rewrite refused for its words (vocabulary) comes back with no answer but a problem: only no_answer is the model's silence.
+          if(again.problem==='no_answer'||(!again.answer&&!again.problem)) outcome='no_answer';
           else if(again.problem) {outcome='failed_checks';problem=again.problem;}
           else {
             second=await review(again.answer);
