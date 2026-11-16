@@ -80,6 +80,9 @@ function sanitize(value) {
   return value;
 }
 
+/** Intel's primary audience, in the fact sheet's order (server/agents/creative/copy.mjs `segments`; owner decision 2026-11-16). */
+const intelPrimarySettings = ['Home health agencies', 'Hospice agencies', 'Hospitals', 'Nursing homes', 'Personal care homes'];
+
 export function extractIntel(home, features) {
   const areas = [...features.matchAll(/<section id="([a-z-]+)" class="cm-features-area"[\s\S]*?<\/section>/g)].map(([section, key]) => ({
     key,
@@ -101,8 +104,12 @@ export function extractIntel(home, features) {
   // Each care setting the home page names: the cards of its care-settings grid, which ends with the grid's last card. The note under the
   // grid (every plan welcomes other specialties; coverage varies by setting) is one of the site's caveats.
   const grid = home.slice(home.indexOf('cm-care-settings-grid'));
-  const settings = cardsOf(grid.slice(0, grid.indexOf('</article></div>')));
+  const settingCards = cardsOf(grid.slice(0, grid.indexOf('</article></div>')));
   const settingsNote = clean(first(/<p class="cm-plan-note">([\s\S]*?)<\/p>/, sectionOf(home, 'care-settings')));
+  // Intel's primary audience (owner decision 2026-11-16, docs/GTM_FACTS.md "For" and "Secondary markets"), by name and in the fact
+  // sheet's order wherever the site lists them; every other setting is a secondary market. The tests hold the five to the fact sheet.
+  const settings = intelPrimarySettings.map(name => settingCards.find(card => card.name.toLowerCase() === name.toLowerCase())).filter(Boolean);
+  const otherSettings = settingCards.filter(card => !settings.includes(card));
   // The manager view: its own section's numbered outcomes ("Focus the work before the week starts", ...).
   const managers = cardsOf(first(/<ul class="cm-outcome-list">([\s\S]*?)<\/ul>/, sectionOf(home, 'for-managers')) ?? '');
   const tabs = Object.fromEntries([...home.matchAll(/id="(_R_[^"]+-tab-\d+)"[^>]*>(?:<svg[\s\S]*?<\/svg>)?\s*<span>([\s\S]*?)<\/span>/g)].map(([, tab, label]) => [tab, clean(label)]));
@@ -137,7 +144,7 @@ export function extractIntel(home, features) {
     legend: clean(first(/<p class="cm-features-legend">([\s\S]*?)<\/p>/, features)),
     publishedCount: count ? Number(count[1]) : null,
     pillars, areas, data,
-    settings, managers,
+    settings, otherSettings, managers,
     // Purchasing and the end of the trial are the fact sheet's (prices come from Intel's catalog); the rest are product answers.
     faq: faq.filter(item => !/^(How do we purchase|What happens when the trial ends)/.test(item.question)),
     caveats,
@@ -237,9 +244,9 @@ export const products = {
     extract: ({ home, features }) => extractIntel(home, features),
     check: body => {
       const total = body.areas.reduce((sum, area) => sum + area.features.length, 0);
-      // A pillar read as a care setting or a manager outcome: the grid or the manager section was misread.
-      const strays = [...body.settings, ...body.managers].filter(card => body.pillars.some(pillar => pillar.title === card.name)).length;
-      if (body.areas.length < 5 || total < 50 || body.data.length < 5 || body.pillars.length < 5 || body.settings.length < 5 || !body.managers.length || strays) {
+      // All five primary settings, the manager outcomes, and no pillar read as a care setting or a manager outcome.
+      const strays = [...body.settings, ...body.otherSettings, ...body.managers].filter(card => body.pillars.some(pillar => pillar.title === card.name)).length;
+      if (body.areas.length < 5 || total < 50 || body.data.length < 5 || body.pillars.length < 5 || body.settings.length !== 5 || body.managers.length < 3 || strays) {
         throw new Error(`Intel's pages changed shape (areas ${body.areas.length}, features ${total}, data ${body.data.length}, pillars ${body.pillars.length}, settings ${body.settings.length}, managers ${body.managers.length}${strays ? `, ${strays} pillars read as settings or managers` : ''}); update the extractor.`);
       }
       if (body.publishedCount && body.publishedCount !== total) throw new Error(`Intel's features page says ${body.publishedCount} features but ${total} were read.`);

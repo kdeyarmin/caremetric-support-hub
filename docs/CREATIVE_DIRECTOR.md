@@ -60,8 +60,8 @@ model calls carry its product's published catalog as a second cached block after
   pre-visit card and spoken debrief never lead a brief); the data behind it (providers, facilities, Medicare use and share, demographics,
   payers and Medicare Advantage, community need, competitors, and the organization's own results), each with what is included, its
   source (NPPES, CMS files and Care Compare, the Census Bureau's American Community Survey, state licensing files and other federal
-  sources), the decision it helps make and its limit; each care setting the site describes (briefs aim only at the settings the fact
-  sheet names); the manager view; the questions and answers; and the site's own caveats.
+  sources), the decision it helps make and its limit; each care setting the site describes, with the secondary markets
+  labeled as such (briefs aim only at the primary five); the manager view; the questions and answers; and the site's own caveats.
 - **CareMetric CareBase**, from https://cmcarebase.com/features, its home page and /faq: every capability (112 in 8 areas: resident care and
   daily operations, staff training, medication management and eMAR, survey readiness and safety, workforce and scheduling, resident
   billing and payments, AI assistance with human review, and access and onboarding), each area with the plan or add-on it needs and its

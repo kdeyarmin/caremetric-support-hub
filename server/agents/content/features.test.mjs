@@ -26,11 +26,13 @@ describe('CareMetric Intel\'s published feature catalog', () => {
   });
 
   it('describes every care setting the fact sheet names, in the site\'s words', () => {
-    // The site describes more settings than the fact sheet names (owner decision 2026-11-16: the catalog follows the site, and who
-    // Intel is for stays as the fact sheet says until its positioning is settled). Every setting the ads aim at has the site's paragraph.
+    // The primary audience is exactly the fact sheet's five (owner decision 2026-11-16); the other settings the site describes are
+    // secondary markets, kept apart so a prompt never treats them as targets.
     const settings = intel.settings.map(setting => setting.name.toLowerCase());
-    expect(settings).toEqual(expect.arrayContaining(segments['caremetric-intel']));
-    for (const setting of segments['caremetric-intel']) expect(products.intel.forWhom.toLowerCase()).toContain(setting);
+    expect(settings).toEqual(segments['caremetric-intel']);
+    for (const setting of settings) expect(products.intel.forWhom.toLowerCase()).toContain(setting);
+    expect(intel.otherSettings.map(setting => setting.name)).toEqual(expect.arrayContaining(['Physician practices & clinics', 'Behavioral health', 'Rehabilitation & therapy', 'Diagnostics, dialysis & DME']));
+    expect(featuresText('caremetric-intel')).toMatch(/Also served \(secondary markets: [^)]*\):\n- Physician practices & clinics:/);
     expect(careSettingText('caremetric-intel', 'hospitals')).toContain('post-discharge Medicare spending');
     expect(careSettingText('caremetric-intel', 'dental offices')).toBeNull();
     expect(careSettingText('carebase', 'hospitals')).toBeNull();

@@ -910,12 +910,30 @@
   ],
   "settings": [
     {
-      "name": "Physician practices & clinics",
-      "text": "Find referring clinicians and practices by specialty and location. Build an outreach list, assign relationship owners, prepare visits, and track the referrals your team records."
+      "name": "Home health agencies",
+      "text": "See which physicians certify the most Medicare home health patients, which hospitals your county’s residents use and how much post-discharge spending goes to home health. Rank competing agencies by Medicare share, and track the referrals and admissions each source sends."
+    },
+    {
+      "name": "Hospice agencies",
+      "text": "Find physicians by hospice care-plan oversight, hospitals by where residents are admitted, and counties with high need and few hospices. See each hospice’s Hospice Care Index and CMS spending-variation index, and keep every relationship and recorded referral together."
     },
     {
       "name": "Hospitals",
       "text": "Map where your county’s residents are hospitalized and where their post-discharge Medicare spending goes. Research the physician practices, post-acute partners and community organizations around you, see which hospitals are in CMS’s TEAM model, and plan physician outreach by territory."
+    },
+    {
+      "name": "Nursing homes",
+      "text": "Analyze the hospitals that serve your area, skilled nursing use and supply, and every competing nursing home’s star ratings, staffing, inspections and ownership. Focus outreach on the hospitals and physicians that matter and keep relationship history and recorded referrals together."
+    },
+    {
+      "name": "Personal care homes",
+      "text": "Find the counties and ZIP areas with the most residents 75 and over, older adults living alone and the fewest licensed beds, using the Site finder and state licensing files where loaded. Research nearby hospitals, physicians and senior-care organizations and organize community outreach."
+    }
+  ],
+  "otherSettings": [
+    {
+      "name": "Physician practices & clinics",
+      "text": "Find referring clinicians and practices by specialty and location. Build an outreach list, assign relationship owners, prepare visits, and track the referrals your team records."
     },
     {
       "name": "Behavioral health",
@@ -928,22 +946,6 @@
     {
       "name": "Diagnostics, dialysis & DME",
       "text": "Research clinicians and organizations relevant to your specialty. Use available provider activity and directory information to plan outreach and follow the relationships that generate referrals."
-    },
-    {
-      "name": "Nursing homes",
-      "text": "Analyze the hospitals that serve your area, skilled nursing use and supply, and every competing nursing home’s star ratings, staffing, inspections and ownership. Focus outreach on the hospitals and physicians that matter and keep relationship history and recorded referrals together."
-    },
-    {
-      "name": "Personal care homes",
-      "text": "Find the counties and ZIP areas with the most residents 75 and over, older adults living alone and the fewest licensed beds, using the Site finder and state licensing files where loaded. Research nearby hospitals, physicians and senior-care organizations and organize community outreach."
-    },
-    {
-      "name": "Home health agencies",
-      "text": "See which physicians certify the most Medicare home health patients, which hospitals your county’s residents use and how much post-discharge spending goes to home health. Rank competing agencies by Medicare share, and track the referrals and admissions each source sends."
-    },
-    {
-      "name": "Hospice agencies",
-      "text": "Find physicians by hospice care-plan oversight, hospitals by where residents are admitted, and counties with high need and few hospices. See each hospice’s Hospice Care Index and CMS spending-variation index, and keep every relationship and recorded referral together."
     },
     {
       "name": "Other healthcare organizations",
