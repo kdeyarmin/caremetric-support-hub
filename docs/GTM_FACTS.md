@@ -613,27 +613,27 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
 - [x] CareBase's avoidance of "evidence" applies to articles and everything else the AI team writes, as well as the landing page.
 - [x] 2026-11-12: Intel's bigger picture and "How to present it" (sending emails to referral sources is never the point), the plain-language
   rules, and outreach written and signed as the founder.
-- [ ] 2026-11-14: Intel's lead order, market context and boundaries from the competitor research ("Intel: what to lead with, why now,
+- [x] 2026-11-14: Intel's lead order, market context and boundaries from the competitor research ("Intel: what to lead with, why now,
   and what it is not"), the `integration` and `security` written answers, and the three new outreach angles. Requested by the owner;
-  tick this box when you approve the pull request that adds them.
+  the owner confirmed them on 2026-11-16.
 - [x] 2026-11-14: Intel is a marketing workspace, not a compliance product; expense tracking (spend in view of policy and the Stark
   limit) is a small part of it and never leads.
 - [x] 2026-11-12: the founder's story wording. The owner confirmed: the founder built Intel, and currently runs a home health and
   hospice agency and a consulting company.
-- [ ] 2026-11-16: the CareBase feature and function reference, rewritten from the redesigned cmcarebase.com/features (112 capabilities
+- [x] 2026-11-16: the CareBase feature and function reference, rewritten from the redesigned cmcarebase.com/features (112 capabilities
   across 8 areas, each with the plan or add-on the page names) and its "What the team can do" descriptions; and CareBase's "Everything
   it does, by area" summary in the same eight areas, which the AI team reads (`capabilities` in `facts.mjs`), with families' portal
-  payments added to who uses it. Tick this box when you approve the pull request that adds them.
-- [ ] 2026-11-16: the Intel feature and function reference and Intel's "Everything it does, by area", refreshed from caremetricintel.com
+  payments added to who uses it. The owner confirmed them on 2026-11-16.
+- [x] 2026-11-16: the Intel feature and function reference and Intel's "Everything it does, by area", refreshed from caremetricintel.com
   (125 features across 12 areas, including the public data library, 8 data families and the site's 10 care settings). The site’s other
   five care settings are listed as secondary markets; the pre-visit card and spoken debrief pillar never leads; the count of Intel's
-  datasets and the AI apps and CRM it connects to are written generically. Tick this box when you approve the pull request that adds them.
-- [ ] 2026-11-16: Intel's trial covers 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of the customer's choice
+  datasets and the AI apps and CRM it connects to are written generically. The owner confirmed them on 2026-11-16.
+- [x] 2026-11-16: Intel's trial covers 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of the customer's choice
   and 1 county, as Intel's billing catalog states it (it said 1 branch, home health and hospice); and the plans' descriptions follow
   the catalog too: locations instead of branches, healthcare service lines of the customer's choice instead of home health and hospice,
   and Growth "For growing healthcare teams" instead of "The usual agency plan"; the Founders Sale's excluded add-ons say "Intel extra
-  seats/locations/states" to match. Prices and the offer's scope are unchanged. Tick this box when you approve the pull request that
-  changes them.
+  seats/locations/states" to match. Prices and the offer's scope are unchanged. The owner confirmed this wording on 2026-11-16
+  (kdeyarmin/caremetric-support-hub#222).
 
 ## Feature and function reference
 
