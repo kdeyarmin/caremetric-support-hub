@@ -76,6 +76,8 @@ export const settingsCatalog = Object.freeze([
     label: 'Tasks at once', help: 'How many agent tasks may run side by side (1 to 10). A slow task no longer holds up the rest of the team.' },
   { key: 'agents.watchdog_idle_days', group: 'agents', kind: 'number', input: 'number', default: 3, min: 1, max: 30, unit: 'days', env: null, valid: wholeNumber(1, 30),
     label: 'Days before an idle agent is flagged', help: 'The morning brief names an active agent that has not run for this many days, with the likely cause (1 to 30).' },
+  { key: 'agents.strategist', group: 'agents', kind: 'flag', input: 'toggle', default: false, env: null,
+    label: 'Name the week\'s binding constraint', help: 'Each Monday at 7:35 the Chief of Staff reads last week\'s Intel funnel (agencies found, addresses, first emails, opens, replies, trials) and names the one stage holding the rest back, with one move for this week. The Monday scorecard opens with it. One call on the top model a week, about 10 to 20 cents; if it cannot be made, the rules pick the stage. Off: no note.' },
   { key: 'agents.owner_email', group: 'agents', kind: 'text', input: 'email', default: null, env: 'HUB_OWNER_EMAIL', fromEnv: fromText, valid: isEmail,
     label: 'Your email for alerts and the morning brief', help: 'Where the AI team emails alerts, the morning brief and the Monday scorecard. Urgent items are also texted to your verified number.' },
   { key: 'support.chat', group: 'support', kind: 'flag', input: 'toggle', default: false, env: 'HUB_CHAT_ENABLED', fromEnv: fromFlag,

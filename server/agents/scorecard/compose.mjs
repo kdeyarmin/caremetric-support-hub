@@ -12,6 +12,7 @@
 import { monthlyTotals } from '../accounts/money.mjs';
 import { plural } from '../tasks/shared.mjs';
 import { shownPage } from '../seo/insights.mjs';
+import { constraintLabels, watchLabels } from '../strategist/rules.mjs';
 
 export const composeVersion = 'scorecard.1';
 export const products = Object.freeze([
@@ -196,7 +197,7 @@ function campaignWords(list) {
   return `${total} (${kept.slice(0, 5).map(item => `${item.campaign} ${item.sessions}`).join(', ')}${kept.length > 5 ? ', and others' : ''})`;
 }
 
-export function composeScorecard({ week, facts, billing = null, search = null, ads = null, visitors = null, verifiedLifecycle = false, needs = {}, publicOrigin = null, notes = [] }) {
+export function composeScorecard({ week, facts, billing = null, search = null, ads = null, visitors = null, verifiedLifecycle = false, needs = {}, publicOrigin = null, notes = [], strategy = null }) {
   const byProduct = list => Object.fromEntries((list ?? []).map(entry => [entry.product, entry]));
   const current = byProduct(facts?.current?.products);
   const previous = byProduct(facts?.previous?.products);
@@ -281,7 +282,17 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
     ...notes,
   ].filter(Boolean);
 
+  // The weekly strategist's note for this week (strategist/index.mjs), first: its words travel only in the blocks.
+  const named = strategy && typeof strategy.headline === 'string' && (Object.hasOwn(constraintLabels, strategy.constraint) || strategy.constraint === 'none') ? strategy : null;
+  const strategyBlocks = named ? [
+    { type: 'callout', tone: 'info', title: named.constraint === 'none' ? 'This week\'s constraint: none stood out.' : `This week's constraint: ${constraintLabels[named.constraint]}.`,
+      text: named.headline },
+    ...(named.why ? [{ type: 'paragraph', text: named.why }] : []),
+    ...(named.move ? [{ type: 'paragraph', text: `This week: ${named.move}` }] : []),
+    ...(named.watch && watchLabels[named.watch] ? [{ type: 'paragraph', text: `Next Monday, watch ${watchLabels[named.watch]}.` }] : []),
+  ] : [];
   const blocks = [
+    ...strategyBlocks,
     { type: 'callout', tone: ranked.kept.length ? 'warning' : 'success', title: ranked.kept.length ? 'Needs you.' : 'All clear.', text: headline },
     ...(ranked.kept.length ? [
       { type: 'details', rows: ranked.kept.map((item, index) => [`${index + 1}.`, item.text]) },
@@ -301,6 +312,7 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
 
   // Counts only: this is what the notification log keeps.
   const body = [
+    named ? `Constraint: ${named.constraint}.` : null,
     headline,
     ranked.kept.length ? `Needs you:\n${ranked.kept.map(item => `- ${item.text}`).join('\n')}` : null,
     `Last week: ${plural(total('countyReports', 0), 'county report')}, ${trials[0] === null ? 'trial starts unavailable' : plural(trials[0], verifiedLifecycle ? 'verified trial start' : 'trial sign-up')}, ${total('activated', 0)} activated`
@@ -316,7 +328,7 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
     body,
     blocks,
     result: {
-      needsYou: ranked.kept.length, needs: ranked.kept.map(item => item.key), moreNeeds: ranked.more,
+      needsYou: ranked.kept.length, needs: ranked.kept.map(item => item.key), moreNeeds: ranked.more, ...(named ? { constraint: named.constraint } : {}),
       products: figures,
       sources: {
         visitors: seen.state, visitorProducts: Object.fromEntries(products.map(({ key }) => [key, seen.byProduct[key].state])), billing: billing ? 'read' : 'unavailable',

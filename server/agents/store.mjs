@@ -17,7 +17,7 @@ import { transaction } from '../sms-auth.mjs';
 /** Work recovery (20261117180000_work_recovery.sql, review 2026-11-17): blocked images rendered again, and why an ad platform refused. */
 export const workRecoveryFeature = 'platform.agents.work-recovery.v1';
 
-export function sqlAgentStore(pool, { fenced = false, growthPriority = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, creativeReview = false, ads = false, watchdog = false, handover = false, workRecovery = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growthPriority = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, creativeReview = false, ads = false, watchdog = false, handover = false, workRecovery = false, strategist = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -114,6 +114,14 @@ export function sqlAgentStore(pool, { fenced = false, growthPriority = false, gr
       individualReports: () => call('private.agent_individual_reports'),
       /** Per product, between `since` and `until`: county reports, trial sign-ups, first activations, outbound email outcomes and replies, and the AI spend. Counts only. */
       scorecardFacts: ({ since, until }) => call('private.agent_scorecard_facts', [since, until]),
+    } : {}),
+    // The weekly strategist (platform.agents.strategist.v1): the week's Intel funnel, counts only, and one note per reported week.
+    ...(strategist ? {
+      strategyFacts: ({ since, until }) => call('private.growth_strategy_facts', [since, until]),
+      strategyNote: week => call('private.agent_strategy_note', [week]),
+      strategySave: (week, note) => call('private.agent_strategy_save', [week, JSON.stringify(note)]),
+      /** Whether the strategist's task is running or due within five minutes (the scorecard waits for its note while it is). */
+      strategyPending: () => call('private.agent_strategy_pending'),
     } : {}),
     ...(growth ? { reserveBudget:(taskId,cents)=>call('private.growth_budget_reserve',[taskId,cents]),releaseBudget:id=>call('private.growth_budget_release',[id]),accountsPage: ({limit=200,offset=0}={})=>call('private.agent_accounts_page',[limit,offset]), notificationStatus: key=>call('private.growth_notification_status',[key]) } : {}),
     /** Turns due schedules of the given task kinds (the ones this server can handle) into tasks. */
