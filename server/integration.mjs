@@ -258,4 +258,4 @@ try {
   const unknown=await call('auth/sms/start',{phone:phones.unknown}); assert.equal(unknown.status,200); assert.equal(sent.length,2);
   assert.equal((await call('auth/sms/verify',{challengeId:unknown.body.challengeId,code:'123456'})).status,401);
   console.log('App SMS integration passed: actual PostgreSQL permissions, browser binding, rate limits, attempts, replay, roles, course creation, delegation and logout.');
-} finally { await new Promise(resolve=>server.close(resolve)); await removeTestIdentities(admin,[editor,learner],{also:['with drafts as (delete from private.learning_courses where updated_by = any($1::uuid[]) returning item_id) delete from hub.content_items where id in (select item_id from drafts)']}); await pool.end(); await admin.end(); }
+} finally { await new Promise(resolve=>server.close(resolve)); await removeTestIdentities(admin,[editor,learner],{also:['with drafts as (delete from private.learning_courses where updated_by = any($1::uuid[]) returning item_id) delete from hub.content_items where id in (select item_id from drafts)'],phones:[phones.unknown]}); await pool.end(); await admin.end(); }
