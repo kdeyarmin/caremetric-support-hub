@@ -167,6 +167,12 @@ with the agent row held and keeps the ten-a-day and once-per-business cold email
 agent's list, and the two steps and the daily evaluation schedule exist. Each test fails closed. The Hub server registers the
 contact finder, qualification and evaluation only when the feature is declared.
 
+`20261116020100_billing_trial_cards_contract.sql` declares `billing.trial-cards.v1` only after `billing.platform.v1` is declared,
+`private.billing_trial_cards` exists with row-level security and is closed to every role, the Hub server included, and
+`private.billing_trial_card_record` and `private.billing_trial_card_confirmed` are security definers with a pinned empty search path
+that call `private.require_hub_app_server()` and are executable by `hub_app_server` alone. Each test fails closed. The Hub server keeps
+Stripe's trial card answers in the table, and reads them while Stripe cannot be reached, only when the feature is declared.
+
 `20261115200100_autonomy_handover_contract.sql` declares `platform.agents.autonomy-handover.v1` only after the autonomy, growth
 autonomy, learning memo, people finder, founder post, paid ads and watchdog features are declared, the four steps
 (`named_contacts`, `learning_memo`, `ad_campaigns`, `founder_posts`) exist requiring it with exactly their values, the campaign and

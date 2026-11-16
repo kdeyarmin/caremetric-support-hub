@@ -71,6 +71,7 @@ const marketingConnectionContracts=await Promise.all([
   ['platform.agents.autonomy-handover.v1','20261115200100_autonomy_handover_contract.sql'],
   ['platform.agents.growth-colleagues.v1','20261115230100_growth_colleagues_contract.sql'],
   ['platform.agents.growth-roster-match.v1','20261115233100_growth_roster_match_contract.sql'],
+  ['billing.trial-cards.v1','20261116020100_billing_trial_cards_contract.sql'],
   ['platform.agents.growth-address-check.v1','20261116100100_growth_address_check_contract.sql'],
   ['platform.agents.growth-brief.v1','20261116110100_growth_brief_contract.sql'],
   ['platform.agents.growth-report-views.v1','20261116120100_growth_report_views_contract.sql'],
