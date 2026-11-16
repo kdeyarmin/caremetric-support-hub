@@ -51,7 +51,8 @@ describe('the settings catalog', () => {
     const databaseMax = Number(/jsonb_array_length\(p_value\) between 1 and (\d+)/.exec(definitions.at(-1))?.[1]);
     expect(databaseMax).toBe(60);
     // One item each list setting accepts. A new list setting must add its own here, so its limit is checked too.
-    const samples = { 'growth.roster_states': 'PA', 'social.image_urls': 'https://example.com/ad.png', 'seo.search_console_sites': 'sc-domain:example.com' };
+    const samples = { 'growth.roster_states': 'PA', 'social.image_urls': 'https://example.com/ad.png', 'seo.search_console_sites': 'sc-domain:example.com',
+      'learning.media_import_hosts': 'files.heygen.ai' };
     const lists = settingsCatalog.filter(item => item.kind === 'list');
     expect(lists.map(item => item.key).sort()).toEqual(Object.keys(samples).sort());
     for (const item of lists) {
@@ -59,6 +60,30 @@ describe('the settings catalog', () => {
       expect(item.valid(Array(databaseMax + 1).fill(samples[item.key])), item.key).toBe(false);
     }
     expect(entry('growth.roster_states').valid(Array(60).fill('PA'))).toBe(true);
+  });
+});
+
+describe('the two addresses that were Railway variables (20261117100000_catalog_and_import_host_settings.sql)', () => {
+  const catalog = entry('billing.intel_catalog_url'), hosts = entry('learning.media_import_hosts');
+  it('copies a usable INTEL_CATALOG_URL, and only an address where Intel publishes its catalog', () => {
+    expect(settingFromEnv(catalog, { INTEL_CATALOG_URL: ' https://staging.caremetricintel.com/api/billing/catalog ' })).toBe('https://staging.caremetricintel.com/api/billing/catalog');
+    for (const value of ['http://staging.caremetricintel.com/api/billing/catalog', 'https://staging.caremetricintel.com/api/billing/catalog?plan=pro',
+      'https://staging.caremetricintel.com/', 'https://user:pass@staging.caremetricintel.com/api/billing/catalog', 'not a url']) {
+      expect(settingFromEnv(catalog, { INTEL_CATALOG_URL: value }), value).toBeUndefined();
+      expect(() => settingInput(catalog, value), value).toThrow();
+    }
+    // Empty is Intel's live catalog: the sync is called without an address (server/main.mjs).
+    expect(catalog.default).toBeNull();
+    expect(settingInput(catalog, '  ')).toBeNull();
+  });
+  it('copies HUB_MEDIA_IMPORT_HOSTS as the import did (comma-separated, lowercased), and HeyGen\'s hosts are the default', () => {
+    expect(settingFromEnv(hosts, { HUB_MEDIA_IMPORT_HOSTS: 'Files.HeyGen.ai, cdn.example.com,files.heygen.ai' })).toEqual(['files.heygen.ai', 'cdn.example.com']);
+    // A list the import would have refused entirely is not copied; the deploy log says to set it on the Settings page.
+    expect(settingFromEnv(hosts, { HUB_MEDIA_IMPORT_HOSTS: 'cdn.example.com, https://evil.test/' })).toBeUndefined();
+    expect(hosts.default).toEqual(['resource2.heygen.ai', 'files.heygen.ai', 'files2.heygen.ai']);
+    expect(settingInput(hosts, [' cdn.example.com ', 'cdn.example.com', ''])).toEqual(['cdn.example.com']);
+    for (const value of [['https://cdn.example.com'], ['CDN.example.com'], ['cdn.example.com/videos'], ['localhost']]) expect(() => settingInput(hosts, value), value[0]).toThrow();
+    expect(settingInput(hosts, [])).toBeNull();
   });
 });
 
