@@ -64,7 +64,7 @@ The [feature and function reference](#feature-and-function-reference) below cont
 
 | Product | Feature sources | Saved source used in this expansion |
 | --- | --- | --- |
-| CareBase | https://cmcarebase.com/features, https://cmcarebase.com/ and https://cmcarebase.com/faq | [carebase-features.json](../server/agents/content/carebase-features.json), reviewed 2026-11-09: 60 capabilities in 6 areas, plus roles, workflow and operating conditions. |
+| CareBase | https://cmcarebase.com/features, https://cmcarebase.com/ and https://cmcarebase.com/faq | [carebase-features.json](../server/agents/content/carebase-features.json), reviewed 2026-11-16: 112 capabilities in 8 areas, each with the plan or add-on it needs, plus roles, workflow and operating conditions. |
 | Intel | https://www.caremetricintel.com/features and https://www.caremetricintel.com/ | [intel-features.json](../server/agents/content/intel-features.json), reviewed 2026-11-09: 107 features in 11 areas, plus data coverage and care-setting guidance. |
 
 [features.mjs](../server/agents/content/features.mjs) presents these same catalogs to the AI team; refresh them with
@@ -599,111 +599,205 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
   limit) is a small part of it and never leads.
 - [x] 2026-11-12: the founder's story wording. The owner confirmed: the founder built Intel, and currently runs a home health and
   hospice agency and a consulting company.
+- [ ] 2026-11-16: the rewritten CareBase feature and function reference: the eight areas of the redesigned features page (112
+  capabilities), the plan or add-on each area names, the page's eMAR and AI notes, and the "What the team can do" wording for each
+  capability. Requested by the owner; tick this box when you approve the pull request that adds it.
 
 ## Feature and function reference
 
-This is the complete functional inventory from the saved catalogs named under Sources read: 60 CareBase capabilities and 107 Intel features.
+This is the complete functional inventory from the saved catalogs named under Sources read: 112 CareBase capabilities in 8 areas and 107 Intel features.
 It is a reference for explaining what users do, not a statement that every feature is included in every subscription or configured for every customer.
-The plan tables, role limits, setup conditions and claim rules apply throughout. No production workflow was newly verified for this expansion.
+The plan tables, role limits, setup conditions and claim rules apply throughout. No production workflow was newly verified for this expansion
+or for the CareBase rewrite of 2026-11-16.
 
-Terminology follows the approved vocabulary. CareBase document storage is described for survey review rather than as a readiness guarantee.
+Terminology follows the approved vocabulary. In the CareBase tables, “audit” names CareBase's own records (the eMAR's audit packets and the
+audit trail of recorded actions), never a surveyor's visit.
 The Intel source also describes spoken visit entry; below, visit logging and debriefs use the approved written workflow only.
 This preserves the owner's text-only AI rule and does not authorize voice or phone claims. Static presenter videos remain course media.
 
 ### CareBase feature and function reference
 
-These are functional areas, not paid-package names. Availability spans Core and optional modules; do not infer a subscription entitlement from an area heading.
-For example, the heading “Training & compliance core” does not mean every item is included in CareBase Core.
+These are the eight areas of CareBase's features page as read on 2026-11-16, in the page's order: 112 capabilities in all.
+Area headings are not paid-package names; do not infer a subscription entitlement from an area heading. Each area shows the plan or add-on
+the page names for it, quoted as published. Prices and bundles are in [CareBase and Train pricing](#carebase-and-train-pricing).
+For example, the heading “Medication management & eMAR” does not mean a facility has eMAR: the page names the eMAR add-on and facility
+activation, and the note under that table applies.
 
-#### Training & compliance core
+#### Resident care & daily operations
+
+**Plan or add-on:** CareBase Core
 
 | Capability | What the team can do |
 | --- | --- |
-| Today — daily priorities and due tasks | Review daily priorities and due work in one place. |
-| Compliance tracking & automatic alerts | Track requirements and flag upcoming or overdue work for follow-up. |
-| Maintained course catalog with graded quizzes | Assign maintained courses and record graded quiz results. |
-| Competency checklists & templates | Use checklists and templates to document competency work. |
-| Role-based training plans | Assign training according to employee roles and duties. |
-| Custom requirement catalog | Configure the requirements the organization needs to track. |
-| Interactive compliance matrix + CSV export | Review requirement status across staff and export the matrix as CSV. |
-| Compliance reporting center | Prepare reports from recorded training and requirement status. |
-| Document storage for survey review | Keep supporting documents together for review. |
+| Inquiry tracking, admissions & move-in checklists | Track inquiries and preadmission requirements, and work through move-in checklists before the resident arrives. |
+| Census, rooms & room-readiness tracking | Keep census and room assignments current and see which rooms are ready for a move-in. |
+| Digital RASP / ASP assessments | Prepare resident assessments and support plans for the facility type (RASP for a personal care home, ASP for an ALF); retain required signed DHS forms. |
+| Reassessment deadlines & support-plan review triggers | Track reassessment deadlines and the support-plan reviews that time or a change in the resident's condition calls for. |
+| Resident agreements & guest e-signatures | Prepare resident agreements and collect signatures through time-limited guest links, without a full user account. |
+| Clinical charting: vitals, progress notes & care plans | Record resident vitals, progress notes, assessments and care plans. |
+| Facility-wide vitals rounds | Take and record vitals for residents across the facility in one round. |
+| Resident services, daily care tasks & refusals | Assign services and daily care tasks, and record completion, refusal or needed follow-up. |
+| Change-of-condition follow-up & provider notifications | After a fall, hospital return or other change, track provider notifications, reassessment, support-plan review and follow-up. |
+| Dietary operations & food-safety rounds | Keep dietary work and food-safety checks with daily operations. |
+| Meal & activity calendars | Keep the facility's meal and activity calendars. |
+| Appointments, services calendar & transportation | Organize resident appointments, services and transportation. |
+| Resident documents & chronological history | Keep each resident's documents together and review the record's history in date order. |
+| Designated-person & move-in portals | Share move-in records and designated-person access through time-limited links; guests see only what is shared with them. |
+| Discharge documentation & retained records | Complete discharge documentation at move-out and keep the clinical and operational record for later questions. |
+| Maintenance work orders & QR reporting | Track maintenance needs and work orders, including issues reported through a QR code. |
+| Emergency plans & resident accountability | Keep emergency plans and record which residents are accounted for during an emergency. |
+
+#### Staff training & learning
+
+**Plan or add-on:** Staff Training add-on or CareMetric Train
+
+| Capability | What the team can do |
+| --- | --- |
+| PA-mapped course catalog maintained by the CareMetric team | Assign courses mapped to Pennsylvania requirements from a catalog the CareMetric team builds and keeps current. |
+| Graded quizzes, completion records & certificates | Record graded quiz results, course completions and certificates in each employee's training history. |
+| Role-based training plans & automatic assignments | Set training plans by role and duties, and assign courses from them automatically. |
+| Custom training requirements & renewal dates | Add the organization's own training requirements and track their renewal dates. |
+| Interactive training-compliance matrix & CSV export | Review training status across staff and requirements, and export the matrix as CSV. |
+| Live class scheduling & digital sign-in | Schedule instructor-led classes and record sign-in on the trainer's roster or a shared kiosk with a name and PIN. |
+| Trainer-managed rosters & finalized attendance | Select employees for a class, mark who attended, confirm the hours and complete the class to create training records; employees do not need a phone. |
+| Printable meeting notices & signed attendance sheets | Print meeting notices and attendance sheets, and upload the signed sheet with the class record. |
+| Outside training records & manager review | Record training completed elsewhere; it counts toward annual totals only after a manager approves it. |
+| Retraining assignments & follow-up | Assign retraining and track it until it is complete. |
 | Offline-capable employee training player | Complete eligible downloaded training offline and synchronize after reconnecting. |
+| Public certificate verification & training passport | Share a link that verifies a certificate, and keep each employee's completed training in a training passport. |
+| Training reports & employee learning history | Prepare training reports and review each employee's learning history. |
+| SCORM / xAPI learning packages managed by the CareMetric team | Use e-learning packages in the SCORM or xAPI formats; the CareMetric team adds and manages them. |
+| Course versions, review history & source references | See each course's version, its review history and the sources it was prepared from. |
 
-#### AI, copilot & live training
+#### Medication management & eMAR
 
-| Capability | What the team can do |
-| --- | --- |
-| AI curriculum generation from your documents, run by our team | The CareMetric team drafts courses from regulations, policies or reference documents; a named reviewer must approve publication. |
-| AI avatar video lessons | Optional presenter videos accompany lessons; this is course media, not a conversational voice copilot. |
-| Individual AI lesson sections revised for review | Regenerate a lesson section and submit the changed content for a new review. |
-| Compliance copilot with records and regulatory references | Ask text questions about facility records and regulatory references; review proposed actions before approval. |
-| Plan-of-correction & mock-survey drafts for human review | Prepare written corrective-work or mock-survey drafts for a person to review. |
-| Live class scheduling & digital sign-in | Schedule instructor-led classes and record attendance digitally. |
-| Employee rosters & trainer-recorded attendance | Select employees for a class and let the trainer mark attendance; employees do not need a phone. |
-| Printable meeting notices and attendance sheets | Print notices and attendance sheets, retain the signed sheet and confirm hours before finalizing training records. |
-
-#### Resident care, clinical & operations
+**Plan or add-on:** eMAR add-on · facility activation required
 
 | Capability | What the team can do |
 | --- | --- |
-| Digital RASP/ASP assessment prep | Prepare resident assessments and support plans for the facility type; retain required signed DHS forms. |
-| Automatic reassessment & support-plan triggers | Track reassessment and support-plan follow-up when time or circumstances trigger it. |
-| Native clinical charting (vitals, notes, care plans) | Record resident vitals, progress notes, assessments and care plans. |
-| FHIR sync for medications, allergies & diagnoses | Import medications, allergies and diagnoses through configured connections to compatible clinical systems. |
-| Facility-wide resident compliance dashboard | Review resident assessment and support-plan requirements across a facility. |
-| Admissions, census & room readiness | Track inquiries, preadmission requirements, occupancy and room readiness. |
-| Resident agreements & e-signature workflows | Prepare resident agreements and route them for signatures. |
-| Resident services & daily work | Assign services and record completion, refusal or needed follow-up. |
-| Change-of-condition follow-up | Track notifications, reassessment, support-plan review and follow-up after a change. |
-| Dietary & food-safety operations | Keep dietary checks and food-safety work with daily operations. |
-| Services calendar & transportation | Organize appointments, services and transportation. |
-| Resident financial subledger | Maintain resident charges, payments and financial closeout records; this is not the general accounting ledger. |
-| Medication event integration; native eMAR for enrolled facilities | Review imported medication events without editing them; use native eMAR only after enrollment, clinical approval and a documented switch. |
+| Facility medication rounds & pass setup | Set up the facility's medication rounds and medication passes. |
+| Medication orders with independent review | Enter medication orders, each with an independent review. |
+| Daily, one-time, interval, variable & PRN schedules | Schedule medications daily, once, at intervals, on a variable schedule or as needed (PRN). |
+| Resident, medication & barcode checks | Check the resident, the medication and its barcode when recording an administration. |
+| Medication-training & insulin-qualification checks | Check staff medication training and insulin qualification when they pass medications. |
+| Administrations, refusals, omissions & amendments | Record each administration, refusal or omission, and record amendments to an entry. |
+| PRN effectiveness follow-up & escalation | Follow up on the effect of an as-needed (PRN) dose and escalate follow-up that stays open. |
+| Prescriber holds & observation records | Record a prescriber's hold on a medication and the related observations. |
+| Controlled-substance stock, witnesses & discrepancies | Track controlled-substance stock, record witnesses and follow up on discrepancies. |
+| Refill requests & leave medication packages | Request refills and prepare medication packages for a resident's leave from the facility. |
+| Printable monthly MAR, audit & downtime packets | Print the monthly medication administration record (MAR), audit packets and downtime packets for use when the system is unavailable. |
+| Supervised reconciliation of paper downtime records | Reconcile paper records kept during downtime into CareBase under supervision. |
+| Medication oversight & quality reports | Review medication oversight and quality reports. |
 
-#### Credentials & workforce
+**Published note:** Native eMAR requires facility enrollment, clinical approval before use, and a documented switch to CareBase as the
+official medication administration record. Imported medication events remain read-only.
+
+#### Survey readiness, safety & quality
+
+**Plan or add-on:** Survey & Compliance tools; confidential incidents require Core
 
 | Capability | What the team can do |
 | --- | --- |
-| Credentials & clearances (Act 34 / 73 / 33, licenses, TB, I-9) | Track employee credentials, clearances and renewal requirements; federal exclusion checks must be completed separately. |
+| Today workspace & compliance command center | Review daily priorities, due work and open compliance items in one place. |
+| Citation-weighted readiness score & gap review | Prioritize recorded gaps by regulatory topic using planning weights; the score does not predict survey results. |
+| Compliance binder PDF & survey-packet exports | Export recorded documentation as a PDF binder or a survey packet for review. |
+| Survey Day Mode & entrance-conference checklist | Bring together the entrance-conference checklist, latest binder, on-shift roster and prepared documentation rooms during a survey. |
+| On-shift roster with training & clearance flags | See who is on shift, with training and clearance flags that help staff answer a surveyor's questions. |
+| Resident compliance dashboard & medical-evaluation deadlines | Review resident assessment, support-plan and medical-evaluation deadlines across a facility. |
+| Mock-survey rehearsals & request tracking | Rehearse with a mock survey, and track each documentation request and what was provided. |
+| Chapters 2600 / 2800 regulatory crosswalk | Relate the facility's records to the requirements of Chapters 2600 and 2800. |
+| Time-limited, read-only documentation rooms | Share only the records a surveyor requests through a time-limited link; surveyors get no CareBase sign-in or edit access. |
+| Incidents & required-reporting deadlines | Track incident reporting tasks and deadlines; staff must make and document the required reports. |
+| Confidential incidents & public safety reporting | Restrict access to sensitive incidents while supporting required safety reporting work; this requires Core. |
+| Complaints, resident rights & follow-up | Track complaints and resident-rights concerns through follow-up. |
+| Violations & plans of correction | Track violations and corrective work through due dates, review and verification. |
+| Fire drills & life-safety inspection records | Keep fire drill and life-safety inspection records together. |
+| 60+ document templates & DHS forms | Prepare records from the published template library and DHS forms; retain required signed official forms. |
+| QAPI projects & quality follow-up | Manage Quality Assurance and Performance Improvement (QAPI) projects and their follow-up. |
+| Work queue with owners, due dates & escalation | Assign an owner and a due date to unresolved work, with escalation when it is overdue. |
+| Policy documents, acknowledgments & attestations | Keep policy documents, assign acknowledgments and retain staff attestations. |
+
+#### Workforce, credentials & scheduling
+
+**Plan or add-on:** Workforce add-on
+
+| Capability | What the team can do |
+| --- | --- |
+| Employee records, invitations & lifecycle tracking | Keep employee records, invite staff by email and track each employee from hire to departure. |
+| Act 34 / 73 / 33 clearance tracking | Track Act 34, 73 and 33 clearances; federal exclusion checks must be completed separately. |
 | OAPSA provisional-employment countdown | Track Older Adults Protective Services Act provisional-employment deadlines and documented suitability decisions. |
-| Administrator qualification & CE tracking | Keep administrator qualification and continuing-education records together. |
-| Medication authorization roster | Review medication qualifications, annual practicums and insulin authorization, with missing or expired records highlighted. |
-| Policy attestation campaigns (ESIGN/UETA documentation) | Assign policy acknowledgments and retain their signature documentation. |
-| Shift scheduling & auto-fill | Set up shifts and staffing patterns, generate a draft and review it before publishing. |
+| Professional licenses, TB & I-9 records | Track professional licenses, TB screening and I-9 records. |
+| Administrator qualifications & continuing education | Keep administrator qualification and continuing-education records together. |
+| Competency checklists & observed assessments | Document competencies with checklists and observed assessments. |
+| Medication authorization & pass-meds roster | See on one roster which staff are authorized to pass medications. |
+| Medication practicums & annual observations | Record medication practicums and annual medication observations. |
+| Shift handoffs with assigned follow-up | Record shift handoffs and assign the follow-up they need. |
+| Shift scheduling, templates & auto-fill | Set up shifts and staffing templates, generate a draft schedule and review it before publishing. |
+| Coverage gaps & staff availability | See coverage gaps alongside staff availability. |
 | Cross-facility float staff | Schedule staff across facilities with checks for overlapping assignments. |
-| Time-off requests & coverage awareness | Review time-off requests in the context of shift coverage. |
+| Time-off requests & approval workflows | Review and approve time-off requests with shift coverage in view. |
+| Staff schedule & shift views on mobile | Employees see their published shifts on a phone. |
 
-#### Survey, safety & facility
+#### Resident billing & payments
 
-| Capability | What the team can do |
-| --- | --- |
-| One-click compliance binder PDF | Export recorded documentation as a PDF binder for review. |
-| Citation-weighted readiness score | Prioritize tracked gaps by regulatory topic using default planning weights; the score does not predict survey results. |
-| Survey Day Mode workspace | Bring together the entrance checklist, latest binder, on-shift roster and prepared documentation rooms. |
-| Incident & complaint tracking with reporting deadlines | Track incident and complaint reporting tasks and deadlines; staff must make and document required reports. |
-| Confidential incident pathways & public safety reporting | Restrict access to sensitive incidents while supporting required safety reporting work. |
-| Violations & plan-of-correction workflow | Track violations and corrective work through due dates, review and verification. |
-| Fire drills & life-safety records | Keep fire drill and life-safety documentation together. |
-| Library of 60+ document templates | Use the published document-template library to prepare records. |
-| Emergency operations | Organize emergency-operations records and work. |
-| Maintenance & work orders | Track maintenance needs and work orders. |
-| QAPI & quality projects | Manage Quality Assurance and Performance Improvement (QAPI) work and quality projects. |
-| Work queue with owners, deadlines & follow-up | Assign responsibility, due dates and follow-up for unresolved work. |
-| Documentation rooms & regulatory crosswalk | Share scoped documentation and relate records to regulatory requirements. |
-
-#### Access, portals & onboarding
+**Plan or add-on:** Resident Billing & Payments add-on
 
 | Capability | What the team can do |
 | --- | --- |
-| Role-based access | Limit records and actions to each role and assigned facilities. |
-| Guest portals (move-in, agreements, designated person, documentation) | Use time-limited links for move-in records, agreements, designated-person access and documentation review. |
-| Public certificate verification links | Share a link to verify a certificate. |
-| Bulk CSV employee import | Preview a CSV staff roster, resolve flagged entries and apply the import. |
-| Email, SMS & in-app alerts with escalation | Send configured reminders and review unresolved alerts and delivery status; SMS requires enablement. |
-| User invitations by email | Invite users by email and assign the appropriate access. |
-| Online organization signup | Begin online, verify email, set a password and configure the organization during the trial. |
-| Installable mobile app for employees | Use a supported browser or add the employee training player to a phone home screen. |
+| Resident financial subledger & account history | Keep each resident's charges, payments and account history; this is not the general accounting ledger. |
+| Rate agreements & effective-dated charges | Record each resident's rate agreement and charges that take effect on a set date. |
+| Care-level rate schedules & reviews | Keep rate schedules by care level and record rate reviews. |
+| Facility billing runs & batch statements | Run billing for a facility and produce statements in a batch. |
+| Receivables, balances & payment allocation | Track what residents owe, review balances and apply payments to charges. |
+| Family portal payments & payment history | Let families pay through the portal and see their payment history. |
+| Facility payment-account onboarding | Set up the facility's account for receiving payments. |
+| Autopay policy & authorization records | Set the facility's autopay policy and keep the authorization records for automatic payments. |
+| Personal-funds transactions & resident statements | Record transactions in residents' personal funds and prepare resident statements. |
+| Independent approvals for protected fund actions | Require approval from a second person for protected actions on resident funds. |
+| Move-out financial closeout | Close out a resident's account at move-out. |
+| Financial exports for your accounting workflow | Export financial records for the accounting system the organization already uses; CareBase works alongside it. |
+
+#### AI assistance with human review
+
+**Plan or add-on:** Staff Training and Survey & Compliance tools
+
+| Capability | What the team can do |
+| --- | --- |
+| Team-prepared AI-assisted courses from policies & source documents | The CareMetric team drafts courses with AI assistance from the organization's policies, regulations or reference documents. |
+| Lesson text, video scripts & graded quiz drafts | Course drafts can include lesson text, video scripts and graded quizzes; a reviewer checks the content and source references. |
+| Optional AI presenter video lessons | Optional presenter videos can accompany lessons; this is course media, not a conversational voice copilot. |
+| Named-reviewer approval before course publication | A named reviewer must approve each course before publication; regenerating a section requires a new review. |
+| Compliance copilot grounded in facility records & regulatory references | Ask text questions about deadlines, missing medical evaluations or training gaps, with answers drawn from facility records and regulatory references. |
+| Draft plans of correction & mock-survey preparation | Prepare written plan-of-correction and mock-survey drafts for a person to review. |
+| Proposed follow-up actions for human approval | Review follow-up work the copilot proposes; a person must approve an action before it is carried out. |
+
+**Published note:** The CareMetric team prepares AI-assisted courses; customers use the reviewed catalog. Copilot actions require human
+approval, and AI drafts require review.
+
+The copilot is text only (owner decision 2026-10-30). An answer or a draft does not itself resolve a compliance gap.
+
+#### Access, integrations & onboarding
+
+**Plan or add-on:** Platform tools · access depends on your plan and role
+
+| Capability | What the team can do |
+| --- | --- |
+| Online organization signup & guided setup | Begin online, verify email, set a password and configure the organization during the trial. |
+| Bulk CSV staff import with review before completion | Upload a CSV staff roster, review the preview and resolve flagged entries before applying the import. |
+| Data import center & import history | Run imports from one place and review earlier imports. |
+| FHIR imports for medications, allergies & diagnoses | Import medications, allergies and diagnoses through configured FHIR connections to compatible clinical systems. |
+| Read-only imported medication events | Review imported medication events without editing them; the facility keeps its current medication record unless it switches to native eMAR. |
+| Role-based access with facility scope | Limit records and actions to each person's role and assigned facilities. |
+| SMS account verification & security policies | Verify accounts by text message and apply the organization's security policies. |
+| Private documents & time-limited download links | Keep documents private and share them through download links that expire. |
+| Audit trail of recorded actions | Review the recorded history of actions taken in CareBase. |
+| Email, SMS & in-app alerts with escalation | Send configured reminders and review unresolved alerts, weekly digests and delivery status; SMS requires enablement. |
+| Guest access for move-in, agreements & documentation | Use time-limited links for move-in records, agreements and documentation review; guests need no full user account. |
+| Installable employee app & mobile-friendly workflows | Use CareBase in a supported browser with nothing to install, or add the employee app to a phone's home screen. |
+| Organization-wide reports & multi-facility views | Organization administrators review every facility; facility managers see only their assigned sites, and reports follow the same rules. |
+| In-app help, support & product updates | Find help, reach support and read product updates inside CareBase. |
+| Enterprise SAML SSO & verified domains (managed rollout) | Sign in through the organization's SAML single sign-on on verified email domains, introduced through a managed rollout. |
+| Enterprise provisioning & access reviews (managed rollout) | Provision user accounts and review access, introduced through a managed rollout. |
 
 #### Resident workflow from inquiry to move-out
 
