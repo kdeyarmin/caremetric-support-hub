@@ -10,7 +10,7 @@
  */
 import { founder, products as facts, productPages } from '../agents/content/facts.mjs';
 
-export const playbookVersion = 'sales-playbook.4';
+export const playbookVersion = 'sales-playbook.5';
 
 /**
  * How CareMetric sells (owner decision 2026-11-08): entirely self-serve. Nobody offers a demo, a sales call or a meeting. A prospect gets
@@ -158,6 +158,7 @@ export const salesPlaybook = deepFreeze({
       ],
       strongSignals: [
         'Its own website shows it is a home health or hospice provider (a Medicare-certified agency, service areas or branches).',
+        'Its own website shows it is a nursing home or skilled nursing facility that admits patients from hospitals and physicians.',
         'It is hiring marketers, community liaisons or business development staff.',
         'It is opening a branch, entering a new county or expanding service lines.',
         'It mentions referral partners such as physicians, hospitals or facilities.',
@@ -193,7 +194,7 @@ export const salesPlaybook = deepFreeze({
     qualifyingQuestions: [
       'Which counties or service areas does your team cover today?',
       'How many marketers or liaisons do you have, and how do they track visits and follow-ups?',
-      'Home health, hospice or both?',
+      'Which care settings do you serve: home health, hospice, a nursing home, or more than one?',
       'How do you measure which outreach leads to referrals?',
       'Who else would weigh in on choosing a tool?',
     ],
@@ -294,11 +295,32 @@ export function linkablePages(product) {
  */
 const discoveryGrid = deepFreeze({
   carebase: { segments: ['"personal care home"', '"assisted living facility"', '"personal care home" administrator', '"assisted living" personal care home'], places: pennsylvania },
+  // Nursing homes are a primary audience too (owner decision 2026-11-16): their searches sit between the agencies' ones, so they come up
+  // within the pass rather than after every agency search. A pass searches one segment in every place before the next.
   'caremetric-intel': {
-    segments: ['"home health agency"', '"hospice agency"', '"home health and hospice"', 'hospice "community liaison"', '"home health" "service area" Medicare certified', 'hospice "serving" counties referrals'],
+    segments: ['"home health agency"', '"skilled nursing facility" admissions', '"hospice agency"', '"home health and hospice"', '"nursing and rehabilitation center"',
+      'hospice "community liaison"', '"home health" "service area" Medicare certified', 'hospice "serving" counties referrals'],
     places: intelMarkets,
   },
 });
+
+// What a nursing home calls itself, and what a home health or hospice agency does. "Skilled nursing" alone is a home health service, so a
+// nursing home is named by its facility words; "nursing home care" is not home care.
+const nursingHomeWords = /\b(nursing homes?|nursing (?:and|&) rehab(?:ilitation)?|nursing (?:and|&) rehabilitation cent(?:er|re)s?|rehabilitation (?:and|&) nursing|nursing cent(?:er|re)s?|skilled nursing (?:facility|facilities|cent(?:er|re)s?)|long[- ]term care facilit(?:y|ies))\b/i;
+const agencyWords = /\b(home health|home healthcare|hospice)\b/i;
+/**
+ * Which kind of Intel prospect an organization is, as far as its name and its research say: 'nursing_home', or null for a home health or
+ * hospice agency and for anything not clearly a nursing home. The name decides first; otherwise the research must name a nursing home and
+ * say nothing of home health or hospice. Intel's reports cover home health and hospice agencies only, so a nursing home's first email is the
+ * standard one (draft.mjs); anything doubtful keeps the agency's report-led email.
+ */
+export function intelSetting({ name = '', evidence = [] } = {}) {
+  const named = String(name ?? '');
+  if (agencyWords.test(named)) return null;
+  if (nursingHomeWords.test(named)) return 'nursing_home';
+  const said = (evidence ?? []).map(item => String(item?.claim ?? '')).join('\n');
+  return nursingHomeWords.test(said) && !agencyWords.test(said) ? 'nursing_home' : null;
+}
 /** The places a product's discovery searches ("Cleveland Ohio"), in grid order: where a web-found prospect was most likely found. */
 export const discoveryPlaces = product => [...(discoveryGrid[product]?.places ?? [])];
 /** Searches per product per day. Each is one call to the search provider; the daily discovery run paces them a second apart. */

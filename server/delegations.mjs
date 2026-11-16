@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream';
 import { digest, token, transaction, withSession, HttpError } from './sms-auth.mjs';
 import { parsePortfolioRequest, parsePortfolioEnvelope } from '../supabase/functions/_shared/portfolioProtocol.ts';
 import { isOperationalRead } from '../supabase/functions/_shared/operationsProtocol.ts';
@@ -29,6 +30,7 @@ import { providerOperationSchema } from '../src/learning/providerPolicyProtocol.
 import { learningProvider } from './learning-provider.mjs';
 import { nativeMediaOperationSchema } from '../src/learning/mediaProtocol.ts';
 import { learningMedia } from './learning-media.mjs';
+import { partKey, partUploads } from './upload-parts.mjs';
 import { supportIdentityOperation } from '../src/support/onboardingProtocol.ts';
 import { supportOnboarding } from './support-onboarding.mjs';
 import { supportRegistration } from './support-registration.mjs';
@@ -111,7 +113,8 @@ async function authorize(db,audience,payload,{appCommands=false}={}) {
   if (!(await db.query('select hub.authorize_learning_object($1,$2) as allowed',[payload.path,payload.operation])).rows[0].allowed) throw new HttpError(403,'Media access denied.');
   return payload;
 }
-export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,legacyDistributionOptIn=false,appCommands=false}) {
+// mediaParts: two 256 MB lesson videos at once.
+export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,legacyDistributionOptIn=false,mediaParts=partUploads({budget:2*268435456}),appCommands=false}) {
   const options={appCommands};
   const issue = async (sessionToken,audience,payload,signal) => {
     const authorizeSession=work=>signal?boundedSession(pool,sessionToken,signal,work):withSession(pool,sessionToken,work);
@@ -123,6 +126,14 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
       await db.query(`insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at)
         values($1,$2,$3,$4::jsonb,now()+interval '30 seconds')`,[digest(capability),session.id,audience,JSON.stringify(payload)]);
       return capability;
+    });
+  };
+  const media=async(sessionToken,path,operation,body,contentType)=>{
+    validateMedia(path,operation);
+    const capability=await issue(sessionToken,'media',{path,operation});
+    return fetchImpl(`${storageUrl}/functions/v1/app-media`,{
+      method:'POST',headers:{Authorization:`Bearer ${capability}`,'Content-Type':contentType || 'application/json'},
+      body:body || '{}', ...(body ? {duplex:'half'} : {}), signal:AbortSignal.timeout(120000),redirect:'manual',
     });
   };
   return {
@@ -211,12 +222,21 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
       await withSession(pool,sessionToken,db=>authorize(db,target.audience,request.command,options));
       return result;
     },
-    async media(sessionToken,path,operation,body,contentType) {
-      validateMedia(path,operation);
-      const capability=await issue(sessionToken,'media',{path,operation});
-      return fetchImpl(`${storageUrl}/functions/v1/app-media`,{
-        method:'POST',headers:{Authorization:`Bearer ${capability}`,'Content-Type':contentType || 'application/json'},
-        body:body || '{}', ...(body ? {duplex:'half'} : {}), signal:AbortSignal.timeout(120000),redirect:'manual',
+    media,
+    /**
+     * One part of a lesson's video, captions or transcript (server/upload-parts.mjs), so a large video does not have to arrive in
+     * one request. Every part is authorized for this session and object; once the whole file has arrived it is stored through the
+     * Storage function exactly as a single upload is. The answer is {received} while bytes remain, then {result: {uploaded: true}}.
+     */
+    async mediaPart(sessionToken,path,upload,body,contentType,limit) {
+      validateMedia(path,'upload');
+      if(upload.total>limit) throw new HttpError(413,'Media is too large.');
+      await withSession(pool,sessionToken,db=>authorize(db,'media',{path,operation:'upload'}));
+      return mediaParts.receive(partKey(sessionToken,`media:${path}`),upload,body,async file=>{
+        const response=await media(sessionToken,path,'upload',Readable.toWeb(file.stream()),contentType);
+        await response.body?.cancel();
+        if(!response.ok) throw new HttpError(response.status===409?409:503,'Media transfer could not complete.');
+        return {uploaded:true};
       });
     },
     async publication(sessionToken,id,part,operation,body,contentType,range=null) {

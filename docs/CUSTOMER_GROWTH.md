@@ -173,9 +173,11 @@ objection; a three-touch outreach plan; and a play for each customer moment. It 
 claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the copy of [GTM facts](GTM_FACTS.md)).
 
 - **Discovery** runs six different segment-and-place searches per marketed product every Eastern day, twenty results each
-  (`discoveryQueriesPerDay`; four segments by 36 Pennsylvania places for CareBase, so it never leaves Pennsylvania; six segments by
-  104 markets across the country for Intel). No search repeats until the whole grid has been searched; the next pass reads the next
-  page of each search. Calls to the search provider are paced a second apart. If a later search fails, the day's searching stops and
+  (`discoveryQueriesPerDay`; four segments by 36 Pennsylvania places for CareBase, so it never leaves Pennsylvania; eight segments by
+  104 markets across the country for Intel: six for home health and hospice agencies and, since 2026-11-16, two for nursing homes,
+  the first of them right after the first agency segment). No search repeats until the whole grid has been searched; the next pass
+  reads the next page of each search. Intel's free reports serve home health and hospice agencies only, so a prospect that is clearly a
+  nursing home gets the standard first email and no report page (`intelSetting` in `playbook.mjs`). Calls to the search provider are paced a second apart. If a later search fails, the day's searching stops and
   what was found is kept; only a failure of the first search fails the run. Discovery drops directories, listing and review sites,
   provider-number and company-data lookups, trade associations and trade press, social networks, job boards and government or school
   sites, and any host that names itself a directory, a listing, a review or a jobs site, so the contact finder never writes to a
@@ -279,8 +281,9 @@ directory doesn't list yet has no report, so its email offers the market review 
 this link".
 
 **The first email is built around the report** (owner direction 2026-11-15; `reportTouchAngle` and `reviewTouchAngle` in
-`playbook.mjs`, `growth.11`). It goes to the agency's best contact: a named owner, administrator or marketing leader when the team
-found one, else the role address, and, as separate emails, the other decision-makers there (see
+`playbook.mjs`, `growth.11`; since `growth.12`, a prospect that is clearly a nursing home gets the standard first email instead, as
+Intel's reports serve home health and hospice agencies only). It goes to the agency's best contact: a named owner, administrator or
+marketing leader when the team found one, else the role address, and, as separate emails, the other decision-makers there (see
 [Several decision-makers at one organization](#several-decision-makers-at-one-organization)).
 
 1. It opens with the founder's story in one or two sentences.

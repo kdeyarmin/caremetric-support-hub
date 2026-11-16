@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { cookie,readCookie,sessionCookie,challengeCookie,HttpError } from './sms-auth.mjs';
 import { parseMediaUploadHeader } from './learning-media.mjs';
+import { parseUploadPart } from './upload-parts.mjs';
 import { parsePackageUploadHeader } from './learning-packages.mjs';
 import { chatCookie } from './communications.mjs';
 import { bulkEmailActions } from './bulk-email.mjs';
@@ -83,6 +84,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
       if(cookies.length) res.setHeader('Set-Cookie',cookies);
       res.end(JSON.stringify(body));
     };
+    // An upload part (server/upload-parts.mjs): 202 with where the next part starts, or the upload's own answer once it is whole.
+    const partAnswer=outcome=>'received' in outcome?json({received:outcome.received},202):json(outcome.result);
     try {
       const url=new URL(req.url,'http://internal');
       const path=url.pathname;
@@ -283,8 +286,11 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
               const input=await jsonBody(req,8192);if(!['media.context','media.status','media.finish'].includes(input.operation))throw new HttpError(400,'Invalid media metadata operation.');
               return json(await delegations.courseMedia(session,input,{signal:controller.signal}));
             }
-            if(path==='/api/course-media/upload' && req.method==='POST')return json(await delegations.courseMedia(session,parseMediaUploadHeader(req.headers['x-caremetric-media-request']),
-              {body:req,contentType:req.headers['content-type'],contentLength:req.headers['content-length'],signal:controller.signal}));
+            if(path==='/api/course-media/upload' && req.method==='POST'){
+              const op=parseMediaUploadHeader(req.headers['x-caremetric-media-request']),part=parseUploadPart(req.headers);
+              if(part)return partAnswer(await delegations.courseMedia.uploadPart(session,op,part,req,req.headers['content-type'],controller.signal));
+              return json(await delegations.courseMedia(session,op,{body:req,contentType:req.headers['content-type'],contentLength:req.headers['content-length'],signal:controller.signal}));
+            }
             const ids=/^\/api\/course-media\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/([0-9a-f-]{36})\/([0-9a-f-]{36})$/.exec(path);
             if(ids&&['GET','HEAD'].includes(req.method)) {
               if(req.headers['sec-fetch-site']&&!['same-origin','none'].includes(req.headers['sec-fetch-site']))throw new HttpError(403,'Open this media in CareMetric.');
@@ -304,7 +310,11 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           if(path==='/api/publications/access' && req.method==='GET') return json(await publications.access(session));
           if(path==='/api/publications/imports/stage' && req.method==='POST') return json(await publications.stage(session,await jsonBody(req,70000)));
           const asset=/^\/api\/publications\/imports\/([0-9a-f-]{36})\/assets\/(primary|captions|transcript)$/.exec(path);
-          if(asset && req.method==='POST') return json(await publications.upload(session,asset[1],asset[2],req,req.headers['content-type']));
+          if(asset && req.method==='POST') {
+            const part=parseUploadPart(req.headers);
+            if(part) return partAnswer(await publications.uploadPart(session,asset[1],asset[2],part,req,req.headers['content-type']));
+            return json(await publications.upload(session,asset[1],asset[2],req,req.headers['content-type']));
+          }
           const intent=/^\/api\/publications\/imports\/([0-9a-f-]{36})(?:\/(preview|commit))?$/.exec(path);
           if(intent) {
             if(!intent[2] && req.method==='GET') return json(await publications.get(session,intent[1]));
@@ -536,6 +546,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           const upload=req.method==='POST';
           const expected=objectPath.endsWith('/video.mp4') ? ['video/mp4',268435456] : objectPath.endsWith('/captions.vtt') ? ['text/vtt',2000000] : ['text/plain',1000000];
           if(upload && req.headers['content-type']?.split(';')[0]!==expected[0]) throw new HttpError(415,'Invalid media type.');
+          const part=upload?parseUploadPart(req.headers):null;
+          if(part) return partAnswer(await delegations.mediaPart(session,objectPath,part,req,expected[0],expected[1]));
           async function* boundedUpload() {
             let size=0;
             for await(const chunk of req) { size+=chunk.length; if(size>expected[1]) throw new HttpError(413,'Media is too large.'); yield chunk; }

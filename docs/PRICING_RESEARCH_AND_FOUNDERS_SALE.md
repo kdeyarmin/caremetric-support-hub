@@ -96,7 +96,7 @@ Examples: Core monthly costs **$1,194** over the first twelve months versus **$2
 >
 > Start your free trial. **Your 50% discount is applied automatically to eligible subscriptions — no code needed.**
 >
-> For new paid subscriptions to eligible plans; existing free-trial users qualify. Standard subscription pricing resumes after the introductory year. Setup fees, Intel extra seats/branches/states, taxes and custom contracts are excluded. Other promotional discounts cannot be combined. Plan eligibility, capacity limits and regular cancellation terms apply.
+> For new paid subscriptions to eligible plans; existing free-trial users qualify. Standard subscription pricing resumes after the introductory year. Setup fees, Intel extra seats/locations/states, taxes and custom contracts are excluded. Other promotional discounts cannot be combined. Plan eligibility, capacity limits and regular cancellation terms apply.
 
 CTA destinations: [CareBase / Train trial](https://cmcarebase.com/signup), [Train-only trial](https://cmcarebase.com/signup?product=train), and [Intel plans and trial](https://www.caremetricintel.com/#pricing).
 

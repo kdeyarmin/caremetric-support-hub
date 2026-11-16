@@ -375,6 +375,44 @@ describe('AI auto-resolution loop', () => {
     expect(ai.classifyResolution).toHaveBeenCalledTimes(1);
   });
 
+  it('never posts an attempt twice when saving after it fails, and still schedules its follow-up', async () => {
+    const store = memoryStore();
+    const entry = store.addCase({ id: 'case-20', messages: ['Export broken.'] });
+    const ai = fakeAi();
+    const { loop, advance } = buildLoop(store, ai);
+    // As private.ai_automation_post_message does: the reply uses up its step in the same transaction.
+    const post = store.postAiMessage;
+    store.postAiMessage = async (caseId, body) => {
+      const id = await post(caseId, body);
+      const latest = [...entry.messages].reverse().find((message) => message.authorRole === 'customer');
+      if (entry.state.stage === 'attempt_due') {
+        Object.assign(entry.state, { stage: 'awaiting_response', attempts: entry.state.attempts + 1, lastAiMessageId: id,
+          lastSeenCustomerMessageId: latest?.id ?? null, followUpDueAt: null, followUpSentAt: null });
+      } else Object.assign(entry.state, { followUpSentAt: store.now() });
+      return id;
+    };
+    // The database connection is lost right after the reply was posted, before the loop saves the follow-up it chose.
+    const save = store.saveState;
+    let lost = true;
+    store.saveState = async (caseId, patch) => {
+      if (lost && patch.stage === 'awaiting_response') { lost = false; throw new Error('Connection terminated unexpectedly'); }
+      return save(caseId, patch);
+    };
+    await loop.tick();
+    expect(aiMessages(entry)).toHaveLength(1);
+    expect(entry.state).toMatchObject({ stage: 'awaiting_response', attempts: 1, consecutiveFailures: 1 });
+    expect(entry.state.followUpDueAt).toEqual(new Date(T0.getTime() + 24 * HOUR));
+    advance(10 * MINUTE);
+    await loop.tick();
+    expect(aiMessages(entry)).toHaveLength(1);
+    expect(ai.draftReply).toHaveBeenCalledTimes(1);
+    advance(25 * HOUR);
+    await loop.tick();
+    expect(aiMessages(entry)).toHaveLength(2);
+    expect(aiMessages(entry)[1].body).toContain('Just checking in');
+    expect(ai.draftReply).toHaveBeenCalledTimes(1);
+  });
+
   it('backs off a handoff whose escalation fails, and never posts the staff note twice', async () => {
     const store = memoryStore();
     const entry = store.addCase({ id: 'case-16', messages: ['Export broken.'] });

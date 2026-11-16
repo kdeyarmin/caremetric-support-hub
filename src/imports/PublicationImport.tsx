@@ -80,8 +80,11 @@ export function PublicationImport({ client = publicationClient }: { client?: Pub
       for (const part of publicationParts(manifest)) {
         if (current.uploadedParts.includes(part)) continue;
         const file = files[part]; if (!file) throw new Error("Missing file");
-        setBusy(`Verifying ${partLabels[part].toLowerCase()}…`);
-        current = await client.upload(current, part, file, controller.signal);
+        const label = partLabels[part].toLowerCase();
+        setBusy(`Uploading and verifying ${label}…`);
+        current = await client.upload(current, part, file, controller.signal, (received, total) => {
+          if (run === sequence.current) setBusy(`Uploading and verifying ${label}: ${Math.floor(received * 100 / total)}%…`);
+        });
         if (run !== sequence.current) return; setStage(current);
       }
       setBusy("Checking the current catalog and placements…");

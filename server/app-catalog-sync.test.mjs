@@ -284,7 +284,7 @@ describe('syncing Stripe from Intel\'s catalog', () => {
     const result = await t.sync();
     expect(result).toMatchObject({ ok: true, failed: 0, applied: ADDONS.length + ADDON_PRICES, unchanged: 6, held: [], missing: [], facts_stale: [] });
     const products = t.posts.filter(post => post.path === '/v1/products');
-    expect(products.map(post => post.form.get('name'))).toEqual(['Extra seat (Starter)', 'Extra seat (Growth)', 'Extra seat (Pro)', 'Extra branch', 'Extra state']);
+    expect(products.map(post => post.form.get('name'))).toEqual(['Extra seat (Starter)', 'Extra seat (Growth)', 'Extra seat (Pro)', 'Extra location', 'Extra state']);
     expect(Object.fromEntries(products[1].form)).toMatchObject({ unit_label: 'seat', 'metadata[app]': 'caremetric-intel', 'metadata[kind]': 'addon',
       'metadata[entitlement]': 'extra_seat', [`metadata[${FOR_PLAN_KEY}]`]: 'growth', 'metadata[hub_managed]': 'true' });
     expect(products[3].form.get(`metadata[${FOR_PLAN_KEY}]`)).toBeNull();
