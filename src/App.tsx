@@ -311,9 +311,13 @@ function AppShell({ data, onPersonaChange }: { data: HubData; onPersonaChange: (
     return config.demoMode ? demoCommunicationsClient({ breathe: id("breathe"), advisors: id("advisors"), pennsync: id("pennsync"), carebase: id("carebase") }) : undefined;
   }, [demoProductKey]);
 
+  // A help article names the tab itself (HelpArticlePage). React runs this parent effect after the page's own when an article is opened
+  // directly, so it must not overwrite that title; leaving the article restores the page's title, then this sets the next one.
+  const ownTitle = location.pathname.startsWith("/help/articles/");
   useEffect(() => {
+    if (ownTitle) return;
     document.title = pageLabel ? `${pageLabel} · CareMetric Support Hub` : "CareMetric Support Hub";
-  }, [pageLabel]);
+  }, [pageLabel, ownTitle]);
 
   // A long administrator menu scrolls; keep the current page's link in view.
   useEffect(() => {

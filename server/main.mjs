@@ -69,7 +69,8 @@ const connections=socialConnections({pool,features,settings});
 await connections.start();
 const setting=settings.reader;
 const observer=distributionObserver({pool,token:process.env.CAREBASE_DISTRIBUTION_OBSERVER_TOKEN});
-const capabilities=delegations({pool,storageUrl,provider,observer,legacyDistributionOptIn:setting('learning.legacy_distribution_opt_in')});
+// Breathe and Intel access changes, once the database declares their command audiences (20261117110100_app_command_audiences_contract.sql).
+const capabilities=delegations({pool,storageUrl,provider,observer,legacyDistributionOptIn:setting('learning.legacy_distribution_opt_in'),appCommands:features.has('platform.admin.app-commands.v1')});
 const publicationService=publications({pool,delegations:capabilities,storageUrl});
 const ai=aiAssistance({apiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record});
 const aiCases=aiCaseAssistance({ai,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken),rows:(name,sessionToken)=>api.rows(name,sessionToken)});

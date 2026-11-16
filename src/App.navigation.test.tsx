@@ -233,3 +233,14 @@ describe("a saved sign-in destination", () => {
     expect(window.localStorage.getItem("caremetric.pendingHelpPath")).toBeNull();
   });
 });
+
+describe("the tab title", () => {
+  it("keeps a help article's own title when the article is opened directly", async () => {
+    repo.listContent.mockResolvedValue([{ id: "content-1", contentKey: "account.invite-user", kind: "article", title: "Invite a team member",
+      summary: "Add a user, assign the correct role, and confirm access.", body: "Open Team, select Invite member, and send the invitation.",
+      status: "published", accessLevel: "customer", productIds: [], audience: [], locale: "en-US", revision: 1, sourceSystem: "support_hub", routePattern: null }]);
+    render(<MemoryRouter initialEntries={["/help/articles/account.invite-user"]}><App /></MemoryRouter>);
+    await screen.findByRole("heading", { name: "Invite a team member" });
+    await waitFor(() => expect(document.title).toBe("Invite a team member | CareMetric Help Center"));
+  });
+});

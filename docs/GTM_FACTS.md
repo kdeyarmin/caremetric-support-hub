@@ -643,6 +643,9 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
   ZIP areas and 3,200+ counties, and daily checks for new CMS releases (the home page's "by the numbers" band, which the features catalog
   carries). Intel still has no approved customer results. Approved by the owner on 2026-11-16. Also confirmed that day: the pre-visit card and spoken
   debrief pillar never leads a brief.
+- [ ] 2026-11-16: CareBase's home-page figures (12–16 hrs of annual training tracked per direct care worker, by facility type;
+  Ch. 2600 + 2800 linked to supporting records; 60+ survey-ready form templates; 1 record with access by role), read into the CareBase
+  catalog the AI team writes from and listed under "CareBase by the numbers". Tick this box when you approve the pull request that adds them.
 
 ## Feature and function reference
 
@@ -665,6 +668,17 @@ words. Each heading gives the area's count and, in the "Plan or add-on" line, th
 above set what a subscription includes; do not infer an entitlement from an area heading or promise every item to every plan.
 For example, items under "AI assistance with human review" come with the Staff Training and Survey & Compliance tools, and confidential
 incidents under "Survey readiness, safety & quality" require CareBase Core.
+
+#### CareBase by the numbers
+
+The home page's own figures, in the strip under its hero (read 2026-11-16). The AI team reads them worded as the site words them.
+
+| Figure | What it counts |
+| --- | --- |
+| 12–16 hrs | annual training tracked per direct care worker, by facility type |
+| Ch. 2600 + 2800 | PA regulations linked to supporting records |
+| 60+ | survey-ready form templates included |
+| 1 record | shared documentation, with access based on each person’s role |
 
 #### Resident care & daily operations (17)
 

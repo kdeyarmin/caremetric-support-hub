@@ -4,7 +4,10 @@ import { parsePortfolioRequest, parsePortfolioEnvelope } from '../supabase/funct
 import { isOperationalRead } from '../supabase/functions/_shared/operationsProtocol.ts';
 import { adminRegistry } from '../supabase/functions/_shared/adminRegistry.ts';
 import { advisorsCommandEndpoint, isAdvisorCommand, parseAdvisorCommand, parseAdvisorCommandResult } from '../supabase/functions/_shared/advisorsCommands.ts';
-import { parsePortfolioCommand, parseCommandEnvelope } from '../supabase/functions/_shared/adminCommandProtocol.ts';
+import { parseAppCommand, parsePortfolioCommand, parseCommandEnvelope } from '../supabase/functions/_shared/adminCommandProtocol.ts';
+import { tenantLifecycleCapabilities } from '../src/admin/tenantLifecycleProtocol.ts';
+import { breatheCommandOperation, staffAccessCapabilities } from '../src/admin/staffAccessProtocol.ts';
+import { tenantLifecycle } from './tenant-lifecycle.mjs';
 import { callNativeAdmin } from './admin-transport.mjs';
 import { publicationId, publicationPart } from '../src/imports/publicationProtocol.ts';
 import { publicationRange } from './publication-assets.mjs';
@@ -44,7 +47,15 @@ const mediaPath = /^learning\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 export function validateMedia(path,operation) {
   if (!mediaPath.test(path || '') || !['upload','download','sign'].includes(operation)) throw new HttpError(400,'Invalid media request.');
 }
-async function authorize(db,audience,payload) {
+// Each application's own command endpoint, audience and header. CareBase's predates the others and keeps its own route.
+const commandTargets={
+  carebase:{endpoint:'https://cmcarebase.com/api/platform-admin/command',audience:'carebase.command',header:'Authorization'},
+  intel:{endpoint:'https://www.caremetricintel.com/functions/centralAdminCommand',audience:'intel.command',header:'X-CareMetric-Hub-Authorization'},
+};
+// Breathe and Intel changes need platform.admin.app-commands.v1 (20261117110100_app_command_audiences_contract.sql). Without it the
+// capabilities those applications advertise for them are not passed to the browser.
+const appCommandCapabilities=new Set([...tenantLifecycleCapabilities,...staffAccessCapabilities,'commands.preview','commands.apply']);
+async function authorize(db,audience,payload,{appCommands=false}={}) {
   if (['pennsync','caremetric-emr','caremetric-go'].includes(audience)) throw new HttpError(403,'Application disconnected.');
   if(audience==='publication') {
     if(!payload || Object.keys(payload).sort().join(',')!=='id,operation,part,range'
@@ -81,6 +92,12 @@ async function authorize(db,audience,payload) {
     }
     return (await db.query('select hub.authorize_app_admin() as actor')).rows[0].actor;
   }
+  if (audience==='breathe.command' || audience==='intel.command') {
+    if (!appCommands) throw new HttpError(403,'Unsupported authorization audience.');
+    if (audience==='breathe.command') breatheCommandOperation.parse(payload);
+    else parseAppCommand({product:'intel',...payload});
+    return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
+  }
   if (audience==='carebase.command') {
     if(payload?.domain==='training.v1')parseTrainingOperation(payload);
     else if(payload?.domain==='operations.config.v1')parseConfigurationOperation(payload);
@@ -97,11 +114,12 @@ async function authorize(db,audience,payload) {
   return payload;
 }
 // mediaParts: two 256 MB lesson videos at once.
-export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,legacyDistributionOptIn=false,mediaParts=partUploads({budget:2*268435456})}) {
+export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,legacyDistributionOptIn=false,mediaParts=partUploads({budget:2*268435456}),appCommands=false}) {
+  const options={appCommands};
   const issue = async (sessionToken,audience,payload,signal) => {
     const authorizeSession=work=>signal?boundedSession(pool,sessionToken,signal,work):withSession(pool,sessionToken,work);
     return authorizeSession(async(db,session) => {
-      await authorize(db,audience,payload);
+      await authorize(db,audience,payload,options);
       const capability=prefix+token();
       // Return to the dedicated connection role only after relational authorization.
       await db.query('reset role');
@@ -133,6 +151,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
     onboarding: supportOnboarding({pool,issue,fetchImpl}),
     registration: supportRegistration({pool,issue,provider,fetchImpl}),
     pennsyncMigration: pennsyncLearningMigration({pool,issue,fetchImpl}),
+    tenantLifecycle: tenantLifecycle({pool,issue,fetchImpl,enabled:appCommands}),
     async consume(capability,audience) {
       if (['pennsync','caremetric-emr','caremetric-go'].includes(audience)) throw new HttpError(403,'Application disconnected.');
       if (!validDelegation(capability)) throw new HttpError(401,'Invalid authorization.');
@@ -146,7 +165,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
         await db.query('update private.app_delegations set consumed_at=now() where token_hash=$1',[digest(capability)]);
         await db.query('set local role authenticated');
         await db.query("select set_config('request.jwt.claims',$1,true)",[JSON.stringify({sub:delegation.user_id,role:'authenticated',sms_session_id:delegation.id})]);
-        const authorized=await authorize(db,audience,delegation.payload);
+        const authorized=await authorize(db,audience,delegation.payload,options);
         return ['media','publication'].includes(audience) ? authorized : { ...authorized, operation:delegation.payload };
       });
     },
@@ -166,7 +185,14 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
       }
       // A logout, revocation or role change while the native read was in flight
       // must prevent the response from reaching the browser.
-      await withSession(pool,sessionToken,db=>authorize(db,request.product,operation));
+      await withSession(pool,sessionToken,db=>authorize(db,request.product,operation,options));
+      // Breathe and Intel may advertise access changes before the Hub's database declares them: hide those until it does, and
+      // never offer CareBase's command names for an application without a command endpoint of its own.
+      if (operation.operation==='capabilities') {
+        const offered=name=>!appCommandCapabilities.has(name) || request.product==='carebase'
+          || (appCommands && (request.product==='breathe' ? name.startsWith('organizations.lifecycle.') || name.startsWith('staff.access.') : Object.hasOwn(commandTargets,request.product) && name.startsWith('commands.')));
+        return {...result,data:{...result.data,operations:result.data.operations.filter(offered)}};
+      }
       return result;
     },
     /** The owner's changes to a Healthcare Advisors consultation request: its status and notes, or deleting it. */
@@ -187,11 +213,13 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
     },
     async command(sessionToken,input) {
       let request;
-      try { request=parsePortfolioCommand(input); } catch { throw new HttpError(400,'Invalid administrator command.','invalid_request'); }
-      const capability=await issue(sessionToken,'carebase.command',request.command);
-      const result=await callNativeAdmin(fetchImpl,'https://cmcarebase.com/api/platform-admin/command','Authorization',capability,request.command,value=>parseCommandEnvelope(value,request),true);
-      // A logout or revocation while CareBase was answering keeps the before-and-after values from the browser.
-      await withSession(pool,sessionToken,db=>authorize(db,'carebase.command',request.command));
+      try { request=parseAppCommand(input); } catch { throw new HttpError(400,'Invalid administrator command.','invalid_request'); }
+      if (request.product!=='carebase' && !appCommands) throw new HttpError(503,'Access changes for this application are not switched on yet.','unconfigured');
+      const target=commandTargets[request.product];
+      const capability=await issue(sessionToken,target.audience,request.command);
+      const result=await callNativeAdmin(fetchImpl,target.endpoint,target.header,capability,request.command,value=>parseCommandEnvelope(value,request),true);
+      // A logout or revocation while the application was answering keeps the before-and-after values from the browser.
+      await withSession(pool,sessionToken,db=>authorize(db,target.audience,request.command,options));
       return result;
     },
     media,

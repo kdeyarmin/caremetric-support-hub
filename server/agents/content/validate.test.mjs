@@ -210,6 +210,18 @@ describe('each check that rejects a draft', () => {
     expect(textProblems('CareBase draws on 150+ public healthcare datasets.', { product: 'carebase', numbers: catalogNumbers('carebase') })).toEqual(['unlisted_number']);
   });
 
+  it('reads a number past the country before its unit, so "3,200 U.S. counties" is checked like "3,200 counties"', () => {
+    for (const text of ['3,200 U.S. counties', '3,200+ U.S. counties', '3,200 U. S. counties', '3,200 US counties', '3,200 U.S.A. counties', '3,200 American counties'])
+      expect(numbersIn(text), text).toEqual(['3200:county']);
+    expect(numbersIn('33,000+ U.S. ZIP areas, 50 U.S. states')).toEqual(['33000:zip', '50:state']);
+    // "U.S." and "us" with no count after them give no number of their own.
+    expect(numbersIn('2020 U.S. Census data; join 3 of us; 3 USB drives; 3,200 counties in the U.S.')).toEqual(['3200:county']);
+    // Copy about Intel may state its published figures with the country, and no other figure; copy about CareBase may state none.
+    expect(textProblems('CareMetric Intel covers 3,200+ U.S. counties and 33,000+ U.S. ZIP areas.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual([]);
+    expect(textProblems('CareMetric Intel covers 4,000 U.S. counties.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual(['unlisted_number']);
+    expect(reasons(withSentence('CareBase is used in 500 U.S. facilities.'))).toEqual(['unlisted_number']);
+  });
+
   it('rejects guarantees, compliance assurances and certifications', () => {
     expect(reasons(withSentence('We guarantee a clean survey.'))).toContain('guarantee');
     for (const sentence of ['CareBase ensures compliance with Chapter 2600.', 'It keeps your home compliant.', 'Pass your next inspection with CareBase.',

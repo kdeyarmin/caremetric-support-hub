@@ -4,8 +4,12 @@ import { isOperationalRead, operationalReadOperations, parseOperationalRead, par
 export const portfolioProducts = ["carebase", "breathe", "caremetric-emr", "pennsync", "intel", "caremetric-go", "advisors"] as const;
 export type PortfolioProduct = typeof portfolioProducts[number];
 export const learningPackageCapabilities = ["learning.packages.context", "learning.packages.status", "learning.packages.upload", "learning.packages.accept", "learning.packages.finish"] as const;
+/** Breathe's organization suspend/restore (tenant.lifecycle.v1), offered only by Breathe. */
+export const organizationLifecycleCapabilities = ["organizations.lifecycle.context", "organizations.lifecycle.preview", "organizations.lifecycle.apply", "organizations.lifecycle.resume"] as const;
+/** Breathe staff sign-in deactivate and reactivate (staff.access.v1), advertised by Breathe only. */
+export const staffAccessCapabilities = ["staff.access.context", "staff.access.preview", "staff.access.apply", "staff.access.resume"] as const;
 // Platform billing is the Hub's own (Billing workspace); applications' billing reads are no longer requested.
-export const portfolioOperations = ["phone.messages.list", "inquiries.list", "capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", ...operationalReadOperations, ...learningPackageCapabilities, "learning.distribution.context", "commands.preview", "commands.apply", "support.identity.resolve", "learning.media.v1", "operations.config.v1", "training.v1"] as const;
+export const portfolioOperations = ["phone.messages.list", "inquiries.list", "capabilities", "overview", "courses.list", "courses.get", "organizations.list", "users.list", ...operationalReadOperations, ...learningPackageCapabilities, ...organizationLifecycleCapabilities, ...staffAccessCapabilities, "learning.distribution.context", "commands.preview", "commands.apply", "support.identity.resolve", "learning.media.v1", "operations.config.v1", "training.v1"] as const;
 export type PortfolioOperationName = typeof portfolioOperations[number];
 export type DirectoryOperation = { operation: "organizations.list" | "users.list" | "phone.messages.list" | "inquiries.list"; search?: string; limit: number; offset: number };
 /** Healthcare Advisors is a consulting practice: it exposes only its consultation inbox. */
@@ -26,7 +30,7 @@ export interface AdvisorInquiry {
 }
 export const advisorInquiryStatuses = ["new", "in-progress", "closed"] as const;
 export interface AdminOrganization { id: string; name: string | null; slug: string | null; status: string; createdAt: string | null; }
-export interface AdminDirectoryUser { id: string; displayName: string | null; email: string | null; role: string; status: string; createdAt: string | null; }
+export interface AdminDirectoryUser { id: string; displayName: string | null; email: string | null; role: string; status: string; createdAt: string | null; /** Intel: the account's own state (pending, invited, active, disabled), when its bridge reports it. */ accountStatus?: string; }
 export interface AdminPage<T> { items: T[]; total: number; limit: number; offset: number; }
 
 function object(value: unknown): Record<string, unknown> {
@@ -95,7 +99,9 @@ function user(value: unknown, product: PortfolioProduct): AdminDirectoryUser {
   // Breathe's native identity column is TEXT; legacy IDs must retain their case.
   const userId = product === "breathe" ? string(row.id, 128) : entityId(row.id, product);
   if (product === "breathe" && !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(userId)) throw new Error("Invalid native identity");
-  return { id: userId, displayName: nullableString(row.displayName), email: nullableString(row.email, 500), role: string(row.role, 100), status: string(row.status, 100), createdAt: timestamp(row.createdAt) };
+  const accountStatus = product === "intel" && row.accountStatus !== undefined ? string(row.accountStatus, 20) : undefined;
+  if (accountStatus !== undefined && !["pending", "invited", "active", "disabled"].includes(accountStatus)) throw new Error("Unverified Intel account status");
+  return { id: userId, displayName: nullableString(row.displayName), email: nullableString(row.email, 500), role: string(row.role, 100), status: string(row.status, 100), createdAt: timestamp(row.createdAt), ...(accountStatus ? { accountStatus } : {}) };
 }
 /** One consultation request, validated field by field. */
 export function parseAdvisorInquiry(value: unknown): AdvisorInquiry {
@@ -128,7 +134,7 @@ export function parsePortfolioEnvelope(input: unknown, request: PortfolioRequest
     if (row.apiVersion !== 1 || !Array.isArray(row.operations) || row.operations.length > 100 || row.operations.some(value => typeof value !== "string")) throw new Error("Invalid capabilities");
     const revision = nullableString(row.sourceRevision, 64);
     if (revision !== null && !/^[a-f0-9]{7,64}$/i.test(revision)) throw new Error("Invalid source revision");
-    data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName) && (product === "advisors" ? advisorsOperations.includes(value as PortfolioOperationName) : value !== "inquiries.list") && (product === "carebase" || !isOperationalRead(value) && value !== "learning.distribution.context" && value !== "learning.media.v1" && value !== "operations.config.v1" && value !== "training.v1" && !learningPackageCapabilities.includes(value as typeof learningPackageCapabilities[number]))))] as PortfolioOperationName[], sourceRevision: revision };
+    data = { apiVersion: 1, operations: [...new Set(row.operations.filter(value => portfolioOperations.includes(value as PortfolioOperationName) && (product === "advisors" ? advisorsOperations.includes(value as PortfolioOperationName) : value !== "inquiries.list") && (product === "breathe" || !organizationLifecycleCapabilities.includes(value as typeof organizationLifecycleCapabilities[number]) && !staffAccessCapabilities.includes(value as typeof staffAccessCapabilities[number])) && (product === "carebase" || !isOperationalRead(value) && value !== "learning.distribution.context" && value !== "learning.media.v1" && value !== "operations.config.v1" && value !== "training.v1" && !learningPackageCapabilities.includes(value as typeof learningPackageCapabilities[number]))))] as PortfolioOperationName[], sourceRevision: revision };
   } else if (operation.operation === "phone.messages.list") {
     if (product !== "breathe") throw new Error("Unsupported phone inbox source");
     data = page(row, operation, value => {
