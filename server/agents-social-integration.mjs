@@ -123,7 +123,7 @@ try {
 
   await assert.rejects(admin.query('select private.social_open_targets()'), error => error.code === '42501', 'Only the Hub server reads open targets');
 
-  // ---- The month's campaigns for the ad plan's flights (20261117110000_ads_flights.sql): every platform's, with status and pacing ----
+  // ---- The month's campaigns for the ad plan's flights (20261117120000_ads_flights.sql): every platform's, with status and pacing ----
   const adsStore = sqlAgentStore(pool, { creative: true, ads: true });
   const month = `2099-${String(1 + (parseInt(run, 16) % 12)).padStart(2, '0')}`;
   const adsPlan = await runningTask('social_manager', 'ads.plan');
