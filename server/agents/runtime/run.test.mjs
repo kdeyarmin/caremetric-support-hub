@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { aiModels } from '../../ai-assistance.mjs';
 import { anthropicClient } from './client.mjs';
 import { costCents, inputOnlyCents, worstCaseCents } from './pricing.mjs';
-import { inputTokenBound, modelRunner, requestBody } from './run.mjs';
+import { ceilingFloorTokens, inputTokenBound, modelRunner, requestBody } from './run.mjs';
 
 const CANARY = 'Pat Example 555-0142 canary-8841';
 const schema = {
@@ -153,6 +153,23 @@ describe('the budget', () => {
     expect(f.runs[0].usage).toEqual({});
     expect(f.ledger).toHaveLength(0);
     expect(f.runner.reserved('support_concierge')).toBe(0);
+  });
+
+  it('holds one call inside its own ceiling: a shorter answer when that fits, no call when even the floor does not', async () => {
+    const cost = tokens => worstCaseCents(aiModels.draft, { inputTokens: boundOf(), maxTokens: tokens, cached: true });
+    const roomy = fixture();
+    expect((await roomy.run({ ...request(), ceilingCents: cost(3000) })).outcome).toBe('completed');
+    expect(roomy.seen[0].body.max_tokens).toBe(3000);
+    const tight = fixture();
+    expect((await tight.run({ ...request(), ceilingCents: cost(2000) })).outcome).toBe('completed');
+    expect(tight.seen[0].body.max_tokens).toBeLessThanOrEqual(2000);
+    expect(tight.seen[0].body.max_tokens).toBeGreaterThanOrEqual(ceilingFloorTokens);
+    const none = fixture();
+    const refused = await none.run({ ...request(), ceilingCents: cost(ceilingFloorTokens) - 0.01 });
+    expect(refused).toMatchObject({ outcome: 'over_ceiling' });
+    expect(none.seen).toHaveLength(0);
+    expect(none.ledger).toHaveLength(0);
+    expect(await rejection(fixture().run({ ...request(), ceilingCents: 0 }))).toMatchObject({ code: 'request_rejected' });
   });
 
   it('allows a call that exactly fits, and treats a missing budget as nothing left', async () => {

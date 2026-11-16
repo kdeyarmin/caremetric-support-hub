@@ -121,6 +121,9 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   views:{enabled:setting('growth.report_views'),feed:intelFeedReader({features,enabled:setting('growth.report_views'),key:process.env.HUB_INTEL_FEED_SECRET})},
   briefs:{enabled:setting('growth.account_brief'),perDay:setting('growth.brief_per_day'),cents:setting('growth.brief_cents'),
     qualityWriter:setting('growth.quality_writer'),critic:setting('growth.draft_critic')},
+  // Stage 2 of the 2026-11-17 review (Settings → Customer growth): the best prospects first, a short first email as a test, and a
+  // follow-up when a prospect who replied goes quiet. The send hours are read by the send claim itself.
+  priority:{enabled:setting('growth.send_priority'),shortFirst:setting('growth.short_first_email'),quietFollowup:setting('growth.quiet_followup')},
   // Each Medicare roster agency's free market report on Intel, linked in its outreach (growth/report-link.mjs; the feed's shared secret).
   reports:reportLinks({key:process.env.HUB_INTEL_FEED_SECRET}),importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
   sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});
@@ -140,6 +143,8 @@ const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:
   leadSecrets:leadSecrets(process.env),
   // Website leads followed up by email (Settings → Customer growth → Follow up website leads by email).
   inboundFollowup:setting('growth.inbound_followup'),
+  // The Sales Executive reads the account brief, the email answered and whether the report was opened (Settings → Customer growth).
+  salesContext:setting('growth.sales_context'),
   // How many agent tasks may run side by side (Settings → AI team → Tasks at once).
   concurrentTasks:setting('agents.concurrent_tasks'),
   // Paid ads: Settings → Paid ads, with the Google Ads secrets from Railway.

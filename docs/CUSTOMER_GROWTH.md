@@ -467,14 +467,68 @@ learning memo can tell whether the brief's choice draws more replies. At most on
 it (`held.top_model_later`); a repair pass stays on the agent's own tier.
 
 **The reader's review** (Settings → Customer growth → Have a reader review each first email). A second model reads each first email as
-the owner of an agency like this one (`critic.1`) and scores it 1 to 5 for being specific, relevant, clear in its ask and worth a reply.
+the owner of an agency like this one and scores it 1 to 5 for being specific, relevant, clear in its ask and worth a reply.
 Below 4 the email is rewritten once around its weakest sentence, on the same tier, and the better-scored version is kept. The score is
 recorded with the email (`arms.critic`, `arms.rewritten`), and the Monday memo compares replies by score once there are 20 of each.
+Since 2026-11-17 (`critic.2`, [review](AI_WORKFORCE_REVIEW_2026-11-17.md)): the first version scored all four emails it read 2 or 3,
+having been told most cold email deserves that, and kept only one number. Now each score has a description (a careful, specific email
+earns a 4), the reader sees the brief's writer part and the writer's own rules, and it names one weakness from a fixed list
+(`generic_opening`, `about_sender`, `too_long`, `too_many_asks`, `unclear_ask`, `wrong_problem`, `no_reason_now`, `reads_as_template`, or
+`none`). All four scores and the weakness are kept with the email (`arms.criticSpecific`, `criticRelevant`, `criticAsk`, `weakness`; no
+text), a rewrite is told the weakness too, and the Monday memo names the commonest weakness once three drafts share it.
 
 **Money.** A brief costs about 30 to 45 cents (research on the draft tier, the brief on the top model); a first email on the top model
 about 7 to 15 cents, the review about a cent. The migration raises the Marketing Manager's daily budget to $15 (owner decision
 2026-11-16), enough for about 25 briefed and reviewed first emails a day. Nothing spends it until the settings are on.
 `server/agents-growth-brief-integration.mjs` runs the database side through the real roles in CI.
+
+## Spending the day's cold emails well, and acting on interest (2026-11-17)
+
+Stage 2 of the [November 17 review](AI_WORKFORCE_REVIEW_2026-11-17.md) (`20261117170000_growth_priority.sql`, feature
+`platform.agents.growth-priority.v1`). Ten cold emails a day is the whole machine, and on November 16 they went to whoever was approved
+first, a third of them on a Sunday afternoon. Each switch below is under Settings → Customer growth and starts off.
+
+- **Send to the best prospects first** (`growth.send_priority`). The day's growth emails go out band by band
+  (`private.growth_priority_band`): 1, a follow-up to an agency that opened its report; 2, a first email with an account brief to a named
+  person whose mailbox was confirmed; 3, a first email with a brief; 4, the rest. Within a band, by fit, and ten points an hour of
+  waiting (at most what three bands are worth), so nothing waits forever (`private.growth_action_score`). Every other kind of action keeps
+  its place ahead of them. The drafting sweep reads the pipeline in the same order, and each first email keeps its band (`arms.band`), so
+  the memo can compare bands. An email over the day's cap waits for the next Eastern day instead of being tried every 15 minutes. An
+  agency's first open of its report brings its second email forward to the policy's own gap after the first (72 hours) instead of four
+  days (`growth_report_open_followup`, no new version, so colleagues' emails on the same touch are not cancelled).
+- **Send cold email from this hour / until this hour** (`growth.send_from_hour`, `growth.send_until_hour`). Eastern time, Monday to
+  Friday; the "until" hour itself is outside (16 stops at 4 pm). The send claim refuses a cold email outside them (`outside_hours`) and it
+  waits for the next opening (`private.growth_next_send_at`). Replies and customer emails are never held. Both empty, or "until" not
+  after "from": any time, as before.
+- **Test a short first email** (`growth.short_first_email`). Half of the Intel first emails that link the agency's own report (by a hash
+  of the opportunity, so an agency's form never changes) are written short: about 70 words, never more than 90, the report and exactly one
+  question, no trial, card terms, price or other link (`growth.15`, check `short_form`). The second email after a short first one offers
+  the trial with its card terms (the snapshot's `first_form`), whatever the switch says later. The form is kept as `arms.form` (`short`
+  or `standard`).
+- **Follow up when a prospect who replied goes quiet** (`growth.quiet_followup`). A prospect whose latest word was a reply with interest or
+  a question, which was answered by email, and who has not written since, gets at most two short notes: four days after our answer, then
+  five days after the first note (`private.growth_quiet_candidates`). Each is a customer email (purpose `success`, the Sales follow-ups
+  step), drafted and checked like any growth email, with the same send claim, caps and opt-out link; a reply, a no, a "not now", a
+  meeting, a trial, an opt-out or a complaint ends them. The note asks whether the answer helped and gives the one self-serve next step; it
+  never says it noticed anything the prospect did.
+- **Give the Sales Executive the account brief** (`growth.sales_context`). When drafting a reply to a prospect, the Sales Executive also
+  reads the brief's writer part (never the research part, so never a leader's name, a fit or the agency's own standing), which of our
+  emails was answered (its touch, subject and form) and whether the report was opened (yes or no), through
+  `private.sales_growth_context` (`sales.6`). It must never say or imply that it knows the report was opened (check `mentions_open`), and
+  never state the agency's own share, rank, ratings or patient counts (check `own_standing`).
+
+Plain fixes (no switch):
+
+- **Briefs only for an agency that can be emailed.** Ten of the 22 briefs written by November 16 were for agencies with no address; a brief
+  now needs the opportunity's contact to be permitted.
+- **The brief's write-up has a ceiling.** It holds what is left of "Most to spend on one account brief" after the research
+  (`ceilingCents` on the model call): a shorter answer when that fits, no call when even 1,500 tokens would not.
+- **The memo compares report opens until there are replies.** Each arm also counts the sent emails that linked the agency's own report and
+  how many of those agencies opened it within 30 days (`private.growth_learning_facts`). An arm that cannot be compared on replies is
+  compared on opens: at least 15 such emails for each value, the best with at least 3 opens and a lead of at least 10 points. Band and
+  "opened" are never compared on opens, because an open is what decides them.
+
+`server/agents-growth-priority-integration.mjs` runs the database side through the real roles in CI, twice.
 
 ## Checking an address before the first email, and the bounce guard
 

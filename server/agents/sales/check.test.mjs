@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkSalesReply, guideLinks, replyLinks } from './check.mjs';
+import { checkSalesReply, guideLinks, mentionsOpen, ownStanding, replyLinks } from './check.mjs';
 import { buildUserMessage, responseSchema, salesPromptVersion, systemPrompt } from './prompt.mjs';
 
 const guide = { label: 'Assign annual training', url: 'https://help.caremetric.ai/help/articles/assign-annual-training' };
@@ -96,7 +96,7 @@ describe('checking a sales reply', () => {
 
 describe('the Sales Executive prompt', () => {
   it('is a constant that carries the fact sheet and the playbook and nothing per request', () => {
-    expect(salesPromptVersion).toBe('sales.5');
+    expect(salesPromptVersion).toBe('sales.6');
     // How to use the product catalog that follows as its own block (content/features.mjs).
     expect(systemPrompt).toContain('when a product\'s own published catalog follows these instructions');
     expect(systemPrompt).toContain('never offer or suggest a demo, a call or a meeting');
@@ -118,5 +118,63 @@ describe('the Sales Executive prompt', () => {
     expect(user).not.toContain('booking');
     expect(user).toContain('<prospect_message>\nHow much &lt;is&gt; it?\n</prospect_message>');
     expect(user).toContain('<conversation_history>\ncaremetric: Hello\n</conversation_history>');
+  });
+});
+
+describe('the agency\'s standing and the report open (review 2026-11-17, row 2.9)', () => {
+  const intel = (reply, over = {}) => checkSalesReply({ reply, product: 'caremetric-intel', route: 'email', text: 'Tell me more.', ...over });
+  const trial = '\n\nYou can start a 30-day free trial here:\nhttps://www.caremetricintel.com/';
+
+  it('never states the agency\'s own rating, rank, share or patient counts, and lets words about what Intel shows pass', () => {
+    for (const words of ['Your agency is rated 4 stars.', 'Your market share is 12%.', 'You served 340 patients last year.', 'You rank fourth in the county.',
+      "Your agency's share of referrals is low.", 'You are the third-largest agency in the county.']) expect(ownStanding(words), words).toBe(true);
+    for (const words of ['See the public ratings for every agency in your county.', "Intel shows each agency's share of the county.",
+      'Are you getting your share of the referrals in your county?', 'You have 3 locations to set up.']) expect(ownStanding(words), words).toBe(false);
+    expect(intel(`Your agency's share of referrals is low, and Intel shows why.${trial}`)).toMatchObject({ ok: false, reason: 'own_standing' });
+  });
+
+  it('refuses words that say or imply CareMetric saw an open, and lets invitations to open pass', () => {
+    for (const words of ['I saw you opened the report last week.', 'I noticed you viewed the market report.', 'Thanks for checking out the report.',
+      'Thank you for taking a look at the report.', "You've been looking at the referral data, so here is more.", 'I see you have already opened the link.',
+      'Our records show the report was read.', 'Glad you opened the report.', 'You opened the report on Tuesday.', 'I can see your team looked at it.']) {
+      expect(mentionsOpen(words), words).toBe(true);
+    }
+    for (const words of ['You can open the report here:', 'When you open the report, the first page shows the county.', "If you've looked at the report, the hospitals are on page two.",
+      'I see you have a question about pricing.', "We know you're busy, so you can open the report here.", 'Once you have opened the report, start with the sources.',
+      'Did you get a chance to open it?', 'Thanks for checking out Intel.', 'Thanks for reaching out.',
+      'The data shows which hospitals send the most patients.', 'The Medicare data says the county grew.']) expect(mentionsOpen(words), words).toBe(false);
+    expect(intel(`Thanks for taking a look at the report.${trial}`)).toMatchObject({ ok: false, reason: 'mentions_open' });
+    expect(intel(`You can open the report again here, and the trial shows the rest.${trial}`).ok).toBe(true);
+  });
+
+  it('lets the reply say so when the prospect said they opened it, read from their own words only', () => {
+    expect(mentionsOpen('Thanks for taking a look at the report.', 'I read the report you sent and have a question.')).toBe(false);
+    expect(intel(`Thanks for taking a look at the report.${trial}`, { prospect: 'I read the report you sent.' }).ok).toBe(true);
+    // CareMetric's own earlier email mentioning the report is not the prospect saying they opened it.
+    expect(intel(`Thanks for taking a look at the report.${trial}`, { text: 'Tell me more.\nI put together a free market report for your agency.', prospect: 'Tell me more.' }))
+      .toMatchObject({ ok: false, reason: 'mentions_open' });
+  });
+});
+
+describe('the Sales Executive prompt with an account context', () => {
+  it('tells the model to use the brief for relevance only and never to let an open show', () => {
+    expect(systemPrompt).toContain('<account_context>, when present');
+    expect(systemPrompt).toContain('Use it only to make your answer relevant');
+    expect(systemPrompt).toContain('never mention a brief, research or what CareMetric knows about them');
+    expect(systemPrompt).toContain('Never say or imply that you know whether, when or how often they opened, viewed, read or downloaded anything');
+    expect(systemPrompt).toContain("Never state the prospect's own agency's market share, rank, star ratings, scores, or patient, admission or referral counts");
+  });
+
+  it('adds the block after the conversation only when there is a context', () => {
+    const base = { product: 'CareMetric Intel', channel: 'email', words: 170, links: replyLinks('caremetric-intel'), text: 'Tell me more.' };
+    expect(buildUserMessage(base)).not.toContain('<account_context>');
+    const user = buildUserMessage({ ...base, history: [{ direction: 'outbound', text: 'Hello' }],
+      account: { brief: { summary: 'An agency.', angle: 'referral growth', pains: ['Which hospitals send the most?'], hook: null },
+        answered: { touch: 1, purpose: 'marketing', subject: 'Your county', form: null }, reportOpened: false } });
+    expect(user.indexOf('<account_context>')).toBeGreaterThan(user.indexOf('</conversation_history>'));
+    expect(user).toContain("answered_email: CareMetric's email 1, subject: Your county");
+    expect(user).toContain('brief_angle: referral growth');
+    expect(user).toContain('report_opened: no (never say or imply you know this)');
+    expect(user).not.toContain('brief_opening_fact');
   });
 });

@@ -1,3 +1,4 @@
+import { hasGrowthPriority } from './priority.mjs';
 import { live } from '../live.mjs';
 import { contentBrief } from './content.mjs';
 import { weekStart } from '../agents/accounts/week.mjs';
@@ -15,7 +16,8 @@ import { discoveryQueries, linkablePages, senderFor } from './playbook.mjs';
 import { searchResultLimit } from './research.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
 import { chooseSite, confirmsSite, phoneCandidates, phoneQuery, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
-const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
+// Why it waits goes with it: the send claim's status ('daily_limit', 'outside_hours', ...), read by private.growth_defer_action.
+const deferred=(reason=null)=>Object.assign(new Error('Action is deferred'),{code:'action_deferred',...(reason?{reason}:{})});
 const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
 /** The calendar day in America/New_York, matching every other send cap and notice. */
 export const growthDay=instant=>easternDay.format(instant);
@@ -40,6 +42,8 @@ export const growthColleaguesFeature='platform.agents.growth-colleagues.v1';
 export const growthAddressCheckFeature='platform.agents.growth-address-check.v1';
 // Colleague emails recorded and proposed on one sweep at most: a few touches' worth, so a sweep never spends its time on them.
 export const colleagueLimit=20;
+/** Prospects who went quiet after a reply, read once a sweep (private.growth_quiet_candidates). */
+export const quietLimit=10;
 /**
  * What a colleague's own opt-out link is signed for: its touch's work and its person, so each person's link is their own and stays the
  * same across retries. The claim returns the same text as `unsubscribeKey` (a primary contact's is the work alone, as before).
@@ -105,6 +109,11 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   // First emails wait for their address's check, and cold email for a tripped bounce guard (Settings → Customer growth).
   const holding=(features instanceof Set?features.has(growthAddressCheckFeature):Array.isArray(features)&&features.includes(growthAddressCheckFeature))
     &&typeof growth.store.draftHold==='function';
+  // Stage 2 of the 2026-11-17 review (priority.mjs; Settings → Customer growth): each first email keeps its priority band, half of the
+  // report-led first emails are written short while "Test a short first email" is on, and a prospect who replied and went quiet gets
+  // at most two follow-ups while "Follow up when a prospect who replied goes quiet" is on.
+  const prioritized=hasGrowthPriority(features);
+  const quieting=prioritized&&typeof growth.store.quietCandidates==='function';
   // Assessments and drafts the model could not give, by opportunity and what it was asked about, and when: kept in this process
   // only, so a restart asks once more. Without it every fifteen-minute sweep would pay for the same unanswerable request again.
   const unanswered=new Map();
@@ -180,13 +189,15 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const marketedList=owner==='marketing_manager'?await marketedNow(marketed):null;
     const prospecting=autonomy&&owner==='marketing_manager'&&task.agent?.autonomy!=='observe';
     const productsByDomain=new Map();
+    // The opportunities this sweep read, for the quiet follow-ups after the pipeline.
+    const read=new Map();
     // Researched prospects that meet the qualification rules move to qualified before the pipeline is read (nothing is sent here).
     if(prospecting&&reengaging&&typeof growth.store.reengage==='function')reengaged=(await growth.store.reengage(50))?.reengaged??0;
     if(prospecting)await growth.store.autoQualify(qualifyLimit);
     while(offset<total) {
       signal?.throwIfAborted(); const page=await growth.store.snapshot(offset);total=page.total;offset+=page.items.length;if(!page.items.length)break;
       for(const o of page.items) {
-        signal?.throwIfAborted(); if(o.owner_agent!==owner)continue; inspected++;
+        signal?.throwIfAborted(); if(o.owner_agent!==owner)continue; inspected++; read.set(o.id,o);
         if(owner==='marketing_manager' && !markets(marketedList,o.product))continue;
         if(prospecting && ['identified','researched','qualified'].includes(o.stage))productsOf(productsByDomain,o);
         const plans=planOpportunity(o,now());
@@ -239,12 +250,15 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           const report=work.kind==='outreach'&&growth.reports?(growth.reports.checkedLinkFor?await growth.reports.checkedLinkFor(o,{signal}):growth.reports.linkFor?.(o))??null:null;
           if(quality)topDrafts++;
           const views=viewing&&live(growth.views?.enabled)===true;
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,views,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
+          const short=prioritized&&work.kind==='outreach'&&live(growth.priority?.shortFirst)===true;
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,views,short,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           let saved;
           try {
-            saved=await growth.store.draft(o.id,id,{...draft,version:o.version,contactVersion:o.contact_version,policyVersion:o.policy.version,purpose:work.kind==='outreach'?'marketing':'success',unsubscribeHash:growth.hash(growth.unsubscribeToken(id)),variant:draft.variant??'control',arms:draft.arms??{}});
+            // The email's priority band (1 to 4, private.growth_priority_band) is kept with its arms, so the memo can compare bands.
+            const arms={...(draft.arms??{}),...(prioritized&&work.kind==='outreach'&&[1,2,3,4].includes(Number(o.priority_band))?{band:String(o.priority_band)}:{})};
+            saved=await growth.store.draft(o.id,id,{...draft,version:o.version,contactVersion:o.contact_version,policyVersion:o.policy.version,purpose:work.kind==='outreach'?'marketing':'success',unsubscribeHash:growth.hash(growth.unsubscribeToken(id)),variant:draft.variant??'control',arms});
           } catch (error) {
             // An owner edit during drafting invalidates this output. The next sweep reads fresh context.
             if(error?.code==='40001')continue;
@@ -252,6 +266,34 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           }
           if(saved.status==='draft')await growth.store.propose(task.id,saved.id);drafted++;
         }
+      }
+    }
+    // A prospect who replied with interest or a question, was answered and has gone quiet: at most two short follow-ups (Settings →
+    // Customer growth → Follow up when a prospect who replied goes quiet; private.growth_quiet_candidates), drafted, checked, claimed and
+    // opted out of like every growth email. A customer email (purpose 'success'), so it is the Sales follow-ups step's to hand over.
+    let quietFollowups=0;
+    if(quieting&&prospecting&&growth.signingReady&&live(growth.priority?.quietFollowup)===true&&!spent()) {
+      for(const item of await growth.store.quietCandidates(quietLimit)) {
+        signal?.throwIfAborted(); if(spent())break;
+        const o=read.get(item.opportunityId);
+        if(!o||!markets(marketedList,o.product)||o.eligibility!=='permitted'||![1,2].includes(Number(item.step)))continue;
+        const asked=`quiet:${o.id}:${item.key}:${o.version??''}:${o.contact_version??''}:${o.policy?.version??''}`;
+        if(clock()-(unanswered.get(asked)??-Infinity)<assessRetryMs)continue;
+        const plan={key:String(item.key),kind:'reply',owner:'marketing_manager',dueAt:now().toISOString(),success:'The prospect answers, asks for the next step or declines.',
+          action:Number(item.step)===1?'Follow up once on our answer to the prospect\'s reply.':'Send a last short note after the follow-up went unanswered.'};
+        const id=await growth.store.plan(o.id,plan);planned++;
+        const draft=await oneAnswer(()=>draftMessage({opportunity:o,work:{...plan,quiet:{step:Number(item.step)}},task,model,signal,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
+        if(!draft){if(model?.configured)unanswered.set(asked,clock());continue;}
+        signal?.throwIfAborted();
+        let saved;
+        try {
+          saved=await growth.store.draft(o.id,id,{...draft,version:o.version,contactVersion:o.contact_version,policyVersion:o.policy.version,purpose:'success',
+            unsubscribeHash:growth.hash(growth.unsubscribeToken(id)),variant:draft.variant??'control',arms:{...(draft.arms??{}),quiet:String(item.step)}});
+        } catch (error) {
+          if(error?.code==='40001')continue;
+          throw error;
+        }
+        if(saved?.status==='draft'){await growth.store.propose(task.id,saved.id);quietFollowups++;}
       }
     }
     // The touches sent since the last sweep go to the organization's other decision-makers too.
@@ -262,7 +304,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     let contacts=null;
     if(prospecting&&growth.contacts?.configured&&typeof growth.store.contactCandidates==='function'&&!spent())contacts=await findContacts(sweepContactLimit,productsByDomain,{signal,spent});
     if(planned && notifier)await notifier.send({severity:'info',subject:'Customer growth work is ready',body:`${planned} follow-up tasks reviewed; ${drafted} message drafts prepared. Open Growth to review next actions.`,dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
-    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(Object.keys(held).length?{held}:{}),...(reengaged?{reengaged}:{}),...(colleagueEmails?{colleagues:colleagueEmails}:{}),...(contacts?.searched?{contacts}:{})}};
+    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(Object.keys(held).length?{held}:{}),...(reengaged?{reengaged}:{}),...(colleagueEmails?{colleagues:colleagueEmails}:{}),...(quietFollowups?{quietFollowups}:{}),...(contacts?.searched?{contacts}:{})}};
   }
   async function discover(task,{signal,now=()=>new Date()}={}) {
     if(!growth.research?.configured)return {result:{skipped:'research_not_configured'}};
@@ -493,7 +535,8 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress,features
     if(holding&&await growth.store.sendHold(execution.input.messageId))throw deferred();
     const claimed=await growth.store.claim(execution.input.messageId,execution.id);
     if(!claimed.send){
-      if(['frequency_limited','daily_limit','evaluation_required','delivery_unresolved'].includes(claimed.status))throw deferred();
+      // Over the cap, outside the send hours (20261117170000_growth_priority.sql) or waiting on another email: tried again later.
+      if(['frequency_limited','daily_limit','evaluation_required','delivery_unresolved','outside_hours'].includes(claimed.status))throw deferred(claimed.status);
       if(finalRefusals.has(claimed.status))throw Object.assign(new Error('The message was not sent.'),{code:claimed.status});
       return {delivery:claimed.status};
     }

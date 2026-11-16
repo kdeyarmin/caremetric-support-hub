@@ -17,15 +17,17 @@ import { transaction } from '../sms-auth.mjs';
 /** Work recovery (20261117160000_work_recovery.sql, review 2026-11-17): blocked images rendered again, and why an ad platform refused. */
 export const workRecoveryFeature = 'platform.agents.work-recovery.v1';
 
-export function sqlAgentStore(pool, { fenced = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, creativeReview = false, ads = false, watchdog = false, handover = false, workRecovery = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growthPriority = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, creativeReview = false, ads = false, watchdog = false, handover = false, workRecovery = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
     fenced,
-    // A deferred growth message waits 15 minutes; a social post waits for its time slot (platform.agents.social.v1).
-    ...(growth || social ? { deferExecution:(actionId,execution,kind=null)=>(String(kind??'').startsWith('social.')
+    // A deferred growth message waits 15 minutes, or, with its reason (platform.agents.growth-priority.v1), until the next Eastern day
+    // over the cap with "Send to the best prospects first" on, or the next opening of the send hours; a social post waits for its time
+    // slot (platform.agents.social.v1).
+    ...(growth || social ? { deferExecution:(actionId,execution,kind=null,reason=null)=>(String(kind??'').startsWith('social.')
       ? (social ? call('private.social_schedule',[actionId,execution]) : false)
-      : (growth ? call('private.growth_defer_action',[actionId,execution]) : false)) } : {}),
+      : (growth ? (growthPriority ? call('private.growth_defer_action',[actionId,execution,reason]) : call('private.growth_defer_action',[actionId,execution])) : false)) } : {}),
     ...(social ? {
       /** Targets with an open social action ("kind:target"), so a change is never proposed twice. */
       socialOpenTargets: () => call('private.social_open_targets'),

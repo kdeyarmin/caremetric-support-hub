@@ -999,6 +999,13 @@ decide on their own: the product's walkthrough pages, the published help-center 
 on help.caremetric.ai), the free trial and a written answer. Asked for a demo or a call, it says so kindly and sends the walkthrough
 instead.
 
+**With the account brief (2026-11-17).** While "Give the Sales Executive the account brief" is on (Settings → Customer growth), a growth
+prospect's reply is also drafted with the brief's writer part (never its research, so never a leader's name, a fit or the agency's own
+standing), which of our emails was answered and whether the agency opened its report, yes or no (`private.sales_growth_context`,
+`server/agents/sales/context.mjs`, `sales.6`). The draft must never say or imply that the report was opened (check `mentions_open`, which
+lets it through when the prospect said so first) and never state the agency's own share, rank, ratings or patient counts (check
+`own_standing`) ([review](AI_WORKFORCE_REVIEW_2026-11-17.md), stage 2).
+
 For a handed-over message it reads the newest message and up to two earlier ones, scrubbed of personal details, and, only while
 "Let agents send customer messages to the AI" is on in Settings → AI team and a model key is set, asks the model for a
 reading and a draft. The model is given the

@@ -127,6 +127,9 @@ describe('growth.brief', () => {
     expect(store.discover).toHaveBeenCalledWith('caremetric-intel', [expect.objectContaining({ url: 'https://www.indeed.com/viewjob?jk=1' })]);
     const synthesis = model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.2')[1];
     expect(synthesis).toMatchObject({ tier: 'quality', effort: 'high', timeoutMs: 120_000 });
+    // The write-up holds what is left of the brief's 60 cents after the research (9 cents of search here).
+    expect(synthesis.ceilingCents).toBeGreaterThan(0);
+    expect(synthesis.ceilingCents).toBeLessThanOrEqual(51);
     const sent = JSON.parse(synthesis.user);
     expect(sent.countyFigures.map(figure => figure.key)).toEqual(['home_health_agencies_in_county', 'medicare_advantage_share']);
     expect(sent.intel.position.county_rank).toBe(9);
@@ -191,7 +194,7 @@ describe('a first email written from the brief', () => {
     const result = await draftMessage({ opportunity: o, work, task: { id: 't' }, model, brief, quality: true });
     expect(result).toBeTruthy();
     const [, request] = model.run.mock.calls[0];
-    expect(request).toMatchObject({ tier: 'quality', effort: 'high', maxTokens: 6000, timeoutMs: 120_000, promptVersion: 'growth.14' });
+    expect(request).toMatchObject({ tier: 'quality', effort: 'high', maxTokens: 6000, timeoutMs: 120_000, promptVersion: 'growth.15' });
     const input = JSON.parse(request.user);
     expect(input.brief).toMatchObject({ hook: brief.hook.sentence, hookSourceId: 'e2', angle: 'referral_sources' });
     expect(input.sources.find(source => source.id === 'county').claim).toBe(brief.countyFact.claim);
@@ -241,7 +244,7 @@ describe('a first email written from the brief', () => {
   it('has a reader score the first email and rewrites it once around its weakest sentence when the score is under 4', async () => {
     const better = { ...draft, subject: 'Your liaison\'s first referral map' };
     const run = vi.fn(async (_task, request) => {
-      if (request.promptVersion === 'critic.1') return { outcome: 'completed', output: JSON.parse(request.user).email.subject === better.subject
+      if (request.promptVersion === 'critic.2') return { outcome: 'completed', output: JSON.parse(request.user).email.subject === better.subject
         ? { specific: 4, relevant: 4, clearAsk: 5, wouldReply: 4, weakestSentence: '' }
         : { specific: 2, relevant: 3, clearAsk: 4, wouldReply: 2, weakestSentence: 'Do you know which physicians certify the most home health patients in Butler County?' } };
       return { outcome: 'completed', output: request.promptVersion.endsWith('-c') ? better : draft };
@@ -249,7 +252,7 @@ describe('a first email written from the brief', () => {
     const result = await draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run }, brief, critic: true });
     expect(result.subject).toBe(better.subject);
     expect(result.arms).toMatchObject({ critic: '4', rewritten: '1' });
-    const rewrite = run.mock.calls.find(([, request]) => request.promptVersion === 'growth.14-c')[1];
+    const rewrite = run.mock.calls.find(([, request]) => request.promptVersion === 'growth.15-c')[1];
     expect(JSON.parse(rewrite.user).fix).toMatch(/scored this email 2 of 5.*certify the most home health patients in Butler County/);
   });
 });

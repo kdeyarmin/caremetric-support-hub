@@ -58,8 +58,10 @@ try {
   await admin.query("update private.growth_brief_log set started_at = started_at - interval '2 days' where id = any($1::uuid[])", [earlier]);
 
   // ---- 1. Who is briefed first ------------------------------------------------------------------------------------------------------
-  const borderline = await prospect('brief-borderline', { fit: 64 });
-  const strong = await prospect('brief-strong', { fit: 90 });
+  // Only an agency that can be emailed is briefed (20261117170000_growth_priority.sql): half the briefs were for agencies with no address.
+  const borderline = await prospect('brief-borderline', { fit: 64, contact: true });
+  const strong = await prospect('brief-strong', { fit: 90, contact: true });
+  const unreachable = await prospect('brief-unreachable', { fit: 99 });
   const ready = await prospect('brief-ready', { fit: 78, stage: 'qualified', contact: true });
   const weak = await prospect('brief-weak', { fit: 40 });
   const emailed = await prospect('brief-emailed', { fit: 95, stage: 'qualified', contact: true });
@@ -73,9 +75,9 @@ try {
   assert.equal(await store.briefNext(1), null, 'one a day means one');
   assert.deepEqual(first.agencies, []);
   assert.ok(first.evidence.length >= 1 && first.evidence[0].sourceUrl === `https://${ready.domain}/about`);
-  assert.deepEqual(await mine(10), [strong.domain, borderline.domain], 'then the best fit; never one below 60 without a roster record, one already emailed or another product');
+  assert.deepEqual(await mine(10), [strong.domain, borderline.domain], 'then the best fit; never one with no address, one below 60 without a roster record, one already emailed or another product');
   assert.deepEqual(await mine(10), [], 'an attempt rests the agency a day');
-  void weak; void carebase;
+  void weak; void carebase; void unreachable;
 
   // ---- 2. Two parts, a new version, the writer reads only its own ---------------------------------------------------------------------
   const brief = { writer: { summary: 'A home health agency in Erie.', angle: 'referral_sources', hook: { sentence: 'It serves Erie.', sourceUrl: `https://${ready.domain}/about` } },
