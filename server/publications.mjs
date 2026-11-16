@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { withSession, transaction, HttpError, digest, token } from './sms-auth.mjs';
 import {
   parsePublicationStageRequest, parsePublicationStage, publicationId, publicationPart, publicationCommitSchema,
@@ -7,34 +7,12 @@ import {
 import { previewPublicationImportWithVerifier } from '../src/imports/publicationImportPreview.ts';
 import { spoolPublicationAsset, checkedPublicationAsset, publicationRange } from './publication-assets.mjs';
 import { partKey, partUploads } from './upload-parts.mjs';
+import { directTransferMs, storageDuplicate, storageToken, storedMatches } from './direct-storage.mjs';
 
 const codes={P4040:404,P4090:409,P4130:413,P4290:429,'22023':400,'23505':409,'28000':401,'42501':403};
-// Each way of the direct transfer. private.keep_publication_import_open leaves at least 30 minutes, and cleanup waits 5 more, so a
-// transfer started after it cannot outlive its import (20261117130000_publication_import_window.sql).
-const transferMs=600000;
-const storageToken=/^[A-Za-z0-9._~-]{16,4096}$/;
-
-// Storage answers an existing key with 409, or with its older 400 "Duplicate" body. Any other refusal is not read as one.
-async function storageDuplicate(response) {
-  if(response.status===409) return true;
-  if(response.status!==400) return false;
-  try {
-    const error=JSON.parse((await response.text()).slice(0,8192));
-    return ['ResourceAlreadyExists','KeyAlreadyExists','already_exists'].includes(error?.code) || (error?.error==='Duplicate' && [400,409,'400','409'].includes(error?.statusCode));
-  } catch { return false; }
-}
-
-// Reads what Storage holds back and hashes it: only the exact checked bytes may be recorded.
-async function storedMatches(response,asset) {
-  if(response.status!==200 || !response.body || response.headers.get('content-type')?.split(';')[0]!==asset.contentType) return false;
-  const hash=createHash('sha256'); let bytes=0;
-  for await(const chunk of response.body) {
-    bytes+=chunk.byteLength;
-    if(bytes>asset.byteLength) return false;
-    hash.update(chunk);
-  }
-  return bytes===asset.byteLength && hash.digest('hex')===asset.sha256;
-}
+// Each way of the direct transfer (server/direct-storage.mjs). private.keep_publication_import_open leaves at least 30 minutes, and
+// cleanup waits 5 more, so a transfer started after it cannot outlive its import (20261117130000_publication_import_window.sql).
+const transferMs=directTransferMs;
 
 /**
  * directStorage (knowledge.publications.direct-storage.v1): keep an import open as its parts arrive, and send a checked file to

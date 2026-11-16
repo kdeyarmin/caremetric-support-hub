@@ -87,9 +87,13 @@ captions and transcript:
   nothing. The response says it was replayed.
 - Re-running the same bytes after a failure reuses the same prefix. The bucket refuses
   to overwrite the objects already there, and `app-media` reports Storage's 400
-  "Duplicate" answer as 503, so an upload's status never decides the row: each stored
-  copy is downloaded and hashed, and accepted only if it matches. A missing object
-  fails the row as `storage_unavailable`.
+  "Duplicate" answer as 503 (a direct transfer answers 409), so an upload's status never
+  decides the row: each stored copy is downloaded and hashed, and accepted only if it
+  matches. A missing object fails the row as `storage_unavailable`.
+- While `learning.lesson-media.direct-storage.v1` is declared, each file goes straight to
+  the private bucket through a one-time upload address `app-media` signs, and each stored
+  copy is read back from a ten-minute signed read address, not through `app-media`
+  ([CENTRAL_LEARNING.md](CENTRAL_LEARNING.md)). The checks are the same.
 - Changed captions, transcript or video for a row that is not yet approved get a new
   prefix, never an overwrite. The superseded objects remain private and
   unregistered.
@@ -168,7 +172,10 @@ refusal, partial failure, a stored-copy hash mismatch and its retry, replay with
 refetching, reviewed approval with the server checksum, attachment through the
 draft save, an occupied lesson, a concurrent save during attachment, a
 not-yet-converted PennSync course, editor-only access, and that nothing publishes. Its
-Storage emulator reports duplicates exactly as `app-media` does.
+Storage emulator reports duplicates exactly as `app-media` does. It then repeats a lesson
+upload in parts and an import row straight to Storage, through the real `app-media`
+handler and the local Storage's signed addresses, including an existing object that is
+never overwritten.
 
 Failed or superseded transfers can leave private, unregistered objects, as with the
 single-file uploader. Remove them only after confirming they are not registered.

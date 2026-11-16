@@ -22,7 +22,10 @@ function plan(): DistributionPlan {
     reason: "Review this exact shared course", reviewed: true, confirmReplacement: false, confirmRetirements: false };
 }
 function preview(input: { requestId: string; plan: DistributionPlan }, completed = false): DistributionPreview {
-  return { requestId: input.requestId, plan: input.plan, canCommitThisSession: !completed, previewDigest: "c".repeat(64), createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 300_000).toISOString(), replacesPublished: input.plan.confirmReplacement,
+  // One reading of the clock: distributionPreviewSchema allows an expiry at most 300,001 ms after creation, so two readings a few
+  // milliseconds apart on a busy machine failed the parse and the panel showed "The request did not finish".
+  const created = Date.now();
+  return { requestId: input.requestId, plan: input.plan, canCommitThisSession: !completed, previewDigest: "c".repeat(64), createdAt: new Date(created).toISOString(), expiresAt: new Date(created + 300_000).toISOString(), replacesPublished: input.plan.confirmReplacement,
     result: completed ? { requestId: input.requestId, itemId: context().catalog.itemId, revisionId: "90300000-0000-0000-0000-000000000001", revisionNumber: 1,
       courseId, versionId, sourceRevision: sha, productIds: input.plan.productIds, accessLevel: input.plan.accessLevel, publishedAt: new Date().toISOString() } : null };
 }

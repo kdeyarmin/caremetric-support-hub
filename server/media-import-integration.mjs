@@ -6,11 +6,12 @@ import { execFile } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { promisify } from 'node:util';
 import pg from 'pg';
-import { smsAuth } from './sms-auth.mjs';
+import { smsAuth, sessionCookie } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
 import { learningMediaImport } from './learning-media-import.mjs';
+import { createAppMediaHandler } from '../supabase/functions/app-media/handler.ts';
 import { learningSourceId } from '../src/imports/pennsyncCourseImport.ts';
 import { removeTestIdentities, testPhones } from './test-phones.mjs';
 
@@ -38,8 +39,23 @@ const sources=new Map();let sourceFetches=0;
 const heygen=async url=>{sourceFetches++;const bytes=sources.get(url);
   return bytes?new Response(bytes,{status:200,headers:{'Content-Type':'video/mp4','Content-Length':String(bytes.length)}}):new Response('missing',{status:404});};
 // app-media, exactly: consume the capability for the 'media' audience, then the private bucket with no upsert.
-const stored=new Set();let tamper=null,duplicates=0;
-const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(url,options)=>{
+const stored=new Set();let tamper=null,duplicates=0,directMode=false;
+// Straight to Storage (learning.lesson-media.direct-storage.v1): the real app-media handler, its capability gate answered by this Hub
+// and its Storage calls by the local Storage, and the Hub's own requests to the signed addresses, sent to the local Storage too.
+const toLocal=url=>url.replace('https://storage.test/storage/v1',storageApi);
+const appMedia=createAppMediaHandler({storageOrigin:'https://storage.test',serviceKey,fetchImpl:async(url,options)=>{
+  if(url==='https://support-hub-web-production.up.railway.app/api/internal/media/authorize')
+    return caps.consume(options.headers.Authorization.slice(7),'media').then(payload=>Response.json(payload),()=>Response.json({error:'Unauthorized'},{status:401}));
+  assert.ok(url.startsWith('https://storage.test/storage/v1/object/'));
+  return fetch(toLocal(url),options);
+}});
+const caps=delegations({pool,storageUrl:'https://storage.test',directMedia:()=>directMode,fetchImpl:async(url,options)=>{
+  if(url.startsWith('https://storage.test/storage/v1/object/')){
+    const headers=new Headers(options.headers);
+    assert.equal(headers.get('authorization'),null,'a signed address needs no credentials');assert.equal(options.redirect,'error');
+    return fetch(toLocal(url),options);
+  }
+  if(directMode)return appMedia(new Request(url,{...options,duplex:'half'}));
   assert.equal(url,'https://storage.test/functions/v1/app-media');assert.equal(options.redirect,'manual');
   const {path,operation}=await caps.consume(options.headers.Authorization.slice(7),'media');
   await assert.rejects(caps.consume(options.headers.Authorization.slice(7),'media'),/Invalid authorization/);
@@ -59,7 +75,7 @@ const caps=delegations({pool,storageUrl:'https://storage.test',fetchImpl:async(u
   return new Response(tamper&&path.endsWith(tamper)?Buffer.concat([bytes.subarray(0,-1),Buffer.from('!')]):bytes);
 }});
 const importer=learningMediaImport({pool,hosts:['resource2.heygen.ai'],fetchImpl:heygen,
-  storage:{upload:(token,path,body,type)=>caps.media(token,path,'upload',body,type),download:(token,path)=>caps.media(token,path,'download')}});
+  storage:{upload:caps.mediaUpload,download:caps.mediaDownload}});
 const auth=smsAuth({pool,provider:{send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'}});
 const server=appServer({auth,gateway:gateway(pool),delegations:caps,mediaImport:importer,origins:['https://hub.test']});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
@@ -213,6 +229,32 @@ try{
   const mine=listed.body.items.filter(item=>item.heygenVideoId.startsWith(`r${run}`));
   assert.deepEqual(mine.map(item=>item.state).sort(),['registered','registered','registered','registered','staged','staged']);
   assert.equal((await admin.query("select count(*)::int as n from hub.content_items where id = any($1::uuid[]) and status='published'",[[named.body.itemId,converted.body.itemId,racedDraft.body.itemId]])).rows[0].n,0,'nothing publishes');
+
+  // Straight to Storage: a lesson video in parts is uploaded to a one-time address, read back from Storage and its checksum reported.
+  directMode=true;
+  const directVideo=mp4(`direct ${run}`),directPath=`learning/${randomUUID()}/video.mp4`;
+  const sendDirect=async(offset,bytes)=>{
+    const response=await fetch(`${origin}/api/media/${directPath}`,{method:'POST',body:bytes,headers:{Origin:'https://hub.test','Content-Type':'video/mp4',Cookie:cookie(),
+      'Upload-Offset':String(offset),'Upload-Length':String(directVideo.length)}});
+    return {status:response.status,body:await response.json()};
+  };
+  assert.deepEqual(await sendDirect(0,directVideo.subarray(0,2048)),{status:202,body:{received:2048}});
+  const directDone=await sendDirect(2048,directVideo.subarray(2048));stored.add(directPath);
+  assert.deepEqual(directDone,{status:200,body:{uploaded:true,sha256:sha(directVideo)}},JSON.stringify(directDone));
+  const directCopy=await fetch(`${origin}/api/media/${directPath}`,{headers:{Cookie:cookie()}});
+  assert.equal(sha(Buffer.from(await directCopy.arrayBuffer())),sha(directVideo),'Storage holds exactly the file sent straight to it');
+  // The same name again: Storage already holds it, so nothing is overwritten and the caller reads it back.
+  const existing=await caps.mediaUpload(jar[sessionCookie],directPath,new Blob([mp4('other')],{type:'video/mp4'}),'video/mp4');
+  assert.equal(existing.status,409,'an existing object is never overwritten');
+  const kept=await caps.mediaDownload(jar[sessionCookie],directPath);
+  assert.equal(sha(Buffer.from(await kept.arrayBuffer())),sha(directVideo),'the first upload is kept');
+  // The bulk import stages a row the same way: uploaded straight to Storage, then checked from a signed read.
+  const directRow=row(7);sources.set(directRow.mp4Url,mp4('video 7'));
+  const directStaged=await stage(directRow);
+  assert.equal(directStaged.status,200,JSON.stringify(directStaged));assert.equal(directStaged.body.item.state,'staged',JSON.stringify(directStaged.body));
+  for(const name of ['video.mp4','captions.vtt','transcript.txt'])stored.add(`learning/${directStaged.body.item.mediaId}/${name}`);
+  assert.equal(directStaged.body.item.sourceSha256,sha(sources.get(directRow.mp4Url)));
+  directMode=false;
 
   // The editor's permission is rechecked on every call.
   await admin.query('update private.staff_permissions set revoked_at=now() where user_id=$1',[editor]);

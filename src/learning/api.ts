@@ -26,17 +26,27 @@ export const learningApi = {
     const digest = await crypto.subtle.digest("SHA-256", await video.arrayBuffer());
     const sha256 = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
     // New object names and no upsert preserve previously published videos.
+    let storedHash: string | null = null;
     for (const [name, file, mime] of [["video.mp4", video, "video/mp4"], ["captions.vtt", captions, "text/vtt"], ["transcript.txt", transcript, "text/plain"]] as const) {
       // In parts (src/lib/uploadParts.ts): one request could not carry a large video over a slow connection.
       let response: Response;
       try { response = await sendInParts(fetch, `/api/media/learning/${id}/${name}`, file, { "Content-Type": mime }, { onProgress: name === "video.mp4" ? onProgress : undefined }); }
       catch { throw new Error("Upload did not complete. Retry with a new upload."); }
       if (!response.ok) throw new Error("Upload did not complete. Retry with a new upload.");
+      if (name === "video.mp4") {
+        // A Hub that sent the video straight to Storage read it back and reports the stored copy's SHA-256 (server/delegations.mjs).
+        const answer: unknown = await response.json().catch(() => null);
+        const reported = answer && typeof answer === "object" ? (answer as { sha256?: unknown }).sha256 : undefined;
+        if (typeof reported === "string" && /^[0-9a-f]{64}$/.test(reported)) storedHash = reported;
+      }
     }
-    const stored = await fetch(`/api/media/learning/${id}/video.mp4`,{ credentials:"same-origin",redirect:"error",cache:"no-store" });
-    if (!stored.ok) throw new Error("Upload finished but checksum verification could not complete. Retry the upload.");
-    const storedDigest = await crypto.subtle.digest("SHA-256", await stored.arrayBuffer());
-    const storedHash = Array.from(new Uint8Array(storedDigest), byte => byte.toString(16).padStart(2, "0")).join("");
+    if (storedHash === null) {
+      // Otherwise download the stored copy and check it here.
+      const stored = await fetch(`/api/media/learning/${id}/video.mp4`,{ credentials:"same-origin",redirect:"error",cache:"no-store" });
+      if (!stored.ok) throw new Error("Upload finished but checksum verification could not complete. Retry the upload.");
+      const storedDigest = await crypto.subtle.digest("SHA-256", await stored.arrayBuffer());
+      storedHash = Array.from(new Uint8Array(storedDigest), byte => byte.toString(16).padStart(2, "0")).join("");
+    }
     if (storedHash !== sha256) throw new Error("Stored video checksum does not match the source. The video was not approved.");
     return rpc("register_learning_media", learningId, { p_id: id, p_title: title, p_sha256: sha256, p_reviewed: reviewed });
   },
