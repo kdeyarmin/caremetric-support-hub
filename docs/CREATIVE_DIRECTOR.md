@@ -53,19 +53,22 @@ playbook (the Sales Executive's fact source) and are cached. The answers are clo
 **What each product does** (`server/agents/content/features.mjs`, data in `intel-features.json` and `carebase-features.json`). Each brief's
 model calls carry its product's published catalog as a second cached block after the prompt:
 
-- **CareMetric Intel**, from https://www.caremetricintel.com/features and its home page: every feature (97 in 11 areas: the healthcare
+- **CareMetric Intel**, from https://www.caremetricintel.com/features and its home page: every feature (125 in 12 areas: the healthcare
   marketing CRM, daily field work, expenses, mileage and Stark-limit tracking, referral and admission tracking with EMR report imports,
-  prospecting, market and territory research, competitor intelligence, manager tools, email campaigns, reports, and administration) with
-  the plan or role it needs; why each part matters (the site's nine pillars); the data behind it (providers, facilities, territories,
-  utilization and quality, and the organization's own results), each with what is included, its source (NPPES, CMS files and Care
-  Compare, the Census Bureau's American Community Survey, state licensing files), the decision it helps make and its limit; each care
-  setting; the manager view; the questions and answers; and the site's own caveats.
-- **CareMetric CareBase**, from https://cmcarebase.com/features, its home page and /faq: every capability (60 in 6 modules: training and
-  compliance, courses and live training, resident care and clinical records, survey, safety and facility, credentials and workforce, and
-  access and portals); why it matters and the tools that set it apart; the newest tools (Survey Day Mode, the compliance copilot, clinical
-  records); a resident's record from inquiry to move-out; what each role sees and does; before and with CareBase; each chapter's
-  requirements; the questions and answers; and the site's own caveats (the readiness score is not a prediction of survey results; it
-  guarantees no compliance).
+  prospecting, market and territory research, the public data library, competitor intelligence, manager tools, email campaigns, reports,
+  and administration) with the plan or role it needs; why each part matters (the site's twelve pillars; email campaigns, expenses and the
+  pre-visit card and spoken debrief never lead a brief); the data behind it (providers, facilities, Medicare use and share, demographics,
+  payers and Medicare Advantage, community need, competitors, and the organization's own results), each with what is included, its
+  source (NPPES, CMS files and Care Compare, the Census Bureau's American Community Survey, state licensing files and other federal
+  sources), the decision it helps make and its limit; each care setting the site describes, with the secondary markets
+  labeled as such (briefs aim only at the primary five); the manager view; the questions and answers; and the site's own caveats.
+- **CareMetric CareBase**, from https://cmcarebase.com/features, its home page and /faq: every capability (112 in 8 areas: resident care and
+  daily operations, staff training, medication management and eMAR, survey readiness and safety, workforce and scheduling, resident
+  billing and payments, AI assistance with human review, and access and onboarding), each area with the plan or add-on it needs and its
+  own notes; why it matters and the tools that set it apart; the newest tools (Survey Day Mode, the compliance copilot, clinical records);
+  a resident's record from inquiry to move-out; what each role sees and does; before and with CareBase; each chapter's requirements; the
+  questions and answers; and the site's own caveats (CareBase guarantees no compliance, and native eMAR needs enrollment, clinical
+  approval and a documented switch).
 
 The model is told to sell one feature per asset by the decision it helps make or the work it saves, to vary features across variants, to
 respect plan and module labels, and never to imply that public data confirms referrals, that a tool makes anyone compliant or survey-ready,

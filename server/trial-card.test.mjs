@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { trialCardOnFile } from './trial-card.mjs';
 import { trialRequestSchema, appPortalRequestSchema } from '../src/billing/billingProtocol.ts';
 
@@ -101,5 +101,74 @@ it('creates one annual trial with automatic card collection, and reuses it on re
   expect(Object.fromEntries(portalRequests[0])).toMatchObject({
     customer: 'cus_owner', 'flow_data[type]': 'payment_method_update',
     'flow_data[after_completion][redirect][return_url]': 'https://intel.test/Billing?card_setup=returned',
+  });
+});
+
+describe('an Intel trial entitlement while Stripe cannot be reached', () => {
+  // Intel locks an organization to its Billing page whenever the Hub cannot answer its entitlement (sessionUsers.ts), so a Stripe
+  // failure inside the card check must not fail the whole answer.
+  function hub({ cardSaved = true } = {}) {
+    const stripe = { up: true, account: true, card: cardSaved };
+    let clock = Date.parse('2026-11-16T12:00:00Z');
+    const trial = { linked: true, entitled: true, status: 'trialing', app: 'caremetric-intel', tenant_id: 'tenant-a', trial_end: '2026-12-16T00:00:00Z',
+      products: [{ key: 'growth', kind: 'plan', status: 'trialing', subscription: 'sub_trial' }] };
+    const query = vi.fn(async sql => {
+      if (sql.includes('billing_authenticate_app')) return { rows: [{ app: { slug: 'caremetric-intel', product_id: 'intel' } }] };
+      if (sql.includes('scoped_app_billing_entitlements')) return { rows: [{ e: structuredClone(trial) }] };
+      return { rows: [] };
+    });
+    const fetchImpl = vi.fn(async url => {
+      const path = new URL(url).pathname;
+      const down = () => new Response(JSON.stringify({ error: { type: 'api_error', message: 'Stripe is down.' } }), { status: 503 });
+      if (path === '/v1/account') return stripe.account ? new Response(JSON.stringify({ id: STRIPE_ACCOUNT_ID })) : down();
+      if (!stripe.up) return down();
+      if (path === '/v1/subscriptions/sub_trial') return new Response(JSON.stringify({ status: 'trialing', collection_method: 'charge_automatically', metadata: { app: 'caremetric-intel' }, customer: 'cus_owner' }));
+      if (path === '/v1/customers/cus_owner') return new Response(JSON.stringify({ metadata: { hub_tenant_id: 'tenant-a' }, invoice_settings: { default_payment_method: stripe.card ? 'pm_card' : null } }));
+      if (path === '/v1/payment_methods/pm_card') return new Response(JSON.stringify({ type: 'card', customer: 'cus_owner' }));
+      throw new Error(`Unexpected provider request ${path}`);
+    });
+    const log = { warn: vi.fn(), info: vi.fn() };
+    const make = () => platformBilling({ pool: { connect: async () => ({ query, release() {} }) }, secretKey: 'sk_test_fixture', fetchImpl, now: () => clock, log });
+    return { stripe, log, make, later: ms => { clock += ms; } };
+  }
+  const key = `Bearer cmb_${'a'.repeat(43)}`;
+  let platformBilling, STRIPE_ACCOUNT_ID;
+  beforeAll(async () => { ({ platformBilling } = await import('./billing.mjs')); ({ STRIPE_ACCOUNT_ID } = await import('./stripe.mjs')); });
+
+  it('still answers the entitlement, keeping a card Stripe confirmed until Stripe says otherwise', async () => {
+    const h = hub();
+    const billing = h.make();
+    expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: true });
+    h.stripe.up = false;
+    expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: true });
+    expect(h.log.warn).toHaveBeenCalledWith(expect.stringContaining('the card it confirmed earlier'));
+    // A long outage does not take it away: a card removed meanwhile does not matter, as Stripe cancels a trial that ends without one.
+    h.later(3 * 24 * 60 * 60 * 1000);
+    expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: true });
+    // A restart while Stripe is down starts with no confirmation: the card reads as not confirmed until Stripe answers again.
+    expect(await h.make().entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: false });
+  });
+
+  it('never unlocks a trial whose card Stripe has not confirmed', async () => {
+    // An abandoned card setup is a trialing subscription with no card. Stripe then goes down: still not confirmed.
+    const h = hub({ cardSaved: false });
+    const billing = h.make();
+    expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: false });
+    h.stripe.up = false;
+    expect(await billing.entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, payment_method_on_file: false });
+    // A card that was confirmed and then removed is forgotten at once.
+    const removed = hub();
+    const again = removed.make();
+    expect(await again.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: true });
+    removed.stripe.card = false;
+    expect(await again.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: false });
+    removed.stripe.up = false;
+    expect(await again.entitlements(key, { account: 'abc' })).toMatchObject({ payment_method_on_file: false });
+  });
+
+  it('answers when Stripe cannot even be verified, as after a restart during an outage', async () => {
+    const h = hub();
+    h.stripe.account = false;
+    expect(await h.make().entitlements(key, { account: 'abc' })).toMatchObject({ entitled: true, status: 'trialing', payment_method_on_file: false });
   });
 });

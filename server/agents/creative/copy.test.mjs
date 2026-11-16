@@ -107,7 +107,7 @@ describe('creative copy', () => {
     // A brief aimed at one kind of organization gets the site's own paragraph for it; one aimed at all of them, none.
     expect(intel.careSetting).toBeNull();
     const hospitals = JSON.parse(briefUserMessage({ brief: { product: 'caremetric-intel', goal: 'g', audience: audienceFor('caremetric-intel', 'hospitals'), angle: '', platforms: ['meta'], formats: ['static'], videoLengths: [], offerCode: null }, brandKit: {}, learnings: [] }));
-    expect(hospitals.careSetting).toContain('hospital and post-acute utilization');
+    expect(hospitals.careSetting).toContain('post-discharge Medicare spending');
   });
 });
 

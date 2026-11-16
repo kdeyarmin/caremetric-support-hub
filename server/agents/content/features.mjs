@@ -89,6 +89,11 @@ function intelText(catalog) {
     lines.push(`- ${family.family}: ${family.headline} Includes: ${family.includes.join('; ')}. Source: ${family.source}. The decision it helps make: ${family.question} ${family.decision} Limit: ${family.limit}`);
   }
   lines.push('', 'By care setting:', ...catalog.settings.map(setting => `- ${setting.name}: ${setting.text}`));
+  // Owner decision 2026-11-16: secondary markets are described so a reader from one gets an accurate answer, never as a target.
+  if (catalog.otherSettings?.length) {
+    lines.push('', 'Also served (secondary markets: answer a reader from one of these, but aim no outreach, content or ads at them until the primary settings above have been thoroughly marketed to):',
+      ...catalog.otherSettings.map(setting => `- ${setting.name}: ${setting.text}`));
+  }
   lines.push('', 'For managers:', ...catalog.managers.map(item => `- ${item.name}: ${item.text}`));
   lines.push('', 'Questions and answers:', ...catalog.faq.map(item => `- ${item.question} ${item.answer}`));
   lines.push('', 'What the site itself says not to imply:', ...catalog.caveats.map(caveat => `- ${caveat}`));
@@ -115,6 +120,9 @@ const intelWords = [
   /\b(expenses?|mileage|stark|meals?|reimburse|receipts?)/i,
   /\b(competitors?|competition|market share|star ratings?)\b/i,
   /\b(email campaigns?|campaigns?|newsletters?)\b/i,
+  /\b(pre-visit|prepared|debrief)\b/i,
+  /\b(response times?|answer(?:ing)? referrals|availability|accepting referrals)\b/i,
+  /\b(site finder|new (?:offices?|locations?|sites?)|expan(?:d|sion)|where to grow)\b/i,
 ];
 
 /**
@@ -148,9 +156,10 @@ export function catalogNumbers(product) {
  * sources is not the point of Intel and is never the whole focus (facts.mjs, `present`), so its email campaigns pillar is not a lead.
  * Owner direction 2026-11-14: Intel is a marketing workspace, not a compliance product, and its expense tracking (spend in view of policy
  * and the Stark limit) is a small part of it, so its expenses pillar is not a lead either. Field activity, which logs expenses among much
- * else, still leads.
+ * else, still leads. Owner direction 2026-11-16: AI is text only in what the team writes, so Intel's pre-visit card and spoken debrief
+ * pillar is not a lead; the catalog keeps the site's words, and the field-visit pillar still leads.
  */
-const supportingAreas = { 'caremetric-intel': /\bemail campaigns\b|\bexpenses, mileage\b/i };
+const supportingAreas = { 'caremetric-intel': /\bemail campaigns\b|\bexpenses, mileage\b|\bspoken debrief\b/i };
 
 /**
  * The "why it matters" pillar a planned brief leads with: the one its plan text is about (the most specific match: a later pillar's words,
