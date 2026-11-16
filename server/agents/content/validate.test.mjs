@@ -237,6 +237,10 @@ describe('each check that rejects a draft', () => {
     expect(numbersIn('2 new and existing customers; 3 rural and the counties; 5 tips and resident stories')).toEqual(['2:customer']);
     expect(numbersIn('Step 2 Train staff; Steps 2 and 3 cover staff training; Tip 3 staff; Touch 2 leads; No. 1 referral source; #1 referral source')).toEqual([]);
     expect(numbersIn('each year 12 hours of training')).toEqual(['12:hour']);
+    // A Markdown heading's marker is not a label: its count is read, so a draft cannot slip one past the check in a section heading.
+    for (const text of ['## 500 homes use CareBase', '# 500 homes', '### 500 rural homes', '# 500 + homes']) expect(numbersIn(text), text).toEqual(['500:facility']);
+    expect(textProblems('## 500 homes use CareBase', { numbers: allowedNumbers([]) })).toEqual(['unlisted_number']);
+    expect(numbersIn('Step #2 staff, ##1 staff')).toEqual(['1:staff']);
     // A count no source states is refused; one the catalog states may be written with a describing word.
     expect(reasons(withSentence('CareBase is used in 500 Pennsylvania homes.'))).toEqual(['unlisted_number']);
     expect(reasons(withSentence('CareBase is used in 500 rural and urban homes.'))).toEqual(['unlisted_number']);

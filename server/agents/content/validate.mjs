@@ -108,7 +108,8 @@ const plural = word => /s$/.test(word) && !/(?:ss|us|is|ous|as|'s)$/.test(word);
 const yearLike = /^(?:19|20)\d{2}$/;
 // A label's number names a step or a place in a list, not a count: "Step 2 Train staff", "Steps 2 and 3", "Tip 3", "Touch 2", "No. 1", "#1".
 // Time words are not labels: "each year 12 hours of training" is 12 hours.
-const labelBefore = /(?:\b(?:steps?|phases?|stages?|tips?|items?|rules?|options?|questions?|lessons?|levels?|tiers?|rounds?|touch(?:es)?|no\.|number)\s*#?|#)\s*(?:\d+\s*(?:and|or|to|,|-|–)\s*)?$/i;
+// A bare "#" is a label only when it touches the number ("#1"): "## 500 homes" is a Markdown heading, and its count is read.
+const labelBefore = /(?:\b(?:steps?|phases?|stages?|tips?|items?|rules?|options?|questions?|lessons?|levels?|tiers?|rounds?|touch(?:es)?|no\.|number)\s*#?\s*|(?<![#\w])#)(?:\d+\s*(?:and|or|to|,|-|–)\s*)?$/i;
 // The country between a number and its unit ("3,200 U.S. counties", "50 US states", "U.S.A."), written as one word, "US", before the unit
 // is looked for: a word stops at a full stop, so "U.S." would otherwise hide the number. "US" and "American" are qualifiers above.
 const country = /\bU\.?\s?S\.?(?:\s?A\.?)?(?![a-z])/gi;
