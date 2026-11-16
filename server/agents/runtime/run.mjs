@@ -100,7 +100,7 @@ const count = value => (Number.isFinite(value) && value >= 0 ? Math.round(value)
 /** What the request asks for, or a permanent error when the caller got it wrong. Nothing is sent before this passes. */
 function checkRequest(request) {
   const reject = () => { throw aiError('request_rejected'); };
-  const { promptVersion, system, user, schema, maxTokens = 3000, effort = 'medium', tier = null, timeoutMs = null, images = null } = request ?? {};
+  const { promptVersion, system, user, schema, maxTokens = 3000, effort = 'medium', tier = null, timeoutMs = null, images = null, ceilingCents = null } = request ?? {};
   if (typeof promptVersion !== 'string' || !versionPattern.test(promptVersion)) reject();
   if (!Array.isArray(system) || system.length === 0 || system.length > 4) reject();
   if (system.some(block => typeof block?.text !== 'string' || block.text.length === 0)) reject();
@@ -115,7 +115,26 @@ function checkRequest(request) {
   if (tier !== null && !tiers.has(tier)) reject();
   // A longer wait for one call (an account brief or a first email on the quality tier), never past the run's own deadline.
   if (timeoutMs !== null && (!Number.isInteger(timeoutMs) || timeoutMs < 10_000 || timeoutMs > 180_000)) reject();
-  return { ...request, maxTokens, effort, tier, timeoutMs };
+  // A ceiling for this one call, in cents (an account brief's write-up holds what is left of "Most to spend on one account brief").
+  if (ceilingCents !== null && (!Number.isFinite(ceilingCents) || ceilingCents <= 0 || ceilingCents > 500)) reject();
+  return { ...request, maxTokens, effort, tier, timeoutMs, ceilingCents };
+}
+
+// Under a call's ceiling the answer may be shortened to fit, but never below this: a structured answer cut short is paid for and thrown away.
+export const ceilingFloorTokens = 1500;
+
+/**
+ * The longest answer a call may ask for and stay within its own ceiling (`spec.ceilingCents`) at worst case, or null when even
+ * `ceilingFloorTokens` (or the call's own smaller limit) would not fit. Without a ceiling the call's own limit stands.
+ */
+export function tokensWithinCeiling(model, spec, inputTokens) {
+  if (spec.ceilingCents === null || spec.ceilingCents === undefined) return spec.maxTokens;
+  const cached = spec.system.some(block => block.cache);
+  const cost = tokens => worstCaseCents(model, { inputTokens, maxTokens: tokens, cached });
+  if (cost(spec.maxTokens) <= spec.ceilingCents) return spec.maxTokens;
+  let low = 0, high = spec.maxTokens;
+  while (low < high) { const mid = Math.ceil((low + high) / 2); if (cost(mid) <= spec.ceilingCents) low = mid; else high = mid - 1; }
+  return low >= Math.min(spec.maxTokens, ceilingFloorTokens) ? low : null;
 }
 
 const usageOf = message => {
@@ -310,9 +329,16 @@ export function modelRunner({
     // The scheduler has already given up on this task: start nothing, book nothing.
     if (signal?.aborted) throw aiError('run_aborted', true);
 
-    const body = requestBody(model, spec);
-    const inputBound = inputTokenBound(body);
-    const reserve = worstCaseCents(model, { inputTokens: inputBound, maxTokens: spec.maxTokens, cached: spec.system.some(block => block.cache) });
+    const asked = requestBody(model, spec);
+    const inputBound = inputTokenBound(asked);
+    // A call with its own ceiling asks for no longer an answer than the ceiling pays for at worst case; one that cannot fit is not made.
+    const fitted = tokensWithinCeiling(model, spec, inputBound);
+    if (fitted === null) {
+      return { outcome: 'over_ceiling', neededCents: worstCaseCents(model, { inputTokens: inputBound, maxTokens: Math.min(spec.maxTokens, ceilingFloorTokens),
+        cached: spec.system.some(block => block.cache) }), ceilingCents: spec.ceilingCents };
+    }
+    const body = fitted === spec.maxTokens ? asked : { ...asked, max_tokens: fitted };
+    const reserve = worstCaseCents(model, { inputTokens: inputBound, maxTokens: fitted, cached: spec.system.some(block => block.cache) });
     // Alone among this agent's calls: settle what is still owed, read the budget, and reserve. Nothing can finish and release between the
     // read and the reservation, so no call is judged against money another call has already spent or is holding.
     const admission = await exclusive(agentKey, async () => {

@@ -18,7 +18,8 @@ const now = () => new Date('2026-11-08T15:00:00Z');
 const answer = (over = {}) => ({ outcome: 'completed', output: { intent: 'pricing', objection: 'price', possiblePhi: false, needsOwner: false, nextStep: 'start_trial',
   reply: 'CareBase Core is $199 per facility per month, with unlimited residents and staff.\n\nYou can start a 30-day free trial here:\nhttps://cmcarebase.com/signup', ...over } });
 
-const fixture = ({ snapshot = snapshotOf(`How much is CareBase? ${canary}`), model = null, bookingUrl = null, answers = false, guides = null, status = 'proposed', marketed = null } = {}) => {
+const fixture = ({ snapshot = snapshotOf(`How much is CareBase? ${canary}`), model = null, bookingUrl = null, answers = false, guides = null, status = 'proposed', marketed = null,
+  context = null, contextOn = () => false } = {}) => {
   const sent = [];
   const store = {
     communicationSnapshot: vi.fn(async () => snapshot),
@@ -29,7 +30,7 @@ const fixture = ({ snapshot = snapshotOf(`How much is CareBase? ${canary}`), mod
     growthReplyDisposition: vi.fn(async () => 1),
   };
   const notifier = { send: vi.fn(async input => { sent.push(input); return [{ channel: 'email', delivery: 'sent' }]; }) };
-  const handler = salesReplyHandler({ store, notifier, drafting: model ? { model, guides } : null, bookingUrl, answers, marketed, log: () => {} });
+  const handler = salesReplyHandler({ store, notifier, drafting: model ? { model, guides } : null, bookingUrl, answers, marketed, context, contextOn, log: () => {} });
   return { store, notifier, sent, run: (task = taskOf()) => handler(task, { now }) };
 };
 const modelOf = (result = answer()) => ({ configured: true, run: vi.fn(async () => (typeof result === 'function' ? result() : result)) });
@@ -61,7 +62,7 @@ describe('the Sales Executive answering a prospect', () => {
     const harness = fixture({ model });
     const outcome = await harness.run();
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('sales.5');
+    expect(request.promptVersion).toBe('sales.6');
     expect(request.user).toContain(`How much is CareBase? ${canary}`);
     expect(request.system[0].text).not.toContain(canary);
     // The prompt, then the product's own published catalog, each cached (content/features.mjs).
@@ -216,5 +217,57 @@ describe('answering on its own once handed over', () => {
   it('refuses a link to a guide it was not given', async () => {
     const harness = fixture({ model: modelOf(answer({ reply: 'See https://help.caremetric.ai/help/articles/made-up-guide' })), answers: true, guides });
     expect((await harness.run()).result).toMatchObject({ draft: 'rejected', draftReason: 'link', reply: 'sales' });
+  });
+});
+
+describe('the Sales Executive with a growth prospect\'s account context (review 2026-11-17, row 2.9)', () => {
+  const intelSnapshot = () => snapshotOf('Tell me more about the referral data.', { productSlug: 'caremetric-intel', sourceSystem: 'hub.email' });
+  const intelAnswer = reply => answer({ intent: 'interested', objection: 'none', reply });
+  const raw = {
+    brief: { summary: 'A home health agency serving two counties. Its owner is reachable at owner@context.example.test or 412-555-0142.', angle: 'referral_growth',
+      pains: ['Which hospitals send the most patients?', 'Call 412-555-0142 today?'], hook: 'It opened a second office this fall.' },
+    answered: { touch: 2, purpose: 'marketing', subject: 'Your county\'s referral sources', form: 'short' },
+    reportOpened: true,
+  };
+
+  it('reads the brief, the answered email and the report open only with the switch on, and never a person\'s address or phone', async () => {
+    const context = vi.fn(async () => raw);
+    const off = fixture({ model: modelOf(intelAnswer('You can start a 30-day free trial here:\nhttps://www.caremetricintel.com/')), snapshot: intelSnapshot(), context, contextOn: () => false });
+    await off.run(taskOf({ product: 'caremetric-intel' }));
+    expect(context).not.toHaveBeenCalled();
+    expect(off.store.proposeAction.mock.calls.length).toBe(1);
+
+    const model = modelOf(intelAnswer('You can start a 30-day free trial here:\nhttps://www.caremetricintel.com/'));
+    const on = fixture({ model, snapshot: intelSnapshot(), context, contextOn: () => true });
+    const outcome = await on.run(taskOf({ product: 'caremetric-intel' }));
+    expect(context).toHaveBeenCalledWith(ids.communication, ids.message);
+    const user = model.run.mock.calls[0][1].user;
+    expect(user).toContain('<account_context>');
+    expect(user).toContain("answered_email: CareMetric's email 2 (short form), subject: Your county's referral sources");
+    expect(user).toContain('brief_summary: A home health agency serving two counties.');
+    expect(user).toContain('- Which hospitals send the most patients?');
+    expect(user).toContain('brief_opening_fact: It opened a second office this fall.');
+    expect(user).toContain('report_opened: yes (never say or imply you know this)');
+    expect(user).not.toMatch(/owner@context|555-0142/);
+    expect(outcome.result).toMatchObject({ draft: 'drafted', context: true });
+    expect(on.store.proposeAction.mock.calls[0][0].input.sources).toContain('Account brief');
+  });
+
+  it('goes on without the context when the database cannot answer', async () => {
+    const model = modelOf(intelAnswer('You can start a 30-day free trial here:\nhttps://www.caremetricintel.com/'));
+    const harness = fixture({ model, snapshot: intelSnapshot(), context: vi.fn(async () => { throw new Error('down'); }), contextOn: () => true });
+    const outcome = await harness.run(taskOf({ product: 'caremetric-intel' }));
+    expect(model.run.mock.calls[0][1].user).not.toContain('<account_context>');
+    expect(outcome.result.draft).toBe('drafted');
+    expect(outcome.result.context).toBeUndefined();
+  });
+
+  it('drops a draft that lets the open show, or that states the agency\'s own standing', async () => {
+    const opened = fixture({ model: modelOf(intelAnswer('I saw you opened the report, so here is the trial:\nhttps://www.caremetricintel.com/')), snapshot: intelSnapshot(),
+      context: vi.fn(async () => raw), contextOn: () => true });
+    expect((await opened.run(taskOf({ product: 'caremetric-intel' }))).result).toMatchObject({ draft: 'rejected', draftReason: 'mentions_open' });
+    const standing = fixture({ model: modelOf(intelAnswer('Your agency is rated 4 stars, and Intel shows why:\nhttps://www.caremetricintel.com/')), snapshot: intelSnapshot(),
+      context: vi.fn(async () => raw), contextOn: () => true });
+    expect((await standing.run(taskOf({ product: 'caremetric-intel' }))).result.draft).toBe('rejected');
   });
 });

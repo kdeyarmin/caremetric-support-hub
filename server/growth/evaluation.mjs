@@ -1,6 +1,6 @@
 import { products, planOpportunity, qualify } from './policy.mjs';
-import { draftMessage, growthPromptVersion } from './draft.mjs';
-import { discoveryQuery, operatorHost } from './playbook.mjs';
+import { draftMessage, growthPromptVersion, messageArms } from './draft.mjs';
+import { discoveryQuery, operatorHost, playbookFor, shortFollowupClose, shortReportTouchAngle } from './playbook.mjs';
 import { assessProspect } from './assessment.mjs';
 
 /**
@@ -54,6 +54,25 @@ export async function evaluateGrowth(now = new Date()) {
     check('tagged product page link allowed and given its campaign tags', tagged?.modelGenerated === true && new RegExp(`${page.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\?${ownTags}&utm_content=[a-z0-9-]{1,60}$`).test(tagged.body));
     check('tagged link to another host rejected', await invoke({ ...draft, body: 'Would a free trial help?\n\nhttps://unsupported.example.org/?utm_source=x&utm_medium=y&utm_campaign=z' }) === null);
     check('tag carrying another address rejected', await invoke({ ...draft, body: `Would a free trial help?\n\n${page}?utm_source=x&utm_medium=y&utm_campaign=z&next=https://unsupported.example.org` }) === null);
+    // The short first email's test (2026-11-17, Settings → Customer growth → Test a short first email): only an Intel first email that
+    // links the agency's own report, held by code to the report and one question, with the trial moved to the second email.
+    const report = { label: 'Free market report for the agency', url: 'https://www.caremetricintel.com/report/synthetic.case' };
+    const shortCase = Array.from({ length: 64 }, (_, i) => ({ ...base, id: `synthetic-${i}`, organization_id: `synthetic-org-${i}` }))
+      .find(o => messageArms(o, o.evidence, { reportLed: true, shortTest: true }).form === 'short');
+    const shortBody = `I run a home health and hospice agency, and I built CareMetric Intel to see my own market.\n\nI put together a free market report for your agency from public Medicare data. It shows where you stand in your county and who refers the most.\n${report.url}\n\nAre you getting your share of the referrals in your county?`;
+    const seen = [];
+    const capture = output => ({ configured: true, run: async (_task, request) => { seen.push(JSON.parse(request.user)); return { outcome: 'completed', output }; } });
+    const shortDraft = { subject: 'Referrals in your county', body: shortBody, citations: ['source-a'], needsHuman: false };
+    if (product === 'caremetric-intel') {
+      const short = await draftMessage({ opportunity: shortCase, work, task: {}, model: capture(shortDraft), report, short: true });
+      check('short first email links the report and asks one question', short?.arms?.form === 'short' && seen.at(-1)?.touchPlan === shortReportTouchAngle);
+      check('short first email offering the trial rejected', await draftMessage({ opportunity: shortCase, work, task: {}, model: capture({ ...shortDraft, body: `${shortBody}\n\n${playbookFor(product).nextStep.url}` }), report, short: true }) === null);
+      check('short first email over its length rejected', await draftMessage({ opportunity: shortCase, work, task: {}, model: capture({ ...shortDraft, body: `${shortBody}${' The report also lists the county\'s largest agencies and the hospitals its residents use.'.repeat(4)}` }), report, short: true }) === null);
+      await draftMessage({ opportunity: { ...shortCase, touches: 1, first_form: 'short' }, work, task: {}, model: capture({ ...shortDraft, body: `Would the free trial help your team?\n\n${playbookFor(product).nextStep.url}` }), report, short: true });
+      check('second email after a short first offers the trial with its card terms', seen.at(-1)?.touchPlan?.includes(shortFollowupClose) === true);
+    } else {
+      check('short first email never written for this product', (await draftMessage({ opportunity: shortCase, work, task: {}, model: capture(draft), report, short: true }))?.arms?.form === undefined);
+    }
     check('discovery rotates daily', discoveryQuery(product, now) !== discoveryQuery(product, new Date(now.getTime() + 86400000)));
     check('directories are not prospects', !operatorHost('www.aplaceformom.com') && !operatorHost('pa.gov'));
     const fit = await assessProspect(base, {}, model({ fit: 70, rationale: 'Observed services fit the audience; buyer unknown.', citations: ['source-a'], nextAction: 'Verify the buyer.' }));

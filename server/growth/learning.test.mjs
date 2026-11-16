@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { composeMemo, failedChecks, growthLearningFeature, learningHandlers, minimumSends, ownerNote } from './learning.mjs';
+import { composeMemo, failedChecks, growthLearningFeature, learningHandlers, minimumReported, minimumSends, ownerNote, weaknessNotes } from './learning.mjs';
 
 const arm = (arm, value, sent, replied) => ({ arm, value, sent, replied, positive: 0, negative: 0, notNow: 0, bounced: 0 });
 const facts = (extra = {}) => ({ product: 'caremetric-intel', days: 90, sent: 0, replied: 0, positive: 0, bounced: 0, arms: [], memos: [], objections: {},
@@ -82,4 +82,65 @@ it('never compares report length with concise/control while preserving other exp
  expect(result.text).not.toContain('80 of 100');
  expect(result.text).toContain('under 120 words');
  expect(result.text).toContain('subjects phrased as a question');
+});
+
+describe('report opens and the reader\'s weaknesses (2026-11-17)', () => {
+  const linked = (name, value, sent, replied, reported, opened) => ({ ...arm(name, value, sent, replied), reported, opened });
+
+  it('compares an arm on report opens only when replies cannot tell, and only above the thresholds', () => {
+    const memo = composeMemo('caremetric-intel', facts({ arms: [linked('subject', 'question', 30, 1, 20, 8), linked('subject', 'plain', 30, 0, 18, 2)] }));
+    expect(memo.lines).toHaveLength(1);
+    expect(memo.text).toContain('Replies are still too few to compare, so this compares report opens.');
+    expect(memo.text).toContain('the agency opened it after 8 of 20 subjects phrased as a question (40%) and after 2 of 18 plain subjects (11%)');
+    // Too few emails linked the report on one side.
+    expect(composeMemo('caremetric-intel', facts({ arms: [linked('subject', 'question', 30, 0, 20, 8), linked('subject', 'plain', 30, 0, minimumReported - 1, 0)] })).text).toBeNull();
+    // The best has fewer than three opens.
+    expect(composeMemo('caremetric-intel', facts({ arms: [linked('subject', 'question', 30, 0, 20, 2), linked('subject', 'plain', 30, 0, 20, 0)] })).text).toBeNull();
+    // A lead under ten points.
+    expect(composeMemo('caremetric-intel', facts({ arms: [linked('subject', 'question', 30, 0, 20, 5), linked('subject', 'plain', 30, 0, 20, 4)] })).text).toBeNull();
+    // An opens comparison needs no minimum of sends, only of linked reports.
+    expect(composeMemo('caremetric-intel', facts({ arms: [linked('form', 'short', 16, 0, 16, 6), linked('form', 'standard', 15, 0, 15, 1)] })).text)
+      .toContain('after 6 of 16 short first emails (about 70 words) (38%) and after 1 of 15 standard first emails (7%)');
+  });
+
+  it('never lets opens override a reply comparison, nor compares the send order or an earlier open on opens', () => {
+    const replies = composeMemo('caremetric-intel', facts({ arms: [linked('subject', 'question', 40, 6, 30, 1), linked('subject', 'plain', 38, 1, 30, 20)] }));
+    expect(replies.lines).toHaveLength(1);
+    expect(replies.text).toContain('subjects phrased as a question drew replies to 6 of 40 emails');
+    expect(replies.text).not.toContain('report opens');
+    expect(composeMemo('caremetric-intel', facts({ arms: [linked('band', '1', 20, 0, 20, 15), linked('band', '4', 20, 0, 20, 1),
+      linked('viewed', 'yes', 20, 0, 20, 15), linked('viewed', 'no', 20, 0, 20, 1)] })).text).toBeNull();
+    // An arm value the memo has no name for is never compared, and counts that cannot be true are ignored.
+    expect(composeMemo('caremetric-intel', facts({ arms: [linked('subject', 'question', 30, 0, 20, 25), linked('subject', 'plain', 30, 0, 20, 0),
+      linked('subject', 'odd', 30, 0, 20, 0)] })).text).toBeNull();
+  });
+
+  it('names the send bands and the short form when replies compare them', () => {
+    const memo = composeMemo('caremetric-intel', facts({ arms: [arm('band', '2', 25, 4), arm('band', '4', 40, 1), arm('form', 'short', 30, 5), arm('form', 'standard', 30, 1)] }));
+    expect(memo.text).toContain('short first emails (about 70 words) drew replies to 5 of 30 emails (17%); standard first emails drew 1 of 30 (3%)');
+    expect(memo.text).toContain('first emails with a brief and a checked named person drew replies to 4 of 25 emails (16%); other emails drew 1 of 40 (3%)');
+    expect(memo.lines[0]).toContain('short first emails');
+  });
+
+  it('names the reader\'s commonest weakness after three drafts, with what to do about it', () => {
+    expect(composeMemo('caremetric-intel', facts({ weaknesses: { too_long: 2, about_sender: 2 } })).text).toBeNull();
+    const memo = composeMemo('caremetric-intel', facts({ weaknesses: { too_long: 3, generic_opening: 3, about_sender: 1, invented_code: 9, none: 12 } }));
+    expect(memo.lines).toEqual(['The reader\'s commonest finding in 3 recent first emails: the opening could go to any agency. Open with something true of this agency alone: its setting, its county or a dated event from the sources.']);
+    expect(memo.stats.weaknesses).toEqual({ too_long: 3, generic_opening: 3, about_sender: 1 });
+    expect(composeMemo('caremetric-intel', facts({ weaknesses: { unclear_ask: 4, too_long: 3 } })).text).toContain('what it asks for is unclear. End with one plain question');
+    for (const [code, note] of Object.entries(weaknessNotes)) {
+      expect(code).toMatch(/^[a-z_]{1,30}$/);
+      expect(`${note.finding} ${note.remedy}`).not.toMatch(/\b(demo|call|meeting|share|rank|rating)s?\b/i);
+    }
+  });
+
+  it('writes the same text from the same counts, and keeps the opens in its stats', () => {
+    const counts = facts({ reported: 40, opened: 9, weaknesses: { no_reason_now: 5 },
+      arms: [linked('angle_by', 'brief', 22, 1, 20, 7), linked('angle_by', 'hash', 21, 0, 20, 1)] });
+    const first = composeMemo('caremetric-intel', counts);
+    expect(first.text).toBe(composeMemo('caremetric-intel', structuredClone(counts)).text);
+    expect(first.lines).toHaveLength(2);
+    expect(first.stats).toMatchObject({ reported: 40, opened: 9, weaknesses: { no_reason_now: 5 } });
+    expect(first.text.length).toBeLessThanOrEqual(2000);
+  });
 });

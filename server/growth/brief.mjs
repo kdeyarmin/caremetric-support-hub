@@ -244,10 +244,14 @@ export function briefHandlers({ growth, model, features = null, marketed = null,
     const user = JSON.stringify(input);
     if (screenIdentifiers(JSON.stringify({ ...input, evidence: [] })).flagged) return { result: { briefed: 0, skipped: 'identifier' } };
     if (clock() - started > researchBudgetMs * 2) return { result: { briefed: 0, stopped: 'time', facts: fresh.length } };
+    // The write-up is held inside what is left of "Most to spend on one account brief" after the research (review 2026-11-17: it had no
+    // ceiling of its own). Too little left: no write-up, and the agency is tried again tomorrow.
+    const left = Math.min(Math.round((cents - Number(researched.cents ?? 0)) * 100) / 100, 500);
+    if (!(left > 0)) return { result: { briefed: 0, outcome: 'over_ceiling', facts: fresh.length } };
     let answer;
     try {
       answer = await model.run(task, { promptVersion: briefPromptVersion, system: [{ text: briefSystem, cache: true }], user, schema: briefSchema,
-        maxTokens: 6000, effort: 'high', tier: 'quality', timeoutMs: synthesisTimeoutMs, describe: output => `Wrote an account brief (angle ${output.angle}).` }, { signal });
+        maxTokens: 6000, effort: 'high', tier: 'quality', timeoutMs: synthesisTimeoutMs, ceilingCents: left, describe: output => `Wrote an account brief (angle ${output.angle}).` }, { signal });
     } catch (error) {
       if (signal?.aborted || error?.transient === true) throw error;
       return { result: { briefed: 0, failed: error?.code ?? 'ai_error', facts: fresh.length } };

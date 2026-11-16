@@ -4,7 +4,7 @@ select plan(12);
 select ok(hub.get_backend_contract() -> 'features' @> '["platform.settings.v1"]'::jsonb, 'The Hub settings are declared in release metadata');
 
 -- The seed: every setting the server knows, none set (the settings migration's 32, and the Creative Director's 3 in Settings → Creative, website session measurement, the 5 Amazon SES settings in Settings → Email, and the 2 Google Analytics properties in Settings → Website analytics, Settings → Customer growth → Most people to email at one organization, and the daily number of web prospects matched in Settings → Customer growth, and Settings → Social media → LinkedIn API tier).
-select is((select count(*)::int from private.hub_settings), 89, 'Every setting the Hub server knows has a row');
+select is((select count(*)::int from private.hub_settings), 95, 'Every setting the Hub server knows has a row');
 select is((select count(*)::int from private.hub_settings where value is not null or imported_from is not null or changed_by is not null), 0,
   'No setting starts with a value');
 select throws_ok($$update private.hub_settings set value = '"on"' where key = 'support.chat'$$, '23514', null,

@@ -27,6 +27,8 @@ export function growthStore(pool) {
     appEvent:(keyHash,data)=>server('private.growth_app_event',[keyHash,data]),
     plan:(id,data)=>server('private.growth_plan',[id,data]),
     draft:(id,work,data)=>server('private.growth_draft',[id,work,data]),
+    // Prospects who replied, were answered and went quiet (20261117190000_growth_priority.sql; the worker reads it only with the feature).
+    quietCandidates:(limit=10)=>server('private.growth_quiet_candidates',[limit]),
     propose:(taskId,messageId)=>server('private.growth_propose',[taskId,messageId]),
     claim:(id,action)=>server('private.growth_claim_message',[id,action]),
     finish:(id,status,provider)=>server('private.growth_finish_message',[id,status,provider]),

@@ -69,14 +69,16 @@ try {
   await assert.rejects(store.learningFacts(product, 3), refused('22023'));
   const facts = await store.learningFacts(product, 90);
   const arm = facts.arms.find(item => item.arm === 'itest' && item.value === run);
-  assert.deepEqual(arm, { arm: 'itest', value: run, sent: 4, replied: 2, positive: 1, negative: 0, notNow: 1, bounced: 1 });
+  // No email here linked the agency's own report, so none counts as reported or opened (20261117190000_growth_priority.sql).
+  assert.deepEqual(arm, { arm: 'itest', value: run, sent: 4, replied: 2, positive: 1, negative: 0, notNow: 1, bounced: 1, reported: 0, opened: 0 });
   assert.ok(facts.sent >= 4 && facts.replied >= 2 && facts.bounced >= 1);
   const memo7 = facts.memos.find(item => item.version === 7);
   assert.ok(memo7.sent >= 2 && memo7.replied >= 1);
   assert.ok(facts.objections.price >= 1 && facts.objections.timing >= 1);
   assert.ok(facts.ownerNotes.includes(`Too long, itest ${run}`));
   assert.ok(facts.rejectedDrafts >= 1);
-  assert.deepEqual(Object.keys(facts).sort(), ['arms', 'bounced', 'days', 'draftChecks', 'memos', 'objections', 'ownerNotes', 'positive', 'product', 'rejectedDrafts', 'replied', 'sent']);
+  assert.deepEqual(Object.keys(facts).sort(), ['arms', 'bounced', 'days', 'draftChecks', 'memos', 'objections', 'opened', 'ownerNotes', 'positive', 'product',
+    'rejectedDrafts', 'replied', 'reported', 'sent', 'weaknesses']);
   assert.equal(JSON.stringify(facts).includes('@'), false, 'No address leaves the database');
   const memo = composeMemo(product, facts);
   assert.ok(memo.text.includes(`Too long, itest ${run}`), 'The owner\'s note is in the memo');

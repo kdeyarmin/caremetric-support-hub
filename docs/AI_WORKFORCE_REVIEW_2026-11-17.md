@@ -5,7 +5,8 @@ Reviewed November 16 and 17, 2026, against Hub `main` at `ae35e2d` and Intel `ma
 - **Production counts:** read-only, the evening of November 16. No message text, name or address was read.
 - **Earlier reviews:** this follows the [November 16 review](AI_WORKFORCE_REVIEW_2026-11-16.md). Its owner steps were done: the roster,
   briefs, the top-model writer, the reader's review, report opens, the address check, the bounce guard and budget flights are all on.
-- **Code:** stage 1 is in this pull request. Stage 2 follows in its own pull request.
+- **Code:** stage 1 is in [kdeyarmin/caremetric-support-hub#255](https://github.com/kdeyarmin/caremetric-support-hub/pull/255). Stage 2 is
+  in its own pull request, after it (`20261117190000_growth_priority.sql`, feature `platform.agents.growth-priority.v1`).
 
 **The owner's ask:** a comprehensive review of the AI workforce, and ways to make it more intelligent and better at winning new
 customers.
@@ -22,8 +23,8 @@ customers.
 - Third, **nothing can be learned yet.** Learning waits for replies, the reader's review keeps one number, a report open changes one
   sentence, and a prospect who replies and goes quiet gets nothing.
 
-Stage 1 (this change) stops the losses and makes the team report them. Stage 2 makes each of the ten sends go to the best prospect at
-a sensible hour and acts on interest. Stage 3 waits for a week of clean data.
+Stage 1 stops the losses and makes the team report them. Stage 2 makes each of the ten sends go to the best prospect at a sensible
+hour and acts on interest. Stage 3 waits for a week of clean data.
 
 ## What production showed (November 16, evening)
 
@@ -77,7 +78,10 @@ What stays the same:
 - Never a physician's name or NPI, never the SSVI.
 - Only migrations write the auto-approve lists.
 
-## Stage 2 (next pull request)
+## What changed (stage 2)
+
+Each new behaviour has its own switch, off (or empty) until you set it; the details are in
+[Customer growth](CUSTOMER_GROWTH.md#spending-the-days-cold-emails-well-and-acting-on-interest-2026-11-17).
 
 | # | Change | Setting (Settings → Customer growth), off until you set it |
 | --- | --- | --- |
@@ -88,7 +92,7 @@ What stays the same:
 | 5 | The reader's review sees the brief and the writer's rules, scores against a described scale, names a weakness from a fixed list, and keeps all four scores; the Monday memo names the commonest weakness | Existing: Have a reader review each first email |
 | 6 | A short first email as a test for half of report-led first emails: about 70 words, the agency's report and one question; the trial and its card terms move to the second email | Test a short first email |
 | 7 | The Monday memo compares arms on report opens until replies exist | Existing: Write from what is working |
-| 8 | At most two follow-ups to a prospect who replied and went quiet, through the same send claim and opt-out | Follow up when a prospect who replied goes quiet |
+| 8 | At most two follow-ups to a prospect who replied, was answered and went quiet (four days after the answer, then five days later), through the same send claim, caps and opt-out; a customer email, so the Sales follow-ups step hands it over | Follow up when a prospect who replied goes quiet |
 | 9 | The Sales Executive answers with the account brief, which email was answered and whether the report was opened (never said to the prospect) | Give the Sales Executive the account brief |
 
 ## What you need to do, in this order
@@ -100,6 +104,9 @@ What stays the same:
 4. **Confirm the growth sender's domain records** (SPF, DKIM, DMARC). This review did not look them up.
 5. **Keep "Most cold emails a day" at 10** until 50 cold emails in a row bounce under 2%.
 6. **Read the first watchdog findings** in the next morning brief. They say what is still being lost and why.
+7. **After stage 2 merges:** set the send hours (8 to 16 suggested) and turn on "Send to the best prospects first" (Settings → Customer
+   growth). A week later, once the bands look right, turn on "Test a short first email", "Follow up when a prospect who replied goes
+   quiet" and "Give the Sales Executive the account brief".
 
 ## Cost
 
@@ -108,7 +115,7 @@ What stays the same:
 | Stage 1 itself | No new model call. The image review is one call per image as before |
 | Images reviewed again once | Up to 18 images at about a cent each, from the Creative Director's $3 a day |
 | Snapshots rendered again once | 12 renders inside "Most renders a day" |
-| Stage 2 | No new model call except the second email's longer trial paragraph in the short-form test |
+| Stage 2 | The reader's review reads the brief and the rules (a little more input, about a cent an email as before); each quiet follow-up is one draft call (about 2 cents); the Sales Executive's context adds a few hundred input tokens to a reply. The brief's write-up now has a ceiling, so a brief never costs more than "Most to spend on one account brief" |
 
 ## Not built (in order of what it would add)
 

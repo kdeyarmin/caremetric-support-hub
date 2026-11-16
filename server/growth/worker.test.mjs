@@ -23,6 +23,42 @@ it('saves the exact contact and policy versions used to write a draft',async()=>
  expect(store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({version:4,contactVersion:7,policyVersion:9}));
  expect(store.propose).toHaveBeenCalledWith('task','message');
 });
+it('keeps a first email\'s priority band with its arms once the database declares stage 2, and passes the short-form switch',async()=>{
+ const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',priority_band:2,policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
+ for(const [features,band] of [[new Set(['platform.agents.growth-priority.v1']),'2'],[new Set(),undefined]]) {
+  const store={snapshot:vi.fn(async()=>({total:1,items:[o]})),plan:vi.fn(async()=> 'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn()};
+  const growth={store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token',priority:{shortFirst:()=>true}};
+  await growthHandlers({growth,features})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
+  expect(store.draft.mock.calls[0][2].arms.band).toBe(band);
+ }
+});
+describe('a prospect who replied and went quiet',()=>{
+ const engaged={...base,product:'caremetric-intel',stage:'engaged',version:6,contact_id:'contact',contact_version:2,eligibility:'permitted',policy:{version:3,approved_claim:'Intel shows where referrals come from.'},
+  evidence:[{id:'source',source_url:'https://example.org',claim:'Home health agency.',observed_at:new Date().toISOString()}]};
+ const setup=({on=true,features=new Set(['platform.agents.growth-autonomy.v1','platform.agents.growth-priority.v1']),step=1}={})=>{
+  const store={snapshot:vi.fn(async()=>({total:1,items:[engaged]})),plan:vi.fn(async()=> 'work'),autoQualify:vi.fn(),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn(),
+   quietCandidates:vi.fn(async()=>[{opportunityId:'opp',product:'caremetric-intel',step,eventId:'e1',key:`quiet:e1:${step}`}])};
+  const growth={store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token',priority:{quietFollowup:()=>on}};
+  const run=()=>growthHandlers({growth,features,marketed:()=>['caremetric-intel']})['growth.pipeline']({id:'task',agent:{autonomy:'act'},kind:'growth.pipeline'});
+  return {store,run};
+ };
+ it('drafts a short customer email for the quiet step, through the same draft and proposal as every growth email',async()=>{
+  const {store,run}=setup();
+  const {result}=await run();
+  expect(store.plan).toHaveBeenCalledWith('opp',expect.objectContaining({key:'quiet:e1:1',kind:'reply',owner:'marketing_manager'}));
+  expect(store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({purpose:'success',version:6,contactVersion:2,policyVersion:3,arms:expect.objectContaining({quiet:'1'})}));
+  expect(store.propose).toHaveBeenCalledWith('task','message');
+  expect(result.quietFollowups).toBe(1);
+ });
+ it('does nothing while the switch is off or the database does not declare stage 2',async()=>{
+  for(const options of [{on:false},{features:new Set(['platform.agents.growth-autonomy.v1'])}]) {
+   const {store,run}=setup(options);
+   await run();
+   expect(store.quietCandidates).not.toHaveBeenCalled();
+   expect(store.draft).not.toHaveBeenCalled();
+  }
+ });
+});
 it('discards a stale draft and continues the sweep when an owner edits its context during generation',async()=>{
  const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
  const store={snapshot:vi.fn(async()=>({total:2,items:[o,{...o,id:'next'}]})),plan:vi.fn(async()=> 'work'),draft:vi.fn().mockRejectedValueOnce(Object.assign(new Error('Changed'),{code:'40001'})).mockResolvedValue({id:'message',status:'draft'}),propose:vi.fn()};
@@ -85,6 +121,14 @@ it('does not pay for a new draft of work whose last message was cancelled under 
 });
 it('sending disabled defers before claiming a message',async()=>{
  const store={claim:vi.fn()},growth={store,configured:()=>false};const exec=growthExecutors({growth,mail:{configured:true}})['growth.message'];await expect(exec({input:{messageId:'m'}})).rejects.toMatchObject({code:'action_deferred'});expect(store.claim).not.toHaveBeenCalled();
+});
+it('a claim refused for the cap or the send hours waits with its reason, and nothing is sent',async()=>{
+ for(const status of ['daily_limit','outside_hours','frequency_limited']) {
+  const store={claim:vi.fn(async()=>({send:false,status})),finish:vi.fn()},mail={configured:true,send:vi.fn()};
+  const exec=growthExecutors({growth:{store,configured:()=>true},mail})['growth.message'];
+  await expect(exec({input:{messageId:'m'},id:'a'})).rejects.toMatchObject({code:'action_deferred',reason:status});
+  expect(mail.send).not.toHaveBeenCalled();
+ }
 });
 it('only sends a claimed message, distinguishes acceptance and never retries an uncertain outcome',async()=>{
  const store={claim:vi.fn(async()=>({send:true,to:'synthetic@example.org',id:'m',workId:'w',subject:'Hello',body:'Approved message'})),finish:vi.fn()};
@@ -394,11 +438,11 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  const on=await sweep(true);
  expect(on.store.learningActive).toHaveBeenCalledTimes(1);
  expect(on.store.learningActive).toHaveBeenCalledWith('caremetric-intel');
- expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.14-m5');
+ expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.15-m5');
  expect(on.store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({memoVersion:5}));
  const off=await sweep(false);
  expect(off.store.learningActive).not.toHaveBeenCalled();
- expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.14');
+ expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.15');
  expect(off.store.draft.mock.calls[0][2].memoVersion).toBeUndefined();
 });
 

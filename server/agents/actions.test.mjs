@@ -60,9 +60,18 @@ describe('action executor', () => {
     const deferred = async () => { throw Object.assign(new Error('Rate limited'), { code: 'action_deferred' }); };
     const { executor, store } = fixture({ started: execution({ kind: 'growth.message', execution: 3 }), executors: { 'growth.message': deferred } });
     expect(await executor.executeOne('a1')).toMatchObject({ skipped: true, failed: false, needsSession: false });
-    expect(store.deferExecution).toHaveBeenCalledWith('a1', 3, 'growth.message');
+    expect(store.deferExecution).toHaveBeenCalledWith('a1', 3, 'growth.message', null);
     expect(store.releaseExecution).not.toHaveBeenCalled();
     expect(store.completeExecution).not.toHaveBeenCalled();
+  });
+
+  it('tells the store why a growth email waits, so one over the cap or outside the send hours waits for the right time', async () => {
+    for (const reason of ['daily_limit', 'outside_hours']) {
+      const waits = async () => { throw Object.assign(new Error('Action is deferred'), { code: 'action_deferred', reason }); };
+      const { executor, store } = fixture({ started: execution({ kind: 'growth.message', execution: 4 }), executors: { 'growth.message': waits } });
+      expect(await executor.executeOne('a1')).toMatchObject({ skipped: true, failed: false });
+      expect(store.deferExecution).toHaveBeenCalledWith('a1', 4, 'growth.message', reason);
+    }
   });
 
   it('fails visibly if a deferral cannot be persisted, without putting it back at the front of the queue', async () => {
