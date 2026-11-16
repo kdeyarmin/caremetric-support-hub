@@ -1,7 +1,7 @@
 begin;
 select plan(9);
 
--- Large publication videos (20261117120000_publication_import_window.sql): an import may be kept open up to four hours after staging.
+-- Large publication videos (20261117130000_publication_import_window.sql): an import may be kept open up to four hours after staging.
 select is((select pg_get_constraintdef(oid) from pg_constraint where conrelid='private.publication_imports'::regclass and conname='publication_imports_window_check'),
   'CHECK (((expires_at > created_at) AND (expires_at <= (created_at + ''04:00:00''::interval))))', 'An import closes at most four hours after it was staged');
 select is((select count(*) from pg_constraint where conrelid='private.publication_imports'::regclass and contype='c'

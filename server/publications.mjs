@@ -10,7 +10,7 @@ import { partKey, partUploads } from './upload-parts.mjs';
 
 const codes={P4040:404,P4090:409,P4130:413,P4290:429,'22023':400,'23505':409,'28000':401,'42501':403};
 // Each way of the direct transfer. private.keep_publication_import_open leaves at least 30 minutes, and cleanup waits 5 more, so a
-// transfer started after it cannot outlive its import (20261117120000_publication_import_window.sql).
+// transfer started after it cannot outlive its import (20261117130000_publication_import_window.sql).
 const transferMs=600000;
 const storageToken=/^[A-Za-z0-9._~-]{16,4096}$/;
 
