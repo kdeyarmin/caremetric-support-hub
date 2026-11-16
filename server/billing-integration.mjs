@@ -489,6 +489,21 @@ try {
   await command({ action: 'account.unlink', tenant_id: tenant, app: 'carebase', expected_version: (await customer(tenant)).links[0].version });
   assert.deepEqual((await customer(tenant)).links, []);
 
+  // Stripe's trial card answers (20261116020000_billing_trial_cards.sql), through the real roles: the server keeps and reads them, the
+  // table is closed even to the server, and a check that finds no card forgets the confirmation.
+  assert.ok((await admin.query('select hub.get_backend_contract() as c')).rows[0].c.features.includes('billing.trial-cards.v1'), 'the contract declares trial cards');
+  const cardCustomer = (await admin.query('select stripe_customer_id from private.billing_customers where tenant_id=$1', [tenant])).rows[0].stripe_customer_id;
+  const cardSubscription = `sub_trialCard${randomUUID().replaceAll('-', '')}`;
+  await admin.query(`insert into private.billing_subscriptions(stripe_subscription_id,tenant_id,stripe_customer_id,status,collection_method,livemode,stripe_created,seen_at)
+    values ($1,$2,$3,'trialing','charge_automatically',false,now(),now())`, [cardSubscription, tenant, cardCustomer]);
+  const cardConfirmed = async () => (await pool.query('select private.billing_trial_card_confirmed($1,$2) as confirmed', [tenant, [cardSubscription]])).rows[0].confirmed;
+  assert.equal(await cardConfirmed(), false, 'nothing is confirmed until Stripe confirms it');
+  await pool.query('select private.billing_trial_card_record($1,$2,true)', [tenant, [cardSubscription]]);
+  assert.equal(await cardConfirmed(), true, 'a confirmed card is kept');
+  await assert.rejects(pool.query('select count(*) from private.billing_trial_cards'), error => error.code === '42501', 'the table is closed to the server too');
+  await pool.query('select private.billing_trial_card_record($1,$2,false)', [tenant, [cardSubscription]]);
+  assert.equal(await cardConfirmed(), false, 'a check that finds no card forgets it');
+
   // The audit trail carries actions, states, amounts and identifiers, never names, emails or free text.
   const audit = (await admin.query("select action,metadata from private.audit_events where action like 'billing.%' and (actor_id=$1 or tenant_id=any($2::uuid[]))", [owner, tenantIds])).rows;
   for (const action of ['billing.customer.save', 'billing.subscription.create', 'billing.price.change', 'billing.price.migrate', 'billing.discount.apply', 'billing.usage.updated', 'billing.trial.start', 'billing.subscription.cancel'])
