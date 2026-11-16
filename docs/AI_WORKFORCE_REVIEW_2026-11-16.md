@@ -108,7 +108,8 @@ The $15 budget stops the work rather than overspend. A day that runs out of budg
 ## Not built in this pass
 
 - **Vision review of videos.** Video frames and captions are checked by code; the model looks at static images only.
-- **A weekly strategist** that names the one binding constraint at the top of the Monday scorecard.
+- **A weekly strategist** that names the one binding constraint at the top of the Monday scorecard. Built 2026-11-17, off until you
+  switch it on: [Monday scorecard](MONDAY_SCORECARD.md#the-weeks-constraint-the-weekly-strategist).
 - **A model that proposes websites** for roster agencies the telephone search still misses. The phone search should show how much of the gap remains.
 - **The other experiment factors.** Subject style and length still vary by hash while experiments are on.
 - **Trial attribution.** Intel's report PDF now carries the prospect's reference on its trial link (`utm_term`), but the Hub does not yet use it to match a trial to its prospect. It still matches by email address or domain.

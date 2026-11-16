@@ -12,7 +12,8 @@ import { watchdogFindings } from '../tasks/watchdog.mjs';
  * - verified trial starts and positive paid billing events, when the app-growth capability and prospective coverage are available;
  * - the Sales Executive's pipeline (the growth snapshot): deals that need the owner;
  * - the Social Media Manager's ad accounts, when one is connected: ad spend and ads losing money;
- * - the SEO Analyst's crawl of the websites (urgent problems) and Search Console, when it is connected (organic clicks).
+ * - the SEO Analyst's crawl of the websites (urgent problems) and Search Console, when it is connected (organic clicks);
+ * - the weekly strategist's note for the week (platform.agents.strategist.v1), when it was written: the scorecard opens with it.
  * A source that cannot be read is named in the email; only the scorecard's own counts are required.
  *
  * The schedule fires every morning, and every scheduled run in an Eastern week uses `scorecard:<Monday>`, so the first run of the week
@@ -147,6 +148,8 @@ export function scorecardHandlers({
       optional('websites', () => siteProblems(signal), signal),
       visitors ? optional('visitors', () => visitors({ before, since, until, signal }), signal).then(value => value ?? { state: 'unavailable' }) : null,
     ]);
+    // The weekly strategist's note for the reported week (strategist/index.mjs), written at 07:35; none when it is missing or unread.
+    const strategy = typeof store.strategyNote === 'function' ? await optional('strategy', () => store.strategyNote(week), signal) : null;
     // The watchdog's findings for the week (watchdog.mjs), as notes; none when they cannot be read.
     const watched = typeof store.watchdogFacts === 'function' ? watchdogFindings(await optional('watchdog', () => store.watchdogFacts(), signal), { now: moment }) : [];
     // The scheduler may have stopped waiting while the figures were read: the scorecard is not sent after that.
@@ -162,7 +165,7 @@ export function scorecardHandlers({
       ...watched.map(finding => `Watchdog: ${finding.text}`),
     ].filter(Boolean);
     const card = composeScorecard({
-      week, facts: { current, previous }, billing: billingFigures(snapshot, { now: moment }), search, ads: adFigures, visitors: seen, publicOrigin, notes,
+      week, facts: { current, previous }, billing: billingFigures(snapshot, { now: moment }), search, ads: adFigures, visitors: seen, publicOrigin, notes, strategy,
       verifiedLifecycle: features instanceof Set ? features.has('platform.agents.app-growth.v1') : Array.isArray(features) && features.includes('platform.agents.app-growth.v1'),
       needs: {
         incidents: Array.isArray(brief?.incidents) ? brief.incidents.length : 0, approvals: brief?.approvals ?? null,

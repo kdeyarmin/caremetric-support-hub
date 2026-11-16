@@ -80,6 +80,28 @@ describe('the Monday scorecard task', () => {
     expect(store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'Sent the Monday scorecard: One decision needs you this week.', null);
   });
 
+  it('opens with the weekly strategist\'s note for the reported week, its words only in the blocks', async () => {
+    const note = { constraint: 'reach', headline: '66 of 94 strong-fit agencies have no address the team may write to.', why: 'Most strong fits cannot be reached.',
+      move: 'Raise "Most address checks a day".', watch: 'strongNoContact' };
+    const { run, store, notifier } = fixture({ store: { strategyNote: vi.fn(async week => (week === '2026-10-26' ? note : null)) } });
+    const outcome = await run();
+    expect(store.strategyNote).toHaveBeenCalledWith('2026-10-26');
+    const { body, blocks } = notifier.send.mock.calls[0][0];
+    expect(blocks.slice(0, 4)).toEqual([
+      { type: 'callout', tone: 'info', title: 'This week\'s constraint: Strong fits with no address.', text: note.headline },
+      { type: 'paragraph', text: note.why }, { type: 'paragraph', text: 'This week: Raise "Most address checks a day".' },
+      { type: 'paragraph', text: 'Next Monday, watch strong fits with no usable address.' }]);
+    expect(blocks[4]).toMatchObject({ type: 'callout', title: 'Needs you.' });
+    expect(body.split('\n')[0]).toBe('Constraint: reach.');
+    expect(body).not.toContain('66 of 94');
+    expect(outcome.result.constraint).toBe('reach');
+    // Without a note, or when it cannot be read, the scorecard is as before.
+    const unread = fixture({ store: { strategyNote: vi.fn(async () => { throw Object.assign(new Error('x'), { code: '57014' }); }) } });
+    const plain = await unread.run();
+    expect(unread.notifier.send.mock.calls[0][0].blocks[0]).toMatchObject({ title: 'Needs you.' });
+    expect(plain.result).not.toHaveProperty('constraint');
+  });
+
   it('puts money only in the email\'s blocks: never in the subject, the stored body, the run, the result or the log', async () => {
     const { run, store, notifier, logs } = fixture();
     const outcome = await run();

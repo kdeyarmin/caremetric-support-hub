@@ -363,6 +363,12 @@ Chief of Staff is working, the five reports' scheduled runs are held (`skipped: 
 of them still emails it. With the Chief of Staff paused, or the setting unreadable, they email as before. Details:
 [Monday scorecard](MONDAY_SCORECARD.md).
 
+**The week's constraint** (since 2026-11-17, Settings → AI team → Name the week's binding constraint, off by default). At 07:35 on
+Monday the Chief of Staff's `strategy.weekly` task reads last week's Intel funnel and names the one stage holding the rest back, with
+one move for this week and the figure to watch next Monday; the scorecard opens with it. The rules find the candidates from the
+figures; one call on the top model picks one and words it, using only the week's numbers; the rules decide when the model cannot.
+Details: [Monday scorecard](MONDAY_SCORECARD.md#the-weeks-constraint-the-weekly-strategist).
+
 ## The SEO Analyst
 
 Checks the company's public websites once per Eastern week and emails what to fix. The crawl uses no model and reads
@@ -1309,6 +1315,13 @@ never hold a name, an address or anything about a person.
   empty search path executable by `hub_app_server` alone and refusing every other session user, their helpers are executable by no
   role, `hub.get_scorecard_settings` and `hub.set_individual_reports` authorize the owner's session themselves and are closed to
   anonymous callers, and the Chief of Staff has its 07:50 schedule. Every test fails closed.
+
+- `20261117170100_weekly_strategist_contract.sql` declares `platform.agents.strategist.v1` only after the settings, scorecard, address
+  check and account brief features are declared, `agents.strategist` is a flag, the notes table has row level security and is closed
+  to every role, the funnel helper is executable by no role, `private.growth_strategy_facts`, `private.agent_strategy_save` and
+  `private.agent_strategy_note` are security definers with a pinned empty search path executable by `hub_app_server` alone, the funnel
+  excludes internal organizations, counts only suppressed bounces and reads Intel only, and `strategy.weekly` is scheduled before the
+  scorecard. Every test fails closed.
 
 ## Hardening
 

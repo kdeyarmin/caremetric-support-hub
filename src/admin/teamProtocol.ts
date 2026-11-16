@@ -185,7 +185,7 @@ export const stepHelpText = (category: string) => stepHelp[category] ?? "";
 const taskLabels: Record<string, string> = {
   "content.weekly": "Weekly help article", "content.outreach": "Monthly outreach drafts",
   "probe.sweep": "Health check", "probe.incident": "Handle an incident", "probe.recovery": "Write a recovery note", "probe.forms": "Lead form check",
-  "brief.daily": "Morning brief", "scorecard.weekly": "Monday scorecard", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
+  "brief.daily": "Morning brief", "scorecard.weekly": "Monday scorecard", "strategy.weekly": "Name the week's constraint", "seo.weekly": "Weekly SEO check", "concierge.sweep": "Look for new messages", "concierge.communication": "Triage a message",
   "import.advisors": "Import Advisors requests", "import.breathe": "Import phone messages", "accounts.weekly": "Weekly account report",
   "growth.leads": "Look for new leads", "growth.followup": "Chase unanswered leads", "growth.weekly": "Weekly growth report",
   "accounts.lifecycle": "Customer emails", "autonomy.graduate": "Hand over work after its supervised week", "accounts.offers": "Offers from your menu",

@@ -236,6 +236,15 @@ claim still writes only to permitted contacts, the guard counts cold email that 
 `growth.verify` task is scheduled. Each test fails closed. The Hub server checks addresses, holds drafts and sends, and shows the
 Send guard only when the feature is declared ([Customer growth](CUSTOMER_GROWTH.md#checking-an-address-before-the-first-email-and-the-bounce-guard)).
 
+`20261117170100_weekly_strategist_contract.sql` declares `platform.agents.strategist.v1` only after the settings, Monday scorecard,
+address check and account brief features are declared, the `agents.strategist` setting is a flag, `private.agent_strategy_notes` has
+row level security and is closed to every role, the funnel helper `private.growth_strategy_facts_json` is closed to every role,
+`private.growth_strategy_facts`, `private.agent_strategy_save` and `private.agent_strategy_note` are security definers with a pinned empty
+search path executable by `hub_app_server` alone that require the Hub server connection, the funnel reads Intel only, excludes internal
+organizations and counts a bounce as hard only once the address is suppressed, and the Chief of Staff's `strategy.weekly` task is
+scheduled before `scorecard.weekly`. Each test fails closed. The Hub server writes the week's note, and the scorecard opens with it, only
+when the feature is declared ([Monday scorecard](MONDAY_SCORECARD.md#the-weeks-constraint-the-weekly-strategist)).
+
 `20261117160100_growth_diagnostics_contract.sql` declares `platform.agents.growth-diagnostics.v1` only after the address check and
 account brief features are declared, contacts hold `mailbox_reason` under a check of the known reasons, the two- and three-argument
 `private.growth_mailbox_record` and `private.growth_review_record` are security definers with a pinned empty search path executable by

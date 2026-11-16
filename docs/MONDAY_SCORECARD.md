@@ -63,6 +63,36 @@ reported. Queries that look personal are excluded by the same rules as the full 
 A source that cannot be read (billing, the pipeline, the ad accounts, the websites, the brief's facts) is named in the email and
 the rest still goes out. Only the scorecard's own counts are required: if they cannot be read the task fails and is tried again.
 
+## The week's constraint (the weekly strategist)
+
+Since 2026-11-17 (`20261117170000_weekly_strategist.sql`, gate `20261117170100_weekly_strategist_contract.sql`, feature
+`platform.agents.strategist.v1`; code `server/agents/strategist/`). With **Settings → AI team → Name the week's binding constraint**
+on, the Chief of Staff's `strategy.weekly` task (07:35 Eastern, shown as "Name the week's constraint") writes one note for the week the
+scorecard reports, and the scorecard opens with it: the constraint, the figure that shows it, why, one move for this week, and the
+figure to watch next Monday.
+
+1. **The figures.** `private.growth_strategy_facts(since, until)` reads CareMetric Intel's funnel for the week, counts only: strong
+   fits (75 or more) not yet written to and how many have an address the team may write to, roster agencies resolved and still
+   unresolved, addresses checked and unanswered, cold first emails and later touches, deliveries, hard bounces (addresses the Hub
+   suppressed) and soft ones, complaints, agencies that replied or opened their report, trial starts, first value and paid, days the
+   cold-email cap was reached, approved drafts waiting, briefs written, the Marketing Manager's spend and the days its budget ran out,
+   proposals waiting for you, the bounce guard's own window and the current cap and address-check mode. Internal organizations never
+   count. Strong fits, waiting drafts and approvals are as of the read.
+2. **The candidates** (`server/agents/strategist/rules.mjs`), scored 0 to 100 from the figures alone: email bouncing (a complaint, or
+   2% or more hard bounces of at least 10 sent; half weight when the bounce guard's window since shows 10 clean sends), too few agencies
+   ready, strong fits with no address (half or more), the daily cap (reached on 4 or more days with drafts waiting and bounces under
+   2%), first emails not read or answered (30 sent over two weeks, no reply, under 10% opened), interest without trials, trials without
+   first value, the Marketing Manager's budget (3 or more days), and proposals waiting for you (10 or more). A constraint the figures do
+   not show is never offered.
+3. **The choice.** One call on the top model (high effort, about 10 to 20 cents) reads the figures, the week before's counts, the
+   candidates and last week's note with what its watched figure did since, and picks one candidate. Every number it writes must be one
+   of the figures, and a link, an address or a person's title is refused. When the model is not configured, out of budget or refused,
+   the top candidate goes as the rules wrote it, and the note says the rules chose it.
+
+The note is kept in `private.agent_strategy_notes` (one row per reported week, closed to every role). A scheduled run writes the week
+once; **Run now** writes it again. The scorecard's stored body carries the constraint's key only; the note's words travel in the
+email's layout blocks. Without a note (the setting off, or the run failed) the scorecard is as before.
+
 ## What is kept
 
 The subject, the stored body (the notification log and the Team screen), the run summary and the task result carry counts only. MRR,

@@ -146,6 +146,8 @@ const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:
   ads:()=>adsConfig(process.env,settings.get),
   // Days before the watchdog flags an agent that has not run (Settings → AI team).
   watchdogIdleDays:setting('agents.watchdog_idle_days'),
+  // The weekly strategist's Monday note at the top of the scorecard (Settings → AI team → Name the week's binding constraint).
+  strategist:setting('agents.strategist'),
   // The social media tokens from Railway, with the page ids, ad accounts, images and ad limits from Settings → Social media.
   social:()=>socialConfig(connections.resolvedEnv(),connections.getSetting),
   // The Creative Director: Settings → Creative, with HeyGen's key from Railway.
