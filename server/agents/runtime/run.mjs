@@ -64,13 +64,34 @@ const requestOverheadTokens = 512;
  * cannot be too small, whatever the script, symbols or emoji. It is far above the real count for English;
  * the money it reserves is released as soon as the call is booked at its real usage.
  */
-export const inputTokenBound = body => Buffer.byteLength(JSON.stringify(body), 'utf8') + requestOverheadTokens;
+export const inputTokenBound = body => {
+  // An image is not read as its bytes: the API counts it at most imageTokenCeiling tokens, whatever its size, so its base64 is left out
+  // of the byte count and the ceiling counted instead.
+  let images = 0;
+  const text = JSON.stringify(body, (key, value) => {
+    if (value && typeof value === 'object' && value.type === 'image') { images += 1; return { type: 'image' }; }
+    return value;
+  });
+  return Buffer.byteLength(text, 'utf8') + images * imageTokenCeiling + requestOverheadTokens;
+};
+
+/**
+ * The most tokens one image costs: current models scale an image to at most 2,576 pixels on its long edge, about 4,784 tokens. Kept a
+ * little above, so a reservation is never short.
+ */
+export const imageTokenCeiling = 5000;
+// The API takes an image of at most 5 MB; its base64 is a third larger.
+const imageMaxBase64 = Math.floor((5 * 1024 * 1024 * 4) / 3);
+const imageTypes = new Set(['image/png', 'image/jpeg']);
 
 /** The request sent to the Messages API for a checked spec: one user message, a closed JSON schema for the answer, no tools. */
 export const requestBody = (model, spec) => ({
   model, max_tokens: spec.maxTokens,
   system: spec.system.map(block => ({ type: 'text', text: block.text, ...(block.cache ? { cache_control: { type: 'ephemeral' } } : {}) })),
-  messages: [{ role: 'user', content: spec.user }],
+  // Images, when a call looks at one (a rendered ad), go before the words that ask about them.
+  messages: [{ role: 'user', content: spec.images?.length
+    ? [...spec.images.map(image => ({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } })), { type: 'text', text: spec.user }]
+    : spec.user }],
   output_config: { effort: spec.effort, format: { type: 'json_schema', schema: spec.schema } },
 });
 
@@ -79,11 +100,15 @@ const count = value => (Number.isFinite(value) && value >= 0 ? Math.round(value)
 /** What the request asks for, or a permanent error when the caller got it wrong. Nothing is sent before this passes. */
 function checkRequest(request) {
   const reject = () => { throw aiError('request_rejected'); };
-  const { promptVersion, system, user, schema, maxTokens = 3000, effort = 'medium', tier = null, timeoutMs = null } = request ?? {};
+  const { promptVersion, system, user, schema, maxTokens = 3000, effort = 'medium', tier = null, timeoutMs = null, images = null } = request ?? {};
   if (typeof promptVersion !== 'string' || !versionPattern.test(promptVersion)) reject();
   if (!Array.isArray(system) || system.length === 0 || system.length > 4) reject();
   if (system.some(block => typeof block?.text !== 'string' || block.text.length === 0)) reject();
   if (typeof user !== 'string' || user.length === 0) reject();
+  // At most two images, each a PNG or JPEG in base64 within the API's size limit.
+  if (images !== null && (!Array.isArray(images) || images.length === 0 || images.length > 2
+    || images.some(image => !imageTypes.has(image?.mediaType) || typeof image?.data !== 'string' || image.data.length === 0 || image.data.length > imageMaxBase64
+      || !/^[A-Za-z0-9+/]+={0,2}$/.test(image.data)))) reject();
   if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > maxTokensCeiling) reject();
   if (!efforts.has(effort)) reject();
   if (schemaDefects(schema).length > 0) reject();

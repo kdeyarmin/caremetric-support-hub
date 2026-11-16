@@ -68,6 +68,7 @@ export function agentTeam({
   const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true, growth: features?.has?.('platform.agents.customer-growth.v1') === true,
     social: socialDeclared(features), socialVideo: features?.has?.('platform.agents.social-video.v1') === true,
     marketing, scorecard: scorecardDeclared(features), creative: creativeOn, creativeData: features?.has?.('platform.agents.creative-data.v1') === true,
+    creativeReview: features?.has?.('platform.agents.creative-review.v1') === true,
     ads: features?.has?.('platform.agents.ads.v1') === true, watchdog: features?.has?.('platform.agents.watchdog.v1') === true,
     handover: features?.has?.(handoverFeature) === true });
   // What the team markets: the owner's switches on the AI team page, read when each marketing task starts (marketing.mjs). Until the
@@ -108,7 +109,8 @@ export function agentTeam({
   const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}), ...peopleHandlers({growth,features,marketed:marketedSource}), ...matchHandlers({growth,features,marketed:marketedSource}), ...researchHandlers({growth,model:runtime,features,marketed:marketedSource}), ...verifyHandlers({growth,features,notifier}), ...briefHandlers({growth,model:runtime,features,marketed:marketedSource}), ...viewsHandlers({growth,features,notifier}), ...learningHandlers({growth,features,marketed:marketedSource,enabled:growth?.learning?.enabled??false}),
     ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, publicOrigin, guides, marketed: marketedSource, log }),
     ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log, creative: creativeLink, feed: growth?.roster?.feed ?? null }),
-    ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log, feed: growth?.roster?.feed ?? null }),
+    ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log, feed: growth?.roster?.feed ?? null,
+      states: growth?.roster?.states ?? null }),
     ...adsWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, social: socialWork.ads?.settings ?? {}, marketed: marketedSource, creative: creativeLink, publicOrigin, log }),
     ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, visitors: visitorMetrics ? input => visitorMetrics.read(input) : null, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, inboundFollowup, toolkit: toolkitNow, watchdogIdleDays, services: senderServices(sms, email) }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   // Settings → AI team → Tasks at once: how many tasks may run side by side.

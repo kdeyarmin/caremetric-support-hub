@@ -86,6 +86,22 @@ describe('one model run', () => {
     expect(g.seen).toHaveLength(0);
   });
 
+  it('shows the model an image before the words that ask about it, counts it at its token ceiling not its bytes, and refuses a bad one before calling', async () => {
+    const data = Buffer.alloc(900_000, 7).toString('base64');
+    const f = fixture();
+    await f.run(request({ images: [{ mediaType: 'image/png', data }] }));
+    expect(f.seen[0].body.messages).toEqual([{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data } }, { type: 'text', text: request().user }] }]);
+    expect(f.seen[0].body).not.toHaveProperty('images');
+    // A 1.2 MB image is reserved as at most 5,000 tokens, so a cheap look at an ad never waits for tomorrow's budget.
+    expect(boundOf(request({ images: [{ mediaType: 'image/png', data }] })) - boundOf()).toBeLessThan(5_200);
+    const g = fixture();
+    for (const images of [[], [{ mediaType: 'image/gif', data: 'AAAA' }], [{ mediaType: 'image/png', data: 'not base64!' }], [{ mediaType: 'image/png', data: '' }],
+      Array.from({ length: 3 }, () => ({ mediaType: 'image/png', data: 'AAAA' })), [{ mediaType: 'image/png', data: 'A'.repeat(7_000_001) }], 'AAAA']) {
+      expect(await rejection(g.run(request({ images }))), JSON.stringify(images).slice(0, 60)).toMatchObject({ code: 'request_rejected' });
+    }
+    expect(g.seen).toHaveLength(0);
+  });
+
   it('puts the cache breakpoint only on the blocks marked for it and takes the model from the agent\'s tier', async () => {
     const f = fixture({ taskOver: { agent: { modelTier: 'fast' } }, steps: [ok(message({ model: aiModels.fast }))] });
     await f.run(request({ system: [{ text: 'Static rules', cache: true }, { text: 'Per-product notes' }], effort: 'low', maxTokens: 1200 }));

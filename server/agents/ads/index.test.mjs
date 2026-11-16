@@ -33,6 +33,11 @@ describe('the weekly paid ads plan', () => {
     expect(proposals.map(item => [item.kind, item.targetId])).toEqual([['social.campaign_create', 'linkedin:caremetric-intel:2026-11'],
       ['social.campaign_create', 'meta:caremetric-intel:2026-11'], ['social.google_campaign', 'google:caremetric-intel:2026-11']]);
     expect(proposals[0].input).toMatchObject({ platform: 'linkedin', dailyBudgetCents: 3000, link: expect.stringContaining('utm_medium=paid_social') });
+    // Intel's new campaigns send agencies to the free market report for their own agency, and say who the report is for.
+    expect(proposals[0].input.link).toMatch(/^https:\/\/www\.caremetricintel\.com\/market-review\?/);
+    expect(proposals[1].input.link).toMatch(/^https:\/\/www\.caremetricintel\.com\/market-review\?/);
+    expect(proposals[2].input.finalUrl).toMatch(/^https:\/\/www\.caremetricintel\.com\/market-review\?/);
+    expect(proposals[0].preview).toContain('The free market report is for home health agencies and hospices');
     expect(proposals[1].input).toMatchObject({ platform: 'meta', audienceId: '1234567' });
     expect(proposals[2].input.plan.headlines).toHaveLength(3);
     expect(proposals[1].preview).toContain('paused');

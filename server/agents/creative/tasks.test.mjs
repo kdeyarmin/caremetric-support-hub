@@ -65,7 +65,9 @@ describe('registration', () => {
   });
 
   it('reads Settings → Creative with safe defaults, and HeyGen only with its key', () => {
-    expect(creativeConfig({})).toEqual({ enabled: false, dailyRenderCap: 40, countySnapshotsPerWeek: 3, videoProvider: 'internal', heygenKey: '' });
+    expect(creativeConfig({})).toEqual({ enabled: false, dailyRenderCap: 40, countySnapshotsPerWeek: 3, visionReview: false, visionMinScore: 3, videoProvider: 'internal', heygenKey: '' });
+    expect(creativeConfig({}, settingsOf({ 'creative.vision_review': true, 'creative.vision_min_score': 4 }))).toMatchObject({ visionReview: true, visionMinScore: 4 });
+    expect(creativeConfig({}, settingsOf({ 'creative.vision_review': 'yes', 'creative.vision_min_score': 9 }))).toMatchObject({ visionReview: false, visionMinScore: 3 });
     expect(creativeConfig({}, settingsOf({ 'creative.county_snapshots_per_week': 0 })).countySnapshotsPerWeek).toBe(0);
     expect(creativeConfig({}, settingsOf({ 'creative.county_snapshots_per_week': 9 })).countySnapshotsPerWeek).toBe(3);
     expect(creativeConfig({}, settingsOf({ 'creative.daily_render_cap': 12, 'creative.video_provider': 'heygen' })).videoProvider).toBe('internal');
@@ -158,6 +160,44 @@ describe('the work', () => {
     expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ dedupeKey: 'creative:ready:2026-11-09' }));
     expect(store.creativeHandoff).not.toHaveBeenCalled();
     expect(store.creativeMarkLive).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it('has a model look at each finished image while the review is on: a visible defect blocks it, a weak one warns, an unreviewed one warns', async () => {
+    const asset = { id: assetId, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static', layout: 'checklist', width: 1080, height: 1080,
+      variantLabel: 'A', hookType: 'proof', ...copyOf('proof'), overlay: copyOf('proof').overlay, offerCode: null, brandKit: fullKit, landingUrl: 'https://www.caremetricintel.com/?utm_content=x' };
+    const review = output => ({ configured: true, run: vi.fn(async () => (output instanceof Error ? Promise.reject(output) : { outcome: 'completed', output })) });
+    const go = async (model, visionReview = true) => {
+      const h = harness({ claimed: [asset] });
+      const handlers = creativeHandlers({ store: h.store, notifier: h.notifier, model, settings: { dailyRenderCap: 40, videoProvider: 'internal', visionReview, visionMinScore: 3 },
+        publicOrigin: 'https://help.caremetric.ai', log: () => {} });
+      const done = await handlers['creative.render'](h.task('creative.render'), { now });
+      return { ...h, done, finish: h.store.creativeRenderFinish.mock.calls.find(([id]) => id === assetId) };
+    };
+    const ok = { textSeen: 'x', defects: [], score: 4, reader: 'Clear.', fix: 'None.' };
+
+    const cut = await go(review({ ...ok, defects: [{ kind: 'text_cut_off', where: 'the checklist' }] }));
+    expect(cut.done.result).toMatchObject({ blocked: 1, proposed: 0 });
+    expect(cut.finish[1]).toBe('blocked');
+    expect(cut.finish[4]).toMatchObject({ verdict: 'block', review: { score: 4, defects: [{ kind: 'text_cut_off', where: 'the checklist' }] } });
+    expect(cut.store.proposeAction).not.toHaveBeenCalled();
+
+    const weak = await go(review({ ...ok, score: 2 }));
+    expect(weak.finish[1]).toBe('ready');
+    expect(weak.finish[4]).toMatchObject({ verdict: 'warn', review: { score: 2 } });
+    expect(weak.store.proposeAction.mock.calls[0][0].kind).toBe('creative.asset_review');
+
+    const failed = await go(review(Object.assign(new Error('x'), { code: 'ai_unavailable', transient: true })));
+    expect(failed.finish[4].reasons.map(item => item.rule)).toContain('vision_unreviewed');
+    expect(failed.store.proposeAction.mock.calls[0][0].kind).toBe('creative.asset_review');
+
+    const model = review(ok);
+    const off = await go(model, false);
+    expect(model.run).not.toHaveBeenCalled();
+    expect(off.finish[4].review).toBeUndefined();
+    // The rendered PNG itself is what the model was shown.
+    const seen = review(ok);
+    const shown = await go(seen);
+    expect(seen.run.mock.calls[0][1].images[0].data).toBe(Buffer.from(shown.finish[2]).toString('base64'));
   }, 60_000);
 
   it('renders a product whose brand kit is blank in its own brand theme', async () => {
@@ -259,6 +299,52 @@ describe('county snapshots', () => {
       expect(store.creativeBriefCreate.mock.calls.some(([item]) => item.source === 'data.county')).toBe(false);
       expect(done.result.snapshots).toBeUndefined();
     }
+  });
+
+  it('says why a run opened no snapshot', async () => {
+    const reasons = [];
+    for (const options of [{ perWeek: 0 }, { configured: false }, { fail: true }]) {
+      const { handlers, task: make } = setup(options);
+      reasons.push((await handlers['creative.plan'](make('creative.plan'), { now })).result.snapshotsSkipped);
+    }
+    expect(reasons).toEqual(['off', 'feed_not_configured', 'feed_unavailable']);
+  });
+
+  it('pictures every county of the roster\'s states, each about one care setting, and sends agencies to their own market report', async () => {
+    const h = harness({ model: modelOf() });
+    // Forest County has no agency located in it: it comes from Intel's county list. Erie has only hospices on the roster.
+    h.store.creativeDataCountiesAll = vi.fn(async () => [{ countyFips: '42053', state: 'PA', agencies: 0, homeHealth: 0, hospice: 0, lastSetting: 'home_health' },
+      { countyFips: '42049', state: 'PA', agencies: 4, homeHealth: 0, hospice: 4, lastSetting: null }]);
+    const figure = (key, value, setting, unit = 'count') => ({ key, label: key, value, unit, setting, data_year: '2024', period: '2024', dataset: 'CMS', source_line: 's', short_source: `CMS ${key}, 2024` });
+    const feed = { configured: true,
+      counties: vi.fn(async () => ({ counties: [{ county_fips: '42049', county_name: 'Erie', state: 'PA' }, { county_fips: '42053', county_name: 'Forest', state: 'PA' }] })),
+      countyFigures: vi.fn(async () => ({ counties: [
+        { county_fips: '42053', county_name: 'Forest', state: 'PA', figures: [figure('home_health_agencies_billing', 9, 'home_health'), figure('hospices_billing', 6, 'hospice')] },
+        { county_fips: '42049', county_name: 'Erie', state: 'PA', figures: [figure('home_health_top3_share', 0.61, 'home_health', 'fraction'), figure('hospice_top3_share', 0.72, 'hospice', 'fraction')] },
+      ] })) };
+    const handlers = creativeHandlers({ store: h.store, notifier: h.notifier, model: modelOf(), feed, states: () => ['PA'],
+      settings: { dailyRenderCap: 40, videoProvider: 'internal', countySnapshotsPerWeek: 3 }, publicOrigin: 'https://help.caremetric.ai', log: () => {} });
+    const done = await handlers['creative.plan'](h.task('creative.plan'), { now });
+    expect(feed.counties).toHaveBeenCalledWith({ states: ['PA'] });
+    expect(h.store.creativeDataCountiesAll).toHaveBeenCalledWith(3, '2026-11-09T05:00:00.000Z', [{ countyFips: '42049', state: 'PA' }, { countyFips: '42053', state: 'PA' }]);
+    expect(done.result.snapshots).toBe(2);
+    const opened = new Map(h.store.creativeBriefCreate.mock.calls.map(([item]) => item).filter(item => item.source === 'data.county').map(item => [item.facts.countyFips, item]));
+    // Forest was pictured for home health last time, so hospice now; Erie has only hospices, so hospice.
+    expect(opened.get('42053')).toMatchObject({ facts: { setting: 'hospice', stat: '6', statLabel: 'hospices billed Medicare for Forest County, PA residents', landing: 'intel-market-review' },
+      audience: 'Owners, administrators and marketers at hospices serving Forest County, PA' });
+    expect(opened.get('42049')).toMatchObject({ facts: { setting: 'hospice', figure: 'hospice_top3_share', stat: '72%',
+      statLabel: 'of the Medicare patients of Erie County, PA hospices went to the 3 largest' } });
+    for (const item of opened.values()) expect(`${item.goal} ${item.angle}`).not.toMatch(/home health/i);
+  });
+
+  it('sends a snapshot\'s drafts to the free market report, whatever page the concept chose', async () => {
+    const snapshotBrief = { ...brief, source: 'data.county', facts: { stat: '9', statLabel: 'home health agencies billed Medicare for Forest County, PA residents', statSource: 'CMS, 2024',
+      dataYear: '2024', place: 'Forest County, PA', setting: 'home_health', landing: 'intel-market-review' } };
+    const { store, task: make } = setup();
+    store.creativeBriefContext.mockResolvedValue({ brief: snapshotBrief, brandKit: fullKit, parent: null, learnings: [], recentHeadlines: [] });
+    const withModel = creativeHandlers({ store, notifier: { send: vi.fn() }, model: modelOf(), settings: { dailyRenderCap: 40, videoProvider: 'internal' }, publicOrigin: 'https://help.caremetric.ai', log: () => {} });
+    await withModel['creative.request'](make('creative.request', { payload: { briefId } }), { now });
+    expect(store.creativeDraftsSave.mock.calls[0][2].every(row => row.landingBase === 'https://www.caremetricintel.com/market-review')).toBe(true);
   });
 
   it('draws every draft of a snapshot brief as the data\'s figure, and the model\'s own numbers block it', async () => {

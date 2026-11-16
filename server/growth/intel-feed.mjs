@@ -59,6 +59,10 @@ const countySchema = z.object({ contract: z.literal(intelFeedContract), action: 
   counties: z.array(z.object({ county_fips: z.string().regex(/^\d{5}$/), county_name: z.string().max(200), state: z.string().max(2), figures: z.array(figure).max(40) })).max(50),
   not_found: z.array(z.string()).max(50) });
 
+// counties (Intel 2026-11-16): every county of the states asked for, from Intel's Census geography.
+const countiesSchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('counties'),
+  counties: z.array(z.object({ county_fips: z.string().regex(/^\d{5}$/), county_name: z.string().max(200), state: z.string().regex(/^[A-Z]{2}$/) })).max(5000) });
+
 // agency_match (Intel docs/HUB_MARKETING_FEED.md): each candidate's CCN with how it matched, and the agency as a roster item, or why
 // there is none.
 const matchSchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('agency_match'), period: z.string().regex(/^\d{4}Q[1-4]$/).nullable(),
@@ -155,6 +159,8 @@ export function intelFeedReader({ features = null, enabled = false, key = '', fe
       call({ action: 'roster', states, ...(cursor ? { cursor } : {}), limit, include }, rosterSchema, { signal }),
     /** Headline figures for up to 50 counties, each with its unit, year and source line. */
     countyFigures: ({ countyFips, signal } = {}) => call({ action: 'county_figures', county_fips: countyFips }, countySchema, { signal }),
+    /** Every county of `states` (two-letter codes): its FIPS code, name and state, so a county with no agency located in it is known too. */
+    counties: ({ states, signal } = {}) => call({ action: 'counties', states }, countiesSchema, { signal }),
     /** The CMS and Census datasets Intel loaded a new release of in the last `sinceDays` days (catalog metadata only). */
     releases: ({ sinceDays = 30, signal } = {}) => call({ action: 'releases', since_days: sinceDays }, releasesSchema, { signal }),
     /** Healthcare observances starting in the next `days` days, from Intel's fixed calendar. */

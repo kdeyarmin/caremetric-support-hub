@@ -22,10 +22,12 @@
 import { weekStart, easternDate, easternMidnight } from '../accounts/week.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { delivered } from '../notify.mjs';
+import { live } from '../../live.mjs';
+import { reviewImage } from './vision.mjs';
 import { dueMoment, permanent, plural, recordRun } from '../tasks/shared.mjs';
 import { catalogBlocks, focusFor } from '../content/features.mjs';
 import { badgeText, checkCopy, checkData, checkPlatform, checkText, checkVideo, checkVisual, verdictOf, withoutFigure } from './compliance.mjs';
-import { countyBrief, countySnapshot, withFacts } from './data.mjs';
+import { countyBrief, countySnapshot, settingFor, withFacts } from './data.mjs';
 import {
   audienceFor, namedSegment, segmentFor,
   briefUserMessage, chooseVariants, conceptPromptVersion, conceptSchema, conceptSystem, landingFor, normalizeVariant, planPlacements, variantsPromptVersion,
@@ -49,7 +51,7 @@ const goals = {
   tip: 'Earn attention with a practical tip and send people to the product page', capability: 'Show one capability and drive free-trial starts',
   engagement: 'Build familiarity with the product among the people it is for', offer: 'Drive paid activations with the Founders Sale',
   resource: 'Send people to a useful resource page',
-  data: 'Share one piece of public Medicare data news and send people to the free county report',
+  data: 'Share one piece of public Medicare data news and send people to the free market report for their agency',
 };
 const socialPlatform = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' };
 // A used-up budget waits for the next Eastern day, which is when the budget starts again.
@@ -66,11 +68,16 @@ const aborted = () => Object.assign(new Error('The agent task is no longer runni
  * @param {object} [options.meta] @param {object} [options.linkedin] the Social Media Manager's clients, read for ad results
  */
 export function creativeHandlers({ store, notifier, model = null, meta = null, linkedin = null, heygen = null, settings = {}, publicOrigin = null, marketed = null,
-  feed = null, renderBudgetMs = 150_000, log = line => console.warn(line) }) {
+  feed = null, states = null, renderBudgetMs = 150_000, log = line => console.warn(line) }) {
+  // The roster's states (Settings → Customer growth), read on each run: the county snapshots picture every county of them.
+  const rosterStates = () => { const value = live(states); return Array.isArray(value) ? value.filter(state => /^[A-Z]{2}$/.test(state)).slice(0, 60) : []; };
   // County snapshots a week (Settings → Creative), from Intel's marketing feed (`feed`, growth/intel-feed.mjs); 0 or no feed, none.
   const snapshotsNow = () => (Number.isInteger(settings.countySnapshotsPerWeek) && settings.countySnapshotsPerWeek >= 0 ? Math.min(settings.countySnapshotsPerWeek, 7) : 0);
   // Read on each run: the cap and the video provider are Hub settings (Settings → Creative) that change without a restart.
   const capNow = () => (Number.isInteger(settings.dailyRenderCap) && settings.dailyRenderCap >= 0 ? settings.dailyRenderCap : 40);
+  // Settings → Creative: the vision review and the least score it lets through without a warning. Off without a model.
+  const visionNow = () => settings.visionReview === true && model?.configured === true;
+  const visionMinScore = () => (Number.isInteger(settings.visionMinScore) && settings.visionMinScore >= 1 && settings.visionMinScore <= 5 ? settings.visionMinScore : 3);
   const offeredNow = async () => { const list = await marketedNow(marketed); return creativeProducts.filter(product => markets(list, product)); };
   const effort = task => (['low', 'medium', 'high'].includes(task.agent?.config?.effort) ? task.agent.config.effort : 'medium');
   const origin = /^https:\/\//i.test(publicOrigin ?? '') ? publicOrigin.replace(/\/+$/, '') : null;
@@ -155,34 +162,50 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
         await store.enqueue(task.agentKey, 'creative.request', `creative:brief:${saved.id}`, { payload: { briefId: saved.id }, priority: 5, sourceKind: 'agent', sourceRef: 'creative.plan' });
       }
     }
-    const snapshots = offered.includes('caremetric-intel') ? await countySnapshots(task, week) : 0;
-    await recordRun({ store, log }, task, { promptVersion: 'creative-plan.1', summary: `Read ${plural(inputs.length, 'plan item')} and opened ${plural(created, 'creative brief')}${snapshots ? ` and ${plural(snapshots, 'county snapshot')}` : ''}.` });
-    return { result: { week, inputs: inputs.length, briefs: created, ...(snapshots ? { snapshots } : {}) } };
+    const snapshots = offered.includes('caremetric-intel') ? await countySnapshots(task, week) : { opened: 0, skipped: 'intel_not_marketed' };
+    await recordRun({ store, log }, task, { promptVersion: 'creative-plan.1', summary: `Read ${plural(inputs.length, 'plan item')} and opened ${plural(created, 'creative brief')}${snapshots.opened ? ` and ${plural(snapshots.opened, 'county snapshot')}` : ''}.` });
+    // Why no county snapshot was opened, in the run's result, so a quiet week can be told from a broken one.
+    return { result: { week, inputs: inputs.length, briefs: created, ...(snapshots.opened ? { snapshots: snapshots.opened } : {}), ...(snapshots.skipped ? { snapshotsSkipped: snapshots.skipped } : {}) } };
   }
 
+  const codeOf = error => (/^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'feed_error');
+
   /**
-   * County snapshots (data.mjs): up to the week's number, each one public figure for a county where the roster's prospects are, the
-   * figure in turn by week. A feed that cannot answer leaves the week without them; the next day's plan tries again.
+   * County snapshots (data.mjs): up to the week's number, each one public figure about one care setting for one county of the roster's
+   * states, the least recently pictured first, the figure in turn by week. Returns how many were opened, or why none could be.
+   * A feed that cannot answer leaves the week without them; the next day's plan tries again.
    */
   async function countySnapshots(task, week) {
     const perWeek = snapshotsNow();
-    if (!perWeek || !feed?.configured || typeof feed.countyFigures !== 'function' || typeof store.creativeDataCounties !== 'function') return 0;
-    const counties = await store.creativeDataCounties(perWeek, easternMidnight(week).toISOString());
-    if (!Array.isArray(counties) || !counties.length) return 0;
+    if (!perWeek) return { opened: 0, skipped: 'off' };
+    if (!feed?.configured || typeof feed.countyFigures !== 'function') return { opened: 0, skipped: 'feed_not_configured' };
+    if (typeof store.creativeDataCountiesAll !== 'function' && typeof store.creativeDataCounties !== 'function') return { opened: 0, skipped: 'database_not_ready' };
+    const weekStart = easternMidnight(week).toISOString();
+    // Every county of the roster's states (Intel's geography), so a county with no agency located in it is pictured too. Without the list
+    // (an older Intel, or the database without the newer county choice), the roster's own counties, as before.
+    let all = null;
+    const states = rosterStates();
+    if (states.length && typeof feed.counties === 'function' && typeof store.creativeDataCountiesAll === 'function') {
+      try { all = ((await feed.counties({ states }))?.counties ?? []).map(county => ({ countyFips: county.county_fips, state: county.state })); }
+      catch (error) { log(JSON.stringify({ event: 'hub_creative_county_list_unread', code: codeOf(error) })); }
+    }
+    const counties = typeof store.creativeDataCountiesAll === 'function' ? await store.creativeDataCountiesAll(perWeek, weekStart, all) : await store.creativeDataCounties(perWeek, weekStart);
+    if (!Array.isArray(counties) || !counties.length) return { opened: 0, skipped: 'no_county_due' };
     let answer;
     try { answer = await feed.countyFigures({ countyFips: counties.map(county => county.countyFips) }); }
-    catch (error) { log(JSON.stringify({ event: 'hub_creative_county_unread', code: /^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'feed_error' })); return 0; }
+    catch (error) { log(JSON.stringify({ event: 'hub_creative_county_unread', code: codeOf(error) })); return { opened: 0, skipped: codeOf(error) }; }
     const turn = Math.floor(Date.parse(week) / (7 * day));
+    const chosen = new Map(counties.map(county => [county.countyFips, county]));
     let opened = 0;
     for (const [index, county] of (answer?.counties ?? []).entries()) {
-      const snapshot = countySnapshot(county, turn + index);
+      const snapshot = countySnapshot(county, turn + index, settingFor(chosen.get(county.county_fips), turn + index));
       if (!snapshot) continue;
       const saved = await store.creativeBriefCreate(countyBrief(snapshot, week));
       if (!saved?.created) continue;
       opened += 1;
       await store.enqueue(task.agentKey, 'creative.request', `creative:brief:${saved.id}`, { payload: { briefId: saved.id }, priority: 5, sourceKind: 'agent', sourceRef: 'creative.plan' });
     }
-    return opened;
+    return opened ? { opened } : { opened: 0, skipped: 'no_figure_fits' };
   }
 
   // ---- Request: one brief becomes checked drafts -------------------------------------------------------------------------------------
@@ -227,7 +250,8 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     const others = more.outcome === 'completed' ? (more.output.variants ?? []).map(raw => withFacts({ ...normalizeVariant(raw, { screenshots, offer }), concept: hero.concept }, facts)) : [];
     const chosen = chooseVariants(hero, others);
     const provider = brief.formats.includes('video') && useHeygen(kit) ? 'heygen' : 'internal';
-    const rows = planPlacements({ brief, variants: chosen, landingBase: landingFor(brief.product, concept.output.concept.landingPageId), provider }).map(row => {
+    // A county snapshot goes to the page its facts name (the free market report for the reader's agency); other briefs to the concept's choice.
+    const rows = planPlacements({ brief, variants: chosen, landingBase: landingFor(brief.product, facts?.landing ?? concept.output.concept.landingPageId), provider }).map(row => {
       const copy = { layout: row.layout, headline: row.headline, primaryText: row.primaryText, description: row.description, cta: row.cta, altText: row.altText, overlay: row.overlay };
       // A snapshot's figure is the data's, checked against it; the copy rules read the words around it.
       const findings = facts ? [...checkCopy({ product: brief.product, platform: row.platform, copy: withoutFigure(copy), offerCode: brief.offerCode, brandKit: kit }), ...checkData({ copy, facts })]
@@ -299,7 +323,20 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       await store.creativeRenderFinish(asset.id, error?.transient || ['renderer_unavailable', 'video_unavailable', 'heygen_unavailable'].includes(code) ? 'retry' : 'failed', null, null, null, { error: code });
       return 'failed';
     }
-    const verdict = verdictOf(findings);
+    let verdict = verdictOf(findings);
+    // The vision review (vision.mjs), while it is on: a model looks at a finished image that passed every coded check, before the owner does.
+    if (verdict.verdict !== 'block' && asset.kind === 'static' && visionNow()) {
+      if (signal?.aborted) throw aborted();
+      // Never retried here: an image the model could not look at is shown with a warning that it was not reviewed.
+      const run = async request => {
+        try { return await model.run(task, request, { signal }); }
+        catch (error) { if (signal?.aborted) throw aborted(); return { outcome: 'unavailable', code: /^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'ai_error' }; }
+      };
+      const reviewed = await reviewImage({ run, asset, png: file, minScore: visionMinScore() });
+      verdict = { ...verdictOf([...findings, ...reviewed.findings]), review: reviewed.review };
+      if (verdict.verdict === 'block') log(JSON.stringify({ event: 'hub_creative_vision_blocked', asset: asset.id, layout: asset.layout, placement: asset.placement,
+        defects: (reviewed.review.defects ?? []).map(item => item.kind) }));
+    }
     if (verdict.verdict === 'block') {
       await store.creativeRenderFinish(asset.id, 'blocked', null, null, verdict, {});
       return 'blocked';
