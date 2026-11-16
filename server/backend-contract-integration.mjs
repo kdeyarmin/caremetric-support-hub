@@ -412,7 +412,11 @@ try {
   }
   await client.query('begin');
   try {
-    const before=withPortalFeature(await readContract());
+    // The structure gate (2026-09-11) bounds the list at 99 features, a sanity bound of its day that production never runs again; it
+    // predates every AI team feature (platform.agents.*, declared from 2026-11-02 on), so it is replayed against a contract without them,
+    // as it could have seen it (as credit-policy-contract-integration.mjs does). Nothing it checks is left out.
+    const current=withPortalFeature(await readContract());
+    const before={...current,features:current.features.filter(feature=>!feature.startsWith('platform.agents.'))};
     const withLaterFeature={...before,features:[...before.features,'synthetic.reviewed-next.v1']};
     // Literal JSON is from this fixed synthetic fixture, not caller input.
     const literal=JSON.stringify(withLaterFeature).replaceAll("'","''");
