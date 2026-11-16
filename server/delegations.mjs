@@ -178,7 +178,10 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
       let request;
       try { request=parsePortfolioCommand(input); } catch { throw new HttpError(400,'Invalid administrator command.','invalid_request'); }
       const capability=await issue(sessionToken,'carebase.command',request.command);
-      return callNativeAdmin(fetchImpl,'https://cmcarebase.com/api/platform-admin/command','Authorization',capability,request.command,value=>parseCommandEnvelope(value,request),true);
+      const result=await callNativeAdmin(fetchImpl,'https://cmcarebase.com/api/platform-admin/command','Authorization',capability,request.command,value=>parseCommandEnvelope(value,request),true);
+      // A logout or revocation while CareBase was answering keeps the before-and-after values from the browser.
+      await withSession(pool,sessionToken,db=>authorize(db,'carebase.command',request.command));
+      return result;
     },
     async media(sessionToken,path,operation,body,contentType) {
       validateMedia(path,operation);

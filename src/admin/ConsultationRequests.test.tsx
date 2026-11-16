@@ -41,6 +41,16 @@ it("explains a conflict instead of overwriting a change made in Advisors' own in
   expect((await within(request).findByRole("alert")).textContent).toMatch(/changed in Advisors since the list loaded/);
 });
 
+it("never claims nothing changed when Advisors' answer was lost", async () => {
+  render(<ConsultationRequests change={vi.fn(async () => { throw new AdminApiError("upstream"); })} />);
+  const request = await row();
+  fireEvent.change(within(request).getByLabelText("Notes"), { target: { value: "My note" } });
+  fireEvent.click(within(request).getByRole("button", { name: "Save" }));
+  const alert = (await within(request).findByRole("alert")).textContent ?? "";
+  expect(alert).toMatch(/did not confirm the change\. Reload the list/);
+  expect(alert).not.toMatch(/nothing changed/);
+});
+
 it("deletes a request only after a second, explicit confirmation", async () => {
   const change = vi.fn<(command: AdvisorCommand) => Promise<unknown>>(async () => ({}));
   render(<ConsultationRequests change={change} />);

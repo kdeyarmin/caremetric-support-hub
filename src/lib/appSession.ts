@@ -24,7 +24,9 @@ export async function appRequest<T>(path: string, body?: unknown, signal?: Abort
   });
   // Gateways can return HTML or an empty body during an outage. Session expiry
   // must still reach the shell, even when that response is not valid JSON.
-  if (response.status === 401 && !path.startsWith('auth/')) window.dispatchEvent(new Event(authEvent));
+  // Sign-in routes answer 401 for a wrong code or password, so they do not mean the session lapsed; reading the password
+  // settings does, because only a signed-in person can.
+  if (response.status === 401 && (!path.startsWith('auth/') || (path === 'auth/password/settings' && body === undefined))) window.dispatchEvent(new Event(authEvent));
   let data: { error?:string | { code?:string; message?:string } } & T;
   try { data = await response.json(); }
   catch (error) {

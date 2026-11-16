@@ -68,6 +68,7 @@ export function reviewedDatabaseError(error) {
   const message=error.message.split('\n')[0].trim().slice(0,500);
   return message?{status:databaseStatus[error.code],message}:null;
 }
+const largeUploads=new Set(['/api/admin/creative/video','/api/admin/learning-media-import','/api/admin/packages']);
 export const privateHubMessage='This Hub is private. Only its owner can sign in.';
 /**
  * `owner.allows(sessionToken)` makes the Hub private to its owner: a session that fails it is
@@ -86,7 +87,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
       const url=new URL(req.url,'http://internal');
       const path=url.pathname;
       const cookieSession=readCookie(req.headers.cookie,sessionCookie);
-      const session=owner && cookieSession && path.startsWith('/api/') && !(await owner.allows(cookieSession)) ? undefined : cookieSession;
+      // Signing out needs no owner check: it only ends the cookie's own session.
+      const session=owner && cookieSession && path.startsWith('/api/') && path!=='/api/auth/logout' && !(await owner.allows(cookieSession)) ? undefined : cookieSession;
       if (path.startsWith('/api/')) {
         res.setHeader('Cache-Control','no-store');
         // Public liveness for uptime probes: whether this process can reach its database. It reveals nothing else.
@@ -228,6 +230,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
         }
         if (!['GET','POST','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
         if(req.method==='POST' && !sameOrigin(req,origins)) throw new HttpError(403,'Open this action in CareMetric.');
+        // Uploads (a video may be 60 MB) need a signed-in session before any of the body is read; the handlers check it again.
+        if(req.method==='POST' && !session && (largeUploads.has(path) || path.startsWith('/api/admin/creative/brand'))) throw new HttpError(401,'Sign in to continue.');
         if(owner && (path.startsWith('/api/self-service/connect/') || path.startsWith('/api/auth/invitation/'))) throw new HttpError(403,privateHubMessage);
         if(path==='/api/self-service/connect/start' && req.method==='POST' && selfService) {
           if(url.search) throw new HttpError(400,'Query parameters are not supported.');
@@ -366,7 +370,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           return json({authenticated:true},200,[cookie(sessionCookie,value,28800),cookie(challengeCookie,'',0)]);
         }
         if(path==='/api/auth/logout' && req.method==='POST') {
-          await jsonBody(req,2048); await auth.logout(session);
+          // The cookie's own session, even if the owner check could not answer: signing out must always end it on the server.
+          await jsonBody(req,2048); await auth.logout(cookieSession);
           return json({authenticated:false},200,[cookie(sessionCookie,'',0),cookie(challengeCookie,'',0)]);
         }
         if(path==='/api/admin/go-live-readiness' && req.method==='POST') {

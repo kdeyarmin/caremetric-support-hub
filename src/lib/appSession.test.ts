@@ -33,6 +33,20 @@ describe("appRequest errors", () => {
   });
 });
 
+describe("session expiry from sign-in routes", () => {
+  it("is reported when reading the password settings, but not for a wrong password", async () => {
+    const dispatch = vi.spyOn(window, "dispatchEvent");
+    answer(401, { error: "Sign in to manage your password." });
+    await expect(appRequest("auth/password/settings")).rejects.toThrow("Sign in to manage your password.");
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: sessionEvent }));
+    dispatch.mockClear();
+    answer(401, { error: "The current password is incorrect." });
+    await expect(appRequest("auth/password/settings", { username: "owner", password: "x".repeat(10) })).rejects.toThrow();
+    await expect(appRequest("auth/password/login", { username: "owner", password: "x".repeat(10) })).rejects.toThrow();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+});
+
 describe("responseErrorMessage", () => {
   it("reads a plain message or one attached to a code, and nothing else", () => {
     expect(responseErrorMessage({ error: "Choose a conversation." })).toBe("Choose a conversation.");

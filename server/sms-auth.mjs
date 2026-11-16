@@ -117,7 +117,12 @@ export function smsAuth({ pool, provider, log = console }) {
 
 /** The Hub is private to its owner, the platform administrator. Every check rereads the database, so revoking access takes effect on the next request. */
 export function ownerAccess(pool) {
-  return { allows: token => withSession(pool, token, async db => { await db.query('select hub.authorize_app_admin()'); return true; }).catch(() => false) };
+  return { allows: token => withSession(pool, token, async db => { await db.query('select hub.authorize_app_admin()'); return true; }).catch(error => {
+    // Only an answer about this sign-in means "not the owner": a missing, expired or revoked session (401 / 28000) or one without
+    // owner permission (42501). A busy or unreachable database is an outage: it must not sign the owner out or call the Hub private.
+    if ((error instanceof HttpError && [401, 403].includes(error.status)) || ['28000', '42501'].includes(error?.code)) return false;
+    throw error;
+  }) };
 }
 
 export async function withSession(pool, sessionToken, operation, required = true) {
