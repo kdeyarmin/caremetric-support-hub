@@ -17,7 +17,7 @@ Each change presents the exact intended target, fields and reason. Retrying an u
 
 The Admin workspace also links directly to the Hub's support cases, AI phone inbox, phone-number registry and routing, course authoring/distribution, learning videos/imports, knowledge articles, product contacts, customer onboarding and account security. These are internal Hub routes using the current sign-in.
 
-The application selector continues to expose the operations actually supported by each connected app. CareBase has billing, access, learning, job, release and audit controls. A directory or subscription read from another app does not imply that app supports every mutation. **All app functions** distinguishes connected controls from source inventory and unavailable connections. No generic app impersonation or external application password is introduced.
+The application selector continues to expose the operations actually supported by each connected app. CareBase has access, learning, job, release and audit controls; billing for every application is in the Hub's Billing workspace (`/admin/billing`). A directory or subscription read from another app does not imply that app supports every mutation. **All app functions** distinguishes connected controls from source inventory and unavailable connections. No generic app impersonation or external application password is introduced.
 
 ## Connection and deployment contract
 

@@ -6,6 +6,16 @@ export const sessionEvent = authEvent;
 export class AppRequestError extends Error {
   constructor(message: string, readonly status: number) { super(message); this.name = 'AppRequestError'; }
 }
+/**
+ * The message a failed Hub response carries for the person, or null. The server sends either a plain message or, for a coded
+ * error, `{ code, message? }` with a message only when it is safe to show (server/http.mjs).
+ */
+export function responseErrorMessage(data: unknown): string | null {
+  const error = data && typeof data === 'object' && 'error' in data ? (data as { error: unknown }).error : null;
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && 'message' in error && typeof (error as { message: unknown }).message === 'string') return (error as { message: string }).message;
+  return null;
+}
 export async function appRequest<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/api/${path}`, {
     method: body === undefined ? 'GET' : 'POST', credentials:'same-origin', cache:'no-store', redirect:'error',
@@ -22,10 +32,7 @@ export async function appRequest<T>(path: string, body?: unknown, signal?: Abort
     throw new AppRequestError(response.ok ? 'The server returned an unreadable response. Please try again.' : 'The request could not be completed. Please try again.', response.status);
   }
   if (!response.ok) {
-    // A coded error carries a message only when the server marked it as safe to show.
-    const error = data?.error;
-    const message = typeof error === 'string' ? error : typeof error === 'object' && error !== null && typeof error.message === 'string' ? error.message : null;
-    throw new AppRequestError(message ?? 'The request could not be completed.', response.status);
+    throw new AppRequestError(responseErrorMessage(data) ?? 'The request could not be completed.', response.status);
   }
   return data;
 }

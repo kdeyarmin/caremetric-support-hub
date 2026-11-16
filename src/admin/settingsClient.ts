@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { config } from "../lib/config";
-import { sessionEvent } from "../lib/appSession";
+import { sessionEvent, responseErrorMessage } from "../lib/appSession";
 
 /**
  * The Hub's settings (server/hub-settings.mjs): switches and values the owner changes on the Settings page instead of in Railway
@@ -53,7 +53,7 @@ async function post(body: unknown, signal?: AbortSignal): Promise<SettingsView> 
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new Event(sessionEvent));
-    const message = data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : "The request could not be completed.";
+    const message = responseErrorMessage(data) ?? "The request could not be completed.";
     throw new SettingsApiError(response.status, message);
   }
   return settingsViewSchema.parse(data);

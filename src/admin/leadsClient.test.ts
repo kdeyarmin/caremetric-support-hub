@@ -55,6 +55,11 @@ describe("Leads client", () => {
     await expect(leadsClient.list({ kind: null, source: null, includeTest: true, offset: 0, limit: 25 }, { signal: new AbortController().signal })).rejects.toMatchObject({ code: "403" });
     vi.stubGlobal("fetch", respond({ error: "Leads are not configured." }, 503));
     await expect(leadsClient.setStatus({ id: lead.id, status: "won", expectedUpdatedAt: lead.updatedAt })).rejects.toMatchObject({ code: "unconfigured" });
+    // A coded error keeps the message the server marked safe to show, and only that (server/http.mjs).
+    vi.stubGlobal("fetch", respond({ error: { code: "conflict", message: "This lead changed. Refresh and try again." } }, 409));
+    await expect(leadsClient.setStatus({ id: lead.id, status: "won", expectedUpdatedAt: lead.updatedAt })).rejects.toMatchObject({ message: "This lead changed. Refresh and try again." });
+    vi.stubGlobal("fetch", respond({ error: { code: "upstream" } }, 503));
+    await expect(leadsClient.setStatus({ id: lead.id, status: "won", expectedUpdatedAt: lead.updatedAt })).rejects.toMatchObject({ message: "The request could not be completed." });
   });
 
   it("does not trust an answer that is not the shape it expects", async () => {

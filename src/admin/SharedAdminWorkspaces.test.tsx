@@ -10,7 +10,7 @@ describe('shared owner workspaces',()=>{
     render(<MemoryRouter><SharedAdminWorkspaces/></MemoryRouter>);
     const navigation=screen.getByRole('navigation',{name:'Shared owner workspaces'});
     const expected=[
-      ['Control center: every app, channel and service','/admin'],['Applications: users, billing, courses, training','/admin/apps'],
+      ['Control center: every app, channel and service','/admin'],['Applications: users, organizations, courses, training','/admin/apps'],
       ['Phone numbers and routing','/phone-numbers'],['AI phone inbox','/phone'],
       ['Communications: phone, text, email, chat','/communications'],['Support cases','/cases'],['Knowledge articles','/knowledge'],
       ['Courses, creation and distribution','/library'],

@@ -41,6 +41,25 @@ describe('the settings catalog', () => {
     for (const item of settingsCatalog) if (item.env) expect(item.env, item.key).not.toMatch(/(KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS)$/);
     expect(retiredVariables).toEqual(['HUB_BULK_EMAIL_FROM', 'HUB_BOOKING_URL', 'HUB_APOLLO_API_KEY']);
   });
+
+  it('never accepts a longer list than the database stores', async () => {
+    // The newest migration that defines private.hub_setting_value_ok sets how many texts a list setting may hold. A list the
+    // Settings page accepts but the database refuses fails on save ("That value does not fit this setting.").
+    const names = (await readdir(migrationsDir)).sort();
+    const definitions = (await Promise.all(names.map(name => readFile(new URL(name, migrationsDir), 'utf8'))))
+      .filter(text => /function private\.hub_setting_value_ok\(/.test(text));
+    const databaseMax = Number(/jsonb_array_length\(p_value\) between 1 and (\d+)/.exec(definitions.at(-1))?.[1]);
+    expect(databaseMax).toBe(60);
+    // One item each list setting accepts. A new list setting must add its own here, so its limit is checked too.
+    const samples = { 'growth.roster_states': 'PA', 'social.image_urls': 'https://example.com/ad.png', 'seo.search_console_sites': 'sc-domain:example.com' };
+    const lists = settingsCatalog.filter(item => item.kind === 'list');
+    expect(lists.map(item => item.key).sort()).toEqual(Object.keys(samples).sort());
+    for (const item of lists) {
+      expect(item.valid([samples[item.key]]), item.key).toBe(true);
+      expect(item.valid(Array(databaseMax + 1).fill(samples[item.key])), item.key).toBe(false);
+    }
+    expect(entry('growth.roster_states').valid(Array(60).fill('PA'))).toBe(true);
+  });
 });
 
 describe('the number of people to email at one organization (20261115230000_growth_colleagues.sql)', () => {

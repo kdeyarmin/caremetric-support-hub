@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("./config", () => ({ config: { demoMode: false } }));
-import { appRequest, sessionEvent } from "./appSession";
+import { appRequest, responseErrorMessage, sessionEvent } from "./appSession";
 
 const answer = (status: number, body: unknown) => vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json(body, { status }));
 afterEach(() => vi.restoreAllMocks());
@@ -30,5 +30,13 @@ describe("appRequest errors", () => {
   it("handles a JSON null error body", async () => {
     answer(503, null);
     await expect(appRequest("communications/get", {})).rejects.toThrow("The request could not be completed.");
+  });
+});
+
+describe("responseErrorMessage", () => {
+  it("reads a plain message or one attached to a code, and nothing else", () => {
+    expect(responseErrorMessage({ error: "Choose a conversation." })).toBe("Choose a conversation.");
+    expect(responseErrorMessage({ error: { code: "conflict", message: "This changed." } })).toBe("This changed.");
+    for (const value of [{ error: { code: "upstream" } }, { error: { message: 5 } }, { error: null }, { message: "not an error" }, null, "text", undefined]) expect(responseErrorMessage(value)).toBeNull();
   });
 });
