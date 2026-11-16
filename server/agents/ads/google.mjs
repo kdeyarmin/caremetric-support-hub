@@ -119,17 +119,17 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
     /**
      * Creates the campaign PAUSED in one mutate; returns its resource name. `live` (a launch the owner handed over) creates it ENABLED with
      * its last day `endDate` (YYYY-MM-DD, the account's time zone), so it can never spend past its month; the mutate is atomic, so a
-     * refusal creates nothing.
+     * refusal creates nothing. A paused campaign may carry its last day too (a flight, which ends on its own).
      */
     async createSearchCampaign({ name, dailyBudgetCents, finalUrl, plan, live = false, endDate = null }, { signal } = {}) {
       if (!configured) throw failure('google_not_configured');
-      if (live && !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(endDate ?? '')) throw failure('google_invalid_request');
+      if ((live || endDate !== null) && !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(endDate ?? '')) throw failure('google_invalid_request');
       const base = `customers/${customer}`;
       const budget = `${base}/campaignBudgets/-1`, campaign = `${base}/campaigns/-2`, adGroup = `${base}/adGroups/-3`;
       const mutateOperations = [
         { campaignBudgetOperation: { create: { resourceName: budget, name: `${name} budget`.slice(0, 250), amountMicros: String(dailyBudgetCents * 10_000), deliveryMethod: 'STANDARD', explicitlyShared: false } } },
         { campaignOperation: { create: { resourceName: campaign, name: name.slice(0, 250), status: live ? 'ENABLED' : 'PAUSED', advertisingChannelType: 'SEARCH', campaignBudget: budget, maximizeClicks: {},
-          ...(live ? { endDateTime: `${endDate} 23:59:59` } : {}),
+          ...(endDate !== null ? { endDateTime: `${endDate} 23:59:59` } : {}),
           networkSettings: { targetGoogleSearch: true, targetSearchNetwork: false, targetContentNetwork: false, targetPartnerSearchNetwork: false },
           containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING' } } },
         { campaignCriterionOperation: { create: { campaign, location: { geoTargetConstant: 'geoTargetConstants/2840' } } } },

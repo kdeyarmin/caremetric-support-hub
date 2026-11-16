@@ -120,6 +120,20 @@ describe('growth.brief', () => {
     expect(store.briefSave.mock.calls[0][1].writer.setting).toBe('nursing_home');
   });
 
+  it('writes the brief when Intel\'s shares carry every digit of a fraction, which the identifier screen read as a card number', async () => {
+    const h = setup();
+    // 12 / 912 is 0.013157894736842105 in JSON: its digits pass the card number check, so before 2026-11-16 the brief was skipped.
+    h.feed.agencyBrief.mockResolvedValueOnce({ found: true, brief: { setting: 'home_health', county: { fips: '42003', name: 'Allegheny County', state: 'PA' }, year: '2024',
+      position: { patients: 12, county_share: 12 / 912, county_rank: 30, county_providers: 48 }, history: [{ data_year: '2023', patients: 15, county_share: 15 / 912, county_rank: 28 }],
+      competitors: [{ name: 'Another agency', patients: 120, share: 120 / 912, is_agency: false }], figures: [], hospitals: [], ratings: [], moves: [] } });
+    const { result } = await h.run();
+    expect(result).toMatchObject({ briefed: 1, intel: true });
+    const sent = JSON.parse(h.model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.1')[1].user);
+    expect(sent.intel.position).toEqual({ patients: 12, county_share: 0.0132, county_rank: 30, county_providers: 48 });
+    expect(sent.intel.history[0].county_share).toBe(0.0164);
+    expect(sent.intel.competitors[0].share).toBe(0.1316);
+  });
+
   it('does nothing when off, in Observe, or with nobody to brief', async () => {
     expect((await setup({ enabled: false }).run()).result).toEqual({ skipped: 'off' });
     expect((await setup().run({ id: 't', agent: { autonomy: 'observe' } })).result).toEqual({ skipped: 'observe_only' });
