@@ -18,7 +18,8 @@
  * `capabilities` follow its refreshed catalog (intel-features.json): twelve areas with the public data library, in words only, with no
  * count of its data and nothing spoken; who Intel is for stays as written here until its positioning is settled (owner decision).
  * Also on 2026-11-16 Intel's reviewed trial follows its billing catalog: 1 location and up to 2 healthcare service lines of the
- * customer's choice, where it said 1 branch, home health and hospice. The plans' own descriptions are unchanged here.
+ * customer's choice, where it said 1 branch, home health and hospice, and so do the plans' descriptions: locations instead of
+ * branches, service lines of the customer's choice, and Growth "for growing healthcare teams" (it said "the usual agency plan").
  */
 
 export const factsVersion = '2026-11-16.3';
@@ -74,7 +75,7 @@ export function intelFactsFromCatalog(catalog) {
   const branch = product('extra_branch');
   const state = product('extra_state');
   const extras = [
-    branch && amount(branch, 'month') ? `Extra branches are ${usd(amount(branch, 'month'))} per month each${perYear(0, amount(branch, 'year'))}` : '',
+    branch && amount(branch, 'month') ? `Extra locations are ${usd(amount(branch, 'month'))} per month each${perYear(0, amount(branch, 'year'))}` : '',
     state && amount(state, 'month') ? `extra states ${usd(amount(state, 'month'))} per month each${perYear(0, amount(state, 'year'))}` : '',
   ].filter(Boolean);
   const saving = catalog.annual_saving_percent ? ` Annual billing saves about ${catalog.annual_saving_percent}%.` : '';
@@ -97,11 +98,11 @@ export function intelFactsFromCatalog(catalog) {
 export const intelReviewedFacts = deepFreeze({
   trialDays: 30,
   pricing: [
-    'Starter: $349 per month, or $290 per month billed annually ($3,480 per year). One office. 3 marketer seats + 1 manager, 1 branch, home health or hospice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding.',
-    'Growth: $899 per month, or $749 per month billed annually ($8,988 per year). The usual agency plan, with campaigns, manager tools and AI field help. 10 seats included, up to 3 branches, home health and hospice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding.',
-    'Pro: $1,999 per month, or $1,665 per month billed annually ($19,980 per year). For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 branches, home health and hospice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding.',
+    'Starter: $349 per month, or $290 per month billed annually ($3,480 per year). One office. 3 marketer seats + 1 manager, 1 location, 1 healthcare service line of your choice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding.',
+    'Growth: $899 per month, or $749 per month billed annually ($8,988 per year). For growing healthcare teams, with campaigns, manager tools and AI field help. 10 seats included, up to 3 locations, up to 2 healthcare service lines of your choice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding.',
+    'Pro: $1,999 per month, or $1,665 per month billed annually ($19,980 per year). For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 locations, up to 2 healthcare service lines of your choice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding.',
     'Enterprise: a custom annual agreement starting at about $3,500 per month.',
-    'Extra branches are $99 per month each ($990 per year on annual billing) and extra states $199 per month each ($1,990 per year on annual billing). Annual billing saves about 17%.',
+    'Extra locations are $99 per month each ($990 per year on annual billing) and extra states $199 per month each ($1,990 per year on annual billing). Annual billing saves about 17%.',
   ],
   offers: [
     `A 30-day free trial, covering 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your choice, 1 county. ${trialCardTerms}`,
@@ -294,7 +295,7 @@ export const products = deepFreeze({
       'Give field work a purpose and a next step. Pre-visit cards, call plans, routes, mobile visit logs and dated follow-ups connect preparation with the work after a visit.',
       'See what recorded activity led to. Referral funnels, admissions, response times and lost reasons let managers review results alongside visits and outreach without treating public data as confirmed referrals.',
       'Review marketing spend with the supporting records. Account-linked expenses, receipts, per-person values, policy flags, approvals and reimbursement records help managers examine spending. These tools are not legal advice.',
-      'Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and branches, subject to plan and role.',
+      'Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and locations, subject to plan and role.',
       'Reduce repeated research and report assembly. Saved lists, account history, supported reporting questions, file imports and reusable reports bring the work together. Any time or cost benefit depends on use.',
     ],
     // Prices, the trial and Intel's offers come from Intel's own catalog once the Hub has read it.
