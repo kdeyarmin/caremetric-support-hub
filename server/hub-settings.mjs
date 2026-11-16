@@ -1,6 +1,7 @@
 import { HttpError, transaction, withSession } from './sms-auth.mjs';
 import { validGrowthFromEmail, validGrowthFromName } from './growth/sender.mjs';
 import { readProperties } from './agents/seo/search-console.mjs';
+import { DEFAULT_MEDIA_IMPORT_HOSTS, isMediaImportHost, mediaImportHosts } from './learning-media-import.mjs';
 
 /**
  * The Hub's settings (supabase/migrations/20261109150000_hub_settings.sql): every switch and value that is not a secret, changed by
@@ -38,6 +39,12 @@ const fromText = raw => raw.trim() || undefined;
 const fromNumber = raw => { const number = Number(raw.trim()); return raw.trim() && Number.isFinite(number) ? number : undefined; };
 const fromList = raw => { const items = raw.split(',').map(item => item.trim()).filter(Boolean); return items.length ? items : undefined; };
 const fromSites = raw => { const items = raw.split(/[\s,]+/).filter(Boolean); return items.length ? items : undefined; };
+// Intel's price catalog, or another Intel's: https, at exactly the address Intel publishes it, with nothing appended.
+const isCatalogAddress = value => {
+  if (!isHttps(value)) return false;
+  const url = new URL(value);
+  return url.pathname === '/api/billing/catalog' && !url.search && !url.hash;
+};
 const searchConsoleSite = value => typeof value === 'string' && value.length <= 300 && readProperties(value).properties.length === 1;
 
 export const settingGroups = Object.freeze([
@@ -52,7 +59,7 @@ export const settingGroups = Object.freeze([
   { id: 'creative', label: 'Creative', description: 'The Creative Director: whether it works, how many images and videos it starts a day, and how videos are made. HeyGen\'s key stays in Railway.' },
   { id: 'seo', label: 'Search', description: 'The Search Console properties the SEO Analyst and the Monday scorecard read. The service account key stays in Railway.' },
   { id: 'analytics', label: 'Website analytics', description: 'Read first-party measurements from the public marketing website. Signing keys stay in Railway.' },
-  { id: 'learning', label: 'Course distribution', description: 'How shared courses reach CareBase.' },
+  { id: 'learning', label: 'Course distribution', description: 'How shared courses reach CareBase, and where lesson videos may be imported from.' },
 ]);
 
 /**
@@ -145,8 +152,13 @@ export const settingsCatalog = Object.freeze([
     label: 'Customers can buy subscriptions', help: 'Lets a customer administrator start a new subscription from the Hub. Existing subscriptions and payment methods work either way.' },
   { key: 'billing.intel_price_sync', group: 'billing', kind: 'flag', input: 'toggle', default: true, env: 'HUB_APP_CATALOG_SYNC', fromEnv: raw => raw.trim() !== 'off',
     label: 'Keep Stripe in step with Intel\'s prices', help: 'Every 15 minutes the Hub reads Intel\'s plan prices and updates Stripe, keeping current subscribers on their price.' },
+  { key: 'billing.intel_catalog_url', group: 'billing', kind: 'text', input: 'text', default: null, env: 'INTEL_CATALOG_URL', fromEnv: fromText, valid: isCatalogAddress,
+    label: 'Intel price catalog address', help: 'Leave empty: the Hub reads Intel\'s live prices from https://www.caremetricintel.com/api/billing/catalog. Only a staging Hub sets another Intel\'s https address ending in /api/billing/catalog, because the prices it publishes are written into this Hub\'s Stripe.' },
   { key: 'billing.portal_configuration', group: 'billing', kind: 'text', input: 'text', default: null, env: 'STRIPE_PORTAL_CONFIGURATION_ID', fromEnv: fromText, valid: matches(/^bpc_[A-Za-z0-9]{1,200}$/),
     label: 'Stripe customer portal configuration', help: 'The portal configuration customers see (bpc_…). Empty: the Stripe account\'s default.' },
+  { key: 'learning.media_import_hosts', group: 'learning', kind: 'list', input: 'lines', default: DEFAULT_MEDIA_IMPORT_HOSTS, env: 'HUB_MEDIA_IMPORT_HOSTS',
+    fromEnv: raw => mediaImportHosts(raw) ?? undefined, valid: listOf(isMediaImportHost, 20),
+    label: 'Lesson video import hosts', help: 'The exact host names bulk lesson-video import may download MP4s from, one per line in lowercase, without https:// (at most 20). Empty: HeyGen\'s asset hosts, resource2.heygen.ai, files.heygen.ai and files2.heygen.ai.' },
   { key: 'learning.legacy_distribution_opt_in', group: 'learning', kind: 'flag', input: 'toggle', default: false, env: 'HUB_LEGACY_DISTRIBUTION_OPT_IN', fromEnv: fromFlag,
     label: 'Allow legacy opt-in distribution', help: 'Lets a course distribution use the older opt-in mode for facilities that have not moved to entitlements. Leave off unless you were told to use it.' },
   { key: 'social.meta_page_id', group: 'social', kind: 'text', input: 'text', default: null, env: 'HUB_META_PAGE_ID', fromEnv: fromText, valid: matches(/^[0-9]{1,40}$/),

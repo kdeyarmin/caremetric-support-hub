@@ -31,13 +31,16 @@ platform billing and stay in those applications.
 | `STRIPE_SECRET_KEY` | yes | Secret or restricted key of `acct_1SinLKB06O2UFlNz`. `sk_test_` for test mode, `sk_live_` for live. |
 | `STRIPE_WEBHOOK_SECRET` | yes | Signing secret of the Hub's webhook endpoint. Comma-separate two secrets while rolling one. |
 | `HUB_PUBLIC_ORIGIN` | no | Return address of the customer portal (`https://help.caremetric.ai`). |
-| `INTEL_CATALOG_URL` | no | Reads Intel's price catalog from another Intel (staging) instead of `https://www.caremetricintel.com/api/billing/catalog`. |
 
 In [Settings](SETTINGS.md) → Billing:
 
 - **Customers can buy subscriptions** (off by default). Enables reviewed customer purchase confirmations only after the
   sandbox and native entitlement rollout gates pass. Existing checkout status and cancellation remain reachable when it is off.
 - **Keep Stripe in step with Intel's prices** (on by default). Switching it off stops the Intel price sync (below).
+- **Intel price catalog address** (empty by default): where the sync reads Intel's prices. Empty is Intel's live catalog,
+  `https://www.caremetricintel.com/api/billing/catalog`. Only a staging Hub sets another Intel's `https` address ending in
+  `/api/billing/catalog`, because the prices it publishes are written into this Hub's Stripe. It replaced the
+  `INTEL_CATALOG_URL` Railway variable.
 - **Stripe customer portal configuration**: the `bpc_…` Customer Portal configuration for Hub customers; Stripe's default
   configuration otherwise.
 
