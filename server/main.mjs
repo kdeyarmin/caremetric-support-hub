@@ -70,7 +70,9 @@ await connections.start();
 const setting=settings.reader;
 const observer=distributionObserver({pool,token:process.env.CAREBASE_DISTRIBUTION_OBSERVER_TOKEN});
 // Breathe and Intel access changes, once the database declares their command audiences (20261117110100_app_command_audiences_contract.sql).
-const capabilities=delegations({pool,storageUrl,provider,observer,legacyDistributionOptIn:setting('learning.legacy_distribution_opt_in'),appCommands:features.has('platform.admin.app-commands.v1')});
+// Lesson media goes straight to Storage once app-media signs upload addresses (20261117140000_lesson_media_direct_storage_contract.sql).
+const capabilities=delegations({pool,storageUrl,provider,observer,legacyDistributionOptIn:setting('learning.legacy_distribution_opt_in'),appCommands:features.has('platform.admin.app-commands.v1'),
+  directMedia:features.has('learning.lesson-media.direct-storage.v1')});
 // Large publication files go straight to Storage once the database can keep an import open (20261117130100_publication_import_window_contract.sql).
 const publicationService=publications({pool,delegations:capabilities,storageUrl,directStorage:features.has('knowledge.publications.direct-storage.v1')});
 const ai=aiAssistance({apiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record});
@@ -205,8 +207,7 @@ console.info(`Website leads: ${leads.enabled()?'database ready':'waiting for the
 // Bulk lesson-media import: answered only when the database declares learning.media-import.v1. MP4s are fetched only from the
 // exact hosts in "Lesson video import hosts" (Settings → Course distribution; empty: HeyGen's asset hosts), read on each request.
 const mediaImport=learningMediaImport({pool,hosts:setting('learning.media_import_hosts'),enabled:features.has(mediaImportFeature),
-  storage:{upload:(sessionToken,path,body,contentType)=>capabilities.media(sessionToken,path,'upload',body,contentType),
-    download:(sessionToken,path)=>capabilities.media(sessionToken,path,'download')}});
+  storage:{upload:capabilities.mediaUpload,download:capabilities.mediaDownload}});
 const setup=integrationSetup({rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken),env:connections.resolvedEnv});
 // Public articles as HTML for crawlers, read exactly as an anonymous visitor's app reads them, at their canonical address.
 // A product's public articles as JSON for its own website: answered only when the database declares content.public-articles.v1.
