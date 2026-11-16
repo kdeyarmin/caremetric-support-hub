@@ -83,12 +83,26 @@ const row=(n,overrides={})=>({product:'carebase',courseTitle:'Fire safety for PC
   mp4Url:`https://resource2.heygen.ai/${run}/${n}.mp4`,posterUrl:null,captionsFile:`${n}.vtt`,transcriptFile:`${n}.txt`,heygenVideoId:`r${run}${n}`,...overrides});
 const stage=(r,extra={})=>media({operation:'stage',manifestSha256,row:r,captions,transcript,...extra});
 const draftOf=async itemId=>(await admin.query('select draft,draft_version from private.learning_courses where item_id=$1',[itemId])).rows[0];
+// A lesson video sent in parts (server/upload-parts.mjs), as the library's upload form sends it.
+const lessonVideo=mp4(`parts ${run}`),lessonPath=`learning/${randomUUID()}/video.mp4`;
+async function sendPart(offset,bytes){
+  const response=await fetch(`${origin}/api/media/${lessonPath}`,{method:'POST',body:bytes,headers:{Origin:'https://hub.test','Content-Type':'video/mp4',Cookie:cookie(),
+    'Upload-Offset':String(offset),'Upload-Length':String(lessonVideo.length)}});
+  return {status:response.status,body:await response.json()};
+}
 try{
   assert.equal((await media({operation:'list'})).status,401,'signed-out callers are refused');
+  assert.equal((await sendPart(0,lessonVideo.subarray(0,2048))).status,401,'a signed-out caller cannot start an upload in parts');
   await login(phones[1]);
   assert.equal((await media({operation:'list'})).status,403,'a content writer without shared-course editor authority is refused');
   await login(phones[0]);
   assert.equal((await media({operation:'list'})).status,200);
+  assert.deepEqual(await sendPart(0,lessonVideo.subarray(0,2048)),{status:202,body:{received:2048}});
+  assert.deepEqual(await sendPart(0,lessonVideo.subarray(0,2048)),{status:202,body:{received:2048}},'a repeated part is not written twice');
+  assert.equal(stored.has(lessonPath),false,'nothing is stored before the whole file has arrived');
+  assert.deepEqual(await sendPart(2048,lessonVideo.subarray(2048)),{status:200,body:{uploaded:true}});
+  const lessonCopy=await fetch(`${origin}/api/media/${lessonPath}`,{headers:{Cookie:cookie()}});
+  assert.equal(lessonCopy.status,200);assert.equal(sha(Buffer.from(await lessonCopy.arrayBuffer())),sha(lessonVideo),'Storage holds exactly the file sent in parts');
 
   // Two drafts: a Hub course naming its video lesson by title, and a PennSync-converted course whose lesson id comes from its module.
   const named=await call('rpc/save_learning_draft',{p_item_id:randomUUID(),p_expected_version:0,p_document:draftDoc('Fire safety for PCH',[
