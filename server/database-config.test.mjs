@@ -85,7 +85,8 @@ describe('reaching the database at startup', () => {
 
   it('retries while the database cannot be reached, then carries on', async () => {
     for (const unreachable of [failure('ECONNREFUSED'), failure('ETIMEDOUT'), failure('EAI_AGAIN'), failure('57P03'), failure('08006'),
-      failure(null, 'timeout exceeded when trying to connect'), failure(null, 'Connection terminated unexpectedly')]) {
+      failure(null, 'timeout exceeded when trying to connect'), failure(null, 'Connection terminated unexpectedly'),
+      Object.assign(new Error('wrapped'), { cause: failure('ECONNRESET') })]) {
       const lines = [];
       let calls = 0;
       const result = await untilReachable(async () => { calls += 1; if (calls < 3) throw unreachable; return 'ready'; }, { ...clock(), log: { warn: line => lines.push(line) } });
@@ -103,11 +104,22 @@ describe('reaching the database at startup', () => {
     }
   });
 
-  it('gives up after about ninety seconds, inside the deploy healthcheck, with the last error', async () => {
+  it('gives up by its deadline, inside the deploy healthcheck, with the last error', async () => {
     const time = clock();
     const last = failure('ECONNREFUSED');
     await expect(untilReachable(async () => { throw last; }, { ...time, log: { warn: () => {} } })).rejects.toBe(last);
     expect(time.now()).toBeGreaterThanOrEqual(60_000);
-    expect(time.now()).toBeLessThanOrEqual(90_000);
+    expect(time.now()).toBeLessThanOrEqual(75_000);
+  });
+
+  it('shares one deadline between startup reads, so the second gets only what the first left', async () => {
+    const time = clock();
+    const deadline = time.now() + 75_000;
+    let first = 0;
+    await untilReachable(async () => { first += 1; if (first < 6) throw failure('ECONNREFUSED'); return 'ok'; }, { ...time, deadline, log: { warn: () => {} } });
+    const used = time.now();
+    await expect(untilReachable(async () => { throw failure('ECONNREFUSED'); }, { ...time, deadline, log: { warn: () => {} } })).rejects.toMatchObject({ code: 'ECONNREFUSED' });
+    expect(used).toBeGreaterThan(0);
+    expect(time.now()).toBeLessThanOrEqual(75_000);
   });
 });

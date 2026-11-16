@@ -51,11 +51,12 @@ const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 // A dropped connection is logged and replaced, never an uncaught error (guardPool).
 const pool=guardPool(new pg.Pool(databaseConfig()));
 // Refuse an incomplete release before replacing the running application. A database that cannot be reached yet (a restart or failover)
-// is waited for, about 90 seconds at most; a release that does not match it fails at once (untilReachable).
-await untilReachable(()=>pool.query('select c.credential_version,s.auth_method from private.password_credentials c,private.sms_sessions s limit 0'));
+// is waited for, 75 seconds at most for both reads together; a release that does not match it fails at once (untilReachable).
+const reachableBy=Date.now()+75_000;
+await untilReachable(()=>pool.query('select c.credential_version,s.auth_method from private.password_credentials c,private.sms_sessions s limit 0'),{deadline:reachableBy});
 const provider=smsProvider({apiKey:process.env.HUB_TELNYX_API_KEY,profileId:process.env.HUB_TELNYX_VERIFY_PROFILE_ID});
 const api=gateway(pool);
-const contract=await untilReachable(()=>api.rpc('get_backend_contract',{}));
+const contract=await untilReachable(()=>api.rpc('get_backend_contract',{}),{deadline:reachableBy});
 assertBackendContract(contract);
 // Optional features (declared ahead of the builds that use them) are read once at boot, like the AI team's.
 const features=new Set(contract.features);

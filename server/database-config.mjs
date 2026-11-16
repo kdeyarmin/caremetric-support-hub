@@ -75,22 +75,22 @@ export function guardPool(pool, log = console) {
 // starting up or shutting down (57P01-57P03), too many connections (53300) or any SQLSTATE class 08 (connection exception).
 const unreachableCodes = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH', 'EPIPE',
   '57P01', '57P02', '57P03', '53300']);
-export const databaseUnreachable = error => unreachableCodes.has(error?.code) || /^08[0-9A-Z]{3}$/.test(error?.code ?? '')
-  || /timeout exceeded when trying to connect|Connection terminated/i.test(error?.message ?? '');
+export const databaseUnreachable = error => Boolean(error) && (unreachableCodes.has(error.code) || /^08[0-9A-Z]{3}$/.test(error.code ?? '')
+  || /timeout exceeded when trying to connect|Connection terminated/i.test(error.message ?? '') || (error.cause !== error && databaseUnreachable(error.cause)));
 
 /**
- * Runs a startup query, retrying while the database cannot be reached, for up to about 90 seconds: inside Railway's 120-second deploy
- * healthcheck, and long enough to outlast a Supabase restart or failover, which otherwise used up the service's restarts and left the
- * Hub down until someone redeployed it. Anything else (a release that does not match the database, wrong credentials) fails at once.
+ * Runs a startup query, retrying while the database cannot be reached, until `deadline` (75 seconds from now by default; startup passes
+ * one deadline to both of its reads). That stays inside Railway's 120-second deploy healthcheck, a last attempt's 10-second connect
+ * timeout included, and outlasts a Supabase restart or failover, which otherwise used up the service's restarts and left the Hub down
+ * until someone redeployed it. Anything else (a release that does not match the database, wrong credentials) fails at once.
  * The lines logged carry no error text, which can name the host or role.
  */
-export async function untilReachable(operation, { limitMs = 90_000, now = Date.now, wait = ms => new Promise(resolve => setTimeout(resolve, ms)), log = console } = {}) {
-  const started = now();
+export async function untilReachable(operation, { now = Date.now, deadline = now() + 75_000, wait = ms => new Promise(resolve => setTimeout(resolve, ms)), log = console } = {}) {
   for (let attempt = 1; ; attempt += 1) {
     try { return await operation(); }
     catch (error) {
       const delay = Math.min(15_000, 1000 * 2 ** (attempt - 1));
-      if (!databaseUnreachable(error) || now() - started + delay > limitMs) throw error;
+      if (!databaseUnreachable(error) || now() + delay > deadline) throw error;
       log.warn(`The database could not be reached (attempt ${attempt}); trying again in ${delay / 1000} seconds.`);
       await wait(delay);
     }
