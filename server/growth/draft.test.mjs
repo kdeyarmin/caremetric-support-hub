@@ -32,7 +32,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.11');
+ expect(request.promptVersion).toBe('growth.12');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -146,7 +146,7 @@ it('repairs a draft once, telling the writer what to fix, and reports why one wa
  const draft=await draftMessage({opportunity,work,task:{},model,onReject:code=>reasons.push(code)});
  expect(draft).toMatchObject({modelGenerated:true,body:'How do you track training hours today?'});
  const repair=model.run.mock.calls[1][1];
- expect(repair.promptVersion).toBe('growth.11-r');
+ expect(repair.promptVersion).toBe('growth.12-r');
  expect(repair.system[0].text).toBe(growthSystem);
  expect(JSON.parse(repair.user)).toMatchObject({previousDraft:{body:'A seamless way to train staff.'},fix:expect.stringMatching(/plain words/)});
  expect(reasons).toEqual([]);
@@ -181,7 +181,7 @@ it('writes outreach with the owner-approved memo as a second cached block, and r
  expect(request.system[0].text).toBe(growthSystem);
  expect(request.system[1].text).toContain('memo 3');
  expect(request.system[1].text).toContain('Too long');
- expect(request.promptVersion).toBe('growth.11-m3');
+ expect(request.promptVersion).toBe('growth.12-m3');
  expect(draft.memoVersion).toBe(3);
  // A customer's message and an unusable memo are written without it.
  model.run.mockClear();
@@ -190,5 +190,5 @@ it('writes outreach with the owner-approved memo as a second cached block, and r
  expect(customer?.memoVersion).toBeUndefined();
  model.run.mockClear();
  await draftMessage({opportunity,work,task:{},model,memo:{version:'3',memo:'x'}});
- expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.11');
+ expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.12');
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { reportLinkDays, reportLinks, reportMissingMs, reportOpensMs, reportToken, rosterAgency } from './report-link.mjs';
 import { draftMessage, draftProblem } from './draft.mjs';
+import { touchAngle } from './playbook.mjs';
 
 const key = 'k'.repeat(40);
 const roster = (ccn = '397001', setting = 'home health agency') => ({
@@ -135,5 +136,27 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     const second = reply('A different angle.\n\nhttps://www.caremetricintel.com/', ['web-1']);
     await draftMessage({ opportunity: { ...web, touches: 1 }, work, task: {}, model: second });
     expect(JSON.parse(second.run.mock.calls[0][1].user).touchPlan).toMatch(/different angle/);
+  });
+
+  it('gives a nursing home the standard first email, without the agency-only report pages (owner decision 2026-11-16)', async () => {
+    const home = { ...opportunity, name: 'Sunrise Nursing & Rehabilitation Center',
+      evidence: [{ id: 'web-1', source_url: 'https://sunrise.example', observed_at: new Date().toISOString(), confidence: 'medium', claim: 'Sunrise is a 120-bed nursing home in Riverton County.' }] };
+    const model = reply('Are your hospital relationships bringing the admissions you need?\n\nhttps://www.caremetricintel.com/', ['web-1']);
+    const draft = await draftMessage({ opportunity: home, work, task: {}, model });
+    expect(draft).toMatchObject({ modelGenerated: true });
+    const input = JSON.parse(model.run.mock.calls[0][1].user);
+    expect(input.touchPlan).toBe(touchAngle(1));
+    expect(input.touchPlan).not.toMatch(/market report/);
+    expect(input.organization).toMatchObject({ name: 'Sunrise Nursing & Rehabilitation Center', setting: 'nursing home' });
+    const offered = input.links.map(item => item.url);
+    expect(offered).not.toContain('https://www.caremetricintel.com/market-review');
+    expect(offered).not.toContain('https://www.caremetricintel.com/county-report');
+    // A draft that links one anyway is refused; an agency may still be sent there.
+    const linked = reply('Get your free market report:\nhttps://www.caremetricintel.com/market-review', ['web-1']);
+    expect(await draftMessage({ opportunity: home, work, task: {}, model: linked })).toBeNull();
+    expect(draftProblem({ subject: 'Your market', body: 'See it:\nhttps://www.caremetricintel.com/market-review', citations: ['web-1'], needsHuman: false },
+      { product: 'caremetric-intel', sources: home.evidence, outreach: true, withoutLinks: ['https://www.caremetricintel.com/market-review'] })).toBe('link');
+    expect(draftProblem({ subject: 'Your market', body: 'See it:\nhttps://www.caremetricintel.com/market-review', citations: ['web-1'], needsHuman: false },
+      { product: 'caremetric-intel', sources: home.evidence, outreach: true })).not.toBe('link');
   });
 });
