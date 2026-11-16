@@ -64,13 +64,34 @@ const requestOverheadTokens = 512;
  * cannot be too small, whatever the script, symbols or emoji. It is far above the real count for English;
  * the money it reserves is released as soon as the call is booked at its real usage.
  */
-export const inputTokenBound = body => Buffer.byteLength(JSON.stringify(body), 'utf8') + requestOverheadTokens;
+export const inputTokenBound = body => {
+  // An image is not read as its bytes: the API counts it at most imageTokenCeiling tokens, whatever its size, so its base64 is left out
+  // of the byte count and the ceiling counted instead.
+  let images = 0;
+  const text = JSON.stringify(body, (key, value) => {
+    if (value && typeof value === 'object' && value.type === 'image') { images += 1; return { type: 'image' }; }
+    return value;
+  });
+  return Buffer.byteLength(text, 'utf8') + images * imageTokenCeiling + requestOverheadTokens;
+};
+
+/**
+ * The most tokens one image costs: current models scale an image to at most 2,576 pixels on its long edge, about 4,784 tokens. Kept a
+ * little above, so a reservation is never short.
+ */
+export const imageTokenCeiling = 5000;
+// The API takes an image of at most 5 MB; its base64 is a third larger.
+const imageMaxBase64 = Math.floor((5 * 1024 * 1024 * 4) / 3);
+const imageTypes = new Set(['image/png', 'image/jpeg']);
 
 /** The request sent to the Messages API for a checked spec: one user message, a closed JSON schema for the answer, no tools. */
 export const requestBody = (model, spec) => ({
   model, max_tokens: spec.maxTokens,
   system: spec.system.map(block => ({ type: 'text', text: block.text, ...(block.cache ? { cache_control: { type: 'ephemeral' } } : {}) })),
-  messages: [{ role: 'user', content: spec.user }],
+  // Images, when a call looks at one (a rendered ad), go before the words that ask about them.
+  messages: [{ role: 'user', content: spec.images?.length
+    ? [...spec.images.map(image => ({ type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } })), { type: 'text', text: spec.user }]
+    : spec.user }],
   output_config: { effort: spec.effort, format: { type: 'json_schema', schema: spec.schema } },
 });
 
@@ -79,16 +100,22 @@ const count = value => (Number.isFinite(value) && value >= 0 ? Math.round(value)
 /** What the request asks for, or a permanent error when the caller got it wrong. Nothing is sent before this passes. */
 function checkRequest(request) {
   const reject = () => { throw aiError('request_rejected'); };
-  const { promptVersion, system, user, schema, maxTokens = 3000, effort = 'medium', tier = null } = request ?? {};
+  const { promptVersion, system, user, schema, maxTokens = 3000, effort = 'medium', tier = null, timeoutMs = null, images = null } = request ?? {};
   if (typeof promptVersion !== 'string' || !versionPattern.test(promptVersion)) reject();
   if (!Array.isArray(system) || system.length === 0 || system.length > 4) reject();
   if (system.some(block => typeof block?.text !== 'string' || block.text.length === 0)) reject();
   if (typeof user !== 'string' || user.length === 0) reject();
+  // At most two images, each a PNG or JPEG in base64 within the API's size limit.
+  if (images !== null && (!Array.isArray(images) || images.length === 0 || images.length > 2
+    || images.some(image => !imageTypes.has(image?.mediaType) || typeof image?.data !== 'string' || image.data.length === 0 || image.data.length > imageMaxBase64
+      || !/^[A-Za-z0-9+/]+={0,2}$/.test(image.data)))) reject();
   if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > maxTokensCeiling) reject();
   if (!efforts.has(effort)) reject();
   if (schemaDefects(schema).length > 0) reject();
   if (tier !== null && !tiers.has(tier)) reject();
-  return { ...request, maxTokens, effort, tier };
+  // A longer wait for one call (an account brief or a first email on the quality tier), never past the run's own deadline.
+  if (timeoutMs !== null && (!Number.isInteger(timeoutMs) || timeoutMs < 10_000 || timeoutMs > 180_000)) reject();
+  return { ...request, maxTokens, effort, tier, timeoutMs };
 }
 
 const usageOf = message => {
@@ -153,14 +180,17 @@ export const minResearchRoundTokens = 1024;
  * (down to one) only when that floor leaves too little for them. Null when even that does not fit, so no round, the first included, can
  * take the run past its ceiling.
  */
-export function fitResearchRound(model, spec, inputTokens, leftCents) {
+export function fitResearchRound(model, spec, inputTokens, leftCents, lockedSearches = null) {
   const cached = spec.system.some(block => block.cache);
   const searching = spec.tools.includes('web_search');
   const worst = (maxTokens, searches) => worstCaseCents(model, { inputTokens, maxTokens, cached }) + searches * searchCents;
-  const wanted = searching ? spec.maxSearches : 0;
+  // After the first round the tool definitions are fixed (lockedSearches): a later round may only ask for fewer output tokens. Changing
+  // a tool's max_uses mid-conversation would change the request's prefix, so the cached system prompt and the conversation's earlier
+  // turns would be read again at full price, and models that bind thinking to the tool list could refuse the turn.
+  const wanted = searching ? (Number.isInteger(lockedSearches) ? lockedSearches : spec.maxSearches) : 0;
   if (worst(spec.maxTokens, wanted) <= leftCents) return { maxTokens: spec.maxTokens, searches: wanted, worst: worst(spec.maxTokens, wanted) };
   const floor = Math.min(spec.maxTokens, minResearchRoundTokens);
-  const searches = searching ? Math.min(wanted, Math.floor((leftCents - worst(floor, 0)) / searchCents)) : 0;
+  const searches = searching ? (Number.isInteger(lockedSearches) ? lockedSearches : Math.min(wanted, Math.floor((leftCents - worst(floor, 0)) / searchCents))) : 0;
   if ((searching && searches < 1) || worst(floor, searches) > leftCents) return null;
   let low = floor, high = spec.maxTokens;
   while (low < high) {
@@ -327,7 +357,7 @@ export function modelRunner({
       let reply = null;
       let failure = null;
       try {
-        reply = await client.create(body, { signal: signal ? AbortSignal.any([signal, deadline]) : deadline });
+        reply = await client.create(body, { signal: signal ? AbortSignal.any([signal, deadline]) : deadline, ...(spec.timeoutMs ? { timeoutMs: spec.timeoutMs } : {}) });
       } catch (error) {
         failure = classify(error);
         // Fixed fields and the provider's request id only: never the message, which can quote the request.
@@ -447,10 +477,13 @@ export function modelRunner({
       let outcome = 'stopped', stopped = 'rounds';
       // The text of every response, paused ones included: a turn that pauses or stops at a limit keeps what it wrote so far.
       const written = [];
+      // The search allowance the first round was sent with; every later round sends the same tool definitions.
+      let lockedSearches = null;
       for (let round = 0; round < spec.maxRounds; round++) {
         // Every round, the first included, fits what the ceiling leaves (the bound of the untrimmed body is the larger one).
-        const fit = fitResearchRound(model, spec, inputTokenBound(bodyNow()), spec.ceilingCents - totals.cents);
+        const fit = fitResearchRound(model, spec, inputTokenBound(bodyNow()), spec.ceilingCents - totals.cents, lockedSearches);
         if (!fit) { stopped = 'ceiling'; break; }
+        if (lockedSearches === null) lockedSearches = fit.searches;
         const body = bodyNow(fit);
         const worst = fit.worst;
         let reply = null, failure = null;

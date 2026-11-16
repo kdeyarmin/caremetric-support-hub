@@ -31,6 +31,7 @@
 .creative-badge-warn { background: #fef3c7; color: #78350f; display: block; border-radius: 10px; }
 .creative-badge-warn summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .creative-badge-warn ul { margin: 6px 0 2px; padding-left: 18px; font-weight: 400; line-height: 1.45; }
+.creative-review { margin: 6px 0 0; font-size: 0.8125rem; color: #475569; line-height: 1.45; }
 .creative-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .creative-card-actions a, .creative-card-actions button { display: inline-flex; align-items: center; gap: 6px; }
 .creative-decision { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }

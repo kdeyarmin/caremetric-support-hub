@@ -65,7 +65,10 @@ to the Social Media Manager's list. While it is automatic:
 
 Once a month per marketed product, `ads.plan` proposes a LinkedIn campaign, a Meta retargeting campaign and a Google search campaign
 (`server/agents/ads/index.mjs`). Each waits for your approval and is created paused (LinkedIn as a draft) with no ads, and you add the
-first ad in the platform's ad manager. The autonomy step **Ad campaign launch** (`ad_campaigns`, AI team page; it ships held) adds
+first ad in the platform's ad manager. Since 2026-11-16 Intel's campaigns send people to the free market report for their own agency
+(`/market-review`: its share and rank in its county, the county's largest agencies and three moves, emailed as a PDF), not the county
+report; the report is for home health agencies and hospices, so the LinkedIn proposal says to use the Medicare roster's company list as
+the campaign's audience. The autonomy step **Ad campaign launch** (`ad_campaigns`, AI team page; it ships held) adds
 `social.campaign_create` and `social.google_campaign` to the Social Media Manager's list. While it is automatic:
 
 - **The first ad comes from creative you already approved.** The plan picks, for each LinkedIn or Meta campaign, the first approved

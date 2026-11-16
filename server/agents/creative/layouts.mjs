@@ -304,7 +304,9 @@ const bodies = {
     const statSize = fit(o.stat, { width: blockWidth, size: Math.round(frame.u * (landscape ? 20 : 24)), min: Math.round(frame.u * 10), maxLines: 1 });
     const block = h('div', { flexDirection: 'column', gap: Math.round(frame.u * 1.5), width: blockWidth },
       text(ctx, { role: 'stat', value: o.stat, size: statSize, bold: true, color: 'accent', background: colors.background, width: blockWidth, maxLines: 1, lineHeight: 1 }),
-      o.statLabel ? text(ctx, { role: 'stat label', value: o.statLabel, size: Math.round(frame.u * 4), bold: true, color: 'text', background: colors.background, width: blockWidth, maxLines: 2 }) : null);
+      // A longer label (a county's market concentration) steps down to fit three lines; a short one is drawn as before.
+      o.statLabel ? text(ctx, { role: 'stat label', value: o.statLabel, size: fit(o.statLabel, { width: blockWidth, size: Math.round(frame.u * 4), min: Math.round(frame.u * 3), maxLines: 3 }),
+        bold: true, color: 'text', background: colors.background, width: blockWidth, maxLines: 3 }) : null);
     const words = h('div', { flexDirection: 'column', gap: Math.round(frame.u * 2), width: wordsWidth },
       text(ctx, { role: 'headline', value: content.headline, size: fit(content.headline, { width: wordsWidth, size: Math.round(frame.u * 6), min: Math.round(frame.u * 3.8), maxLines: 3 }), bold: true, color: 'text', background: colors.background, width: wordsWidth, maxLines: 3 }),
       o.statSource ? text(ctx, { role: 'source', value: `Source: ${o.statSource}`, size: Math.round(frame.u * 2.6), color: 'muted', background: colors.background, width: wordsWidth, maxLines: 2 }) : null);

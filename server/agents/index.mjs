@@ -2,6 +2,9 @@ import { growthHandlers, growthExecutors } from '../growth/worker.mjs';
 import { peopleHandlers } from '../growth/people.mjs';
 import { matchHandlers } from '../growth/agency-match.mjs';
 import { researchHandlers } from '../growth/deep-research.mjs';
+import { verifyHandlers } from '../growth/verify.mjs';
+import { briefHandlers } from '../growth/brief.mjs';
+import { viewsHandlers } from '../growth/views.mjs';
 import { learningHandlers } from '../growth/learning.mjs';
 import { adsTeam } from './ads/index.mjs';
 import { handoverFeature } from './handover.mjs';
@@ -65,6 +68,7 @@ export function agentTeam({
   const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true, growth: features?.has?.('platform.agents.customer-growth.v1') === true,
     social: socialDeclared(features), socialVideo: features?.has?.('platform.agents.social-video.v1') === true,
     marketing, scorecard: scorecardDeclared(features), creative: creativeOn, creativeData: features?.has?.('platform.agents.creative-data.v1') === true,
+    creativeReview: features?.has?.('platform.agents.creative-review.v1') === true,
     ads: features?.has?.('platform.agents.ads.v1') === true, watchdog: features?.has?.('platform.agents.watchdog.v1') === true,
     handover: features?.has?.(handoverFeature) === true });
   // What the team markets: the owner's switches on the AI team page, read when each marketing task starts (marketing.mjs). Until the
@@ -94,7 +98,7 @@ export function agentTeam({
   // Kept as getters, not copied: the postal address is a Hub setting the Account Manager reads on each run.
   const customerEmail = Object.defineProperties({}, { ...Object.getOwnPropertyDescriptors(lifecycle ?? {}), publicOrigin: { value: publicOrigin, enumerable: true } });
   const actions = actionExecutor({ store, executors: {
-    ...recordOnlyExecutors, ...growthExecutors({growth,mail:growthMail,publicOrigin,postalAddress}), ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
+    ...recordOnlyExecutors, ...growthExecutors({growth,mail:growthMail,publicOrigin,postalAddress,features}), ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
     ...offerExecutors({ store, features, billing: offerBilling, notifier, log }),
     ...contentExecutors({ store, features, log }), ...externalEmailExecutors({ store, features, email, log }), ...socialWork.executors({ notifier, log, creative: creativeLink, store, publicOrigin }),
     ...adsWork.executors({ meta: socialWork.meta, linkedin: socialWork.linkedin, social: socialWork.ads?.settings ?? {}, notifier, store, creative: creativeLink, publicOrigin, log }),
@@ -102,10 +106,11 @@ export function agentTeam({
     ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
-  const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}), ...peopleHandlers({growth,features,marketed:marketedSource}), ...matchHandlers({growth,features,marketed:marketedSource}), ...researchHandlers({growth,model:runtime,features,marketed:marketedSource}), ...learningHandlers({growth,features,marketed:marketedSource,enabled:growth?.learning?.enabled??false}),
+  const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}), ...peopleHandlers({growth,features,marketed:marketedSource}), ...matchHandlers({growth,features,marketed:marketedSource}), ...researchHandlers({growth,model:runtime,features,marketed:marketedSource}), ...verifyHandlers({growth,features,notifier}), ...briefHandlers({growth,model:runtime,features,marketed:marketedSource}), ...viewsHandlers({growth,features,notifier}), ...learningHandlers({growth,features,marketed:marketedSource,enabled:growth?.learning?.enabled??false}),
     ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, publicOrigin, guides, marketed: marketedSource, log }),
     ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log, creative: creativeLink, feed: growth?.roster?.feed ?? null }),
-    ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log, feed: growth?.roster?.feed ?? null }),
+    ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log, feed: growth?.roster?.feed ?? null,
+      states: growth?.roster?.states ?? null }),
     ...adsWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, social: socialWork.ads?.settings ?? {}, marketed: marketedSource, creative: creativeLink, publicOrigin, log }),
     ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, visitors: visitorMetrics ? input => visitorMetrics.read(input) : null, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, inboundFollowup, toolkit: toolkitNow, watchdogIdleDays, services: senderServices(sms, email) }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   // Settings → AI team → Tasks at once: how many tasks may run side by side.
