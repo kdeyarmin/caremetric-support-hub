@@ -5,9 +5,9 @@
  * - CareMetric Intel (intel-features.json): https://www.caremetricintel.com/features (every feature, its area and the plan or role it
  *   needs) and the home page (why each area matters, the data behind it with its sources and limits, the care settings, the manager view,
  *   and the questions and answers).
- * - CareMetric CareBase (carebase-features.json): https://cmcarebase.com/features (every capability by module, the newest tools, the
- *   resident lifecycle and what each role sees and does), the home page (why it matters, the tools that set it apart, before and after,
- *   and each chapter's requirements) and /faq (the questions and answers).
+ * - CareMetric CareBase (carebase-features.json): https://cmcarebase.com/features (every capability by area with the plan or add-on it
+ *   needs, the newest tools, the resident lifecycle and what each role sees and does), the home page (why it matters, the tools that set
+ *   it apart, before and after, and each chapter's requirements) and /faq (the questions and answers).
  *
  *   npm run refresh:features                                    # fetch every page
  *   node scripts/refresh-product-features.mjs --from <folder>     # from saved copies: intel-home.html, intel-features.html,
@@ -141,20 +141,48 @@ function faqOf(html, skip = /^$/) {
   return faq;
 }
 
+/** A page's `<section id="…">`, as published (empty when the page has none). */
+function sectionOf(html, id) {
+  const start = html.search(new RegExp(`<section\\b[^>]*\\bid="${id}"`));
+  return start < 0 ? '' : html.slice(start, html.indexOf('</section>', start) + '</section>'.length);
+}
+
+/**
+ * CareBase's capability index (cmcarebase.com/features#capability-index): one card per area (`<article id="resident-care">`), each with
+ * its published count, name, a line on what it is for, the plan or add-on it needs, every capability, and any note under the list.
+ */
+function capabilityAreas(features) {
+  return [...sectionOf(features, 'capability-index').matchAll(/<article\b[^>]*\bid="([a-z0-9-]+)"[^>]*>([\s\S]*?)<\/article>/g)].map(([, key, html]) => {
+    const card = plain(html);
+    const count = first(/(\d+) capabilit(?:y|ies)\b/, clean(first(/^([\s\S]*?)<h3>/, card)));
+    return {
+      key,
+      name: clean(first(/<h3>([\s\S]*?)<\/h3>/, card)),
+      intro: clean(first(/<\/h3><p>([\s\S]*?)<\/p>/, card)),
+      plan: clean(first(/<\/h3><p>[\s\S]*?<\/p><p>([\s\S]*?)<\/p><ul>/, card)),
+      count: count === null ? null : Number(count),
+      capabilities: [...(first(/<ul>([\s\S]*?)<\/ul>/, card) ?? '').matchAll(/<li>([\s\S]*?)<\/li>/g)].map(([, item]) => clean(item)),
+      note: clean(first(/<\/ul><p>([\s\S]*?)<\/p>/, card)) || null,
+    };
+  });
+}
+
 export function extractCarebase({ home, features, faq }) {
   const f = plain(features);
   const h = plain(home);
-  const modules = [...f.matchAll(/(\d+) capabilities<\/span><\/div><h3>([^<]+)<\/h3><ul>([\s\S]*?)<\/ul>/g)].map(([, count, name, list]) => ({
-    name: clean(name), capabilities: [...list.matchAll(/<li><span><\/span><span>([\s\S]*?)<\/span><\/li>/g)].map(([, item]) => clean(item)), count: Number(count),
-  }));
-  const newest = [...f.matchAll(/>New<\/span><span>([^<]+)<\/span><\/div><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p>/g)].map(([, name, headline, text]) => ({ name: clean(name), headline: clean(headline), does: clean(text) }));
-  const lifecycle = [...f.matchAll(/<li><div><span>\d\d<\/span><div><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p>/g)].map(([, step, text]) => ({ step: clean(step), text: clean(text) }));
-  const roles = [...f.matchAll(/<span>\d\d<\/span><h3>([\s\S]*?)<\/h3><\/div><p><span>Sees<\/span>([\s\S]*?)<\/p><p><span>Does<\/span>([\s\S]*?)<\/p>/g)]
+  const areas = capabilityAreas(features);
+  const index = plain(sectionOf(features, 'capability-index'));
+  // The newest tools ("A closer look"): each card's last label is the tool's name, whatever the label before it ("New", "In focus").
+  const newest = [...plain(sectionOf(features, 'recently-shipped')).matchAll(/<span>([^<]+)<\/span><\/div><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p>/g)]
+    .map(([, name, headline, text]) => ({ name: clean(name), headline: clean(headline), does: clean(text) }));
+  const lifecycle = [...plain(sectionOf(features, 'resident-lifecycle')).matchAll(/<li><div><span>\d\d<\/span><div><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p>/g)]
+    .map(([, step, text]) => ({ step: clean(step), text: clean(text) }));
+  const roles = [...plain(sectionOf(features, 'roles')).matchAll(/<span>\d\d<\/span><h3>([\s\S]*?)<\/h3><\/div><p><span>Sees<\/span>([\s\S]*?)<\/p><p><span>Does<\/span>([\s\S]*?)<\/p>/g)]
     .map(([, role, sees, does]) => ({ role: clean(role), sees: clean(sees), does: clean(does) }));
   const pillars = [...h.matchAll(/<span>0\d<\/span><span>([^<]+)<\/span><\/div><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p>/g)].map(([, area, title, why]) => ({ title: clean(title), why: clean(why), area: clean(area) }));
-  // The tools that set it apart: each a heading, what it does, and a closing line; between "What sets it apart" and the free guide.
+  // The tools that set it apart: each a heading, what it does, and a closing line; the "What sets it apart" section only.
   const apartFrom = h.indexOf('What sets it apart');
-  const apart = apartFrom < 0 ? [] : [...h.slice(apartFrom, h.indexOf('A free resource', apartFrom)).matchAll(/<h3>([\s\S]*?)<\/h3>((?:<p>[\s\S]*?<\/p>)+)/g)].map(([, title, paragraphs]) => {
+  const apart = apartFrom < 0 ? [] : [...h.slice(apartFrom, h.indexOf('</section>', apartFrom)).matchAll(/<h3>([\s\S]*?)<\/h3>((?:<p>[\s\S]*?<\/p>)+)/g)].map(([, title, paragraphs]) => {
     const parts = [...paragraphs.matchAll(/<p>([\s\S]*?)<\/p>/g)].map(([, text]) => clean(text)).filter(Boolean);
     return { title: clean(title), why: parts.slice(0, -1).join(' ') || parts[0], area: parts.length > 1 ? parts.at(-1) : 'What sets it apart' };
   });
@@ -162,9 +190,11 @@ export function extractCarebase({ home, features, faq }) {
   const chapters = [...h.matchAll(/<span>(55 Pa\. Code Chapter \d+)<\/span><h3>([\s\S]*?)<\/h3><p>([\s\S]*?)<\/p><p>([\s\S]*?)<\/p><ul>([\s\S]*?)<\/ul>/g)].map(([, chapter, title, text, record, list]) => ({
     chapter: clean(chapter), title: clean(title), text: `${clean(text)} ${clean(record)}`.trim(), highlights: [...list.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(([, item]) => clean(item)),
   }));
-  const total = /(\d+)\+? capabilities/.exec(clean(f))?.[1];
+  // The page's own figure ("112 capabilities across 8 areas"), which the refresh checks against what it read.
+  const published = /(\d+)\+? capabilities across (\d+)\b/.exec(clean(f));
   const intro = /The full capability index[\s\S]*?<p>([\s\S]*?)<\/p>/.exec(f)?.[1];
-  const modulesNote = /Choose the modules you need\.[\s\S]*?<p>([\s\S]*?)<\/p>/.exec(f)?.[1];
+  // Which plan covers what: the note beside the index's heading ("A plan that fits your facility"), a title, its text and a link.
+  const plans = /<div><p>[^<]*<\/p><p>([\s\S]*?)<\/p><a>/.exec(index)?.[1];
   const caveats = [
     ...apart.flatMap(item => (/not a prediction/.test(item.why) ? [item.why.split('. ').find(sentence => /not a prediction/.test(sentence))] : [])),
     ...faqOf(faq).filter(item => /^Does it guarantee|^What does it not replace/.test(item.question)).map(item => item.answer),
@@ -172,16 +202,17 @@ export function extractCarebase({ home, features, faq }) {
   return sanitize({
     overview: clean(/<\/h1>[\s\S]*?<p>([\s\S]*?)<\/p>/.exec(h)?.[1]),
     summary: clean(/In plain English[\s\S]*?<\/h2>(?:<\/div>)?<p>([\s\S]*?)<\/p>/.exec(h)?.[1]),
-    intro: clean(intro), legend: clean(modulesNote),
-    publishedCount: total ? Number(total) : null,
-    pillars: [...pillars, ...apart], modules, newest, lifecycle, roles, beforeAfter, chapters,
+    intro: clean(intro), legend: clean(plans),
+    publishedCount: published ? Number(published[1]) : null,
+    publishedAreas: published ? Number(published[2]) : null,
+    pillars: [...pillars, ...apart], areas, newest, lifecycle, roles, beforeAfter, chapters,
     // Prices are the fact sheet's (read from billing); the rest are product answers.
     faq: faqOf(faq, /^How much does it cost/),
     caveats: [...new Set(caveats)],
   });
 }
 
-const products = {
+export const products = {
   'caremetric-intel': {
     file: 'intel-features.json', site: 'https://www.caremetricintel.com',
     pages: { home: ['/', 'intel-home.html'], features: ['/features', 'intel-features.html'] },
@@ -200,12 +231,18 @@ const products = {
     pages: { home: ['/', 'carebase-home.html'], features: ['/features', 'carebase-features.html'], faq: ['/faq', 'carebase-faq.html'] },
     extract: pages => extractCarebase(pages),
     check: body => {
-      const total = body.modules.reduce((sum, module) => sum + module.capabilities.length, 0);
-      if (!body.overview || !body.summary || body.modules.length < 4 || total < 40 || body.modules.some(module => module.capabilities.length !== module.count) || body.pillars.length < 3
-        || body.roles.length < 4 || body.lifecycle.length < 4 || body.faq.length < 10) {
-        throw new Error(`CareBase's pages changed shape (modules ${body.modules.length}, capabilities ${total}, pillars ${body.pillars.length}, roles ${body.roles.length}, lifecycle ${body.lifecycle.length}, answers ${body.faq.length}); update the extractor.`);
+      const total = body.areas.reduce((sum, area) => sum + area.capabilities.length, 0);
+      // An area read without its name, its line, its plan or every capability it counts; a chapter card read as a reason to choose it.
+      const partial = body.areas.filter(area => !area.name || !area.intro || !area.plan || area.capabilities.length !== area.count).map(area => area.key);
+      const strays = body.pillars.filter(pillar => body.chapters.some(chapter => chapter.title === pillar.title)).length;
+      if (!body.overview || !body.summary || !body.intro || !body.legend || body.areas.length < 6 || total < 80 || partial.length || body.pillars.length < 3 || strays
+        || !body.newest.length || body.roles.length < 4 || body.lifecycle.length < 4 || body.beforeAfter.length < 2 || body.chapters.length < 2 || body.faq.length < 10) {
+        throw new Error(`CareBase's pages changed shape (areas ${body.areas.length}, capabilities ${total}${partial.length ? `, partly read: ${partial.join(', ')}` : ''}, pillars ${body.pillars.length}${strays ? ` (${strays} from the chapters)` : ''}, newest ${body.newest.length}, roles ${body.roles.length}, lifecycle ${body.lifecycle.length}, before and after ${body.beforeAfter.length}, chapters ${body.chapters.length}, answers ${body.faq.length}${body.intro && body.legend ? '' : ', no intro or plan note'}); update the extractor.`);
       }
-      return `${body.modules.length} modules, ${total} capabilities, ${body.pillars.length} reasons and ${body.faq.length} answers`;
+      if (body.publishedCount !== total || body.publishedAreas !== body.areas.length) {
+        throw new Error(`CareBase's features page says ${body.publishedCount ?? 'no number of'} capabilities across ${body.publishedAreas ?? 'no number of'} areas but ${total} across ${body.areas.length} were read.`);
+      }
+      return `${body.areas.length} areas, ${total} capabilities, ${body.pillars.length} reasons and ${body.faq.length} answers`;
     },
   },
 };
