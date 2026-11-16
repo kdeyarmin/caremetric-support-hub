@@ -47,15 +47,20 @@ describe('the strategist\'s rules', () => {
       .map(c => c.key)).not.toContain('volume');
   });
 
-  it('names the limit that binds: Intel\'s own daily limit is checked before the cold-email cap', () => {
-    // Both at 10: raising only the cap would change nothing, so the move raises both.
+  it('names the limit that was reached: Intel\'s own daily limit is checked before the shared cold-email cap', () => {
+    // Both at 10 and both reached: raising only one would change nothing, so both are raised.
     const both = candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 10, productDailyLimit: 10 }, email: { capDays: 5, limitDays: 5, approvedWaiting: 12, delivered: 60, bounced: 0 } }));
     expect(both[0]).toMatchObject({ key: 'volume', evidence: { cap: 10, productLimit: 10, suggestedCap: 20 } });
-    expect(both[0].move).toBe('Raise "Most cold emails a day" (Settings → Customer growth) from 10 to 20 and Intel\'s "Maximum messages per day" (Growth) from 10 to 20.');
-    // Intel's limit lower than the cap: only it is raised, and the days it was reached count.
+    expect(both[0].move).toBe('Raise Intel\'s "Maximum messages per day" (Growth) from 10 to 20 and "Most cold emails a day" (Settings → Customer growth) from 10 to 20.');
+    // Intel's limit lower and reached; the cap never was: only Intel's is raised.
     const product = candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 50, productDailyLimit: 8 }, email: { capDays: 0, limitDays: 6, approvedWaiting: 12, delivered: 60, bounced: 0 } }));
     expect(product[0]).toMatchObject({ key: 'volume', evidence: { limitDays: 6, suggestedCap: 16 } });
     expect(product[0].move).toBe('Raise Intel\'s "Maximum messages per day" (Growth) from 8 to 16.');
+    expect(product[0].headline).toMatch(/^Intel's own limit of 8 emails a day was reached on 6 of 7 days/);
+    // CareBase filled the shared cap while Intel stayed under its own lower limit: the cap is what was reached, and only it is raised.
+    const shared = candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 50, productDailyLimit: 8 }, email: { capDays: 5, limitDays: 0, approvedWaiting: 12, delivered: 60, bounced: 0 } }));
+    expect(shared[0].move).toBe('Raise "Most cold emails a day" (Settings → Customer growth) from 50 to 55.');
+    expect(shared[0].headline).toMatch(/^The cold-email cap of 50 a day was reached on 5 of 7 days/);
   });
 
   it('takes the bounce rate over every cold email attempted, not only those whose delivery has been reported', () => {

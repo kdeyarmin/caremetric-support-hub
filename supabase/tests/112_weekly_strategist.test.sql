@@ -13,6 +13,8 @@ select ok((select relrowsecurity from pg_class where oid = 'private.agent_strate
 select ok(has_function_privilege('hub_app_server', 'private.growth_strategy_facts(timestamptz,timestamptz)', 'execute')
   and has_function_privilege('hub_app_server', 'private.agent_strategy_save(date,jsonb)', 'execute')
   and has_function_privilege('hub_app_server', 'private.agent_strategy_note(date)', 'execute')
+  and has_function_privilege('hub_app_server', 'private.agent_strategy_pending()', 'execute')
+  and not has_function_privilege('authenticated', 'private.agent_strategy_pending()', 'execute')
   and not has_function_privilege('authenticated', 'private.growth_strategy_facts(timestamptz,timestamptz)', 'execute')
   and not has_function_privilege('service_role', 'private.agent_strategy_save(date,jsonb)', 'execute'), 'Only the server reads the funnel and the notes');
 select throws_ok($$ select private.growth_strategy_facts(now() - interval '7 days', now()) $$, '42501', null, 'Outside the server role nothing is read');

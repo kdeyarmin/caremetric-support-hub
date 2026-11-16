@@ -108,20 +108,23 @@ export function candidates(facts, previous = null) {
       `${f.strongNoContact} of ${f.strong} strong-fit agencies (${share}%) have no address the team may write to.`,
       'Raise "Most address checks a day" so the people finder tries more decision-makers per agency.', 'strongNoContact');
   }
-  // A daily limit held sending back on most days while approved drafts waited and bounces stayed low. Two limits apply, and the send
-  // claim checks Intel's own "Maximum messages per day" (Growth) before the cold-email cap: the lower one binds, and the move raises
-  // every limit below the new number, which stops at the settings' 100.
-  const limit = f.productLimit > 0 ? Math.min(f.cap, f.productLimit) : f.cap;
-  const limitedDays = Math.max(f.capDays, f.limitDays);
-  if (limitedDays >= 4 && f.waiting >= 5 && f.sent >= 20 && f.bounceRate < 2 && f.complaints === 0 && limit > 0 && limit < 100) {
-    const next = Math.min(100, Math.max(limit + 5, Math.min(limit * 2, 25)));
-    const raises = [
-      ...(f.cap < next ? [`"Most cold emails a day" (Settings → Customer growth) from ${f.cap} to ${next}`] : []),
-      ...(f.productLimit > 0 && f.productLimit < next ? [`Intel's "Maximum messages per day" (Growth) from ${f.productLimit} to ${next}`] : []),
-    ];
-    add('volume', 50 + limitedDays * 5, { capDays: f.capDays, limitDays: f.limitDays, cap: f.cap, productLimit: f.productLimit, waiting: f.waiting, bounceRate: f.bounceRate, suggestedCap: next },
-      `The daily limit of ${limit} emails was reached on ${limitedDays} of 7 days with ${f.waiting} approved drafts waiting and ${f.bounceRate}% bounces.`,
-      `Raise ${raises.join(' and ')}.`, 'firstSent');
+  // A daily limit held sending back on most days while approved drafts waited and bounces stayed low. Two limits apply: Intel's own
+  // "Maximum messages per day" (Growth), which the send claim checks first, and the cold-email cap shared with CareBase. Each is judged
+  // by the days it was itself reached; the one reached on more days (on a tie, the lower) is raised, and the other too only when it was
+  // also reached on most days. The settings stop at 100.
+  const capHeld = f.capDays >= 4 && f.cap > 0, productHeld = f.productLimit > 0 && f.limitDays >= 4;
+  if ((capHeld || productHeld) && f.waiting >= 5 && f.sent >= 20 && f.bounceRate < 2 && f.complaints === 0) {
+    const product = productHeld && (!capHeld || f.limitDays > f.capDays || (f.limitDays === f.capDays && f.productLimit <= f.cap));
+    const limit = product ? f.productLimit : f.cap, days = product ? f.limitDays : f.capDays;
+    if (limit < 100) {
+      const next = Math.min(100, Math.max(limit + 5, Math.min(limit * 2, 25)));
+      const capMove = `"Most cold emails a day" (Settings → Customer growth) from ${f.cap} to ${next}`;
+      const productMove = `Intel's "Maximum messages per day" (Growth) from ${f.productLimit} to ${next}`;
+      const raises = product ? [productMove, ...(capHeld && f.cap < next ? [capMove] : [])] : [capMove, ...(productHeld && f.productLimit < next ? [productMove] : [])];
+      add('volume', 50 + days * 5, { capDays: f.capDays, limitDays: f.limitDays, cap: f.cap, productLimit: f.productLimit, waiting: f.waiting, bounceRate: f.bounceRate, suggestedCap: next },
+        `${product ? `Intel's own limit of ${f.productLimit} emails a day` : `The cold-email cap of ${f.cap} a day`} was reached on ${days} of 7 days with ${f.waiting} approved drafts waiting and ${f.bounceRate}% bounces.`,
+        `Raise ${raises.join(' and ')}.`, 'firstSent');
+    }
   }
   // Delivered but not read or answered: the message, not the list. Judged over two weeks, sends, replies and opens alike, so one quiet
   // week is not called a pattern.

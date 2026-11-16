@@ -95,7 +95,9 @@ figure to watch next Monday.
    the top candidate goes as the rules wrote it, and the note says the rules chose it.
 
 The note is kept in `private.agent_strategy_notes` (one row per reported week, closed to every role). A scheduled run writes the week
-once; **Run now** writes it again. The scorecard's stored body carries the constraint's key only; the note's words travel in the
+once; **Run now** writes it again. When the Hub catches up after both morning times have passed, the strategist and the scorecard are
+claimed together: a scheduled scorecard then waits three minutes at a time, at most five times, while the strategist's task is running
+or due (`private.agent_strategy_pending`), and opens with the note. A strategist that is off, failed or done never holds it. The scorecard's stored body carries the constraint's key only; the note's words travel in the
 email's layout blocks. Without a note (the setting off, or the run failed) the scorecard is as before.
 
 ## What is kept

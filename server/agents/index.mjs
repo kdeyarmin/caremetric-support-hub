@@ -113,7 +113,8 @@ export function agentTeam({
     ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log, feed: growth?.roster?.feed ?? null,
       states: growth?.roster?.states ?? null }),
     ...adsWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, social: socialWork.ads?.settings ?? {}, marketed: marketedSource, creative: creativeLink, publicOrigin, log }),
-    ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, visitors: visitorMetrics ? input => visitorMetrics.read(input) : null, log }),
+    ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, visitors: visitorMetrics ? input => visitorMetrics.read(input) : null, log,
+      strategist: strategistDeclared(features) ? strategist : false }),
     ...strategistHandlers({ store, model: runtime, features, enabled: strategist, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, inboundFollowup, toolkit: toolkitNow, watchdogIdleDays, services: senderServices(sms, email) }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   // Settings → AI team → Tasks at once: how many tasks may run side by side.
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now, claimLimit: concurrentTasks });

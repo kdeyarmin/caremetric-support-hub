@@ -162,6 +162,16 @@ try {
   assert.equal(await agents.strategyNote('2026-11-02'), null);
   await assert.rejects(pool.query('select * from private.agent_strategy_notes'), refused('42501'), 'the server reads notes only through the function');
 
+  // ---- 2b. Whether the strategist's task is due or running (the catch-up scorecard waits for it) -----------------------------------
+  const pendingBefore = await agents.strategyPending();
+  const due = (await row("insert into private.agent_tasks(agent_key,kind,request_key,status,due_at) values('chief_of_staff','strategy.weekly',$1,'queued',now()) returning id", [`strategist-pending:${run}`])).id;
+  tasks.push(due);
+  assert.equal(await agents.strategyPending(), true, 'a strategist task due now is pending');
+  await admin.query("update private.agent_tasks set due_at=now()+interval '2 hours' where id=$1", [due]);
+  assert.equal(await agents.strategyPending(), pendingBefore, 'one due hours from now is not');
+  await admin.query("update private.agent_tasks set status='done',due_at=now(),finished_at=now() where id=$1", [due]);
+  assert.equal(await agents.strategyPending(), pendingBefore, 'nor one that is done');
+
   // ---- 3. The strategist, end to end, with a stand-in model ---------------------------------------------------------------------------
   const model = { configured: true, run: async (_task, request) => {
     // The real runtime refuses a request whose answer format it cannot enforce (runtime/schema.mjs), before any model call.
@@ -197,6 +207,7 @@ try {
       'grant execute on function private.growth_strategy_facts_json(timestamptz,timestamptz) to hub_app_server',
       'grant execute on function private.agent_strategy_save(date,jsonb) to authenticated',
       'revoke execute on function private.agent_strategy_note(date) from hub_app_server',
+      'grant execute on function private.agent_strategy_pending() to authenticated',
       rewrite('private.growth_strategy_facts(timestamptz,timestamptz)', 'perform private.require_hub_app_server();', ' '),
       rewrite('private.growth_strategy_facts_json(timestamptz,timestamptz)', 'not g.internal', 'true'),
       rewrite('private.growth_strategy_facts_json(timestamptz,timestamptz)', 'private.email_suppressions s where s.email_hash', 'private.growth_contacts s where s.email'),

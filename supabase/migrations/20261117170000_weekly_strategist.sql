@@ -17,7 +17,8 @@
 --    as of the read, so the strategist reads them for the week just ended only.
 -- 3. private.agent_strategy_notes: one note per reported week (its Monday): the constraint, headline, why, the move, the figure to
 --    watch next Monday, whether the model or the rules chose it, the candidates and the figures behind it. Closed to every role;
---    written by private.agent_strategy_save and read by private.agent_strategy_note (Hub server only).
+--    written by private.agent_strategy_save and read by private.agent_strategy_note (Hub server only). private.agent_strategy_pending
+--    tells the scorecard the strategist's task is due or running, so a catch-up scorecard waits for the note.
 -- 4. The Chief of Staff's strategy.weekly task, every morning at 07:35 Eastern; a scheduled run writes the week's note once, before
 --    the scorecard at 07:50 reads it.
 --
@@ -194,6 +195,20 @@ begin
 end; $$;
 revoke all on function private.agent_strategy_note(date) from public, anon, authenticated, service_role;
 grant execute on function private.agent_strategy_note(date) to hub_app_server;
+
+-- Server: whether the strategist's task is running, or queued and due within five minutes. When the Hub catches up after both morning
+-- times have passed, the strategist and the scorecard are claimed together; the scorecard waits a few minutes while this is true, so it
+-- opens with the week's note instead of going out without it.
+create or replace function private.agent_strategy_pending() returns boolean
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  perform private.require_hub_app_server();
+  return exists (select 1 from private.agent_tasks t where t.agent_key = 'chief_of_staff' and t.kind = 'strategy.weekly'
+    and t.created_at > now() - interval '1 day'
+    and (t.status = 'running' or (t.status = 'queued' and coalesce(t.due_at, t.created_at) <= now() + interval '5 minutes')));
+end; $$;
+revoke all on function private.agent_strategy_pending() from public, anon, authenticated, service_role;
+grant execute on function private.agent_strategy_pending() to hub_app_server;
 
 insert into private.agent_schedules (agent_key, task_kind, cadence, every_seconds, at_local, timezone, requires_session, next_run_at)
 values ('chief_of_staff', 'strategy.weekly', 'daily', null, '07:35', 'America/New_York', false,

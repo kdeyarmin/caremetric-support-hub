@@ -44,6 +44,9 @@ export const scorecardFeature = 'platform.agents.scorecard.v1';
 export const scorecardDeclared = features => (features instanceof Set ? features.has(scorecardFeature) : Array.isArray(features) && features.includes(scorecardFeature));
 
 const stopped = () => Object.assign(new Error('The task was stopped.'), { code: 'task_timeout', transient: true });
+// A catch-up scorecard waits for a pending strategist note this long at a time, at most this many times (about 15 minutes in all).
+export const strategyWaitMs = 3 * 60_000;
+export const strategyWaits = 5;
 const shift = (date, days) => { const [year, month, day] = date.split('-').map(Number); return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10); };
 
 /**
@@ -56,7 +59,7 @@ const shift = (date, days) => { const [year, month, day] = date.split('-').map(N
  */
 export function scorecardHandlers({
   store, notifier, publicOrigin = null, features = null, growth = null, ads = null, searchConsole = undefined, searchConsoleSites = undefined, env = process.env, fetchImpl = fetch,
-  sites = defaultSites, audit = auditSite, visitors = null, log = line => console.warn(line),
+  sites = defaultSites, audit = auditSite, visitors = null, log = line => console.warn(line), strategist = false,
 }) {
   if (!scorecardDeclared(features) || typeof store?.scorecardFacts !== 'function') return {};
   const reader = searchConsole === undefined
@@ -135,6 +138,14 @@ export function scorecardHandlers({
     if (!asked && typeof store.notificationStatus === 'function'
       && ['sent', 'unknown', 'pending', 'suppressed'].includes(await store.notificationStatus(dedupeKey))) {
       return { result: { skipped: 'already_attempted', week: thisWeek } };
+    }
+    // The week's constraint (strategist/index.mjs) is written at 07:35. When the Hub catches up after both morning times have passed,
+    // the two are claimed together: a scheduled scorecard then waits a few minutes, at most `strategyWaits` times, while the strategist's
+    // task is running or due, and opens with its note. A strategist that is off, failed or done never holds the scorecard.
+    if (!asked && live(strategist) === true && typeof store.strategyNote === 'function' && typeof store.strategyPending === 'function'
+      && (Number(task.attempts) || 1) <= strategyWaits && !(await optional('strategy', () => store.strategyNote(week), signal))
+      && await optional('strategy_pending', () => store.strategyPending(), signal) === true) {
+      return { status: 'queued', retryAt: new Date(moment.getTime() + strategyWaitMs), result: { deferred: 'strategy_pending', week: thisWeek } };
     }
 
     const [current, previous, brief, snapshot, pipeline, adFigures, search, urgent, seen] = await Promise.all([

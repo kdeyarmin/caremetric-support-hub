@@ -36,7 +36,7 @@ const fakeReader = (properties = [
 
 function fixture({
   features = new Set([scorecardFeature]), deliveries = [{ channel: 'email', delivery: 'sent' }], status = null, brief = { approvals: { count: 2, oldestAt: at(-1) }, incidents: [] },
-  snapshot = book(), pipeline = null, ads = null, searchConsole = null, audit = async site => ({ key: site.key, findings: [] }), store: extra = {},
+  snapshot = book(), pipeline = null, ads = null, searchConsole = null, audit = async site => ({ key: site.key, findings: [] }), store: extra = {}, strategist = false,
 } = {}) {
   const logs = [];
   const store = {
@@ -50,7 +50,7 @@ function fixture({
   };
   const notifier = { send: vi.fn(async () => deliveries) };
   const growth = pipeline ? { store: { snapshot: vi.fn(async offset => ({ total: pipeline.length, items: offset ? [] : pipeline })) } } : null;
-  const handlers = scorecardHandlers({ store, notifier, publicOrigin: origin, features, growth, ads, searchConsole, env: {}, sites: [{ key: 'intel', label: 'Intel', origin: 'https://caremetricintel.com', variants: ['https://www.caremetricintel.com'] }], audit, log: line => logs.push(line) });
+  const handlers = scorecardHandlers({ store, notifier, publicOrigin: origin, features, growth, ads, searchConsole, env: {}, sites: [{ key: 'intel', label: 'Intel', origin: 'https://caremetricintel.com', variants: ['https://www.caremetricintel.com'] }], audit, log: line => logs.push(line), strategist });
   return { store, notifier, logs, handlers, run: (over, now = monday, signal) => handlers['scorecard.weekly'](task(over), { now: () => now, signal }) };
 }
 
@@ -100,6 +100,23 @@ describe('the Monday scorecard task', () => {
     const plain = await unread.run();
     expect(unread.notifier.send.mock.calls[0][0].blocks[0]).toMatchObject({ title: 'Needs you.' });
     expect(plain.result).not.toHaveProperty('constraint');
+  });
+
+  it('waits a few minutes for a strategist that is still writing the week\'s note, never for one that is off, done or failed', async () => {
+    const waiting = fixture({ strategist: () => true, store: { strategyNote: vi.fn(async () => null), strategyPending: vi.fn(async () => true) } });
+    const deferred = await waiting.run();
+    expect(deferred).toEqual({ status: 'queued', retryAt: new Date(monday.getTime() + 3 * 60_000), result: { deferred: 'strategy_pending', week: '2026-11-02' } });
+    expect(waiting.notifier.send).not.toHaveBeenCalled();
+    expect(waiting.store.scorecardFacts).not.toHaveBeenCalled();
+    // After five waits it goes without the note; nothing pending, the strategist off, or Run now, it goes at once.
+    expect((await waiting.run({ attempts: 6 })).result).toMatchObject({ week: '2026-11-02' });
+    const idle = fixture({ strategist: () => true, store: { strategyNote: vi.fn(async () => null), strategyPending: vi.fn(async () => false) } });
+    expect((await idle.run()).result).toMatchObject({ week: '2026-11-02' });
+    const off = fixture({ strategist: () => false, store: { strategyNote: vi.fn(async () => null), strategyPending: vi.fn(async () => true) } });
+    expect((await off.run()).result).toMatchObject({ week: '2026-11-02' });
+    expect(off.store.strategyPending).not.toHaveBeenCalled();
+    const asked = fixture({ strategist: () => true, store: { strategyNote: vi.fn(async () => null), strategyPending: vi.fn(async () => true) } });
+    expect((await asked.run({ sourceKind: 'owner' })).result).toMatchObject({ reported: '2026-10-26' });
   });
 
   it('puts money only in the email\'s blocks: never in the subject, the stored body, the run, the result or the log', async () => {

@@ -111,6 +111,8 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
       strategyFacts: ({ since, until }) => call('private.growth_strategy_facts', [since, until]),
       strategyNote: week => call('private.agent_strategy_note', [week]),
       strategySave: (week, note) => call('private.agent_strategy_save', [week, JSON.stringify(note)]),
+      /** Whether the strategist's task is running or due within five minutes (the scorecard waits for its note while it is). */
+      strategyPending: () => call('private.agent_strategy_pending'),
     } : {}),
     ...(growth ? { reserveBudget:(taskId,cents)=>call('private.growth_budget_reserve',[taskId,cents]),releaseBudget:id=>call('private.growth_budget_release',[id]),accountsPage: ({limit=200,offset=0}={})=>call('private.agent_accounts_page',[limit,offset]), notificationStatus: key=>call('private.growth_notification_status',[key]) } : {}),
     /** Turns due schedules of the given task kinds (the ones this server can handle) into tasks. */

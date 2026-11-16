@@ -8,7 +8,7 @@ declare
   contract jsonb := hub.get_backend_contract();
   feature constant text := 'platform.agents.strategist.v1';
   server_fns constant text[] := array['private.growth_strategy_facts(timestamptz,timestamptz)', 'private.agent_strategy_save(date,jsonb)',
-    'private.agent_strategy_note(date)'];
+    'private.agent_strategy_note(date)', 'private.agent_strategy_pending()'];
   fn text;
   r text;
   facts text;
