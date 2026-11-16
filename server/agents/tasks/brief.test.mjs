@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { briefHandlers, composeBrief } from './brief.mjs';
+import { briefHandlers, composeBrief, senderServices } from './brief.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
 const labels = { carebase: 'CareBase', hub: 'Support Hub' };
@@ -45,6 +45,17 @@ describe('composing the brief', () => {
     const brief = compose(quiet({ failedTasks: 1 }));
     expect(brief.subject).toBe('CareMetric brief for Mon, Nov 2: 1 thing needs you');
     expect(brief.headline).toBe('One thing needs you this morning.');
+  });
+
+  it('says whether text alerts are set up as things stand when it is written, not when the Hub started', () => {
+    // The text sender reads its settings live (Settings → Text messages): set up after the start, the next brief stops saying it is not.
+    const sms = { configured: false };
+    const services = senderServices(sms, { configured: true });
+    expect(compose(busy(), { services }).body).toContain('Text alerts are not set up');
+    sms.configured = true;
+    expect(compose(busy(), { services }).body).not.toContain('Text alerts');
+    expect([services.sms, services.email]).toEqual([true, true]);
+    expect(senderServices(null, undefined)).toMatchObject({ sms: false, email: false });
   });
 
   it('reports yesterday in words and dollars', () => {

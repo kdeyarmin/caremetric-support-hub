@@ -151,6 +151,12 @@ const dayBefore = date => {
   return new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10);
 };
 
+/**
+ * Whether the owner's text and email alerts can go out, read each time the brief is written: both senders read their settings live
+ * (Settings → Text messages and Settings → Email), so a value taken once at the start went stale as soon as either was set up.
+ */
+export const senderServices = (sms, email) => ({ get sms() { return Boolean(sms?.configured); }, get email() { return Boolean(email?.configured); } });
+
 export function briefHandlers({ store, notifier, publicOrigin, services = {}, labels = {}, features = null, toolkit = null, watchdogIdleDays = 3, log = line => console.warn(line) }) {
   // The watchdog's findings (20261113240000_agent_watchdog.sql), never holding back the brief when they cannot be read.
   async function watchdog(moment) {
