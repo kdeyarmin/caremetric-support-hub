@@ -78,6 +78,10 @@ describe('the brief\'s two parts', () => {
     expect(named.writer.hook).toBeNull();
     // The agency's own name is not a person's, and the team still sees who leads it.
     expect(named.research.leaders).toEqual([{ name: 'Jane Doe', title: 'Administrator' }]);
+    // An initial or a title never splits a sentence, so neither leaves the name, nor a stray "Dr.", behind.
+    const initial = briefParts({ ...output, summary: 'Valley Home Health is family-owned. Jane A. Doe is its president. Dr. John Roe is its medical director.' },
+      { evidence, countyFigures: [], people: [{ name: 'Jane A. Doe', title: 'President' }, { name: 'John Roe', title: 'Medical Director' }], setting: 'home_health' });
+    expect(initial.writer.summary).toBe('Valley Home Health is family-owned.');
   });
 
   it('keeps the agency\'s own rating, rank or share out of the writer part even with no number the check would catch', () => {

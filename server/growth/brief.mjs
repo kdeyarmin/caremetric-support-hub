@@ -145,7 +145,10 @@ export function briefParts(output, { evidence, countyFigures, people, intel, set
   // writer-part sentence that names someone on its people list is left out (2026-11-16: a brief's summary named its president and owners).
   const fullNames = [...named].map(name => name.replace(/\s+/g, ' ').trim()).filter(name => name.split(' ').length >= 2);
   const namesPerson = sentence => { const text = sentence.toLowerCase().replace(/\s+/g, ' '); return fullNames.some(name => text.includes(name)); };
-  const withoutPeople = value => String(value ?? '').split(/(?<=[.!?])\s+/).filter(sentence => !namesPerson(sentence)).join(' ');
+  // Sentences end at . ! or ? before a capital, digit or quote, never after an initial or a title, so "Jane A. Doe" and "Dr. Jane Doe"
+  // stay in one sentence and the whole of it goes.
+  const sentences = value => String(value ?? '').split(/(?<=[.!?])(?<!\b(?:[A-Za-z]|Dr|Mr|Mrs|Ms|Jr|Sr|St|Inc|Co|Ltd|Corp)\.)\s+(?=[A-Z0-9"“(])/);
+  const withoutPeople = value => sentences(value).filter(sentence => !namesPerson(sentence)).join(' ');
   const clean = value => {
     const sentence = withoutPeople(String(value ?? '').replace(/\s+/g, ' ').trim()).slice(0, 600);
     // The agency's own rating, rank or share stays in the research part, whatever the number check finds (standing.mjs).
