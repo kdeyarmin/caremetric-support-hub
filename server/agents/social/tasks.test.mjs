@@ -293,7 +293,7 @@ describe('the daily ad review', () => {
     expect(h.store.proposeAction.mock.calls[0][0]).toMatchObject({ kind: 'social.ad_budget', targetId: '40', input: { adsetId: '40', from: 2000, to: 2400 } });
     expect(h.store.proposeAction.mock.calls[0][0].preview).toContain('Only you can approve a budget change.');
     const again = harness({ settings: { targetCostCents: 2000, maxDailyBudgetCents: 3000 }, openTargets: ['social.ad_budget:40'], meta: metaOf({ adsOverview: vi.fn(async () => winning) }) });
-    expect((await again.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0, skipped: 1 });
+    expect((await again.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0, skipped: 1, skips: { already_proposed: 1 } });
   });
 });
 
@@ -493,7 +493,20 @@ describe('approved creative from the Creative Director', () => {
     const outcome = await handlers['social.ads'](task('social.ads'), { now });
     expect(creative.approved).toHaveBeenCalled();
     expect(store.proposeAction).not.toHaveBeenCalled();
-    expect(outcome.result).toMatchObject({ create: 0, skipped: 1 });
+    expect(outcome.result).toMatchObject({ create: 0, skipped: 1, skips: { model_not_configured: 1 } });
+  });
+
+  // Review 2026-11-17: the review skipped 18 of 18 recommendations every day, and nothing said why.
+  it('counts each skipped recommendation by its reason', async () => {
+    const overviewOf = link => ({
+      adsets: [{ id: '40', name: 'Ad set', active: true, dailyBudget: 2000 }],
+      ads: [{ id: '1', name: 'Only ad', adsetId: '40', active: true, createdAt: '2026-10-01T00:00:00Z', copy: { link } }],
+      current: [], previous: [],
+    });
+    const result = async (link, marketed = undefined) => (await harness({ meta: metaOf({ adsOverview: vi.fn(async () => overviewOf(link)) }), model: null, ...(marketed ? { marketed } : {}) })
+      .handlers['social.ads'](task('social.ads'), { now })).result;
+    expect(await result('https://example.com/form')).toMatchObject({ skipped: 1, skips: { leads_elsewhere: 1 } });
+    expect(await result('https://www.cmcarebase.com/', ['caremetric-intel'])).toMatchObject({ skipped: 1, skips: { product_not_marketed: 1 } });
   });
 });
 

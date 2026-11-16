@@ -9,7 +9,7 @@ import { learningHandlers } from '../growth/learning.mjs';
 import { adsTeam } from './ads/index.mjs';
 import { handoverFeature } from './handover.mjs';
 import { defaultMarketed, marketingFeature } from './marketing.mjs';
-import { sqlAgentStore } from './store.mjs';
+import { sqlAgentStore, workRecoveryFeature } from './store.mjs';
 import { agentScheduler } from './scheduler.mjs';
 import { actionExecutor, recordOnlyExecutors } from './actions.mjs';
 import { ownerNotifier } from './notify.mjs';
@@ -71,7 +71,7 @@ export function agentTeam({
     marketing, scorecard: scorecardDeclared(features), creative: creativeOn, creativeData: features?.has?.('platform.agents.creative-data.v1') === true,
     creativeReview: features?.has?.('platform.agents.creative-review.v1') === true,
     ads: features?.has?.('platform.agents.ads.v1') === true, watchdog: features?.has?.('platform.agents.watchdog.v1') === true,
-    handover: features?.has?.(handoverFeature) === true, strategist: strategistDeclared(features) });
+    handover: features?.has?.(handoverFeature) === true, strategist: strategistDeclared(features), workRecovery: features?.has?.(workRecoveryFeature) === true });
   // What the team markets: the owner's switches on the AI team page, read when each marketing task starts (marketing.mjs). Until the
   // database declares them, CareMetric Intel only. A caller (a test) may pass its own list or reader.
   const marketedSource = marketed ?? (marketing && typeof store.marketedProducts === 'function' ? () => store.marketedProducts() : [...defaultMarketed]);

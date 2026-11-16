@@ -52,6 +52,15 @@ describe('checking an address before the first email (20261116100000_growth_addr
     expect(JSON.stringify(outcome)).not.toMatch(/@|550|go away/);
   });
 
+  it('keeps the STARTTLS reasons (a server that asks for TLS without offering it, a TLS conversation that failed) as their own', async () => {
+    const mailbox = checker({ 'info@a.example.org': { result: 'unknown', reason: 'tls_required' }, 'info@b.example.org': { result: 'unknown', reason: 'tls_failed' } });
+    const { store, run } = handler({ mailbox, declared: new Set([growthAddressCheckFeature, growthDiagnosticsFeature]),
+      candidates: ['a', 'b'].map(id => ({ id, email: `info@${id}.example.org` })) });
+    const outcome = await run(task);
+    expect(store.mailboxRecord.mock.calls).toEqual([['a', 'unknown', 'tls_required'], ['b', 'unknown', 'tls_failed']]);
+    expect(outcome.result).toMatchObject({ why: { tls_required: 1, tls_failed: 1 } });
+  });
+
   it('spends no try while the mail servers are out of reach, and asks nothing without a host name to introduce the Hub', async () => {
     const resting = { configured: true, available: () => false, check: vi.fn() };
     const first = handler({ mailbox: resting, candidates: [{ id: 'a', email: 'info@a.example.org' }] });
