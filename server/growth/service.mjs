@@ -12,7 +12,7 @@ const https=z.union([z.literal(''),z.url().refine(v=>new URL(v).protocol==='http
 export const growthSchemas={
  create:z.object({name:text(200).min(1),domain:text(253).regex(/^[a-z0-9][a-z0-9.-]+\.[a-z]{2,}$/),product:z.enum(products),email:z.union([z.literal(''),z.email()]),contactName:text(200),role:text(200),goal:text(2000),tenantId:uuid.optional(),internal:z.boolean().optional()}).strict(),
  opportunity:z.object({id:uuid,internal:z.boolean().optional(),tenantId:z.union([z.literal(''),uuid]).optional(),version:z.number().int().positive(),stage:z.enum(stages),goal:text(2000),nextAction:text(500).min(1),nextAt:instant,trialEnd:z.union([z.literal(''),instant]),renewalAt:z.union([z.literal(''),instant]),memory:z.object({promises:text(2000).optional(),blockers:text(2000).optional(),objections:text(2000).optional(),lossReason:text(2000).optional()}).strict()}).strict(),
- contact:z.object({id:uuid,version:z.number().int().positive(),eligibility:z.enum(['review','permitted','opted_out']),verified:z.boolean(),sourceUrl:https}).strict(),
+ contact:z.object({id:uuid,version:z.number().int().positive(),eligibility:z.enum(['review','permitted','opted_out','undeliverable']),verified:z.boolean(),sourceUrl:https}).strict(),
  evidence:z.object({opportunityId:uuid,sourceUrl:z.url().refine(v=>new URL(v).protocol==='https:'),claim:text(4000).min(1),confidence:z.enum(['low','medium','high']),observedAt:instant}).strict(),
  policy:z.object({product:z.enum(products),version:z.number().int().positive(),enabled:z.boolean(),autoSend:z.boolean(),experimentEnabled:z.boolean().default(false),dailyLimit:z.number().int().min(1).max(100),minGapHours:z.number().int().min(24).max(720),maxTouches:z.number().int().min(1).max(3),bookingUrl:https,approvedClaim:text(1000)}).strict(),
  reconcile:z.object({id:uuid,status:z.enum(['delivered','failed']),reference:text(500).min(3)}).strict(),
@@ -53,7 +53,7 @@ export function growthService({store,research,contacts=null,roster=null,people=n
     configured:()=>sending()&&signingKey.length>=32&&postal().trim().length>0&&/^https:\/\//.test(publicOrigin??''),
     async admin(token,input) {
       ready(); const {operation,data}=parse(z.object({operation:z.string(),data:z.record(z.string(),z.unknown()).default({})}).strict(),input);
-      if(operation==='workspace') {const {offset}=parse(z.object({offset:z.number().int().min(0).default(0)}).strict(),data);return safe(async()=>({...await store.workspace(token,offset),services:{sending:sending(),signing:signingKey.length>=32,postalAddress:Boolean(postal().trim()),research:Boolean(research?.configured),roster:features?.has('platform.agents.growth-roster.v1')===true,people:features?.has('platform.agents.growth-people.v1')===true,learning:features?.has('platform.agents.growth-learning.v1')===true}}));}
+      if(operation==='workspace') {const {offset}=parse(z.object({offset:z.number().int().min(0).default(0)}).strict(),data);return safe(async()=>({...await store.workspace(token,offset),services:{sending:sending(),signing:signingKey.length>=32,postalAddress:Boolean(postal().trim()),research:Boolean(research?.configured),roster:features?.has('platform.agents.growth-roster.v1')===true,people:features?.has('platform.agents.growth-people.v1')===true,learning:features?.has('platform.agents.growth-learning.v1')===true,addressCheck:features?.has('platform.agents.growth-address-check.v1')===true}}));}
       if(operation==='roster') {
         // The Medicare roster's progress (Settings → Customer growth → Find prospects from the Medicare roster).
         if(!features?.has('platform.agents.growth-roster.v1'))throw new HttpError(503,'Apply the roster database migration first.');
@@ -74,6 +74,12 @@ export function growthService({store,research,contacts=null,roster=null,people=n
           services:peopleServices()}));
         if(operation==='peopleDecide'){const parsed=parse(z.object({ids:z.array(uuid).min(1).max(200),decision:z.enum(['permit','refuse'])}).strict(),data);return safe(async()=>({decided:await store.peopleDecide(token,parsed.ids,parsed.decision)}));}
         return safe(()=>store.importList(token,parse(importSchema,data).rows));
+      }
+      if(['sendGuard','sendGuardResume'].includes(operation)) {
+        // Addresses checked before the first email, and the bounce guard (Settings → Customer growth).
+        if(!features?.has('platform.agents.growth-address-check.v1'))throw new HttpError(503,'Apply the address check database migration first.');
+        parse(z.object({}).strict(),data);
+        return safe(()=>operation==='sendGuard'?store.sendGuard(token):store.sendGuardResume(token));
       }
       if(['learning','learningDecide'].includes(operation)) {
         // What is working: the weekly memos (Settings → Customer growth → Write from what is working).

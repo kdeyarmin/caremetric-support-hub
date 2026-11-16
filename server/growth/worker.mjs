@@ -34,6 +34,8 @@ export const growthAutonomyFeature='platform.agents.growth-autonomy.v1';
 export const growthReengageFeature='platform.agents.growth-reengage.v1';
 /** Each cold touch also to the other decision-makers at the organization (20261115230000_growth_colleagues.sql). */
 export const growthColleaguesFeature='platform.agents.growth-colleagues.v1';
+/** Addresses checked before the first email, and the bounce guard (20261116100000_growth_address_check.sql; verify.mjs). */
+export const growthAddressCheckFeature='platform.agents.growth-address-check.v1';
 // Colleague emails recorded and proposed on one sweep at most: a few touches' worth, so a sweep never spends its time on them.
 export const colleagueLimit=20;
 /**
@@ -91,6 +93,9 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   // The owner-approved learning memo (learning.mjs), while Settings → Customer growth → "Write from what is working" is on.
   const learning=(features instanceof Set?features.has(growthLearningFeature):Array.isArray(features)&&features.includes(growthLearningFeature))
     &&typeof growth.store.learningActive==='function';
+  // First emails wait for their address's check, and cold email for a tripped bounce guard (Settings → Customer growth).
+  const holding=(features instanceof Set?features.has(growthAddressCheckFeature):Array.isArray(features)&&features.includes(growthAddressCheckFeature))
+    &&typeof growth.store.draftHold==='function';
   // Assessments and drafts the model could not give, by opportunity and what it was asked about, and when: kept in this process
   // only, so a restart asks once more. Without it every fifteen-minute sweep would pay for the same unanswerable request again.
   const unanswered=new Map();
@@ -152,6 +157,8 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0,reengaged=0;
     // Why drafts were not kept, by check (draft.mjs codes), so the run shows which rule throws good openings away.
     const rejected={};
+    // First emails not drafted yet because they wait (an address not yet checked, the bounce guard), by reason.
+    const held={};
     // Each product's active memo, read once a sweep.
     const memos=new Map();
     const memoFor=async product=>{
@@ -201,6 +208,12 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           // for again for six hours. One such prospect, retried every sweep, would otherwise spend the day's whole budget.
           const wanted=`draft:${o.id}:${work.key}:${o.version??''}:${o.contact_version??''}:${o.policy?.version??''}`;
           if(clock()-(unanswered.get(wanted)??-Infinity)<assessRetryMs)continue;
+          // A first email waits for its address's check, and cold email for a tripped bounce guard (verify.mjs): no model call is paid
+          // for an email that could not be sent.
+          if(holding&&work.kind==='outreach'&&o.contact_id) {
+            const hold=await growth.store.draftHold(o.contact_id);
+            if(hold){held[hold]=(held[hold]??0)+1;continue;}
+          }
           const memo=work.kind==='outreach'?await memoFor(o.product):null;
           // The agency's own report, only once Intel has opened it (report-link.mjs checkedLinkFor); otherwise the review page.
           const report=work.kind==='outreach'&&growth.reports?(growth.reports.checkedLinkFor?await growth.reports.checkedLinkFor(o,{signal}):growth.reports.linkFor?.(o))??null:null;
@@ -227,7 +240,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     let contacts=null;
     if(prospecting&&growth.contacts?.configured&&typeof growth.store.contactCandidates==='function'&&!spent())contacts=await findContacts(sweepContactLimit,productsByDomain,{signal,spent});
     if(planned && notifier)await notifier.send({severity:'info',subject:'Customer growth work is ready',body:`${planned} follow-up tasks reviewed; ${drafted} message drafts prepared. Open Growth to review next actions.`,dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
-    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(reengaged?{reengaged}:{}),...(colleagueEmails?{colleagues:colleagueEmails}:{}),...(contacts?.searched?{contacts}:{})}};
+    return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(Object.keys(held).length?{held}:{}),...(reengaged?{reengaged}:{}),...(colleagueEmails?{colleagues:colleagueEmails}:{}),...(contacts?.searched?{contacts}:{})}};
   }
   async function discover(task,{signal,now=()=>new Date()}={}) {
     if(!growth.research?.configured)return {result:{skipped:'research_not_configured'}};
@@ -429,10 +442,15 @@ export function growthEmail({product,purpose=null,subject,body,postalAddress,uns
     blocks:[{type:'message',text:`Hello${greeting?` ${greeting}`:''},\n\n${words}`,links:messageLinks(product,words)}],
     signature:[...(sender.signer??[sender.team]),...(sender.site?[sender.site]:[])],footer});
 }
-export function growthExecutors({growth,mail,publicOrigin,postalAddress}) {
+export function growthExecutors({growth,mail,publicOrigin,postalAddress,features=null}) {
   if(!growth)return {};
+  const holding=(features instanceof Set?features.has(growthAddressCheckFeature):Array.isArray(features)&&features.includes(growthAddressCheckFeature))
+    &&typeof growth.store.sendHold==='function';
   return {'growth.content':async()=>({recorded:true,published:false}),'growth.message':async execution=>{
     if(!growth.configured()||!mail?.configured)throw deferred();
+    // A cold email waits (tried again in 15 minutes) while the bounce guard holds cold email, and a first email until its address was
+    // checked. The send claim below still decides everything else.
+    if(holding&&await growth.store.sendHold(execution.input.messageId))throw deferred();
     const claimed=await growth.store.claim(execution.input.messageId,execution.id);
     if(!claimed.send){
       if(['frequency_limited','daily_limit','evaluation_required','delivery_unresolved'].includes(claimed.status))throw deferred();

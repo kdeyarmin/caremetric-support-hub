@@ -374,6 +374,40 @@ Checking needs outbound connections to mail servers (port 25), which Railway all
 every server unreachable, rests for six hours, and the AI team page's "Named decision-makers" row and the Growth screen say so;
 choose "Addresses businesses publish on their own websites" to stop trying.
 
+## Checking an address before the first email, and the bounce guard
+
+Owner decision 2026-11-16 ([review](AI_WORKFORCE_REVIEW_2026-11-16.md)). Of the first 22 cold emails, 3 bounced (14%), all to
+addresses read from the agencies' own websites. Mailbox providers judge a sender by its bounces, and the rule for raising "Most cold
+emails a day" is under 2%. Two settings, both off until you save them (`20261116100000_growth_address_check.sql`, gate
+`20261116100100_growth_address_check_contract.sql`, feature `platform.agents.growth-address-check.v1`):
+
+- **Settings → Customer growth → Check an address before the first email.** Before the first cold email to an address (a role
+  address such as info@, a named person, an imported one), the Marketing Manager's `growth.verify` task (every half hour,
+  `server/growth/verify.mjs`) asks the business's own mail server whether the mailbox exists, with the same checker the people finder
+  uses: a made-up mailbox first, then the address, from the null sender, and the conversation ends before anything is sent. Addresses
+  with an email already waiting go first, then the best fit. Until the answer arrives, no first email is drafted (no model call is
+  paid for it) and one already approved waits.
+  - *Exists*, or a server that accepts any address (it can say no more): the email goes as before.
+  - *Does not exist*: the contact becomes **undeliverable** (a new eligibility; only "permitted" is ever written to), its waiting
+    emails are cancelled, the business's never-emailed opportunities may take another contact, and the people finder looks there
+    again. Unlike "Do not contact" it says nothing about the business's wishes, so it never blocks a named person there. You can
+    change it on Growth.
+  - *No answer* (a greylisting or silent server): asked again after 16 hours, three times at most. Then **Check** sends as before;
+    **Strict** sends the address to your review (eligibility "Needs review") instead.
+  - It needs Railway's Pro plan (port 25), like the people finder's checks, and is not counted in "Most address checks a day". When
+    three servers in a row cannot be reached the checker rests six hours and spends no tries.
+- **Settings → Customer growth → Pause cold email at this bounce rate** (1 to 50; empty: off). When more than this percent of the cold
+  emails sent in the last seven days (at least 20 of them) bounced for good, or anyone marked one as spam, cold email waits: no first
+  email is drafted and every approved cold email is held before the send claim, tried again every 15 minutes. A soft bounce (a full
+  mailbox, a server that was down) does not count. Replies to people who wrote in and customer emails are never held. You are told
+  once a day ("Cold email is paused") and resume it on Growth → Send guard → **Resume cold email**, which starts the seven days
+  afresh (audited as `growth.cold_email_resumed`). Saving the number also starts them afresh, so bounces from before you switched the
+  guard on never trip it. 5 suits a small volume: at 20 emails one bounce is 5%.
+
+The send claim (`private.growth_claim_message`) is unchanged and still decides every send; the checks above only make an email wait.
+Growth → Send guard shows the mode, the guard's counts and how many addresses were confirmed, accept anything, do not exist, have not
+answered yet or are waiting. `server/agents-growth-address-check-integration.mjs` runs all of it through the real roles in CI.
+
 ## Several decision-makers at one organization
 
 Owner decision 2026-11-15: the Marketing Manager's cold outreach reaches several decision-makers at the same agency (owner,

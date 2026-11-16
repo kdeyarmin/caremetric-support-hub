@@ -2,6 +2,7 @@ import { growthHandlers, growthExecutors } from '../growth/worker.mjs';
 import { peopleHandlers } from '../growth/people.mjs';
 import { matchHandlers } from '../growth/agency-match.mjs';
 import { researchHandlers } from '../growth/deep-research.mjs';
+import { verifyHandlers } from '../growth/verify.mjs';
 import { learningHandlers } from '../growth/learning.mjs';
 import { adsTeam } from './ads/index.mjs';
 import { handoverFeature } from './handover.mjs';
@@ -93,7 +94,7 @@ export function agentTeam({
   // Kept as getters, not copied: the postal address is a Hub setting the Account Manager reads on each run.
   const customerEmail = Object.defineProperties({}, { ...Object.getOwnPropertyDescriptors(lifecycle ?? {}), publicOrigin: { value: publicOrigin, enumerable: true } });
   const actions = actionExecutor({ store, executors: {
-    ...recordOnlyExecutors, ...growthExecutors({growth,mail:growthMail,publicOrigin,postalAddress}), ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
+    ...recordOnlyExecutors, ...growthExecutors({growth,mail:growthMail,publicOrigin,postalAddress,features}), ...conciergeExecutors({ communications, store, notifier, features, log }), ...lifecycleExecutors({ store, features, lifecycle: customerEmail, log }),
     ...offerExecutors({ store, features, billing: offerBilling, notifier, log }),
     ...contentExecutors({ store, features, log }), ...externalEmailExecutors({ store, features, email, log }), ...socialWork.executors({ notifier, log, creative: creativeLink, store, publicOrigin }),
     ...adsWork.executors({ meta: socialWork.meta, linkedin: socialWork.linkedin, social: socialWork.ads?.settings ?? {}, notifier, store, creative: creativeLink, publicOrigin, log }),
@@ -101,7 +102,7 @@ export function agentTeam({
     ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
-  const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}), ...peopleHandlers({growth,features,marketed:marketedSource}), ...matchHandlers({growth,features,marketed:marketedSource}), ...researchHandlers({growth,model:runtime,features,marketed:marketedSource}), ...learningHandlers({growth,features,marketed:marketedSource,enabled:growth?.learning?.enabled??false}),
+  const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}), ...peopleHandlers({growth,features,marketed:marketedSource}), ...matchHandlers({growth,features,marketed:marketedSource}), ...researchHandlers({growth,model:runtime,features,marketed:marketedSource}), ...verifyHandlers({growth,features,notifier}), ...learningHandlers({growth,features,marketed:marketedSource,enabled:growth?.learning?.enabled??false}),
     ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, publicOrigin, guides, marketed: marketedSource, log }),
     ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log, creative: creativeLink, feed: growth?.roster?.feed ?? null }),
     ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log, feed: growth?.roster?.feed ?? null }),

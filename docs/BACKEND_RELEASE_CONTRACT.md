@@ -179,6 +179,17 @@ under the hand-over and never past an unsubscribe or an opt-out, a memo is used 
 post handed back keeps its approval. Each test fails closed. Declaring it changes nothing by itself: the steps ship held. The Hub
 server launches campaigns live and publishes automatically approved founder posts only when the feature is declared.
 
+`20261116100100_growth_address_check_contract.sql` declares `platform.agents.growth-address-check.v1` only after the settings,
+growth autonomy, people finder and colleagues features are declared, the settings `growth.presend_check` (text) and
+`growth.bounce_guard_percent` (number) exist, the send guard table has row level security and is closed to every role,
+`private.growth_send_hold`, `private.growth_draft_hold`, `private.growth_mailbox_candidates`, `private.growth_mailbox_record` and
+`private.growth_send_guard_state` are executable by `hub_app_server` alone and require the Hub server connection, their helpers
+(`growth_presend_mode`, `growth_mailbox_tries`, `growth_bounce_guard`, `growth_hold_for`) are closed to every role,
+`hub.growth_send_guard` and `hub.growth_send_guard_resume` need a signed-in owner, contacts may be `undeliverable` while the send
+claim still writes only to permitted contacts, the guard counts cold email that bounced for good, and the Marketing Manager's
+`growth.verify` task is scheduled. Each test fails closed. The Hub server checks addresses, holds drafts and sends, and shows the
+Send guard only when the feature is declared ([Customer growth](CUSTOMER_GROWTH.md#checking-an-address-before-the-first-email-and-the-bounce-guard)).
+
 `20261106220100_learning_media_import_contract.sql` declares `learning.media-import.v1` only after `learning.runtime.v1`,
 `learning.media.v1` and `app.sms.v1` are declared, the staged-import table exists with row level security and is closed to every
 browser, service and server role, the seven import operations are security definers with a pinned empty search path executable by
