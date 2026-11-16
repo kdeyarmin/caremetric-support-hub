@@ -52,6 +52,22 @@ describe('the ffmpeg process behind a video', () => {
     await expect(renderVideo({ ...video, ffmpeg: path })).rejects.toMatchObject({ code: 'video_encode_failed' });
   }, 30_000);
 
+  it('keeps a video ffmpeg finished, even when it closed its input before the last frame', async () => {
+    // ffmpeg stops reading once it has the frames -t asks for and exits 0: the frames written after that hit a closed pipe, which is fine.
+    const { path, pidFile } = await fakeFfmpeg('echo $$ > "$FOLDER/pid"\nexec 0<&-\nfor out; do :; done\nprintf finished > "$out"\nexit 0');
+    drawing.before = async () => {
+      await waitForFile(pidFile);
+      const pid = Number(await readFile(pidFile, 'utf8'));
+      while (running(pid)) await new Promise(resolve => setTimeout(resolve, 10));
+    };
+    const made = await renderVideo({ ...video, ffmpeg: path });
+    expect(made.mp4.toString()).toBe('finished');
+  }, 30_000);
+
+  it('reports a video ffmpeg could not start', async () => {
+    await expect(renderVideo({ ...video, ffmpeg: '/nonexistent/ffmpeg' })).rejects.toMatchObject({ code: 'video_encode_failed' });
+  }, 30_000);
+
   it('stops ffmpeg when a frame cannot be drawn, instead of leaving it waiting for frames', async () => {
     const { path, pidFile } = await fakeFfmpeg('echo $$ > "$FOLDER/pid"\nexec sleep 30');
     drawing.before = () => waitForFile(pidFile);

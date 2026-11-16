@@ -235,17 +235,19 @@ export async function renderVideo({ id = 'video', width, height, product, conten
     const child = spawn(binary, args, { stdio: ['pipe', 'ignore', 'pipe'] });
     let failed = null;
     child.on('error', error => { failed = error; });
-    // Writing to an ffmpeg that has stopped (it failed, or the render was stopped) is EPIPE on its input; with no listener that error is
-    // uncaught and stops the process. It is this video's failure, nothing more.
-    child.stdin.on('error', error => { failed ??= error; });
+    // Writing to an ffmpeg that has stopped is EPIPE on its input; with no listener that error is uncaught and stops the process. It only
+    // ends the writing: ffmpeg's exit code says whether the video was made (it may close its input once it has the frames it needs).
+    let inputClosed = false;
+    child.stdin.on('error', () => { inputClosed = true; });
     child.stderr.resume();
-    const exit = once(child, 'close');
+    // 'close' follows every end, a failed start included, so this never rejects (events.once would, on 'error', with nobody listening).
+    const exit = new Promise(resolve => { child.once('close', code => resolve([code])); });
     const stop = () => child.kill('SIGKILL');
     signal?.addEventListener('abort', stop, { once: true });
     try {
       const drawn = new Map();
       for (let index = 0; index < frames; index += 1) {
-        if (signal?.aborted || failed) break;
+        if (signal?.aborted || failed || inputClosed) break;
         const t = index / fps;
         const key = stateOf(timeline, t);
         let png = drawn.get(key);
@@ -264,7 +266,7 @@ export async function renderVideo({ id = 'video', width, height, product, conten
           drawn.clear();
           drawn.set(key, png);
         }
-        if (!child.stdin.write(png)) await Promise.race([once(child.stdin, 'drain'), exit]).catch(error => { failed ??= error; });
+        if (!child.stdin.write(png)) await Promise.race([once(child.stdin, 'drain'), exit]).catch(() => { inputClosed = true; });
       }
       child.stdin.end();
       const [code] = await exit;
@@ -273,7 +275,7 @@ export async function renderVideo({ id = 'video', width, height, product, conten
     } finally {
       signal?.removeEventListener('abort', stop);
       // A frame that could not be drawn leaves ffmpeg waiting for the rest: stop it, and let it exit before its folder is removed.
-      if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await exit.catch(() => {}); }
+      if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await exit; }
     }
     const mp4 = await readFile(out);
     const info = mp4Info(mp4);
