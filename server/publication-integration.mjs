@@ -265,11 +265,16 @@ try {
 } finally {
   await new Promise(resolve=>server.close(resolve));
   // DocStudio provenance and published assets are immutable. These rows are the run's own,
-  // so the teardown lifts those guards for its own transaction only.
+  // so the teardown lifts those guards for its own transaction only. The content the run
+  // published and its customer tenant go too, so the next run can use the same keys and slug.
   await removeTestIdentities(admin,[owner,scoped,learner],{
     also:[
       'delete from private.publication_revision_provenance where import_id in (select id from private.publication_imports where actor_id = any($1::uuid[]))',
       'delete from private.publication_imports where actor_id = any($1::uuid[])',
+      'delete from hub.content_publications where item_id in (select id from hub.content_items where created_by = any($1::uuid[]))',
+      'delete from hub.media_assets where content_item_id in (select id from hub.content_items where created_by = any($1::uuid[]))',
+      'delete from hub.content_items where created_by = any($1::uuid[])',
+      'delete from hub.tenants where id in (select tenant_id from hub.tenant_product_memberships where user_id = any($1::uuid[]))',
     ],
     unlock:[
       ['private.publication_revision_provenance','publication_provenance_immutable'],
