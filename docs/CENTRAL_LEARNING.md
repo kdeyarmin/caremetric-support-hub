@@ -79,7 +79,31 @@ each file to the Hub in 8 MiB parts (`server/upload-parts.mjs`), because Railway
 request whose body takes more than five minutes, and the Hub stores the whole file once
 it has arrived; a dropped part is sent again from where the Hub left off, and the editor
 shows the video's progress. The uploader compares SHA-256 of the source video with the
-stored download before registration.
+stored copy before registration.
+
+While the database declares `learning.lesson-media.direct-storage.v1`
+(`20261117140000_lesson_media_direct_storage_contract.sql`), the Hub stores the whole file
+straight in the private bucket instead of streaming it through the `app-media` function,
+whose 150-second response limit a 256 MB video over a slow link to Storage could outlast
+(`server/delegations.mjs`, `server/direct-storage.mjs`):
+
+- `app-media`'s `upload-sign` operation, authorized exactly as an upload of the same object,
+  returns only the token of a one-time upload address. It sends no `x-upsert`, so it can
+  never overwrite. It answers `{stored: true}` when Storage already holds the object.
+- The Hub `PUT`s the file from its spool to that address, with no credentials, under a
+  10-minute deadline. A Storage 413 is reported as Storage's own upload limit.
+- It then reads the object back on a ten-minute signed read address (`app-media`'s `sign`)
+  and hashes it: status, media type, exact length and SHA-256. Its last answer carries that
+  `sha256`, so the editor compares it with the source instead of downloading the whole
+  video again. Another file already at the new, random name is refused (409); any other
+  difference can be retried.
+- The bulk import uses the same upload and read addresses.
+
+Neither address reaches the browser or a log. Until the feature is declared, the Hub streams
+lesson media through `app-media`, and the editor downloads the stored copy to check it. Release
+order: deploy `app-media` with `upload-sign` (`verify_jwt` stays off; it authenticates the Hub's
+one-use capability itself), apply the contract migration, then deploy the Hub, which reads the
+feature at boot.
 Human review is required for accuracy, captions, transcript, and absence of private
 data. This is a staff-owned publishing flow, not a customer attachment inbox.
 To bring many approved videos in at once, the library's manifest import fetches each

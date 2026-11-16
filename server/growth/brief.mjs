@@ -105,10 +105,11 @@ export function figureSentence(figure, countyName) {
   if (shown === null) return null;
   const place = String(countyName ?? '').trim();
   const label = String(figure.label ?? '').trim();
-  // The county's name takes the place of "in the county" or "the county's" ("billing for Dallas County's Medicare FFS beneficiaries");
-  // a label that names neither gets "in <county>" at its end.
+  // Intel's labels name the county as "in the county" or, for the billing counts, "the county's": either way the county's own name
+  // goes there. Appended to the end, it would sit after "located in other counties" and read as if those counties were in it.
   const named = /\bin the county\b/i.test(label) ? label.replace(/\bin the county\b/i, `in ${place}`)
-    : /\bthe county's\b/i.test(label) ? label.replace(/\bthe county's\b/i, `${place}'s`) : `${label} in ${place}`;
+    : /\bthe county's\b/i.test(label) ? label.replace(/\bthe county's\b/i, `${place}'s`)
+      : `${label} in ${place}`;
   const source = String(figure.short_source ?? figure.dataset ?? '').trim();
   const cited = source ? ` (${source})` : '';
   if (figure.unit === 'count') return `${shown} ${/^(?:Medicare|CMS)\b/.test(named) ? named : named[0].toLowerCase() + named.slice(1)}${cited}.`;

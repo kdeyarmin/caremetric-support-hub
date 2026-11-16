@@ -39,12 +39,21 @@ describe('the county figures an agency may be told', () => {
     // A nursing home is told its own setting's figures, never an agency's (owner decision 2026-11-16).
     expect(figuresFor(county, 'nursing_home').map(figure => figure.key)).toEqual(['nursing_homes_in_county', 'medicare_advantage_share']);
     expect(figuresFor(unlabeled, 'nursing_home').map(figure => figure.key)).toEqual(['nursing_homes_in_county', 'medicare_advantage_share']);
-    // Intel's billing counts name "the county's" beneficiaries: the county's name goes there, never "... other counties in Dallas County".
-    expect(figureSentence({ label: 'Home health agencies billing for the county\'s Medicare FFS beneficiaries, including agencies located in other counties', value: 232, unit: 'count',
-      short_source: 'CMS Market Saturation and Utilization, 2025' }, 'Dallas County'))
-      .toBe('232 home health agencies billing for Dallas County\'s Medicare FFS beneficiaries, including agencies located in other counties (CMS Market Saturation and Utilization, 2025).');
     expect(figureSentence({ label: 'Standardized Medicare home health spending per FFS beneficiary', value: 1234.4, unit: 'usd_per_beneficiary' }, 'Erie County'))
       .toBe('Standardized Medicare home health spending per FFS beneficiary in Erie County: $1,234 per beneficiary.');
+  });
+
+  it('names the county where a billing count says "the county\'s", never after "located in other counties"', () => {
+    // Intel's labels for the three billing counts (home health, hospice, skilled nursing), as production sent them on 2026-11-16.
+    const billing = (label, value) => figureSentence({ label, value, unit: 'count', short_source: 'CMS Market Saturation and Utilization, 2025' }, 'Dallas County');
+    expect(billing('Home health agencies billing for the county\'s Medicare FFS beneficiaries, including agencies located in other counties', 232))
+      .toBe('232 home health agencies billing for Dallas County\'s Medicare FFS beneficiaries, including agencies located in other counties (CMS Market Saturation and Utilization, 2025).');
+    expect(billing('Hospices billing for the county\'s Medicare FFS beneficiaries, including hospices located in other counties', 41))
+      .toBe('41 hospices billing for Dallas County\'s Medicare FFS beneficiaries, including hospices located in other counties (CMS Market Saturation and Utilization, 2025).');
+    expect(billing('Skilled nursing facilities billing for the county\'s Medicare FFS beneficiaries, including facilities located in other counties', 1250))
+      .toBe('1,250 skilled nursing facilities billing for Dallas County\'s Medicare FFS beneficiaries, including facilities located in other counties (CMS Market Saturation and Utilization, 2025).');
+    // A label that names no county still takes it at the end.
+    expect(billing('Medicare beneficiaries', 400000)).toBe('400,000 Medicare beneficiaries in Dallas County (CMS Market Saturation and Utilization, 2025).');
   });
 });
 

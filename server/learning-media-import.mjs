@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createWriteStream, openAsBlob } from 'node:fs';
 import { mkdtemp, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -116,13 +116,14 @@ export function learningMediaImport({pool,storage,hosts,fetchImpl=fetch,enabled=
       const source=await spoolSource(response,file,signal);
       const mediaId=await sql(sessionToken,signal,'select private.learning_media_import_prepare($1,$2,$3,$4) as value',[itemKey,lease,source.sha256,source.byteSize]);
       const parts=[
-        ['video.mp4','video/mp4',()=>Readable.toWeb(createReadStream(file)),source.sha256,source.byteSize],
-        ['captions.vtt','text/vtt',()=>captions,sha256(captions),captions.length],
-        ['transcript.txt','text/plain',()=>transcript,sha256(transcript),transcript.length],
+        // Blobs with their length known: the video is read from disk as it is sent, straight to Storage or through app-media.
+        ['video.mp4','video/mp4',()=>openAsBlob(file,{type:'video/mp4'}),source.sha256,source.byteSize],
+        ['captions.vtt','text/vtt',()=>new Blob([captions],{type:'text/vtt'}),sha256(captions),captions.length],
+        ['transcript.txt','text/plain',()=>new Blob([transcript],{type:'text/plain'}),sha256(transcript),transcript.length],
       ];
       for(const [name,type,body] of parts){
         let stored;
-        try{stored=await storage.upload(sessionToken,`learning/${mediaId}/${name}`,body(),type);}
+        try{stored=await storage.upload(sessionToken,`learning/${mediaId}/${name}`,await body(),type);}
         catch(error){if(error instanceof HttpError)throw error;throw failure(signal.aborted?'timeout':'storage_unavailable');}
         // A refused upload is not a verdict: the prefix follows the bytes, so an earlier attempt may already have
         // stored them, and app-media reports Storage's 400 "Duplicate" answer as 503. The stored-copy digest below

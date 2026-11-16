@@ -56,6 +56,12 @@ open as its parts arrive and sends a checked file straight to Storage through a 
 then reads it back to hash it before recording it. Until then it streams files through that function as before
 ([publication imports](PUBLICATION_IMPORTS.md)). Deploy the publication-media function first.
 
+`20261117140000_lesson_media_direct_storage_contract.sql` declares `learning.lesson-media.direct-storage.v1` once
+`learning.runtime.v1` and `hub.authorize_learning_object` exist. It changes no schema: it records that the `app-media` function
+signs one-time upload addresses (`upload-sign`), so deploy that function first. It is optional: while it is present the Hub sends
+lesson media straight to the `hub-learning` bucket and reads it back to check it; until then it streams lesson media through
+`app-media` as before ([central learning](CENTRAL_LEARNING.md)).
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a

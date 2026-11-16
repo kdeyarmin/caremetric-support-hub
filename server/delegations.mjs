@@ -1,3 +1,4 @@
+import { openAsBlob } from 'node:fs';
 import { Readable } from 'node:stream';
 import { digest, token, transaction, withSession, HttpError } from './sms-auth.mjs';
 import { parsePortfolioRequest, parsePortfolioEnvelope } from '../supabase/functions/_shared/portfolioProtocol.ts';
@@ -11,6 +12,7 @@ import { tenantLifecycle } from './tenant-lifecycle.mjs';
 import { callNativeAdmin } from './admin-transport.mjs';
 import { publicationId, publicationPart } from '../src/imports/publicationProtocol.ts';
 import { publicationRange } from './publication-assets.mjs';
+import { directTransferMs, storageDuplicate, storageToken, storedMatches } from './direct-storage.mjs';
 import { nativeLearningOperationSchema } from '../src/learning/receiptProtocol.ts';
 import { learningReceipts } from './learning-receipts.mjs';
 import { nativeAuthoringOperationSchema } from '../src/learning/authoringProtocol.ts';
@@ -44,8 +46,9 @@ import { pennsyncLearningMigration } from './pennsync-learning-migration.mjs';
 const prefix = 'cmh_';
 export const validDelegation = value => typeof value==='string' && /^cmh_[A-Za-z0-9_-]{43}$/.test(value);
 const mediaPath = /^learning\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(video\.mp4|captions\.vtt|transcript\.txt)$/;
+// upload-sign is the Hub's own direct transfer (a one-time Storage upload address); no route lets a browser ask for it.
 export function validateMedia(path,operation) {
-  if (!mediaPath.test(path || '') || !['upload','download','sign'].includes(operation)) throw new HttpError(400,'Invalid media request.');
+  if (!mediaPath.test(path || '') || !['upload','download','sign','upload-sign'].includes(operation)) throw new HttpError(400,'Invalid media request.');
 }
 // Each application's own command endpoint, audience and header. CareBase's predates the others and keeps its own route.
 const commandTargets={
@@ -112,12 +115,15 @@ async function authorize(db,audience,payload,{appCommands=false}={}) {
   }
   if (audience!=='media') throw new HttpError(403,'Unsupported authorization audience.');
   validateMedia(payload.path,payload.operation);
-  if (!(await db.query('select hub.authorize_learning_object($1,$2) as allowed',[payload.path,payload.operation])).rows[0].allowed) throw new HttpError(403,'Media access denied.');
+  // An upload address is authorized exactly as an upload of the same object.
+  if (!(await db.query('select hub.authorize_learning_object($1,$2) as allowed',[payload.path,payload.operation==='upload-sign'?'upload':payload.operation])).rows[0].allowed) throw new HttpError(403,'Media access denied.');
   return payload;
 }
-// mediaParts: two 256 MB lesson videos at once.
-export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,legacyDistributionOptIn=false,mediaParts=partUploads({budget:2*268435456}),appCommands=false}) {
+// mediaParts: two 256 MB lesson videos at once. directMedia (learning.lesson-media.direct-storage.v1): lesson media goes straight to Storage
+// through a one-time address app-media signs, instead of streaming through app-media (docs/CENTRAL_LEARNING.md).
+export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,legacyDistributionOptIn=false,mediaParts=partUploads({budget:2*268435456}),appCommands=false,directMedia=false}) {
   const options={appCommands};
+  const direct=typeof directMedia==='function'?directMedia:()=>directMedia;
   const issue = async (sessionToken,audience,payload,signal) => {
     const authorizeSession=work=>signal?boundedSession(pool,sessionToken,signal,work):withSession(pool,sessionToken,work);
     return authorizeSession(async(db,session) => {
@@ -138,6 +144,35 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
       body:body || '{}', ...(body ? {duplex:'half'} : {}), signal:AbortSignal.timeout(120000),redirect:'manual',
     });
   };
+  // The direct transfer (server/direct-storage.mjs). Both answer as app-media does, with a Response whose status the caller reads, and
+  // throw only when the session may not have the object. An object Storage already holds answers 409: the caller reads it back.
+  async function mediaUploadDirect(sessionToken,path,blob,contentType) {
+    const signing=await media(sessionToken,path,'upload-sign');
+    if(!signing.ok) { await signing.body?.cancel().catch(()=>{}); return new Response(null,{status:503}); }
+    const answer=await signing.json().catch(()=>null);
+    const keys=answer && typeof answer==='object' ? Object.keys(answer).join(',') : '';
+    if(keys==='stored' && answer.stored===true) return new Response(null,{status:409});
+    if(keys!=='token' || typeof answer.token!=='string' || !storageToken.test(answer.token)) return new Response(null,{status:503});
+    try {
+      const sent=await fetchImpl(`${storageUrl}/storage/v1/object/upload/sign/hub-learning/${path}?token=${encodeURIComponent(answer.token)}`,{
+        method:'PUT',headers:{'Content-Type':contentType,'x-upsert':'false'},body:blob,redirect:'error',signal:AbortSignal.timeout(directTransferMs),
+      });
+      if(sent.ok || sent.status===413) { await sent.body?.cancel().catch(()=>{}); return new Response(null,{status:sent.ok?200:413}); }
+      const exists=await storageDuplicate(sent);
+      await sent.body?.cancel().catch(()=>{});
+      return new Response(null,{status:exists?409:503});
+    } catch { return new Response(null,{status:503}); }
+  }
+  async function mediaReadDirect(sessionToken,path) {
+    const signing=await media(sessionToken,path,'sign');
+    if(!signing.ok) { await signing.body?.cancel().catch(()=>{}); return new Response(null,{status:signing.status===404?404:503}); }
+    const answer=await signing.json().catch(()=>null);
+    const prefix=`${storageUrl}/storage/v1/object/sign/hub-learning/${path}?token=`;
+    if(!answer || typeof answer!=='object' || Object.keys(answer).join(',')!=='signedUrl' || typeof answer.signedUrl!=='string'
+      || !answer.signedUrl.startsWith(prefix) || !storageToken.test(answer.signedUrl.slice(prefix.length))) return new Response(null,{status:503});
+    try { return await fetchImpl(answer.signedUrl,{headers:{'Accept-Encoding':'identity'},redirect:'error',signal:AbortSignal.timeout(directTransferMs)}); }
+    catch { return new Response(null,{status:503}); }
+  }
   return {
     training:trainingAdministration({pool,issue,fetchImpl}),
     configuration:operationalConfiguration({pool,issue,fetchImpl}),
@@ -227,20 +262,39 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
     media,
     /**
      * One part of a lesson's video, captions or transcript (server/upload-parts.mjs), so a large video does not have to arrive in
-     * one request. Every part is authorized for this session and object; once the whole file has arrived it is stored through the
-     * Storage function exactly as a single upload is. The answer is {received} while bytes remain, then {result: {uploaded: true}}.
+     * one request. Every part is authorized for this session and object; once the whole file has arrived it is stored, straight to
+     * Storage when directMedia, else through the Storage function as a single upload is. The answer is {received} while bytes remain,
+     * then {result: {uploaded: true}}, with the stored copy's sha256 when it went straight to Storage.
      */
     async mediaPart(sessionToken,path,upload,body,contentType,limit) {
       validateMedia(path,'upload');
       if(upload.total>limit) throw new HttpError(413,'Media is too large.');
       await withSession(pool,sessionToken,db=>authorize(db,'media',{path,operation:'upload'}));
       return mediaParts.receive(partKey(sessionToken,`media:${path}`),upload,body,async file=>{
+        if(direct()) {
+          // Straight to Storage, then read back and hashed: the answer carries the stored copy's SHA-256, so the editor does not
+          // have to download the whole video again to check it (src/learning/api.ts).
+          const sent=await mediaUploadDirect(sessionToken,path,await openAsBlob(file.file,{type:contentType}),contentType);
+          if(sent.status===413) throw new HttpError(413,'Storage refused a file this large: its upload limit is lower than this file.');
+          if(!sent.ok && sent.status!==409) throw new HttpError(503,'Media transfer could not complete.');
+          const read=await mediaReadDirect(sessionToken,path);
+          let matches=false;
+          try { matches=await storedMatches(read,{byteLength:file.byteLength,sha256:file.sha256,contentType}); }
+          catch { matches=false; }
+          finally { await read.body?.cancel().catch(()=>{}); }
+          // Another file already at this new, random name is a conflict; anything else can be retried.
+          if(!matches) throw new HttpError(sent.status===409?409:503,'Media transfer could not complete.');
+          return {uploaded:true,sha256:file.sha256};
+        }
         const response=await media(sessionToken,path,'upload',Readable.toWeb(file.stream()),contentType);
         await response.body?.cancel();
         if(!response.ok) throw new HttpError(response.status===409?409:503,'Media transfer could not complete.');
         return {uploaded:true};
       });
     },
+    /** Lesson media for the bulk import (server/learning-media-import.mjs): straight to Storage when directMedia, else through app-media. */
+    mediaUpload:(sessionToken,path,blob,contentType)=>direct()?mediaUploadDirect(sessionToken,path,blob,contentType):media(sessionToken,path,'upload',blob,contentType),
+    mediaDownload:(sessionToken,path)=>direct()?mediaReadDirect(sessionToken,path):media(sessionToken,path,'download'),
     async publication(sessionToken,id,part,operation,body,contentType,range=null) {
       const capability=await issue(sessionToken,'publication',{id,part,operation,range});
       return fetchImpl(`${storageUrl}/functions/v1/publication-media`,{
