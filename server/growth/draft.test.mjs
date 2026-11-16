@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {draftMessage,draftProblem,growthSystem} from './draft.mjs';
+import {draftMessage,draftProblem,growthSystem,messageArms} from './draft.mjs';
 import {assessProspect} from './assessment.mjs';
 const now=new Date().toISOString();
 const opportunity={id:'o',product:'carebase',version:1,contact_id:'c',goal:'Staff training',policy:{approved_claim:'CareBase supports facility training.',booking_url:'https://example.org/book'},evidence:[{id:'source-1',source_url:'https://example.org',observed_at:now,claim:'A personal-care facility',confidence:'high'}],events:[]};
@@ -32,7 +32,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.12');
+ expect(request.promptVersion).toBe('growth.13');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -150,7 +150,7 @@ it('repairs a draft once, telling the writer what to fix, and reports why one wa
  const draft=await draftMessage({opportunity,work,task:{},model,onReject:code=>reasons.push(code)});
  expect(draft).toMatchObject({modelGenerated:true,body:'How do you track training hours today?'});
  const repair=model.run.mock.calls[1][1];
- expect(repair.promptVersion).toBe('growth.12-r');
+ expect(repair.promptVersion).toBe('growth.13-r');
  expect(repair.system[0].text).toBe(growthSystem);
  expect(JSON.parse(repair.user)).toMatchObject({previousDraft:{body:'A seamless way to train staff.'},fix:expect.stringMatching(/plain words/)});
  expect(reasons).toEqual([]);
@@ -185,7 +185,7 @@ it('writes outreach with the owner-approved memo as a second cached block, and r
  expect(request.system[0].text).toBe(growthSystem);
  expect(request.system[1].text).toContain('memo 3');
  expect(request.system[1].text).toContain('Too long');
- expect(request.promptVersion).toBe('growth.12-m3');
+ expect(request.promptVersion).toBe('growth.13-m3');
  expect(draft.memoVersion).toBe(3);
  // A customer's message and an unusable memo are written without it.
  model.run.mockClear();
@@ -194,5 +194,18 @@ it('writes outreach with the owner-approved memo as a second cached block, and r
  expect(customer?.memoVersion).toBeUndefined();
  model.run.mockClear();
  await draftMessage({opportunity,work,task:{},model,memo:{version:'3',memo:'x'}});
- expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.12');
+ expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.13');
+});
+
+it('records the applied report length without changing angle, subject or ordinary length treatments', async () => {
+ const o={...opportunity,product:'caremetric-intel',policy:{...opportunity.policy,experiment_enabled:true}};
+ const ordinary=messageArms(o,o.evidence);
+ expect(messageArms(o,o.evidence,{reportLed:true})).toEqual({...ordinary,length:'report'});
+ for(const context of [{touches:1},{memory:{lead:{kind:'report'}}},{memory:{reengagedAt:'2026-11-15'}}]) {
+  const draft=await draftMessage({opportunity:{...o,...context},work,task:{}});
+  expect(draft.arms.length).toBe(ordinary.length);
+ }
+ expect((await draftMessage({opportunity:o,work,task:{}})).arms.length).toBe('report');
+ expect((await draftMessage({opportunity:o,work:{kind:'trial'},task:{}})).arms.length).toBe(ordinary.length);
+ expect(ordinary.length_basis).toBe('applied_v1');
 });

@@ -435,7 +435,7 @@ While briefs are on, an Intel agency's first email waits up to a day for its bri
 written as before.
 
 **The first email** (Settings → Customer growth → Write first emails on the top model). An Intel agency's first cold email that has a
-brief is written on the top model at high effort (`growth.12`), from the brief: its opening, one of its questions, its angle, and the
+brief is written on the top model at high effort (`growth.13`), from the brief: its opening, one of its questions, its angle, and the
 county figure (the writer may state it once, as a fact about the county with its source, never about the agency; a brief written for
 an agency gives a nursing home no figure, and one written for a nursing home gives an agency none). The brief's angle
 replaces the hashed angle; while experiments run, a quarter of agencies keep the hashed one (`arms.angle_by`: `brief` or `hash`), so the
@@ -637,3 +637,21 @@ The eleven distinct PR review fixes and their regression results are recorded in
 These changes are release artifacts until migrations, deployment, provider configuration and native event wiring are completed. No production records were modified and no prospects were contacted during implementation.
 
 The Customer Growth workspace declares `platform.agents.customer-growth.v1`. The separate website-lead Growth Manager uses `platform.agents.growth.v1`; its lead alerts and reports remain independent. Native Account Manager lifecycle emails and Content Marketer publishing keep their existing approval and transport controls.
+
+
+### Personalized report rendering and learning
+
+Apply `20261115234000_growth_report_learning.sql` before deploying the report-label change: it allows the
+noncomparative `report` variant and replaces the learning aggregate. Report-led Intel first touches retain
+the 170-word instruction and angle/subject experiments; ordinary messages retain control/concise length.
+The send renderer checks the existing report-token signature and expiry, exact Intel origin and path;
+the draft validator still accepts only the specific report offered to that opportunity.
+
+Historical `growth.11` messages did not persist their prompt version or applied word limit. The learning
+query therefore omits only the length dimension of unmarked Intel cold first touches created on or after
+November 15, 2026 UTC, including drafts delivered later. This conservatively omits any earlier non-report
+first touches on that date too. Prior sends establish later touches; inbound, re-ask and CareBase lengths,
+all angle/subject counts, and overall delivery counts remain available. New rows carry `length_basis`.
+No historical message rewrite is needed. Previously saved learning memos are unchanged; review or replace
+any existing memo containing a length conclusion based on the affected rows after rollout. This change
+does not resend existing email or alter reports already delivered.
