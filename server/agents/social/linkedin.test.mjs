@@ -290,6 +290,30 @@ describe('the LinkedIn client', () => {
     expect(new URL(fetchImpl.mock.calls[1][0]).search).toContain(`ids=List(${encodeURIComponent(post)})`);
   });
 
+  it('on the Development tier, reads engagement one post at a time for the eight newest and comments on the three newest, never in a batch', async () => {
+    const ids = Array.from({ length: 12 }, (_, i) => `urn:li:share:71000000000000001${String(i).padStart(2, '0')}`);
+    const fetchImpl = route([
+      [/^GET \/rest\/posts$/, { elements: ids.map(id => ({ id, commentary: id, lifecycleState: 'PUBLISHED' })) }],
+      [/^GET \/rest\/socialMetadata\/urn:li:share:\d+$/, parsed => json({ reactionSummaries: { LIKE: { count: Number(decodeURIComponent(parsed.pathname).slice(-2)) } }, commentSummary: { count: 1 } })],
+      [/^GET \/rest\/socialMetadata$/, json({ message: 'BATCH_GET is not allowed on the Development tier' }, 403)],
+      [/^GET \/rest\/socialActions\/urn:li:share:\d+\/comments$/, { elements: [] }],
+    ]);
+    const li = client(fetchImpl, { tier: 'development' });
+    expect(li.tier).toBe('development');
+    const posts = await li.recentPosts();
+    expect(posts.map(item => [item.id, item.reactions, item.comments])).toEqual(ids.slice(0, 8).map((id, i) => [id, i, 1]));
+    const paths = fetchImpl.mock.calls.map(([url]) => decodeURIComponent(new URL(url).pathname) + new URL(url).search);
+    expect(paths).toEqual(['/rest/posts?author=urn%3Ali%3Aorganization%3A5550001&q=author&count=20&sortBy=LAST_MODIFIED', ...ids.slice(0, 8).map(id => `/rest/socialMetadata/${id}`)]);
+    fetchImpl.mockClear();
+    expect(await li.recentInbox({ now: new Date('2026-11-08T15:00:00Z') })).toEqual([]);
+    expect(fetchImpl.mock.calls.map(([url]) => decodeURIComponent(new URL(url).pathname))).toEqual(['/rest/posts', ...ids.slice(0, 3).map(id => `/rest/socialActions/${id}/comments`)]);
+    // The Standard tier (and a client built without a tier) keeps the batch read and ten posts' comments.
+    expect(client(fetchImpl).tier).toBe('standard');
+    fetchImpl.mockClear();
+    await client(fetchImpl, { tier: 'standard' }).recentInbox({ now: new Date('2026-11-08T15:00:00Z') });
+    expect(fetchImpl).toHaveBeenCalledTimes(11);
+  });
+
   it('finds other people\'s new top-level comments by URN only, and reads one again to see whether the Page answered it', async () => {
     const now = new Date('2026-11-08T15:00:00Z');
     const other = 'urn:li:comment:(urn:li:activity:7100000000000000009,7200000000000000003)';

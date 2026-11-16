@@ -19,7 +19,7 @@ comment asking about another product is left for the owner, and a losing ad for 
 | Work (task) | When | What happens |
 | --- | --- | --- |
 | Weekly social plan (`social.plan`) | Each morning at 08:15 Eastern; plans once a week | Drafts 4 Facebook, 3 Instagram and 4 LinkedIn posts. It works from the fact sheet, the sales playbook and the last four weeks' engagement (more like what worked, never a repeat). Each draft is checked. Each post is proposed with a time slot (10:30 Eastern for Facebook, 12:15 for Instagram, 8:45 for LinkedIn); an approved post is held until then and published. The owner gets the plan by email, with the LinkedIn posts to paste while LinkedIn is not connected. |
-| Comments and messages (`social.inbox`, `social.interaction`) | Every 15 minutes | Finds new comments on the Facebook Page's, Instagram's and the LinkedIn Page's recent posts, and new Messenger messages. Each gets its own task. With Settings → AI team → "Let agents send customer messages to the AI" on, it drafts a short, checked reply for approval, or proposes hiding spam (deleting it on LinkedIn). Without it, the owner is told and answers on the platform. |
+| Comments and messages (`social.inbox`, `social.interaction`) | Every 15 minutes (LinkedIn every two hours on its Development tier, [below](#linkedins-development-and-standard-tiers)) | Finds new comments on the Facebook Page's, Instagram's and the LinkedIn Page's recent posts, and new Messenger messages. Each gets its own task. With Settings → AI team → "Let agents send customer messages to the AI" on, it drafts a short, checked reply for approval, or proposes hiding spam (deleting it on LinkedIn). Without it, the owner is told and answers on the platform. |
 | Daily ad review (`social.ads`) | Each morning at 09:10 Eastern | Judges every Meta ad and LinkedIn creative on the last seven days against the seven before, with the rules below. It proposes pausing losers and new copy where an ad set needs it, plus a budget increase only under the owner's cap. The review finishes once it has proposed, so an undecided proposal (a budget change always waits for you) never holds back the next morning's review. LinkedIn ads are checked against LinkedIn's headline and description lengths (70 characters), Meta ads against Meta's (40 and 30). |
 | Weekly social report (`social.report`) | Each morning at 08:05 Eastern; sends once a week | Shows posts and engagement per platform, the top posts, and ad spend, impressions, click rate, results and cost per result per ad set. It also counts what is waiting for the owner. While the [Monday scorecard](MONDAY_SCORECARD.md) carries it ("Send the individual weekly reports" off), its scheduled run sends nothing; Run now still emails it. |
 
@@ -277,9 +277,9 @@ Provider menus and eligibility can vary; these sources describe the public requi
    **Settings → Verify → Generate URL**, create the verification address and have the Page super admin approve its association.
 3. In **Products → Community Management API → Request access**, submit the business details and wait for approval. This requires
    a business email and legal organization information. Sign In with LinkedIn or Share on LinkedIn alone is insufficient. If
-   another product blocks the application, LinkedIn directs applicants to use a new Community Management app. Development tier
-   allows testing, but the Hub's engagement reporting uses batch requests excluded from that tier: Standard approval is needed
-   for the full workflow.
+   another product blocks the application, LinkedIn directs applicants to use a new Community Management app. LinkedIn approves
+   the Development tier first, and that is enough to connect: leave **Settings → Social media → LinkedIn API tier** on
+   Development until LinkedIn upgrades the app to Standard ([below](#linkedins-development-and-standard-tiers)).
 4. Open the separate [OAuth Token Tools](https://www.linkedin.com/developers/tools/oauth), select the approved app and **3-legged
    OAuth**, and authorize as the Page administrator. Request `r_organization_social`, `w_organization_social`,
    `r_organization_social_feed` and `w_organization_social_feed` for posts/comments. Choose **Copy token** and note its expiry.
@@ -295,7 +295,8 @@ access token before its stated expiry.
 **Optional: add LinkedIn advertising** needs Advertising API approval and Campaign Manager account access. Development apps must
 also list the ad account under **Products → Advertising API → View settings**. Use `r_ads`, `rw_ads`, `r_ads_reporting`,
 `r_organization_social` and `w_organization_social` for the Hub's ad workflow. A separate app can supply the advertising token and
-renewal credentials. The **LinkedIn API version** setting remains below the cards (default `202609`).
+renewal credentials. The **LinkedIn API version** (default `202609`) and **LinkedIn API tier** (default Development) settings
+remain below the cards.
 
 Official sources checked November 11, 2026: [create an app](https://www.linkedin.com/help/linkedin/answer/a1667239),
 [verify its Page association](https://www.linkedin.com/help/linkedin/answer/a1665329),
@@ -303,6 +304,28 @@ Official sources checked November 11, 2026: [create an app](https://www.linkedin
 [token generator](https://learn.microsoft.com/en-us/linkedin/shared/authentication/developer-portal-tools),
 [permission list](https://learn.microsoft.com/en-us/linkedin/marketing/increasing-access),
 [ad account access](https://learn.microsoft.com/en-us/linkedin/marketing/getting-started).
+
+### LinkedIn's Development and Standard tiers
+
+LinkedIn approves the Community Management API at its **Development tier** first (CareMetric's app was approved on November 16,
+2026). LinkedIn's published terms (checked November 16, 2026): that tier allows 500 calls a day for the app and 100 a day for each
+person's token, refuses batch reads (several posts in one request) and sends no webhooks, for at most twelve months. The
+**Standard tier** has none of these limits. LinkedIn upgrades an app after reviewing its Standard tier access request form (**My
+apps → Products**) and a screen recording under five minutes of the app working: a person approving access through the full OAuth
+flow, posting, and how engagement is shown.
+
+**Settings → Social media → LinkedIn API tier** tells the Hub which one the app has. On **Development** (the default):
+
+- Comments and messages read LinkedIn at one run every two hours (the scheduled run due in the first quarter hour of an even UTC
+  hour) and on **Run now**, instead of every 15 minutes, and read comments on the Page's 3 newest posts instead of 10. The check
+  looks back 48 hours, so a comment can wait up to two hours but is not missed. Facebook, Instagram and Messenger are still read
+  every 15 minutes.
+- The weekly plan and the weekly report read engagement for the 8 newest Page posts, one request each, instead of every recent post
+  in one batch request, which the tier refuses.
+
+That is about 50 calls a day for the inbox, about 2 for each new comment and 1 for each reply, a few for each published post, and 9
+for each of the weekly plan and report, inside the token's 100. Choose **Standard** once LinkedIn upgrades the app; it applies
+within a minute, with nothing to restart (`server/agents/social/linkedin.mjs`, `linkedinDue` in `tasks.mjs`).
 
 ## Start the Social Media Manager
 

@@ -18,6 +18,10 @@
  * the owner's approved brand images: fetched without any credential, at most 8 MB of JPEG, PNG or GIF, and sent with the token only to
  * the upload address LinkedIn returns on a linkedin.com host. An image that cannot be uploaded leaves the post without one.
  *
+ * `tier` is the Community Management API tier LinkedIn approved for the Page's app (Settings → Social media → LinkedIn API tier).
+ * Development allows 100 calls a day for each person's token and no batch reads, so on it engagement is read one post at a time for
+ * the newest few posts, and the inbox reads comments on fewer posts (tasks.mjs also reads LinkedIn's inbox less often).
+ *
  * Errors carry a code the Team screen can show: linkedin_token_invalid, linkedin_permission, linkedin_rate_limited and
  * linkedin_unavailable (transient: retried), linkedin_invalid_request, linkedin_unconfirmed (a write LinkedIn may have received).
  */
@@ -61,14 +65,17 @@ export function littleText(text) {
 }
 
 const enc = value => encodeURIComponent(value);
+// On the Development tier: engagement for the eight newest posts (a call each), and comments on the three newest.
+export const developmentLimits = Object.freeze({ engagementPosts: 8, inboxPosts: 3 });
 const dateParam = day => `(year:${day.getUTCFullYear()},month:${day.getUTCMonth() + 1},day:${day.getUTCDate()})`;
 const money = amount => Math.round(Number(amount ?? 0) * 100);
 
 export function linkedinClient({
   token = '', refreshToken = '', clientId = '', clientSecret = '',
   adsToken = '', adsRefreshToken = '', adsClientId = '', adsClientSecret = '', memberToken = '',
-  organizationId = '', adAccountId = '', version = '202609', fetchImpl = fetch, timeoutMs = 15_000,
+  organizationId = '', adAccountId = '', version = '202609', tier = 'standard', fetchImpl = fetch, timeoutMs = 15_000,
 } = {}) {
+  const development = tier === 'development';
   const organization = numeric(String(organizationId ?? '').replace(/^urn:li:organization:/, ''));
   const account = numeric(String(adAccountId ?? '').replace(/^urn:li:sponsoredAccount:/, ''));
   const org = organization ? `urn:li:organization:${organization}` : null;
@@ -302,6 +309,7 @@ export function linkedinClient({
 
   return {
     configured,
+    tier: development ? 'development' : 'standard',
     ids: { organization, account },
     prepareVideo, readVideo, publishVideo,
 
@@ -314,10 +322,13 @@ export function linkedinClient({
 
     async recentPosts({ signal } = {}) {
       if (!configured.page) return [];
-      const posts = await pagePosts(signal);
-      if (!posts.length) return [];
-      const meta = await get('socialMetadata', `ids=List(${posts.map(post => enc(post.id)).join(',')})`, { signal });
-      const results = meta?.results ?? {};
+      const all = await pagePosts(signal);
+      if (!all.length) return [];
+      // The Development tier refuses batch reads, so there each post's engagement is its own read.
+      const posts = development ? all.slice(0, developmentLimits.engagementPosts) : all;
+      let results = {};
+      if (development) for (const post of posts) results[post.id] = await get(`socialMetadata/${enc(post.id)}`, '', { signal });
+      else results = (await get('socialMetadata', `ids=List(${posts.map(post => enc(post.id)).join(',')})`, { signal }))?.results ?? {};
       return posts.map(post => {
         const social = results[post.id] ?? {};
         const reactions = Object.values(social.reactionSummaries ?? {}).reduce((sum, entry) => sum + Number(entry?.count ?? 0), 0);
@@ -331,7 +342,7 @@ export function linkedinClient({
       if (!configured.page) return [];
       const since = now.getTime() - hours * 3_600_000;
       const items = [];
-      for (const post of (await pagePosts(signal)).slice(0, 10)) {
+      for (const post of (await pagePosts(signal)).slice(0, development ? developmentLimits.inboxPosts : 10)) {
         for (const comment of await comments(post.id, signal)) {
           if (comment.actor === org || comment.parent || (Date.parse(comment.at ?? '') || 0) < since) continue;
           items.push({ platform: 'linkedin', kind: 'comment', id: comment.urn, parentId: post.id, url: postUrl(post.id), at: comment.at });
