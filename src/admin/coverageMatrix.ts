@@ -81,8 +81,11 @@ export function accessControls(app: RollupAppSnapshot): { state: "available" | "
     : { state: "view-only", label: "View only", nextStep: "Deploy Intel's account command and switch it on (CAREMETRIC_ADMIN_COMMANDS_ENABLED on Intel)." };
   if (app.product === "breathe") {
     const lifecycle = (["organizations.lifecycle.context", "organizations.lifecycle.preview", "organizations.lifecycle.apply", "organizations.lifecycle.resume"] as const).every(name => has(app, name));
-    return lifecycle ? { state: "available", label: "Organization suspend and restore", nextStep: "" }
-      : { state: "view-only", label: "View only", nextStep: "Switch on Breathe's organization changes (CAREMETRIC_ADMIN_TENANT_COMMANDS_ENABLED on Breathe)." };
+    const staff = (["staff.access.context", "staff.access.preview", "staff.access.apply", "staff.access.resume"] as const).every(name => has(app, name));
+    if (lifecycle && staff) return { state: "available", label: "Organization suspend and restore; staff sign-ins on and off", nextStep: "" };
+    if (lifecycle) return { state: "available", label: "Organization suspend and restore", nextStep: "To change staff sign-ins too, switch on Breathe's staff changes (CAREMETRIC_ADMIN_STAFF_COMMANDS_ENABLED on Breathe)." };
+    if (staff) return { state: "available", label: "Staff sign-ins on and off", nextStep: "To suspend organizations too, switch on Breathe's organization changes (CAREMETRIC_ADMIN_TENANT_COMMANDS_ENABLED on Breathe)." };
+    return { state: "view-only", label: "View only", nextStep: "Switch on Breathe's organization changes (CAREMETRIC_ADMIN_TENANT_COMMANDS_ENABLED) or staff changes (CAREMETRIC_ADMIN_STAFF_COMMANDS_ENABLED) on Breathe." };
   }
   return { state: "view-only", label: "View only", nextStep: "This application has no access commands." };
 }

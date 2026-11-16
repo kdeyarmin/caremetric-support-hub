@@ -93,4 +93,11 @@ describe('capabilities offered to the browser', () => {
     expect(await read('intel', ['users.list', 'commands.preview', 'commands.apply', ...lifecycle], true)).toEqual(['users.list', 'commands.preview', 'commands.apply']);
     expect(await read('carebase', ['users.list', 'commands.preview', 'commands.apply'], false)).toEqual(['users.list', 'commands.preview', 'commands.apply']);
   });
+  it("offer Breathe's staff sign-in changes only from Breathe, and only once declared", async () => {
+    const staff = ['staff.access.context', 'staff.access.preview', 'staff.access.apply', 'staff.access.resume'];
+    expect(await read('breathe', ['users.list', ...staff], false)).toEqual(['users.list']);
+    expect(await read('breathe', ['users.list', ...staff, ...lifecycle], true)).toEqual(['users.list', ...staff, ...lifecycle]);
+    expect(await read('intel', ['users.list', ...staff], true)).toEqual(['users.list']);
+    expect(await read('carebase', ['users.list', ...staff], true)).toEqual(['users.list']);
+  });
 });

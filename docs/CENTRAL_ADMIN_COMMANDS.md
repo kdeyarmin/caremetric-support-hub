@@ -36,12 +36,14 @@ mapped administrator again; the Hub never holds an application credential.
 | Application | What changes | Native endpoint | Hub audience | Switched on by |
 | --- | --- | --- | --- | --- |
 | Breathe | Suspend or restore an organization (`tenant.lifecycle.v1`: context, preview, apply, resume) | `https://cmbreathe.com/resupply-api/central-admin/tenant-lifecycle` | `breathe.command` | `CAREMETRIC_ADMIN_TENANT_COMMANDS_ENABLED=true` on Breathe |
+| Breathe | Turn a staff sign-in off, as Team → Revoke does, or back on when the Hub turned it off (`staff.access.v1`: context, preview, apply, resume) | `https://cmbreathe.com/resupply-api/central-admin/staff-access` | `breathe.command` | `CAREMETRIC_ADMIN_STAFF_COMMANDS_ENABLED=true` on Breathe |
 | CareMetric Intel | Turn an account off or back on (`users.setActive`, this contract) | `https://www.caremetricintel.com/functions/centralAdminCommand` | `intel.command` | `CAREMETRIC_ADMIN_COMMANDS_ENABLED=true` on Intel |
 
-- **Where:** Applications → Breathe → Organizations ("Suspend or restore") and Applications → CareMetric Intel → Users
-  ("Change access"). The control center's application cards and the portfolio coverage matrix say, per application, whether
+- **Where:** Applications → Breathe → Organizations ("Suspend or restore"), Applications → Breathe → Users ("Turn off or
+  on") and Applications → CareMetric Intel → Users ("Change access"). The control center's application cards and the portfolio coverage matrix say, per application, whether
   changes are available or the application is view only, from what its live connection advertises.
-- **Authority:** the browser calls `POST /api/admin/tenant-lifecycle` or `POST /api/admin/command` (`product: "intel"`). The
+- **Authority:** the browser calls `POST /api/admin/tenant-lifecycle` (both Breathe changes, told apart by `domain`) or
+  `POST /api/admin/command` (`product: "intel"`). The
   server issues a 30-second, one-use capability of the application's command audience, bound to the exact operation. The
   application redeems it at `/api/internal/command/breathe/authorize` or `/api/internal/command/intel/authorize` and receives
   exactly `user_id`, `role`, `method`, `session_id`, `session_started_at`, `assurance_expires_at` and `operation`. A read
@@ -50,6 +52,11 @@ mapped administrator again; the Hub never holds an application credential.
   administrator, last administrator, invited account, seat limit, no change, shared sign-in). The Hub shows its own fixed wording
   for the code and never forwards the application's text. Breathe shows its seed organization and archived organizations as not
   changeable before any review.
+- **Breathe staff sign-ins:** Breathe decides, before any review, whether a sign-in can be turned off or back on and says why
+  not: your own sign-in, a platform operator, an organization's last active admin, an invitation not yet accepted, a sign-in
+  that also backs a shop, patient-portal or provider-portal login, or (to turn it back on) one the Hub did not turn off or that
+  changed since. Turning it back on restores the sign-in and its seat as they were, with the same password and no email; ended
+  sessions stay ended. See Breathe's `docs/central-admin-staff-access.md`.
 - **Retries:** a lost answer is recovered from the saved review (Breathe's `resume`; Intel's `apply` replays the stored result
   with `replayed: true`), never by sending another change.
 - **Release order:** apply `20261117110000_app_command_audiences.sql` and `20261117110100_app_command_audiences_contract.sql`,

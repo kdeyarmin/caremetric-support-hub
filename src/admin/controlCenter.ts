@@ -145,8 +145,8 @@ export function applicationCards(input: ControlCenterInput): ApplicationCard[] {
     const organizations = has(app, "organizations.list"), users = has(app, "users.list");
     const access = accessControls(app);
     const changes = connected && access.state === "available";
-    // Only CareBase changes organizations through the access dialog; Breathe's organization changes have their own review.
-    const accessControlsFor = changes && (product === "carebase" || product === "intel");
+    // Users have access controls in CareBase and Intel (the access dialog) and in Breathe (its own staff review, when advertised).
+    const accessControlsFor = changes && (product === "carebase" || product === "intel" || product === "breathe" && has(app, "staff.access.apply"));
     const directory: DirectorySummary = advisors ? { state: "not-applicable", label: "No software accounts", organizations: false, users: false, accessControls: false }
       : !connected ? unavailableDirectory
       : organizations && users ? { state: "available", label: changes ? "Organizations, users and access controls" : "Organizations and users", organizations, users, accessControls: changes }

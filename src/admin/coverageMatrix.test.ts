@@ -60,6 +60,10 @@ describe("super-admin coverage matrix", () => {
     expect(intel.cells.controls).toEqual({ state: "missing", label: "View only" });
     expect(intel.nextSteps).toContain("Deploy Intel's account command and switch it on (CAREMETRIC_ADMIN_COMMANDS_ENABLED on Intel).");
     expect(advisors.cells.controls.state).toBe("not-applicable");
+    const staff: PortfolioOperationName[] = ["staff.access.context", "staff.access.preview", "staff.access.apply", "staff.access.resume"];
+    const [both, staffOnly] = coverageMatrix([app("breathe", ["organizations.list", "users.list", ...lifecycle, ...staff]), app("breathe", ["users.list", ...staff])]);
+    expect(both.cells.controls).toEqual({ state: "available", label: "Organization suspend and restore; staff sign-ins on and off" });
+    expect(staffOnly.cells.controls).toEqual({ state: "available", label: "Staff sign-ins on and off" });
     const [partialBreathe] = coverageMatrix([app("breathe", ["organizations.list", "users.list", "organizations.lifecycle.context"])]);
     expect(partialBreathe.cells.controls.state).toBe("missing");
     const [offline] = coverageMatrix([app("intel", null)]);
