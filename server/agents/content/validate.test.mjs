@@ -222,6 +222,22 @@ describe('each check that rejects a draft', () => {
     expect(reasons(withSentence('CareBase is used in 500 U.S. facilities.'))).toEqual(['unlisted_number']);
   });
 
+  it('reads a number past a describing word before its unit, so "3,200 rural counties" is checked like "3,200 counties"', () => {
+    for (const [text, pair] of [['3,200 rural counties', '3200:county'], ['500 Pennsylvania homes', '500:facility'], ['500 Pennsylvania personal care homes', '500:facility'],
+      ['500 family-owned homes', '500:facility'], ['500 U.S.-based agencies', '500:facility'], ['10 Medicare-certified agencies', '10:facility'],
+      ['14 more trial days', '14:day'], ['2 unanswered leads', '2:referral']]) expect(numbersIn(text), text).toEqual([pair]);
+    // The phrase ends first at a function word, at a plural that is its own subject, or at a measure the number belongs to.
+    expect(numbersIn('3 questions your staff ask; 2 ways to save hours; 4 things caregivers wish; 5 mistakes nurses make; a 5 star rating; 4 star agencies; a 30 second video; 40 percent of homes'))
+      .toEqual([]);
+    // A hyphenated number and a year take only the words the reader knows, as before.
+    expect(numbersIn('a 30-second video; In 2026 survey deficiencies rose; By 2027 most homes; 24-hour-a-day support')).toEqual(['24:hour']);
+    expect(numbersIn('12 month-to-month plans, 65 year-old residents')).toEqual(['12:month', '65:year']);
+    // A count no source states is refused; one the catalog states may be written with a describing word.
+    expect(reasons(withSentence('CareBase is used in 500 Pennsylvania homes.'))).toEqual(['unlisted_number']);
+    expect(textProblems('CareMetric Intel covers 3,200+ rural counties.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual([]);
+    expect(textProblems('CareMetric Intel covers 4,000 rural counties.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual(['unlisted_number']);
+  });
+
   it('rejects guarantees, compliance assurances and certifications', () => {
     expect(reasons(withSentence('We guarantee a clean survey.'))).toContain('guarantee');
     for (const sentence of ['CareBase ensures compliance with Chapter 2600.', 'It keeps your home compliant.', 'Pass your next inspection with CareBase.',

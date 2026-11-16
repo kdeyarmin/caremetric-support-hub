@@ -91,8 +91,21 @@ const chapterNumbers = new Set(['2600', '2800', '6400', '3270', '3280', '3290'])
 // The whole number, decimals included: "6.5 months" is 6.5 months, never 6. A "+" after it ("3,200+ counties", "500 + homes") is read
 // like "more than": the number is the same one, so "150+" and "more than 150" both read as 150 and either one allows the other.
 const numberStart = new RegExp(String.raw`(?<![\w.$§,/])((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?|${Object.keys(numberWords).join('|')})(?=\s|[-–+])`, 'gi');
-// What follows the number, up to its unit: an optional "+", then a space or a dash, then words.
-const unitWords = /^(?:\s*\+)?(?:\s*[-–]\s*|\s+)([a-z' ]+)/i;
+// What follows the number, up to its unit: an optional "+", then a space or a dash (captured), then words, hyphenated ones whole.
+const unitWords = /^(?:\s*\+)?(?:\s*([-–])\s*|\s+)([a-z' -]+)/i;
+// A describing word the reader does not know may stand before the unit too ("3,200 rural counties", "500 Pennsylvania homes", "500
+// family-owned homes"), but not a word that ends the phrase first: a function word ("3 questions your staff ask", "2 ways to save
+// hours"), a plural that is not a unit, which is the phrase's own subject ("4 things caregivers wish"), or a measure the number belongs to
+// ("a 5 star rating", "a 30 second video"). A hyphenated number ("30-second video") and a year ("In 2026 survey deficiencies rose") take
+// only the known words, as before.
+const phraseEnds = new Set(['a', 'an', 'the', 'this', 'that', 'these', 'those', 'each', 'every', 'per', 'your', 'our', 'my', 'their', 'its', 'his',
+  'her', 'of', 'to', 'for', 'in', 'on', 'at', 'by', 'with', 'from', 'into', 'across', 'over', 'under', 'about', 'than', 'as', 'within',
+  'without', 'between', 'among', 'through', 'after', 'before', 'during', 'and', 'or', 'but', 'nor', 'so', 'if', 'when', 'while', 'because',
+  'we', 'you', 'they', 'it', 'he', 'she', 'i', 'me', 'them', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does',
+  'did', 'can', 'could', 'will', 'would', 'should', 'may', 'might', 'must', 'not', 'no', 'who', 'which', 'what', 'where', 'how', 'why', 'am',
+  'pm', 'star', 'point', 'percent', 'second', 'mile', 'page', 'step', 'dollar', 'word', 'x']);
+const plural = word => /s$/.test(word) && !/(?:ss|us|is|ous|as|'s)$/.test(word);
+const yearLike = /^(?:19|20)\d{2}$/;
 // The country between a number and its unit ("3,200 U.S. counties", "50 US states", "U.S.A."), written as one word, "US", before the unit
 // is looked for: a word stops at a full stop, so "U.S." would otherwise hide the number. "US" and "American" are qualifiers above.
 const country = /\bU\.?\s?S\.?(?:\s?A\.?)?(?![a-z])/gi;
@@ -100,8 +113,8 @@ const country = /\bU\.?\s?S\.?(?:\s?A\.?)?(?![a-z])/gi;
 const numberOf = text => Number(String(text).replace(/[$,%\s]/g, ''));
 
 /**
- * Every number written with a unit, as "12:hour" or "6.5:month"; "3,200+ counties" is "3200:county", as "3,200 counties" is. A bare
- * number (a section, a year, a list marker, an age group such as "residents 65+") is not one.
+ * Every number written with a unit, as "12:hour" or "6.5:month"; "3,200+ counties", "3,200 U.S. counties" and "3,200 rural counties" are
+ * "3200:county", as "3,200 counties" is. A bare number (a section, a year, a list marker, an age group such as "residents 65+") is not one.
  */
 export function numbersIn(value) {
   const text = String(value ?? '');
@@ -112,14 +125,19 @@ export function numbersIn(value) {
     if (chapterNumbers.has(match[1].replace(/,/g, '').split('.')[0])
       || /(?:chapters?|ch\.|§+|sections?|part|title|code)\s*(?:\d+(?:\.\d+)?(?:\([a-z0-9]+\))*\s*(?:and|or|,)\s*)?$/i.test(text.slice(Math.max(0, match.index - 32), match.index))) continue;
     const after = text.slice(match.index + match[0].length, match.index + match[0].length + 80);
-    const words = unitWords.exec(after.replace(country, 'US'))?.[1].trim().toLowerCase().split(/\s+/).slice(0, 4) ?? [];
+    const [, dash, phrase = ''] = unitWords.exec(after.replace(country, 'US')) ?? [];
+    // After a dash, the number's own compound ends at the next hyphen ("24-hour-a-day" is 24 hours), as it always has.
+    const words = (dash ? phrase.split('-')[0] : phrase).trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5);
+    const describing = !dash && !yearLike.test(match[1]);
     for (const word of words) {
-      const unit = unitOf(word);
+      // A hyphenated word is read by its first part as well ("12 month-to-month plans" is 12 months, as before).
+      const unit = unitOf(word) ?? (word.includes('-') ? unitOf(word.split('-')[0]) : null);
       if (unit) {
         found.add(`${numberWords[match[1].toLowerCase()] ?? numberOf(match[1])}:${unit}`);
         break;
       }
-      if (!qualifiers.has(word)) break;
+      if (qualifiers.has(word) || (describing && !phraseEnds.has(word) && !plural(word))) continue;
+      break;
     }
   }
   return [...found];
