@@ -20,7 +20,9 @@ const refused = code => error => error?.code === code;
 const gate = await readFile(new URL('../supabase/migrations/20261116130100_creative_review_contract.sql', import.meta.url), 'utf8');
 const run = randomUUID().replace(/[^0-9]/g, '').padEnd(6, '7').slice(0, 6);
 // Synthetic five-digit codes that no real county uses (9xxxN).
-const fips = n => `9${String((Number(run.slice(0, 3)) * 7 + n) % 1000).padStart(3, '0')}${n}`.slice(0, 5);
+// Five-digit codes that sort in the order of n: the middle part never wraps past 999 (a wrap once in a thousand runs put fips(4) before
+// fips(3), and the county order assertions failed).
+const fips = n => `9${String((Number(run.slice(0, 3)) * 7) % 990 + n).padStart(3, '0')}${n}`.slice(0, 5);
 const ccns = [], briefs = [];
 const mine = list => list.filter(item => [fips(1), fips(2), fips(3), fips(4)].includes(item.countyFips));
 const shape = list => mine(list).map(item => [item.countyFips, item.agencies, item.homeHealth, item.hospice, item.lastSetting]);
