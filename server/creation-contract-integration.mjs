@@ -11,7 +11,11 @@ const declare=async contract=>{
   const sql=(await db.query("select format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal($1::text)||'::jsonb') as value",[JSON.stringify(contract)])).rows[0].value;
   await db.query(sql);
 };
-const historical=contract=>({...contract,features:contract.features.flatMap(feature=>feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']:[feature])});
+// The course creation gate (2026-09-11) also bounds the list at 99 features, a sanity bound of its day that production never runs again;
+// it predates every AI team feature (platform.agents.*, declared from 2026-11-02 on), so it is replayed against a contract without them,
+// as it could have seen it (as credit-policy-contract-integration.mjs does). Nothing it checks is left out.
+const historical=contract=>({...contract,features:contract.features.filter(feature=>!feature.startsWith('platform.agents.'))
+  .flatMap(feature=>feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']:[feature])});
 try {
   assertBackendContract(await read());
   const omissions=[
