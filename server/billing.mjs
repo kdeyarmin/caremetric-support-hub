@@ -644,6 +644,34 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
   const appResponse = entitlement => ({ ...entitlement, cache_ttl_seconds: entitlementCacheSeconds, checked_at: entitlement.checked_at ?? new Date(now()).toISOString() });
 
+  /**
+   * Whether a trialing Intel subscription has a card Stripe confirms (trial-card.mjs). Intel locks an organization to its Billing page
+   * whenever the Hub cannot answer its entitlement, so a Stripe failure here must not fail the whole answer: before, one Stripe hiccup
+   * locked out every trialing Intel customer. A failure never unlocks a trial: the answer falls back to Stripe's last answer for this
+   * tenant's subscription, true only if Stripe confirmed its card, else false. Every new trial needs a card, but Stripe starts the
+   * trial before the card is entered (an abandoned card setup is a trialing subscription with none), so "trialing" alone proves nothing.
+   * A confirmation stands until a check finds no card: a card removed later does not matter, as Stripe cancels a trial that ends
+   * without one. It is kept in memory, so a restart while Stripe is down starts with none.
+   */
+  const confirmedCards = new Map();
+  async function trialCardAnswer(entitlement) {
+    const subscriptions = (entitlement.products ?? []).filter(product => product.kind === 'plan' && product.status === 'trialing').map(product => product.subscription).sort();
+    const key = `${entitlement.tenant_id}:${subscriptions.join(',')}`;
+    try {
+      const confirmed = await trialCardOnFile(await stripe(), entitlement);
+      confirmedCards.delete(key);
+      if (confirmed) {
+        confirmedCards.set(key, now());
+        if (confirmedCards.size > 5000) confirmedCards.delete(confirmedCards.keys().next().value);
+      }
+      return confirmed;
+    } catch {
+      const confirmed = confirmedCards.has(key);
+      log.warn(`Stripe could not confirm an Intel trial's card; answering ${confirmed ? 'the card it confirmed earlier' : 'not confirmed'} until it can.`);
+      return confirmed;
+    }
+  }
+
   async function entitlements(authorization, input) {
     const parsed = entitlementRequestSchema.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Send the application account id.');
@@ -652,7 +680,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       return appResponse((await one(db, 'select private.scoped_app_billing_entitlements($1,$2) as e', [app.product_id, parsed.data.account])).e);
     });
     if (answer.app === 'caremetric-intel' && answer.status === 'trialing' && answer.entitled) {
-      answer.payment_method_on_file = await trialCardOnFile(await stripe(), answer);
+      answer.payment_method_on_file = await trialCardAnswer(answer);
     }
     return answer;
   }
