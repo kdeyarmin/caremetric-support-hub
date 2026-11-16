@@ -20,6 +20,8 @@ import { ownerNotifier } from './agents/notify.mjs';
 import { guideLibrary } from './agents/concierge/knowledge.mjs';
 import { modelRuntime } from './agents/runtime/index.mjs';
 import { promptVersion } from './agents/concierge/prompt.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -38,11 +40,11 @@ const owner = randomUUID();
 const ownerToken = `drafting-owner-${randomUUID()}`;
 // Letters only, so scrubbing a run of digits can never touch the canary.
 const run = randomUUID().replace(/[^a-f]/g, '').padEnd(8, 'x').slice(0, 8);
-const ownerPhone = `+1202555${String(1000 + Math.floor(Math.random() * 9000))}`;
+const ownerPhone = phones.owner;
 const apiKey = `sk-ant-drafting-${run}`;
 // Text that must never leave the conversation table, apart from the scrubbed message the model is shown: the contact details, an internal note.
 const canary = `CANARY-${run}`;
-const secrets = { name: `Pat Example ${run}`, email: `pat.${run}@example.test`, phone: '+12025550142', organization: `Example Facility ${run}`, note: `NOTE-${canary}` };
+const secrets = { name: `Pat Example ${run}`, email: `pat.${run}@example.test`, phone: phones.contact, organization: `Example Facility ${run}`, note: `NOTE-${canary}` };
 const easternDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 
 const refused = (code, pattern) => error => { assert.equal(error.code, code, error.message); if (pattern) assert.match(error.message, pattern); return true; };

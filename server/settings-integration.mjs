@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { digest } from './sms-auth.mjs';
 import { hubSettings, settingsCatalog, settingsFeature } from './hub-settings.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -28,7 +30,7 @@ try {
   await admin.query('update private.hub_settings set value = null, imported_from = null, changed_by = null');
   await admin.query('insert into auth.users(id,email,is_anonymous) values($1,$2,false)', [owner, `settings-owner-${run}@test.invalid`]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550976',now())", [owner]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())', [owner, phones.owner]);
   await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3", [randomUUID(), digest(token), owner]);
 
   // At start the server copies the usable Railway values in, and answers from the database.

@@ -9,6 +9,8 @@ import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
 import { job, release, audit } from '../src/admin/testFixtures/operations.ts';
 import { operationalReadOperations } from '../supabase/functions/_shared/operationsProtocol.ts';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -17,7 +19,7 @@ const admin = new pg.Pool({ connectionString: databaseUrl });
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 const appUrl = new URL(databaseUrl); appUrl.username = 'hub_app_server'; appUrl.password = 'ephemeral-test-only';
 const pool = new pg.Pool({ connectionString: appUrl.href });
-const owner = randomUUID(), phone = '+12025550911';
+const owner = randomUUID(), phone = phones.owner;
 await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'operations-fixture@test.invalid',false)", [owner]);
 await admin.query("insert into private.staff_permissions(user_id,permission,granted_by) values($1,'platform.admin',$1)", [owner]);
 await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$2)', [owner, phone]);

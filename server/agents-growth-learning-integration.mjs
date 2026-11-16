@@ -9,6 +9,8 @@ import pg from 'pg';
 import { digest, withSession } from './sms-auth.mjs';
 import { growthStore } from './growth/store.mjs';
 import { composeMemo } from './growth/learning.mjs';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -28,7 +30,7 @@ const seedMemos = (await admin.query('select id from private.growth_learning_mem
 try {
   await admin.query('insert into auth.users(id,email,is_anonymous) values($1,$2,false)', [owner, `growth-learning-owner-${run}@test.invalid`]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550975',now())", [owner]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$2,now())', [owner, phones.owner]);
   await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3", [randomUUID(), digest(token), owner]);
   const ownerCall = (fn, values) => withSession(pool, token, async db => (await db.query(`select ${fn}(${values.map((_, i) => `$${i + 1}`).join(',')}) as r`, values)).rows[0].r);
 

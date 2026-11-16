@@ -7,13 +7,15 @@ import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
 import { adminRegistry } from '../supabase/functions/_shared/adminRegistry.ts';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 const local=new URL(process.env.HUB_TEST_DATABASE_URL);assert.equal(local.hostname,'127.0.0.1');assert.equal(local.port,'54322');
 const admin=new pg.Pool({connectionString:local.href});
 await admin.query("alter role hub_app_server login password 'ephemeral-test-only'");
 local.username='hub_app_server';local.password='ephemeral-test-only';const pool=new pg.Pool({connectionString:local.href});
 const owner=randomUUID(),outsider=randomUUID(),ownerSession=randomUUID(),otherSession=randomUUID(),ownerToken=token(),otherToken=token();
 const claimed=[],tenants=[],sent=[],verified=[];let nativeAllowed=true,nativeRevision='a'.repeat(64),providerAccepts=true,providerFails=false,bridge;
-const fixturePhones=new Set(['+12025550999']);
+const fixturePhones=new Set([phones.wrongNumber]),invitedPhones=[...phones.invited];
 const provider={send:async phone=>{if(providerFails)throw new Error('Synthetic provider outage');sent.push(phone);return randomUUID();},
   verify:async(id,phone,code)=>{verified.push({id,phone});return providerAccepts&&code==='123456';}};
 const fetchImpl=async(url,options)=>{
@@ -37,10 +39,9 @@ async function call(path,body,{jar=ownerJar,headers={}}={}){
   for(const value of response.headers.getSetCookie()){const [key,val]=value.split(';')[0].split('=');jar[key]=val;assert.match(value,/HttpOnly/);assert.match(value,/Secure/);assert.match(value,/SameSite=Strict/);}
   assert.equal(response.headers.get('cache-control'),'no-store');return {status:response.status,body:await response.json()};
 }
-let phoneCounter=10;
 function input(product='breathe'){
   const native=()=>['intel','pennsync'].includes(product)?randomUUID().replaceAll('-','').slice(0,24):randomUUID();
-  const sourceUserId=native(),phone=`+120255509${String(phoneCounter++).padStart(2,'0')}`;fixturePhones.add(phone);
+  const sourceUserId=native(),phone=invitedPhones.shift();assert.ok(phone,'registration-integration needs more invited phones in server/test-phones.mjs');fixturePhones.add(phone);
   return {operation:'preview',product,sourceUserId,sourceAccountId:product==='intel'?sourceUserId:native(),
     phone,displayName:'Synthetic invited customer',tenantName:'Synthetic customer account'};
 }
@@ -57,12 +58,12 @@ const verify=(challenge,jar,code='123456')=>call('auth/invitation/verify',{chall
 try {
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'registration-owner@test.invalid',false),($2,'registration-other@test.invalid',false)",[owner,outsider]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')",[owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550901',now()),($2,'+12025550902',now())",[owner,outsider]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$3,now()),($2,$4,now())',[owner,outsider,phones.owner,phones.outsider]);
   for(const [id,uid,value] of [[ownerSession,owner,ownerToken],[otherSession,outsider,otherToken]])await admin.query("insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at) select $1,$2,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$3",[id,digest(value),uid]);
   assert.equal((await call('admin/registration',input(),{jar:{}})).status,401);
   assert.equal((await call('admin/registration',input(),{jar:otherJar})).status,401,'existing administrator authority returns 28000 for a nonadministrator');
   assert.equal((await call('admin/registration',input(),{headers:{Origin:'https://external.invalid'}})).status,403);
-  await assert.rejects(withSession(pool,ownerToken,db=>db.query('select hub.prepare_support_registration($1,$2,$3,$4,$5,$6)',[owner,ownerSession,'{}','+12025550903','Denied','Denied'])));
+  await assert.rejects(withSession(pool,ownerToken,db=>db.query('select hub.prepare_support_registration($1,$2,$3,$4,$5,$6)',[owner,ownerSession,'{}',phones.refused,'Denied','Denied'])));
   assert.equal((await call('rpc/complete_support_registration',{p_challenge_id:randomUUID()})).status,400);
   const staged=await prepare();assert.equal(sent.length,0);
   assert.equal((await admin.query('select count(*) from private.support_registration_invitations where actor_id=$1',[owner])).rows[0].count,'0');
@@ -73,7 +74,7 @@ try {
   assert.equal((await call('admin/registration',issued.op)).status,200,'same reviewed request is idempotent');
   const invitation={...staged,...issued},jar={};
   assert.equal((await start(invitation,jar,{consent:false})).status,400);
-  const wrongNumber=await start(invitation,{}, {phone:'+12025550999'});assert.equal(wrongNumber.status,200);assert.equal(sent.length,0);
+  const wrongNumber=await start(invitation,{}, {phone:phones.wrongNumber});assert.equal(wrongNumber.status,200);assert.equal(sent.length,0);
   const challenge=await start(invitation,jar);assert.equal(challenge.status,200);assert.deepEqual(sent,[staged.fields.phone]);
   assert.equal((await start(invitation,{})).status,429,'persisted shared resend limit');
   assert.equal((await verify(challenge,{})).status,400,'browser cookie required');

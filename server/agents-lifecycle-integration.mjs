@@ -16,6 +16,8 @@ import { sqlAgentStore } from './agents/store.mjs';
 import { lifecycleHandlers } from './agents/tasks/lifecycle.mjs';
 import { lifecycleInput, lifecyclePreview, parseLifecycleInput, unsubscribeLabel, wordingHash } from './agents/accounts/lifecycle.mjs';
 import { approvalTitle, decisionSchema, overviewSchema } from '../src/admin/teamProtocol.ts';
+import { testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -34,7 +36,7 @@ const run = randomUUID().slice(0, 8);
 const prefix = `lc-it-${run}`;
 const owner = randomUUID();
 const ownerToken = `lifecycle-owner-${randomUUID()}`;
-const ownerPhone = `+1202555${String(1000 + Math.floor(Math.random() * 9000))}`;
+const ownerPhone = phones.owner;
 const origin = 'https://hub.test';
 const postal = `CareMetric Test Office ${run}, 100 Example Street, Altoona, PA 16601`;
 const booking = 'https://cal.example.com/caremetric-test';

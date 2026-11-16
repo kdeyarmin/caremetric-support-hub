@@ -7,6 +7,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { digest } from './sms-auth.mjs';
 import { gateway } from './gateway.mjs';
+import { removeTestIdentities, testPhones } from './test-phones.mjs';
+const phones = testPhones(import.meta.url);
 
 assert.equal(process.env.GITHUB_ACTIONS, 'true', 'Recovery drill requires a disposable GitHub runner');
 assert.equal(process.env.HUB_RUN_RECOVERY_DRILL, 'disposable-data-loss', 'Explicit drill opt-in required');
@@ -64,7 +66,7 @@ try {
   const product = (await admin.query("select id from hub.products where slug='caremetric-intel'")).rows[0].id;
   await admin.query("insert into auth.users(id,email,is_anonymous) values($1,'recovery-owner@test.invalid',false),($2,'recovery-customer@test.invalid',false)", [owner,customer]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);
-  await admin.query("insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,'+12025550981',now()),($2,'+12025550982',now())", [owner,customer]);
+  await admin.query('insert into private.sms_identities(user_id,phone_e164,verified_at) values($1,$3,now()),($2,$4,now())', [owner,customer,phones.owner,phones.customer]);
   for (const [user,token] of [[owner,ownerToken],[customer,customerToken]]) {
     await admin.query(`insert into private.sms_sessions(id,token_hash,user_id,identity_version,expires_at)
       select gen_random_uuid(),$1,user_id,identity_version,now()+interval '1 hour' from private.sms_identities where user_id=$2`, [digest(token),user]);
@@ -127,5 +129,9 @@ try {
 } finally {
   // The whole runner database is disposable and stopped by the workflow even on failure.
   await execDb(['rm','-f',archive]).catch(()=>{});
+  await removeTestIdentities(admin,[owner,customer],{also:[
+    'delete from hub.support_cases where requester_id = any($1::uuid[])',
+    'delete from private.case_intake_settings where activated_by = any($1::uuid[])',
+  ]});
   await pool.end(); await admin.end();
 }
