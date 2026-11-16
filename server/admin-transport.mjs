@@ -13,7 +13,9 @@ export const refusalMessages={
   last_administrator:'This is the last active administrator. Make someone else an administrator first.',
   invited_account:"This invitation hasn't been accepted yet. Delete it in the application instead.",
   seat_limit:"Turning this account on would go past its organization's seats. Add seats in Billing first.",
-  no_change:'The account is already in that state.',
+  no_change:"It's already in that state. Refresh the list to see its current status.",
+  protected_organization:"This organization can't be suspended from the Hub.",
+  own_organization:"Your own CareMetric Intel sign-in works in this organization, so it can't be suspended from the Hub. Ask another administrator.",
   shared_identity:'This sign-in is also used outside the staff console, so only the application itself can change it.',
 };
 async function refusal(response){
