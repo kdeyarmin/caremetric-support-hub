@@ -13,6 +13,24 @@
   ],
   "overview": "Manage staff training, resident records, and daily tasks in one place. See what needs attention and keep documentation organized for your next survey.",
   "summary": "CareBase brings training records, credentials, clearances, resident assessments, incidents, and inspections together. Assign follow-up tasks, monitor deadlines, and export the documentation your surveyor requests.",
+  "figures": [
+    {
+      "figure": "12–16 hrs",
+      "label": "annual training tracked per direct care worker, by facility type"
+    },
+    {
+      "figure": "Ch. 2600 + 2800",
+      "label": "PA regulations linked to supporting records"
+    },
+    {
+      "figure": "60+",
+      "label": "survey-ready form templates included"
+    },
+    {
+      "figure": "1 record",
+      "label": "shared documentation, with access based on each person’s role"
+    }
+  ],
   "intro": "From the morning med pass to the next survey: explore resident care, training, eMAR, workforce, billing, and the tools that connect them. Start with Core and choose the modules your facility needs.",
   "legend": "Core covers resident operations. Add training, workforce, survey, eMAR, or billing. Training-only teams can choose CareMetric Train.",
   "publishedCount": 112,
