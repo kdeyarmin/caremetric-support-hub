@@ -34,7 +34,8 @@ describe('checking an address before the first email (20261116100000_growth_addr
       ['dead.example.org', ['info@dead.example.org']], ['live.example.org', ['jane@live.example.org']],
       ['any.example.org', ['info@any.example.org']], ['quiet.example.org', ['info@quiet.example.org']]]);
     expect(store.mailboxRecord.mock.calls).toEqual([['a', 'rejected'], ['b', 'verified'], ['c', 'catch_all'], ['d', 'unknown']]);
-    expect(outcome.result).toEqual({ guard: 'clear', checked: 4, verified: 1, rejected: 1, catch_all: 1, unknown: 1, undeliverable: 1, cancelled: 1 });
+    // Why the unanswered one had no answer is kept (review 2026-11-17).
+    expect(outcome.result).toEqual({ guard: 'clear', checked: 4, verified: 1, rejected: 1, catch_all: 1, unknown: 1, undeliverable: 1, cancelled: 1, reasons: { temporary: 1 } });
     expect(JSON.stringify(outcome)).not.toMatch(/@/);
   });
 

@@ -62,6 +62,15 @@ const nextBudgetDay = (task, moment) => {
 const aborted = () => Object.assign(new Error('The agent task is no longer running.'), { code: 'task_cancelled' });
 
 /**
+ * The copy rules for one asset's words, the same when it is drafted and when it is rendered. A county snapshot (`facts`, data.mjs) is
+ * read without its code-printed figure and alt text, and the figure is checked against the data instead.
+ */
+export function copyFindings({ product, platform, copy, offerCode = null, kit = {}, facts = null }) {
+  if (!facts?.stat) return checkCopy({ product, platform, copy, offerCode, brandKit: kit });
+  return [...checkCopy({ product, platform, copy: withoutFigure(copy, facts), offerCode, brandKit: kit }), ...checkData({ copy, facts })];
+}
+
+/**
  * @param {object} options
  * @param {object} options.settings { dailyRenderCap, videoProvider: 'internal' | 'heygen' }
  * @param {object} [options.heygen] heygen.mjs client (used only when the provider is heygen and it is configured)
@@ -254,10 +263,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     // A county snapshot goes to the page its facts name (the free market report for the reader's agency); other briefs to the concept's choice.
     const rows = planPlacements({ brief, variants: chosen, landingBase: landingFor(brief.product, facts?.landing ?? concept.output.concept.landingPageId), provider }).map(row => {
       const copy = { layout: row.layout, headline: row.headline, primaryText: row.primaryText, description: row.description, cta: row.cta, altText: row.altText, overlay: row.overlay };
-      // A snapshot's figure is the data's, checked against it; the copy rules read the words around it.
-      const findings = facts ? [...checkCopy({ product: brief.product, platform: row.platform, copy: withoutFigure(copy), offerCode: brief.offerCode, brandKit: kit }), ...checkData({ copy, facts })]
-        : checkCopy({ product: brief.product, platform: row.platform, copy, offerCode: brief.offerCode, brandKit: kit });
-      return { ...row, compliance: verdictOf([...findings, ...checkText(row.platform, copy)]) };
+      return { ...row, compliance: verdictOf([...copyFindings({ product: brief.product, platform: row.platform, copy, offerCode: brief.offerCode, kit, facts }), ...checkText(row.platform, copy)]) };
     });
     const saved = rows.length ? await store.creativeDraftsSave(briefId, task.id, rows) : [];
     const blocked = rows.filter(row => row.compliance.verdict === 'block').length;
@@ -284,24 +290,33 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     return files;
   }
   const contentOf = asset => ({ headline: asset.headline, primaryText: asset.primaryText, description: asset.description, cta: asset.cta, altText: asset.altText, overlay: asset.overlay ?? {} });
+  // A stat image from a county snapshot carries its brief's data (data.mjs); any other asset has none.
+  async function factsOf(asset) {
+    if (asset.layout !== 'stat' || typeof asset.briefId !== 'string' || !uuid.test(asset.briefId)) return null;
+    const context = await store.creativeBriefContext(asset.briefId);
+    return context?.brief?.facts?.stat ? context.brief.facts : null;
+  }
 
   async function renderOne(task, asset, signal) {
     const kit = asset.brandKit ?? {};
     const content = contentOf(asset);
-    const findings = checkCopy({ product: asset.product, platform: asset.platform, copy: content, offerCode: asset.offerCode, brandKit: kit });
+    // The same checks the draft passed: a county snapshot's figure against its data, the copy rules on the words around it (review
+    // 2026-11-17: the render used to read the code-printed figure as an unlisted number and block every snapshot).
+    const findings = copyFindings({ product: asset.product, platform: asset.platform, copy: { ...content, layout: asset.layout }, offerCode: asset.offerCode, kit, facts: await factsOf(asset) });
     if (findings.some(item => item.level === 'block')) {
       await store.creativeRenderFinish(asset.id, 'blocked', null, null, verdictOf(findings), {});
       return 'blocked';
     }
     let file;
     let type;
+    let report = null;
     const meta = { provider: 'internal' };
     try {
       const files = await brandFiles(asset, kit);
       if (asset.kind === 'static') {
         const out = await renderStatic({ layout: asset.layout, width: asset.width, height: asset.height, product: asset.product, content, kit, files });
         findings.push(...checkVisual(out.report), ...checkPlatform({ placement: asset.placement, width: out.width, height: out.height, bytes: out.png.length, contentType: 'image/png', copy: content }));
-        file = out.png; type = 'image/png';
+        file = out.png; type = 'image/png'; report = out.report;
       } else if (useHeygen(kit)) {
         const seconds = videoLengths[asset.lengthKey]?.target ?? 15;
         const job = await heygen.submit({ script: heygenScript(content, seconds), avatarId: kit.videoAvatarId, voiceId: kit.videoVoiceId, width: asset.width, height: asset.height,
@@ -334,7 +349,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
         try { return await model.run(task, request, { signal }); }
         catch (error) { if (signal?.aborted) throw aborted(); return { outcome: 'unavailable', code: /^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'ai_error' }; }
       };
-      const reviewed = await reviewImage({ run, asset, png: file, minScore: visionMinScore() });
+      const reviewed = await reviewImage({ run, asset, png: file, report, minScore: visionMinScore() });
       verdict = { ...verdictOf([...findings, ...reviewed.findings]), review: reviewed.review };
       if (verdict.verdict === 'block') log(JSON.stringify({ event: 'hub_creative_vision_blocked', asset: asset.id, layout: asset.layout, placement: asset.placement,
         defects: (reviewed.review.defects ?? []).map(item => item.kind) }));
@@ -384,6 +399,12 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     const offered = await offeredNow();
     const counts = { rendered: 0, proposed: 0, blocked: 0, failed: 0, submitted: 0 };
     const cap = capNow();
+    // Images blocked only by checks this release corrects (the first image review, a snapshot's figure read as a number) go back to the
+    // queue once (20261117150000_work_recovery.sql); the vision-blocked ones only while the review is on, so none passes unseen.
+    if (typeof store.creativeRenderRequeue === 'function') {
+      const requeued = Number(await store.creativeRenderRequeue(visionNow())) || 0;
+      if (requeued) counts.requeued = requeued;
+    }
     await collectJobs(task, counts, signal);
     // Rendered before, not yet proposed (the agent was observing, or proposing failed).
     for (const asset of await store.creativeReady(10, offered)) {
@@ -412,7 +433,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       if (!sent.some(delivered) && !sent.some(item => item.delivery === 'duplicate')) log(JSON.stringify({ event: 'hub_creative_ready_unsent' }));
     }
     if (Object.values(counts).some(Boolean)) {
-      await recordRun({ store, log }, task, { promptVersion: 'creative-render.1', summary: `Rendered ${plural(counts.rendered, 'asset')}, proposed ${counts.proposed}, blocked ${counts.blocked}, failed ${counts.failed}${counts.submitted ? `, ${counts.submitted} sent to HeyGen` : ''}; ${renderedToday} of ${cap} renders today.` });
+      await recordRun({ store, log }, task, { promptVersion: 'creative-render.1', summary: `Rendered ${plural(counts.rendered, 'asset')}, proposed ${counts.proposed}, blocked ${counts.blocked}, failed ${counts.failed}${counts.submitted ? `, ${counts.submitted} sent to HeyGen` : ''}${counts.requeued ? `, ${plural(counts.requeued, 'blocked image')} queued again` : ''}; ${renderedToday} of ${cap} renders today.` });
     }
     return { result: { ...counts, renderedToday, cap } };
   }

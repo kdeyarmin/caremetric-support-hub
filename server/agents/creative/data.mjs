@@ -119,8 +119,15 @@ export function countyBrief(snapshot, week) {
   };
 }
 
-/** A variant drawn as the snapshot: the stat layout, with the figure, label and source exactly as the data gives them. */
+/**
+ * A snapshot's alt text, written by code from the figure, its label and its source (review 2026-11-17): a model describing a stat image
+ * repeats its number, and that number is the data's, so code writes it and `checkData` compares it like the figure.
+ */
+export const snapshotAltText = facts => (facts?.stat ? `County snapshot: ${facts.stat} ${facts.statLabel}. Source: ${facts.statSource}.`.slice(0, 300) : null);
+
+/** A variant drawn as the snapshot: the stat layout, with the figure, label, source and alt text exactly as the data gives them. */
 export function withFacts(variant, facts) {
   if (!facts?.stat) return variant;
-  return { ...variant, layout: 'stat', overlay: { ...(variant.overlay ?? {}), stat: facts.stat, statLabel: facts.statLabel, statSource: facts.statSource } };
+  return { ...variant, layout: 'stat', altText: snapshotAltText(facts),
+    overlay: { ...(variant.overlay ?? {}), stat: facts.stat, statLabel: facts.statLabel, statSource: facts.statSource } };
 }

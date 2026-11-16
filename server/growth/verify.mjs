@@ -13,6 +13,7 @@
  *
  * Only counts are returned: never an address or a server's words.
  */
+import { unansweredReason } from './mailbox.mjs';
 import { growthAddressCheckFeature, growthDay } from './worker.mjs';
 
 export { growthAddressCheckFeature };
@@ -58,6 +59,8 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
     // Empty while checking is off (the database reads the owner's setting).
     const candidates = await growth.store.mailboxCandidates(verifyPerRun);
     const counts = { checked: 0, verified: 0, rejected: 0, catch_all: 0, unknown: 0, unreachable: 0, undeliverable: 0, cancelled: 0 };
+    // Why addresses went unanswered, by the checker's reason (review 2026-11-17: 25 of 44 had no answer and nothing said why).
+    const reasons = {};
     let stopped = null;
     for (const candidate of candidates) {
       signal?.throwIfAborted();
@@ -68,6 +71,8 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
       try { answer = await mailbox.check(domainOf(candidate.email), [candidate.email], { signal }); }
       catch (error) { if (signal?.aborted) throw error; answer = { result: 'unknown' }; }
       const result = results.has(answer?.result) ? answer.result : 'unknown';
+      const why = unansweredReason(answer);
+      if (why) reasons[why] = (reasons[why] ?? 0) + 1;
       let saved;
       try { saved = await growth.store.mailboxRecord(candidate.id, result); }
       catch (error) { if (error?.code !== '22023') throw error; continue; }
@@ -76,7 +81,7 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
       counts.cancelled += Number(saved?.cancelled ?? 0);
     }
     const kept = Object.fromEntries(Object.entries(counts).filter(([key, value]) => key === 'checked' || value > 0));
-    return { result: { ...guardResult, ...kept, ...(stopped ? { stopped } : {}) } };
+    return { result: { ...guardResult, ...kept, ...(Object.keys(reasons).length ? { reasons } : {}), ...(stopped ? { stopped } : {}) } };
   }
   return { 'growth.verify': verify };
 }

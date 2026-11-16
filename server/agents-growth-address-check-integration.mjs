@@ -123,7 +123,7 @@ try {
 
   // ---- 3. The mail server answers --------------------------------------------------------------------------------------------------
   const first = await verify({ [dead.email]: 'rejected', [live.email]: 'verified', [quiet.email]: 'catch_all', [silent.email]: { result: 'unknown', reason: 'temporary' } });
-  assert.deepEqual(first.result, { checked: 4, verified: 1, rejected: 1, catch_all: 1, unknown: 1, undeliverable: 1, cancelled: 1 });
+  assert.deepEqual(first.result, { checked: 4, verified: 1, rejected: 1, catch_all: 1, unknown: 1, undeliverable: 1, cancelled: 1, reasons: { temporary: 1 } });
   assert.deepEqual(new Set(first.asked.slice(0, 2)), new Set([quiet.email, dead.email]));
   const deadContact = await contactOf(dead.email);
   assert.deepEqual([deadContact.eligibility, deadContact.mailbox_result, deadContact.mailbox_checks], ['undeliverable', 'rejected', 1], 'a mailbox that does not exist is never written to');

@@ -144,7 +144,8 @@ export function text(ctx, { role, value, size, bold = false, color, background, 
   const readable = readableOn(background, wanted, { ink: ctx.brand.ink, paper: ctx.brand.paper, fontSize: size, bold, canvasWidth: ctx.frame.width });
   if (readable.adjusted && kitRole[color] && ctx.brand.overrides.includes(kitRole[color])) ctx.adjusted.add(kitField[kitRole[color]]);
   const chars = Math.min(String(value).length, Math.ceil((maxLines * width) / (size * charWidth(bold))));
-  ctx.texts.push({ role, color: readable.color, background, fontSize: size, bold, area: Math.round(chars * size * charWidth(bold) * size) });
+  // The words themselves go in the report too: the image review is told every string the layout drew (vision.mjs).
+  ctx.texts.push({ role, value: String(value ?? ''), color: readable.color, background, fontSize: size, bold, area: Math.round(chars * size * charWidth(bold) * size) });
   return h('div', { fontFamily: family ?? (bold ? ctx.heading : ctx.body), fontSize: size, fontWeight: bold ? 800 : 400, color: readable.color, lineHeight, maxWidth: width, ...style }, value);
 }
 
@@ -232,9 +233,15 @@ export function cta(ctx, label, { align = 'flex-start', background = null } = {}
     text(ctx, { role: 'cta', value: label || 'Learn more', size, bold: true, color: words, background: fill, width: frame.inner * 0.6, maxLines: 1 }));
 }
 
+/**
+ * Small print (the site address, a figure's source, the offer's fine print) at `share` of the short side, but never under 2.2% of the
+ * width: on a landscape canvas the short side made it about 16 pixels, too small to read in a feed (review 2026-11-17).
+ */
+export const smallPrint = (frame, share) => Math.max(Math.round(frame.u * share), Math.round(frame.width * 0.022));
+
 function footer(ctx, content) {
   const { frame, colors, theme } = ctx;
-  const size = Math.round(frame.u * 2.6);
+  const size = smallPrint(frame, 2.6);
   return h('div', { justifyContent: 'space-between', alignItems: 'center', width: frame.inner },
     cta(ctx, content.cta),
     text(ctx, { role: 'domain', value: theme.site, size, color: 'muted', background: colors.background, width: frame.inner * 0.38, maxLines: 1 }));
@@ -263,11 +270,13 @@ const bodyRoom = (ctx, gap) => ctx.frame.height - ctx.frame.top - ctx.frame.bott
 /** How tall `value` is drawn at `size` in `width`, at most `maxLines` lines. */
 const textHeight = (value, { size, width, bold = true, lineHeight = 1.15, maxLines = 6 }) => Math.min(maxLines, linesFor(value, size, width, bold)) * size * lineHeight;
 
-const support = content => {
+// The supporting line: the description or primary text when it fits, else its first sentence, else nothing. Never cut off with "…",
+// which a reader (and the image review) takes for text that ran off the image.
+export const support = content => {
   const value = String(content.description || content.primaryText || '').trim();
   if (value.length <= 140) return value;
   const sentence = value.split(/(?<=[.!?])\s+/)[0];
-  return sentence.length <= 140 ? sentence : `${value.slice(0, 137).trimEnd()}…`;
+  return sentence.length <= 140 ? sentence : '';
 };
 const headlineSize = (ctx, value, share = 1) => fit(value, { width: ctx.frame.inner * share, size: Math.round(ctx.frame.u * (ctx.frame.shape === 'landscape' ? 8.5 : ctx.frame.shape === 'tall' ? 8 : 9)), min: Math.round(ctx.frame.u * 4.6), maxLines: ctx.frame.shape === 'landscape' ? 3 : 4 });
 
@@ -282,15 +291,30 @@ const bodies = {
     const { frame, colors } = ctx;
     const landscape = frame.shape === 'landscape';
     const width = landscape ? frame.inner * 0.72 : frame.inner;
-    const size = headlineSize(ctx, content.headline, landscape ? 0.72 : 1);
-    const supporting = support(content);
+    const gap = Math.round(frame.u * 2.5);
+    let size = headlineSize(ctx, content.headline, landscape ? 0.72 : 1);
+    let supporting = support(content);
+    let supportSize = Math.round(frame.u * (landscape ? 3.6 : 3.8));
+    const kickerWords = content.overlay?.kicker ? String(content.overlay.kicker).toUpperCase() : '';
+    // The accent bar, the kicker, the headline and the supporting line share the room between the header and the footer: the headline
+    // and the supporting line step down together until they fit, and the supporting line gives way before anything is pushed off.
+    const used = () => Math.round(frame.u * 1.2) + gap
+      + (kickerWords ? textHeight(kickerWords, { size: Math.round(frame.u * 2.8), width: frame.inner, maxLines: 2 }) + gap : 0)
+      + textHeight(content.headline, { size, width, lineHeight: 1.08, maxLines: 4 })
+      + (supporting ? gap + textHeight(supporting, { size: supportSize, width, bold: false, lineHeight: 1.3, maxLines: 3 }) : 0);
+    const room = bodyRoom(ctx, gap) * 0.96;
+    for (let step = 0; step < 12 && used() > room; step += 1) {
+      size = Math.max(Math.round(frame.u * 4.6), Math.floor(size * 0.93));
+      supportSize = Math.max(Math.round(frame.u * 3), Math.floor(supportSize * 0.93));
+    }
+    if (used() > room) supporting = '';
     return page(ctx, [
       header(ctx),
-      h('div', { flexDirection: 'column', gap: Math.round(frame.u * 2.5) },
+      h('div', { flexDirection: 'column', gap },
         h('div', { width: Math.round(frame.u * 12), height: Math.round(frame.u * 1.2), backgroundColor: colors.accent, borderRadius: 4 }),
         kicker(ctx, content.overlay?.kicker),
         text(ctx, { role: 'headline', value: content.headline, size, bold: true, color: 'text', background: colors.background, width, maxLines: 4, lineHeight: 1.08 }),
-        supporting ? text(ctx, { role: 'support', value: supporting, size: Math.round(frame.u * (landscape ? 3.6 : 3.8)), color: 'body', background: colors.background, width, maxLines: 3, lineHeight: 1.3 }) : null),
+        supporting ? text(ctx, { role: 'support', value: supporting, size: supportSize, color: 'body', background: colors.background, width, maxLines: 3, lineHeight: 1.3 }) : null),
       footer(ctx, content),
     ]);
   },
@@ -309,7 +333,7 @@ const bodies = {
         bold: true, color: 'text', background: colors.background, width: blockWidth, maxLines: 3 }) : null);
     const words = h('div', { flexDirection: 'column', gap: Math.round(frame.u * 2), width: wordsWidth },
       text(ctx, { role: 'headline', value: content.headline, size: fit(content.headline, { width: wordsWidth, size: Math.round(frame.u * 6), min: Math.round(frame.u * 3.8), maxLines: 3 }), bold: true, color: 'text', background: colors.background, width: wordsWidth, maxLines: 3 }),
-      o.statSource ? text(ctx, { role: 'source', value: `Source: ${o.statSource}`, size: Math.round(frame.u * 2.6), color: 'muted', background: colors.background, width: wordsWidth, maxLines: 2 }) : null);
+      o.statSource ? text(ctx, { role: 'source', value: `Source: ${o.statSource}`, size: smallPrint(frame, 2.6), color: 'muted', background: colors.background, width: wordsWidth, maxLines: 2 }) : null);
     return page(ctx, [
       header(ctx),
       landscape ? h('div', { justifyContent: 'space-between', alignItems: 'center', width: frame.inner }, block, words) : h('div', { flexDirection: 'column', gap: Math.round(frame.u * 4) }, block, words),
@@ -383,7 +407,7 @@ const bodies = {
       text(ctx, { role: 'offer name', value: (o.kicker || 'Founders Sale').toUpperCase(), size: Math.round(frame.u * 3), bold: true, color: brand.callout.text, background: fill, width: inner, maxLines: 1, style: { letterSpacing: 1 } }),
       text(ctx, { role: 'offer', value: o.offerLine, size: offerSize, bold: true, color: brand.callout.accent, background: fill, width: inner, maxLines: 3, lineHeight: 1.05 }),
       text(ctx, { role: 'offer product', value: productNames[product] ?? 'CareMetric', size: Math.round(frame.u * 3.6), bold: true, color: brand.callout.text, background: fill, width: inner, maxLines: 1 }),
-      text(ctx, { role: 'fine print', value: fine, size: Math.round(frame.u * 2.5), color: brand.callout.text, background: fill, width: inner, maxLines: 3, lineHeight: 1.3 }));
+      text(ctx, { role: 'fine print', value: fine, size: smallPrint(frame, 2.5), color: brand.callout.text, background: fill, width: inner, maxLines: 3, lineHeight: 1.3 }));
     const headline = width => text(ctx, { role: 'headline', value: content.headline, size: headlineSize, bold: true, color: 'text', background: colors.background, width, maxLines: landscape ? 4 : 3 });
     return page(ctx, [
       header(ctx),
@@ -395,21 +419,37 @@ const bodies = {
 
   checklist(ctx, content) {
     const { frame, colors } = ctx;
-    const items = content.overlay.checklist.slice(0, frame.shape === 'landscape' ? 3 : 5);
     const landscape = frame.shape === 'landscape';
     const width = landscape ? frame.inner * 0.55 : frame.inner;
-    const size = Math.round(frame.u * (landscape ? 3.6 : 4));
+    const headWidth = landscape ? frame.inner * 0.4 : frame.inner;
+    const between = Math.round(frame.u * 3.5);
+    let headSize = fit(content.headline, { width: headWidth, size: Math.round(frame.u * 7), min: Math.round(frame.u * 4), maxLines: 3 });
+    let size = Math.round(frame.u * (landscape ? 3.6 : 4));
+    // Every item (up to five) on every canvas: the items, and on a stacked canvas the headline too, step down until they fit the room
+    // between the header and the footer; only then does an item give way, and never below three (review 2026-11-17: the landscape
+    // image used to draw three of five, and the image review read the missing two as a fault).
+    const rowsHeight = (list, at) => list.reduce((sum, item) => sum + Math.max(Math.round(at * 1.3),
+      textHeight(item, { size: at, width: width - Math.round(at * 1.3) - at, maxLines: 2 })), 0) + Math.round(at * 0.8) * Math.max(0, list.length - 1);
+    const headHeight = () => textHeight(content.headline, { size: headSize, width: headWidth, lineHeight: 1.08, maxLines: 3 });
+    const used = list => (landscape ? Math.max(headHeight(), rowsHeight(list, size)) : headHeight() + between + rowsHeight(list, size));
+    const room = bodyRoom(ctx, Math.round(frame.u * 2)) * 0.96;
+    let items = content.overlay.checklist.slice(0, 5);
+    for (let step = 0; step < 12 && used(items) > room; step += 1) {
+      size = Math.max(Math.round(frame.u * 3), Math.floor(size * 0.93));
+      if (!landscape) headSize = Math.max(Math.round(frame.u * 4), Math.floor(headSize * 0.95));
+    }
+    while (items.length > 3 && used(items) > room) items = items.slice(0, -1);
     const tick = Math.round(size * 1.3);
     const stroke = Math.max(2, Math.round(tick * 0.12));
     const rows = items.map(item => h('div', { alignItems: 'center', gap: Math.round(size * 0.7) },
       h('div', { width: tick, height: tick, borderRadius: tick, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
         h('div', { width: Math.round(tick * 0.28), height: Math.round(tick * 0.52), borderRight: `${stroke}px solid ${colors.onPrimary}`, borderBottom: `${stroke}px solid ${colors.onPrimary}`, transform: 'rotate(45deg)', marginTop: -Math.round(tick * 0.08) })),
       text(ctx, { role: 'checklist item', value: item, size, bold: true, color: 'text', background: colors.background, width: width - tick - size, maxLines: 2 })));
-    const head = text(ctx, { role: 'headline', value: content.headline, size: fit(content.headline, { width: landscape ? frame.inner * 0.4 : frame.inner, size: Math.round(frame.u * 7), min: Math.round(frame.u * 4), maxLines: 3 }), bold: true, color: 'text', background: colors.background, width: landscape ? frame.inner * 0.4 : frame.inner, maxLines: 3, lineHeight: 1.08 });
+    const head = text(ctx, { role: 'headline', value: content.headline, size: headSize, bold: true, color: 'text', background: colors.background, width: headWidth, maxLines: 3, lineHeight: 1.08 });
     return page(ctx, [
       header(ctx),
       landscape ? h('div', { justifyContent: 'space-between', alignItems: 'center', width: frame.inner }, head, h('div', { flexDirection: 'column', gap: Math.round(size * 0.8), width }, rows))
-        : h('div', { flexDirection: 'column', gap: Math.round(frame.u * 3.5) }, head, h('div', { flexDirection: 'column', gap: Math.round(size * 0.8) }, rows)),
+        : h('div', { flexDirection: 'column', gap: between }, head, h('div', { flexDirection: 'column', gap: Math.round(size * 0.8) }, rows)),
       footer(ctx, content),
     ]);
   },

@@ -231,6 +231,23 @@ picture is not kept anywhere else. Videos are not reviewed this way: their capti
 The runtime sends the PNG as an image block before the words that ask about it; the budget reservation counts an image at the API's
 per-image ceiling (about 4,800 tokens), not its bytes.
 
+**Version 2 (2026-11-17, [review](AI_WORKFORCE_REVIEW_2026-11-17.md)).** The first version blocked 18 of the 24 images it saw, almost all
+for the brand's own small print: the site address in the footer and the product name inside the logo were "too small to read", and the
+supporting line ("Try Intel free for 30 days") was "a number the image was not meant to show", because nobody had told the reviewer it
+was there. Now (`creative-vision.2`):
+
+- The reviewer is told every string the layout actually drew, element by element (`drawn`: headline, kicker, body, stat, checklist, call
+  to action, source, site address), from the layout's own report, and which parts are the brand's furniture (the logo lockup, the site
+  address, the fire band, which runs off the bottom edge by design). A number in `drawn` is never a wrong figure.
+- Each defect names its element. A cut-off, overlapping, garbled or broken part blocks wherever it is; an unreadable word or a wrong figure
+  blocks on the ad's own words, warns on its small print (a source, fine print) and is only noted on the furniture.
+- The layouts changed where the review saw real faults: the checklist draws every item (up to five) on every canvas, stepping its size
+  down before an item gives way (never below three; the landscape image used to draw three of five); the headline layout fits its
+  headline and supporting line to the room between the header and the footer; the supporting line is a whole sentence or nothing, never
+  cut off with "…"; and small print is never under 2.2% of the width (on a landscape canvas it was about 16 pixels).
+- Images blocked only by the first version (while the review is on) go back to the render queue once
+  (`private.creative_render_requeue`, `20261117150000_work_recovery.sql`), and are reviewed again under version 2.
+
 ## Approving, rejecting, asking for changes
 
 Each finished asset is a proposal on the AI team page and on the Creative screen: `creative.asset` (passed every check) or
@@ -384,3 +401,15 @@ Since 2026-11-16 (`20261116130000_creative_review.sql`, feature `platform.agents
   `database_not_ready`, `no_county_due`, `no_figure_fits`, or the feed's error code). Until the Hub restarts after the migration that
   declares a feature, it does not see it: the November 15 run opened none because the data creative migration reached production that
   evening.
+
+Since 2026-11-17 (`20261117150000_work_recovery.sql`, feature `platform.agents.work-recovery.v1`; [review](AI_WORKFORCE_REVIEW_2026-11-17.md)):
+
+- **Checked the same way when drafted and rendered.** Every snapshot rendered on November 16 was blocked: the render read the code-printed
+  figure ("72%") as a number the fact sheet does not state. A snapshot is now checked at render against its brief's data, as it was when
+  drafted (`copyFindings` in `server/agents/creative/tasks.mjs`; `creative-compliance.3`), and the snapshots blocked that way are rendered
+  once more.
+- **Alt text from the data.** A model describing a stat image repeats its number, which the words around the figure may not carry, so
+  code writes a snapshot's alt text from the figure, its label and its source (`snapshotAltText`), and the checks read it as the figure.
+- **A blocked snapshot frees its county.** A county counts as pictured only while its snapshot is still in the works or one of its images
+  survived the checks (`private.creative_brief_pictured`). A county whose snapshot was all blocked waits a week, not eight, and gives the
+  week its room back, up to twice the week's number of snapshots opened.

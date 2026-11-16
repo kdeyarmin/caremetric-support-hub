@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { countyBrief, countySnapshot, figureOrders, formatFigure, placeName, settingFor, snapshotLanding, withFacts } from './data.mjs';
+import { countyBrief, countySnapshot, figureOrders, formatFigure, placeName, settingFor, snapshotAltText, snapshotLanding, withFacts } from './data.mjs';
 import { checkCopy, checkData, withoutFigure } from './compliance.mjs';
+import { copyFindings } from './tasks.mjs';
 
 const figure = (key, value, extra = {}) => ({ key, label: key, value, unit: 'count', data_year: '2026', period: '2026-06', dataset: 'CMS Medicare Monthly Enrollment',
   source_line: 'Source: CareMetric analytics derived from public CMS data.', short_source: 'CMS Medicare Monthly Enrollment, 2026', ...extra });
@@ -107,5 +108,38 @@ describe('figure checks', () => {
       .some(item => item.rule === 'stat_source')).toBe(true);
     // The copy rules read the words around the figure, not the code-printed figure.
     expect(withoutFigure(copy()).overlay).toMatchObject({ stat: '', statLabel: '', statSource: '' });
+  });
+
+  it('writes a snapshot\'s alt text from the data, reads it as the figure, and still reads alt text a model wrote', () => {
+    expect(copy().altText).toBe(snapshotAltText(snapshot));
+    expect(snapshotAltText(snapshot)).toBe(`County snapshot: 250,000 people on Medicare in Allegheny County, PA. Source: CMS Medicare Monthly Enrollment, 2026.`);
+    expect(withoutFigure(copy(), snapshot).altText).toBe('');
+    // Without the facts, or with alt text a model wrote, the alt text stays for the copy rules.
+    expect(withoutFigure(copy()).altText).toBe(snapshotAltText(snapshot));
+    const written = { ...copy(), altText: 'A tile saying 250,000 people are on Medicare' };
+    expect(withoutFigure(written, snapshot).altText).toBe(written.altText);
+    expect(checkData({ copy: written, facts: snapshot }).map(item => item.rule)).toEqual(['data_number']);
+    expect(snapshotAltText(null)).toBeNull();
+  });
+
+  // Every snapshot the review of 2026-11-17 found blocked failed its own checks: at render on its printed figure, at drafting on alt text
+  // that repeated it. Each figure key, as Intel sends it, now passes both, drafted and rendered.
+  it('passes every figure key\'s snapshot, drafted and rendered, with plain words around it', () => {
+    const valueOf = key => (/top3_share|_advantage_share/.test(key) ? 0.61 : /growth_since_2020/.test(key) ? 0.08 : /_pct$/.test(key) ? 6.1 : 1234);
+    const keys = [...new Set([...figureOrders.home_health, ...figureOrders.hospice])];
+    expect(keys).toEqual(expect.arrayContaining(['home_health_top3_share', 'hospice_top3_share', 'home_health_agencies_billing', 'hospices_billing']));
+    for (const key of keys) {
+      const setting = key.startsWith('hospice') ? 'hospice' : 'home_health';
+      const facts = countySnapshot(county([figure(key, valueOf(key), { setting: key.startsWith('home_health') || key.startsWith('hospice') ? setting : 'general', data_year: '2024' })]), 0, setting);
+      expect(facts?.figure, key).toBe(key);
+      const drafted = withFacts({ layout: 'headline', headline: 'Know where your agency stands', primaryText: 'See how your county\'s market looks from public Medicare data.',
+        description: 'Free market report', cta: 'Get the report', altText: `A tile showing ${facts.stat}`, overlay: { kicker: 'Public Medicare data' } }, facts);
+      for (const platform of ['meta', 'linkedin']) {
+        const findings = copyFindings({ product: 'caremetric-intel', platform, copy: drafted, facts });
+        expect(findings.filter(item => item.level === 'block'), `${key} on ${platform}`).toEqual([]);
+      }
+      // A share read without its data, as the render read every snapshot before, is refused as a number the fact sheet does not state.
+      if (facts.stat.endsWith('%')) expect(copyFindings({ product: 'caremetric-intel', platform: 'meta', copy: drafted }).some(item => item.rule === 'fact_sheet'), key).toBe(true);
+    }
   });
 });

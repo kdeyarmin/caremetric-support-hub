@@ -39,10 +39,12 @@ import { allowedNumbers, longestSentence, normalizeTerms, textProblems, unclearC
 import { productAmounts } from '../../growth/draft.mjs';
 import { offersMeeting, playbookFor, playbookText } from '../../growth/playbook.mjs';
 import { contrastRatio, meetsAA } from './brand.mjs';
+import { snapshotAltText } from './data.mjs';
 import { liveOffers, offerFor } from './offers.mjs';
 import { textLimits, validateAsset } from './specs.mjs';
 
-export const complianceVersion = 'creative-compliance.2';
+// .3 (2026-11-17): a county snapshot is checked the same way when it is drafted and when it is rendered, and its alt text is the data's.
+export const complianceVersion = 'creative-compliance.3';
 export const rules = Object.freeze(['phi', 'personal_attributes', 'unsubstantiated_claim', 'government_endorsement', 'offer_mismatch', 'brand_name',
   'banned_phrase', 'required_disclaimer', 'fact_sheet', 'plain_language', 'brand_colors', 'logo_ground', 'contrast', 'text_heavy', 'images', 'brand_deviation', 'captions', 'platform']);
 
@@ -115,9 +117,10 @@ const factSheetCodes = {
 };
 
 /**
- * A county snapshot (data.mjs): the figure, its label and its source are the data's, exactly, and nothing the model wrote carries a
- * number of its own (the data's year aside). The fact sheet's number rules do not apply to the code-printed figure, so `checkCopy` reads
- * a snapshot's copy without it (`withoutFigure`) and this check reads the figure.
+ * A county snapshot (data.mjs): the figure, its label, its source and the alt text code writes from them are the data's, exactly, and
+ * nothing the model wrote carries a number of its own (the data's year aside). The fact sheet's number rules do not apply to the
+ * code-printed figure, so `checkCopy` reads a snapshot's copy without it (`withoutFigure`) and this check reads the figure. The same two
+ * checks run when the snapshot is drafted and when it is rendered (tasks.mjs).
  * @returns {{ rule: string, level: 'warn'|'block', message: string }[]}
  */
 export function checkData({ copy = {}, facts = null }) {
@@ -127,7 +130,9 @@ export function checkData({ copy = {}, facts = null }) {
   if (copy.layout !== 'stat' || overlay.stat !== facts.stat || overlay.statLabel !== facts.statLabel || overlay.statSource !== facts.statSource) {
     findings.push(block('data_figure', 'The figure, its label or its source differs from the public data it came from.'));
   }
-  const written = [copy.headline, copy.primaryText, copy.description, copy.cta, copy.altText, overlay.kicker, overlay.quote, overlay.quoteSource, overlay.offerLine,
+  // The code's own alt text is the figure again; alt text a model wrote (a snapshot drafted before 2026-11-17) is read like its other words.
+  const altText = copy.altText === snapshotAltText(facts) ? null : copy.altText;
+  const written = [copy.headline, copy.primaryText, copy.description, copy.cta, altText, overlay.kicker, overlay.quote, overlay.quoteSource, overlay.offerLine,
     ...(Array.isArray(overlay.checklist) ? overlay.checklist : []), ...(Array.isArray(overlay.beats) ? overlay.beats : [])]
     .filter(value => typeof value === 'string').join('\n');
   if ((written.match(/\d[\d,.]*/g) ?? []).some(number => number.replace(/[.,]$/, '') !== String(facts.dataYear ?? ''))) {
@@ -136,8 +141,12 @@ export function checkData({ copy = {}, facts = null }) {
   return findings;
 }
 
-/** A snapshot's copy without the code-printed figure, for the copy rules (checkData reads the figure). */
-export const withoutFigure = copy => ({ ...copy, overlay: { ...(copy.overlay ?? {}), stat: '', statLabel: '', statSource: '' } });
+/**
+ * A snapshot's copy without the code-printed figure, for the copy rules (checkData reads the figure). With the brief's `facts`, the alt
+ * text code wrote from the figure is left out too.
+ */
+export const withoutFigure = (copy, facts = null) => ({ ...copy, ...(facts?.stat && copy.altText === snapshotAltText(facts) ? { altText: '' } : {}),
+  overlay: { ...(copy.overlay ?? {}), stat: '', statLabel: '', statSource: '' } });
 
 /**
  * @param {object} input

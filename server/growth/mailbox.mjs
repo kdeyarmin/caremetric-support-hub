@@ -11,7 +11,9 @@
  * - A made-up mailbox is asked first. A server that accepts it accepts every address (a catch-all), so it can confirm nothing and no
  *   address is kept. Only a server that refuses the made-up mailbox and accepts a guessed one confirms it.
  * - A refusal that is about the Hub rather than the mailbox (5.7.x, a block list, a policy) or a temporary answer (4xx, often
- *   greylisting) confirms nothing either.
+ *   greylisting) confirms nothing either. Each such answer says why (`reason`), so the runs can count why addresses went unanswered.
+ * - A server that offers STARTTLS is asked over TLS, as servers that refuse a sender without it expect (review 2026-11-17: most checks
+ *   came back unanswered and the reason was not kept). The certificate is not checked: nothing but the questions above crosses it.
  * - At most `maxGuesses` shapes per person, best first: a shape learned from the business's own published addresses goes first.
  * - Railway allows outbound port 25 on its Pro plan only. When three businesses in a row cannot be reached at all the checker rests
  *   for six hours and says so (`state`), so a blocked port costs one try, not one per business.
@@ -22,6 +24,7 @@
 import { randomBytes } from 'node:crypto';
 import { lookup as dnsLookup, resolveMx as dnsResolveMx } from 'node:dns/promises';
 import { connect as netConnect, isIP } from 'node:net';
+import { connect as tlsConnect } from 'node:tls';
 import { privateAddress, roleLocalParts } from './contacts.mjs';
 import { isCredential } from './team.mjs';
 
@@ -120,14 +123,36 @@ export function addressFits(email, name, domain) {
 
 const failure = reason => ({ result: 'unknown', reason });
 
-/** A reply's code, its enhanced status (5.1.1) when it has one, and whether it is about the sender rather than the mailbox. */
+/**
+ * Why a check got no answer, as a short code for a run's counts (`reasons`): the checker's own reason (temporary, blocked,
+ * tls_required, tls_failed, sender_refused, refused, dropped, no_mail, unexpected, invalid), or 'error' when the check threw. Null for
+ * any other result (an unreachable server is counted as its own result).
+ */
+export function unansweredReason(answer) {
+  if (answer && answer.result !== 'unknown') return null;
+  return /^[a-z][a-z_]{0,29}$/.test(answer?.reason ?? '') ? answer.reason : 'error';
+}
+
+/**
+ * A reply's code, its enhanced status (5.1.1) when it has one, whether it is about the sender rather than the mailbox, whether it offers
+ * STARTTLS (an EHLO reply) and whether it asks for TLS first.
+ */
 function readReply(lines) {
   const code = Number(lines.at(-1).slice(0, 3));
   const text = lines.map(line => line.slice(4)).join(' ');
   const enhanced = /^\s*([245])\.(\d{1,3})\.(\d{1,3})\b/.exec(text)?.slice(1, 4).join('.') ?? null;
   const policy = (enhanced?.startsWith('5.7.') ?? false) || /\b(block|blacklist|blocklist|spamhaus|rbl|dnsbl|reputation|banned|policy|not allowed to send|client host|denied by|access denied, banned)/i.test(text);
-  return { code, enhanced, policy };
+  const starttls = lines.some(line => /^\d{3}[ -]STARTTLS\b/i.test(line));
+  const tls = code === 530 || /\bstarttls\b|\btls (?:is )?required\b|\bmust use tls\b/i.test(text);
+  return { code, enhanced, policy, starttls, tls };
 }
+
+/** Opportunistic TLS over a connected socket, as mail servers use it between themselves: the certificate is not checked. */
+const startTlsOn = (socket, servername) => new Promise((resolve, reject) => {
+  const secure = tlsConnect({ socket, servername, rejectUnauthorized: false });
+  secure.once('secureConnect', () => resolve(secure));
+  secure.once('error', reject);
+});
 
 /** One SMTP conversation over `socket`: send a line, read one whole (possibly multi-line) reply. */
 function conversation(socket, timeoutMs) {
@@ -158,17 +183,22 @@ function conversation(socket, timeoutMs) {
   };
   socket.setEncoding?.('latin1');
   socket.setTimeout?.(timeoutMs, () => socket.destroy(Object.assign(new Error('SMTP timeout'), { code: 'ETIMEDOUT' })));
-  socket.on('data', chunk => {
+  const onData = chunk => {
     bytes += chunk.length;
     if (bytes > replyBytes) { socket.destroy(Object.assign(new Error('SMTP reply too large'), { code: 'EPROTO' })); return; }
     buffer += chunk;
     settle();
-  });
-  socket.on('error', error => { ended ??= error; settle(); });
-  socket.on('close', () => { ended ??= Object.assign(new Error('SMTP connection closed'), { code: 'ECONNRESET' }); settle(); });
+  };
+  const onError = error => { ended ??= error; settle(); };
+  const onClose = () => { ended ??= Object.assign(new Error('SMTP connection closed'), { code: 'ECONNRESET' }); settle(); };
+  socket.on('data', onData);
+  socket.on('error', onError);
+  socket.on('close', onClose);
   const reply = () => new Promise((resolve, reject) => { pending = { resolve, reject }; settle(); });
   return {
     reply,
+    /** Stops reading `socket`, before TLS takes it over. */
+    detach() { socket.off('data', onData); socket.off('error', onError); socket.off('close', onClose); },
     async command(line) {
       if (/[\r\n]/.test(line)) throw new Error('A command is one line');
       socket.write(`${line}\r\n`);
@@ -185,7 +215,7 @@ function conversation(socket, timeoutMs) {
   };
 }
 
-export function mailboxChecker({ heloName = '', resolveMx = dnsResolveMx, lookup = dnsLookup, connect = netConnect, timeoutMs = 15_000, deadlineMs = 60_000,
+export function mailboxChecker({ heloName = '', resolveMx = dnsResolveMx, lookup = dnsLookup, connect = netConnect, startTls = startTlsOn, timeoutMs = 15_000, deadlineMs = 60_000,
   now = Date.now, made = () => `cm${randomBytes(8).toString('hex')}` } = {}) {
   const helo = String(heloName ?? '').toLowerCase();
   const configured = hostPattern.test(helo);
@@ -235,10 +265,11 @@ export function mailboxChecker({ heloName = '', resolveMx = dnsResolveMx, lookup
     const hosts = await mailHosts(host);
     if (!hosts) return failure('no_mail');
     let socket = null;
+    let server = null;
     for (const name of hosts) {
       signal?.throwIfAborted();
       socket = await open(name, signal);
-      if (socket) break;
+      if (socket) { server = name; break; }
     }
     signal?.throwIfAborted();
     if (!socket) {
@@ -246,7 +277,7 @@ export function mailboxChecker({ heloName = '', resolveMx = dnsResolveMx, lookup
       if (failures >= restAfterFailures) { restingUntil = now() + restMs; reachable = false; failures = 0; }
       return { result: 'unreachable' };
     }
-    const smtp = conversation(socket, timeoutMs);
+    let smtp = conversation(socket, timeoutMs);
     const stop = () => socket.destroy();
     signal?.addEventListener('abort', stop, { once: true });
     // A server may slow every refused address down; the whole conversation still ends within `deadlineMs`.
@@ -256,8 +287,21 @@ export function mailboxChecker({ heloName = '', resolveMx = dnsResolveMx, lookup
       failures = 0; reachable = true;
       if (greeting.code !== 220) return failure(greeting.policy ? 'blocked' : 'refused');
       let hello = await smtp.command(`EHLO ${helo}`);
-      if (hello.code !== 250) hello = await smtp.command(`HELO ${helo}`);
+      const extended = hello.code === 250;
+      if (!extended) hello = await smtp.command(`HELO ${helo}`);
       if (hello.code !== 250) return failure(hello.policy ? 'blocked' : 'refused');
+      // Over TLS when the server offers it; a server whose TLS fails is not asked in the clear after offering it.
+      if (extended && hello.starttls && typeof startTls === 'function') {
+        const ready = await smtp.command('STARTTLS');
+        if (ready.code === 220) {
+          smtp.detach();
+          let secure;
+          try { secure = await startTls(socket, server); } catch { socket.destroy(); return failure('tls_failed'); }
+          smtp = conversation(secure, timeoutMs);
+          hello = await smtp.command(`EHLO ${helo}`);
+          if (hello.code !== 250) return failure(hello.policy ? 'blocked' : 'refused');
+        }
+      }
       const ask = async address => {
         const from = await smtp.command('MAIL FROM:<>');
         if (from.code !== 250) return { ...from, sender: true };
@@ -266,6 +310,7 @@ export function mailboxChecker({ heloName = '', resolveMx = dnsResolveMx, lookup
         return answer;
       };
       const judge = answer => {
+        if (answer.sender && answer.tls) return failure('tls_required');
         if (answer.sender) return failure(answer.policy ? 'blocked' : 'sender_refused');
         if (answer.code >= 400 && answer.code < 500) return failure('temporary');
         if (answer.code >= 500 && answer.policy) return failure('blocked');

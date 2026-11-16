@@ -86,6 +86,13 @@ short flight** set (3 to 30 days; empty is off), the month's number funds one ca
 - It is created with its last day, so it ends on its own: started later than the day you approve it, it runs fewer days, never more.
   Handed over, it reserves only its own days of the month's number (`private.ads_launch_reserve`).
 - A Google flight needs the Google Ads API (an import file cannot carry its last day).
+- **Never on a platform that refuses the team (2026-11-17, [review](AI_WORKFORCE_REVIEW_2026-11-17.md)).** November's only flight went
+  to LinkedIn while LinkedIn refused the team's token, failed on `linkedin_permission`, and nobody was told. The plan now skips a platform
+  whose last refusal of the team's sign-in or permission (the daily ad review's answer, or a campaign it refused in the last 30 days) is
+  newer than its last reconnect under Settings → Social media (Settings → Paid ads for Google) (`private.ads_platform_refusals`,
+  `<platform>_connection_failing` in the plan's result). A campaign a platform refuses tells you at once ("New … campaign not created"),
+  and a flight that failed is tried again the next day on a platform that is not failing, at most three times a month, instead of
+  waiting for the next Monday.
 - A campaign approved before flights were switched on or off is refused when it is created (`budget_changed`), so it is planned again
   under the setting as it stands. The autonomy step **Ad campaign launch** (`ad_campaigns`, AI team page; it ships held) adds
 `social.campaign_create` and `social.google_campaign` to the Social Media Manager's list. While it is automatic:
@@ -158,6 +165,11 @@ only after three days and 1,000 impressions or $20 of spend in the last seven da
 - **Raise a budget** when an ad set has three or more results at 70% of the target cost or better. The step is at most 20%, never above
   the owner's cap, Settings → Social media → "Most any ad may spend per day". With no cap set, no increase is ever proposed.
   The executor re-checks the cap, refuses a step over 25%, and refuses if the budget changed since the proposal. The database refuses any automatic approval of a budget change.
+
+Each run's result counts what it skipped by reason (`skips`: `already_proposed`, `leads_elsewhere` for an ad that links to no CareMetric
+product page, `product_not_marketed`, `no_base_ad`, `model_not_configured`, `model_<outcome>`) and keeps the access error each platform
+answered (`refusedBy`), which the flight planner reads (2026-11-17: the review skipped 18 of 18 recommendations every day and nothing
+said why).
 
 Results are leads and sign-ups as Meta and LinkedIn report them (LinkedIn: website conversions and Lead Gen Form leads). On LinkedIn a
 campaign plays the part of an ad set (it holds the daily budget) and a creative the part of an ad, and the same rules apply. A new ad

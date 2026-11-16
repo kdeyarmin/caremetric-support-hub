@@ -36,7 +36,7 @@ describe('names and address shapes', () => {
 
 // A mail server on the loopback interface. `rcpt` answers each RCPT TO by its address; every command is recorded.
 const servers = [];
-async function mailServer({ rcpt = () => '550 5.1.1 No such user', greeting = '220 mx.valleyhospice.org ESMTP', mailFrom = '250 OK', ehlo = '250-mx.valleyhospice.org\r\n250 SIZE 1000' } = {}) {
+async function mailServer({ rcpt = () => '550 5.1.1 No such user', greeting = '220 mx.valleyhospice.org ESMTP', mailFrom = '250 OK', ehlo = '250-mx.valleyhospice.org\r\n250 SIZE 1000', starttls = '220 2.0.0 Ready to start TLS' } = {}) {
   const commands = [];
   const server = createServer(socket => {
     socket.setEncoding('latin1');
@@ -50,7 +50,7 @@ async function mailServer({ rcpt = () => '550 5.1.1 No such user', greeting = '2
         buffer = buffer.slice(end + 2);
         commands.push(line);
         const [verb] = line.split(/[ :]/);
-        const answer = verb === 'EHLO' ? ehlo : verb === 'MAIL' ? mailFrom : verb === 'RCPT' ? rcpt(/<([^>]*)>/.exec(line)[1]) : verb === 'QUIT' ? '221 Bye' : '250 OK';
+        const answer = verb === 'EHLO' ? ehlo : verb === 'MAIL' ? mailFrom : verb === 'RCPT' ? rcpt(/<([^>]*)>/.exec(line)[1]) : verb === 'QUIT' ? '221 Bye' : verb === 'STARTTLS' ? starttls : '250 OK';
         socket.write(`${answer}\r\n`);
         if (verb === 'QUIT') socket.end();
       }
@@ -70,6 +70,21 @@ const checker = (port, options = {}) => mailboxChecker({ heloName: 'hub.caremetr
 const guesses = ['jane.doe@valleyhospice.org', 'jdoe@valleyhospice.org', 'jane@valleyhospice.org'];
 
 describe('asking the business\'s mail server', () => {
+  // Review 2026-11-17: 25 of 44 checks came back unanswered and the reason was not kept; servers that want TLS refuse a plain sender.
+  it('asks over TLS when the server offers it, and says why when a server wants TLS it did not offer', async () => {
+    const tls = await mailServer({ ehlo: '250-mx.valleyhospice.org\r\n250-SIZE 1000\r\n250 STARTTLS', rcpt: address => (address === 'jdoe@valleyhospice.org' ? '250 2.1.5 OK' : '550 5.1.1 User unknown') });
+    const upgraded = vi.fn(async socket => socket);
+    expect(await checker(tls.port, { startTls: upgraded }).check('valleyhospice.org', guesses)).toEqual({ result: 'verified', email: 'jdoe@valleyhospice.org' });
+    expect(upgraded).toHaveBeenCalledWith(expect.anything(), 'mx1.valleyhospice.org');
+    expect(tls.commands.slice(0, 4)).toEqual(['EHLO hub.caremetric.ai', 'STARTTLS', 'EHLO hub.caremetric.ai', 'MAIL FROM:<>']);
+    // A handshake that fails is not followed by questions in the clear.
+    const broken = await mailServer({ ehlo: '250-mx.valleyhospice.org\r\n250 STARTTLS' });
+    expect(await checker(broken.port, { startTls: async () => { throw new Error('handshake'); } }).check('valleyhospice.org', guesses)).toEqual({ result: 'unknown', reason: 'tls_failed' });
+    expect(broken.commands.some(command => command.startsWith('MAIL'))).toBe(false);
+    const wants = await mailServer({ mailFrom: '530 5.7.0 Must issue a STARTTLS command first' });
+    expect(await checker(wants.port).check('valleyhospice.org', guesses)).toEqual({ result: 'unknown', reason: 'tls_required' });
+  });
+
   it('confirms the address its server accepts after refusing a made-up one, and never sends a message', async () => {
     const server = await mailServer({ rcpt: address => (address === 'jdoe@valleyhospice.org' ? '250 2.1.5 OK' : '550 5.1.1 User unknown') });
     expect(await checker(server.port).check('valleyhospice.org', guesses)).toEqual({ result: 'verified', email: 'jdoe@valleyhospice.org' });

@@ -347,6 +347,18 @@ checks the table is closed, the two functions are the Hub server's alone and sav
 exists and the task is scheduled, before it declares `platform.agents.growth-roster-match.v1`. The server registers `growth.match`
 only once the database declares it. `server/agents-growth-roster-match-integration.mjs` runs it through the real roles in CI.
 
+## Interest and our own trials (2026-11-17)
+
+- **Intent follows what the business did** (`20261117150000_work_recovery.sql`, trigger `growth_event_intent`). It was set only by the
+  fit assessment, which stops once a business is researched, so it was empty on all 235 Intel opportunities, the three trials included.
+  Each recorded event now sets it: a trial, a sign-up, first value, a payment or a meeting 100, a positive reply 75, a reply 60, an
+  opened report 50 (at least); "not now" sets it to 25 and "no" to 0, the business's latest word standing over its earlier interest.
+- **Our own trials are internal.** A trial started from your own address (Settings → AI team → your email) or an address on a CareMetric
+  domain marks its organization internal (`private.growth_internal_address`, audited `growth.marked_internal`), so the scorecard does
+  not count it and no customer email is drafted for it. A trial from another address of yours on a personal mail domain is marked by
+  hand on Growth ("Internal account; exclude from outreach"). By your decision of 2026-11-16 the three Intel trials open that day were
+  marked once.
+
 ## Finding decision-makers and their addresses
 
 The Hub finds the people who decide at its best prospects itself (`growth.people`, every half hour, a few businesses at a time;
@@ -486,14 +498,24 @@ emails a day" is under 2%. Two settings, both off until you save them (`20261116
     **Strict** sends the address to your review (eligibility "Needs review") instead.
   - It needs Railway's Pro plan (port 25), like the people finder's checks, and is not counted in "Most address checks a day". When
     three servers in a row cannot be reached the checker rests six hours and spends no tries.
-- **Settings → Customer growth → Pause cold email at this bounce rate** (1 to 50; empty: off). When more than this percent of the cold
-  emails sent in the last seven days (at least 20 of them) bounced for good, or anyone marked one as spam, cold email waits: no first
+  - Since 2026-11-17 ([review](AI_WORKFORCE_REVIEW_2026-11-17.md): 25 of 44 checks had no answer and nothing said why):
+    - A server that offers STARTTLS is asked over TLS, as servers that refuse a plain sender expect (the certificate is not checked:
+      nothing but the questions crosses it), and one that asks for TLS without offering it says so (`tls_required`).
+    - Each run counts why addresses had no answer (`reasons` in the `growth.verify` and `growth.people` results: `temporary` for
+      greylisting, `blocked`, `tls_required`, `tls_failed`, `sender_refused`, `refused`, `dropped`, `no_mail`, `unexpected`), so a
+      paid checking service is decided on the reasons, not guessed.
+    - An address the people finder already confirmed with the business's mail server is recorded as confirmed, so the check does not
+      ask the same server again.
+- **Settings → Customer growth → Pause cold email at this bounce rate** (1 to 50; empty: off). When two or more cold emails sent in
+  the last seven days bounced for good and they are more than this percent of those sent, counted as at least 20 (so 2 bounces in 10
+  emails trip it at 5% and 1 does not; review 2026-11-17: at ten a day the old "at least 20 of them" never filled and 4 bounces in 32
+  emails never tripped it), or anyone marked one as spam, cold email waits: no first
   email is drafted and every approved cold email is held before the send claim, tried again every 15 minutes. A soft bounce (a full
   mailbox, a server that was down) does not count. Replies to people who wrote in and customer emails are never held. You are told
   once a day ("Cold email is paused") and resume it on Growth → Send guard → **Resume cold email**, which starts the seven days
   afresh (audited as `growth.cold_email_resumed`). A trip holds until you resume or change the number: the bounces behind it leaving
   the seven days never start cold email again by themselves (`private.growth_send_guard.tripped_at`). Saving the number also starts them afresh, so bounces from before you switched the
-  guard on never trip it. 5 suits a small volume: at 20 emails one bounce is 5%.
+  guard on never trip it. 5 suits a small volume.
 
 The send claim (`private.growth_claim_message`) is unchanged and still decides every send; the checks above only make an email wait.
 Growth → Send guard shows the mode, the guard's counts and how many addresses were confirmed, accept anything, do not exist, have not

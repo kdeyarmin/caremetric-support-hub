@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkVisual } from './compliance.mjs';
-import { drawStatic, frameOf, imageSize, layouts } from './layouts.mjs';
+import { drawStatic, frameOf, imageSize, layouts, smallPrint, support } from './layouts.mjs';
 import { pngSize, renderEngine, renderStatic } from './render.mjs';
 import { withThemeFiles } from './themes.mjs';
 import { placements } from './specs.mjs';
@@ -121,6 +121,48 @@ describe('static rendering', () => {
       }
     }
   }, 60_000);
+
+  // Review 2026-11-17: the image review blocked headline and checklist images whose words ran past the room they had, drew three of five
+  // checklist items on a landscape canvas, and read a supporting line cut off with "…" as text running off the image.
+  it('fits a long headline layout and a five-item checklist on every canvas, without losing an item or the bottom margin', async () => {
+    const { satori, Resvg, fonts } = await renderEngine();
+    const long = { ...content, headline: 'See which counties send your organization the most referrals and where to spend your week',
+      description: 'Find the hospitals, physicians and facilities in your county from public Medicare data, and plan your team\'s visits in one place every week.',
+      overlay: { ...content.overlay, kicker: 'For home health agency leaders', checklist: ['Every referral source in your territory, ranked', 'The hospitals your county\'s residents use most',
+        'Physicians who certify the most home health patients', 'Competitors located in your county and their share', 'A visit plan for your marketing team every week'] } };
+    for (const product of ['caremetric-intel', 'carebase']) {
+      const files = { ...(await withThemeFiles(product, {})), band: null };
+      for (const layout of ['headline', 'checklist']) {
+        for (const [width, height] of [[1080, 1080], [1080, 1350], [1200, 627], [1080, 1920]]) {
+          const label = `${product} ${layout} ${width}x${height}`;
+          const { element, report } = drawStatic({ layout, width, height, product, content: long, kit: {}, files });
+          expect(report.images.some(image => image.kind === 'logo'), `${label} logo`).toBe(true);
+          if (layout === 'checklist') expect(report.texts.filter(run => run.role === 'checklist item').length, `${label} items`).toBeGreaterThanOrEqual(width > height ? 3 : 5);
+          const picture = new Resvg(await satori(element, { width, height, fonts }), { fitTo: { mode: 'original' } }).render();
+          const px = picture.pixels;
+          const margin = Math.floor(frameOf(width, height).bottom * 0.7);
+          let drawn = 0;
+          for (let y = height - margin; y < height; y += 1) for (let x = 0; x < width; x += 3) {
+            const i = (y * width + x) * 4;
+            if (Math.max(Math.abs(px[i] - px[0]), Math.abs(px[i + 1] - px[1]), Math.abs(px[i + 2] - px[2])) > 30) drawn += 1;
+          }
+          expect(drawn, `${label} bottom margin`).toBe(0);
+          // Every text run carries its words, for the image review.
+          expect(report.texts.every(run => typeof run.value === 'string'), label).toBe(true);
+        }
+      }
+    }
+  }, 120_000);
+
+  it('never cuts the supporting line off with an ellipsis, and keeps small print readable on a landscape canvas', () => {
+    expect(support({ description: 'Short line.' })).toBe('Short line.');
+    expect(support({ description: `${'A sentence that is long enough to matter. '.repeat(2)}${'x'.repeat(120)}` })).toBe('A sentence that is long enough to matter.');
+    expect(support({ description: 'y'.repeat(200) })).toBe('');
+    expect(smallPrint(frameOf(1200, 627), 2.6)).toBe(26);
+    // Square and tall canvases keep their size.
+    expect(smallPrint(frameOf(1080, 1080), 2.6)).toBe(28);
+    expect(smallPrint(frameOf(1080, 1920), 2.6)).toBe(28);
+  });
 
   it('reads image sizes from PNG headers', () => {
     expect(imageSize(syntheticPng(320, 200))).toEqual({ width: 320, height: 200, type: 'image/png' });
