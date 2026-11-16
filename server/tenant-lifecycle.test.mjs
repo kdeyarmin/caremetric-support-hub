@@ -46,3 +46,22 @@ describe('Breathe organization changes through the Hub', () => {
     expect(await tenantLifecycle({ pool: pool(), issue, fetchImpl: applied, enabled: true })('token', apply)).toEqual(lifecycleApplied);
   });
 });
+
+describe('Breathe staff sign-in changes through the Hub', () => {
+  it('sends a staff operation to Breathe\'s fixed staff endpoint with the same breathe.command capability', async () => {
+    const { staffContext, staffEnvelope, staffUserId } = await import('../src/admin/testFixtures/staffAccess.ts');
+    const issue = vi.fn(async () => capability);
+    const staff = { domain: 'staff.access.v1', operation: 'context', targetId: staffUserId };
+    const fetchImpl = vi.fn(async () => Response.json(staffEnvelope('context', staffContext)));
+    expect(await tenantLifecycle({ pool: pool(), issue, fetchImpl, enabled: true })('token', staff)).toEqual(staffContext);
+    expect(issue).toHaveBeenCalledWith('token', 'breathe.command', staff, expect.any(AbortSignal));
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://cmbreathe.com/resupply-api/central-admin/staff-access');
+    // An organization's answer to a staff question is refused, and an unknown kind of change issues nothing.
+    const wrong = vi.fn(async () => Response.json(envelope('context', lifecycleContext)));
+    await expect(tenantLifecycle({ pool: pool(), issue, fetchImpl: wrong, enabled: true })('token', staff)).rejects.toMatchObject({ status: 503 });
+    issue.mockClear();
+    await expect(tenantLifecycle({ pool: pool(), issue, enabled: true })('token', { ...staff, domain: 'staff.delete.v1' })).rejects.toMatchObject({ status: 400, code: 'invalid_request' });
+    await expect(tenantLifecycle({ pool: pool(), issue, enabled: true })('token', null)).rejects.toMatchObject({ status: 400 });
+    expect(issue).not.toHaveBeenCalled();
+  });
+});

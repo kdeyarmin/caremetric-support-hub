@@ -4,7 +4,8 @@ import { isOperationalRead } from '../supabase/functions/_shared/operationsProto
 import { adminRegistry } from '../supabase/functions/_shared/adminRegistry.ts';
 import { advisorsCommandEndpoint, isAdvisorCommand, parseAdvisorCommand, parseAdvisorCommandResult } from '../supabase/functions/_shared/advisorsCommands.ts';
 import { parseAppCommand, parsePortfolioCommand, parseCommandEnvelope } from '../supabase/functions/_shared/adminCommandProtocol.ts';
-import { tenantLifecycleOperation, tenantLifecycleCapabilities } from '../src/admin/tenantLifecycleProtocol.ts';
+import { tenantLifecycleCapabilities } from '../src/admin/tenantLifecycleProtocol.ts';
+import { breatheCommandOperation, staffAccessCapabilities } from '../src/admin/staffAccessProtocol.ts';
 import { tenantLifecycle } from './tenant-lifecycle.mjs';
 import { callNativeAdmin } from './admin-transport.mjs';
 import { publicationId, publicationPart } from '../src/imports/publicationProtocol.ts';
@@ -51,7 +52,7 @@ const commandTargets={
 };
 // Breathe and Intel changes need platform.admin.app-commands.v1 (20261117100100_app_command_audiences_contract.sql). Without it the
 // capabilities those applications advertise for them are not passed to the browser.
-const appCommandCapabilities=new Set([...tenantLifecycleCapabilities,'commands.preview','commands.apply']);
+const appCommandCapabilities=new Set([...tenantLifecycleCapabilities,...staffAccessCapabilities,'commands.preview','commands.apply']);
 async function authorize(db,audience,payload,{appCommands=false}={}) {
   if (['pennsync','caremetric-emr','caremetric-go'].includes(audience)) throw new HttpError(403,'Application disconnected.');
   if(audience==='publication') {
@@ -91,7 +92,7 @@ async function authorize(db,audience,payload,{appCommands=false}={}) {
   }
   if (audience==='breathe.command' || audience==='intel.command') {
     if (!appCommands) throw new HttpError(403,'Unsupported authorization audience.');
-    if (audience==='breathe.command') tenantLifecycleOperation.parse(payload);
+    if (audience==='breathe.command') breatheCommandOperation.parse(payload);
     else parseAppCommand({product:'intel',...payload});
     return (await db.query('select hub.authorize_app_command() as actor')).rows[0].actor;
   }
@@ -178,7 +179,7 @@ export function delegations({pool,storageUrl,provider,fetchImpl=fetch,observer,l
       // never offer CareBase's command names for an application without a command endpoint of its own.
       if (operation.operation==='capabilities') {
         const offered=name=>!appCommandCapabilities.has(name) || request.product==='carebase'
-          || (appCommands && (request.product==='breathe' ? name.startsWith('organizations.lifecycle.') : Object.hasOwn(commandTargets,request.product) && name.startsWith('commands.')));
+          || (appCommands && (request.product==='breathe' ? name.startsWith('organizations.lifecycle.') || name.startsWith('staff.access.') : Object.hasOwn(commandTargets,request.product) && name.startsWith('commands.')));
         return {...result,data:{...result.data,operations:result.data.operations.filter(offered)}};
       }
       return result;

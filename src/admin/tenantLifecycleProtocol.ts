@@ -13,10 +13,11 @@ export const tenantLifecycleAction = "organizations.setSuspension";
 export const tenantLifecycleCapabilities = ["organizations.lifecycle.context", "organizations.lifecycle.preview", "organizations.lifecycle.apply", "organizations.lifecycle.resume"] as const;
 export const tenantLifecycleEndpoint = "https://cmbreathe.com/resupply-api/central-admin/tenant-lifecycle";
 
-const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).transform(value => value.toLowerCase());
-const digest = z.string().regex(/^[0-9a-f]{64}$/);
-const instant = z.string().max(100).refine(value => /^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:\d\d)$/.test(value) && Number.isFinite(Date.parse(value)));
-const reason = z.string().min(10).max(500).refine(value => value === value.trim() && !/\p{Cc}/u.test(value));
+export const lifecycleUuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).transform(value => value.toLowerCase());
+export const lifecycleDigest = z.string().regex(/^[0-9a-f]{64}$/);
+export const lifecycleInstant = z.string().max(100).refine(value => /^\d{4}-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:\d\d)$/.test(value) && Number.isFinite(Date.parse(value)));
+export const lifecycleReason = z.string().min(10).max(500).refine(value => value === value.trim() && !/\p{Cc}/u.test(value));
+const uuid = lifecycleUuid, digest = lifecycleDigest, instant = lifecycleInstant, reason = lifecycleReason;
 const parameters = z.object({ suspended: z.boolean() }).strict();
 const domain = z.literal(tenantLifecycleDomain);
 

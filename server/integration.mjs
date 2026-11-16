@@ -208,6 +208,11 @@ try {
   assert.deepEqual(Object.keys(breatheActor).sort(),['assurance_expires_at','method','operation','role','session_id','session_started_at','user_id'],'Breathe receives exactly the proof it checks');
   assert.deepEqual(breatheActor.operation,lifecycleOperation); assert.equal(breatheActor.role,'platform_admin');
   await assert.rejects(appCaps.consume(breatheChangeCapability,'breathe.command'),'a Breathe change capability is single use');
+  // A staff sign-in change rides the same audience (staff.access.v1).
+  const staffOperation={domain:'staff.access.v1',operation:'context',targetId:'0f9c2d4e-6b1a-4c3d-8e5f-7a6b5c4d3e2f'};
+  const staffChangeCapability='cmh_'+'j'.repeat(43);
+  await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'breathe.command',$3::jsonb,now()+interval '30 seconds')",[digest(staffChangeCapability),session,JSON.stringify(staffOperation)]);
+  assert.deepEqual((await appCaps.consume(staffChangeCapability,'breathe.command')).operation,staffOperation);
   const intelOperation={operation:'preview',requestId:'7d3c1b2a-4e5f-4a6b-8c7d-9e0f1a2b3c4d',action:'users.setActive',targetId:'00000000000000000000002a',parameters:{active:false},reason:'Left the agency last week'};
   const intelChangeCapability='cmh_'+'f'.repeat(43);
   await admin.query("insert into private.app_delegations(token_hash,session_id,audience,payload,expires_at) values($1,$2,'intel.command',$3::jsonb,now()+interval '30 seconds')",[digest(intelChangeCapability),session,JSON.stringify(intelOperation)]);
