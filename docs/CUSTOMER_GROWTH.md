@@ -435,7 +435,7 @@ While briefs are on, an Intel agency's first email waits up to a day for its bri
 written as before.
 
 **The first email** (Settings → Customer growth → Write first emails on the top model). An Intel agency's first cold email that has a
-brief is written on the top model at high effort (`growth.12`), from the brief: its opening, one of its questions, its angle, and the
+brief is written on the top model at high effort (`growth.13`), from the brief: its opening, one of its questions, its angle, and the
 county figure (the writer may state it once, as a fact about the county with its source, never about the agency; a brief written for
 an agency gives a nursing home no figure, and one written for a nursing home gives an agency none). The brief's angle
 replaces the hashed angle; while experiments run, a quarter of agencies keep the hashed one (`arms.angle_by`: `brief` or `hash`), so the

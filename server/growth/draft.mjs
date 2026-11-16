@@ -26,7 +26,7 @@ import { researchOnlyPrefix } from './roster.mjs';
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.12';
+export const growthPromptVersion='growth.13';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric about one CareMetric product: outreach to a prospect, written as CareMetric's founder, or a message to a customer from its Account Manager. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -157,7 +157,7 @@ export const problemHints=Object.freeze({
  * always recorded. length_basis distinguishes applied treatments from legacy growth.11 labels at learning time.
  * Nothing here is text from the message or the prospect.
  */
-export function messageArms(o, sources, { reportLed = false, brief = null } = {}) {
+export function messageArms(o, sources, { brief = null, reportLed = false } = {}) {
   const hash=createHash('sha256').update(String(o.organization_id??o.id)).digest();
   const experiment=o.policy?.experiment_enabled===true;
   const length=reportLed?'report':experiment && hash[0]%2 ? 'concise':'control';
@@ -222,22 +222,22 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   // A re-ask counts touches from when it began; a website lead follows its own sequence.
   const sent=Math.max(0,Number(o.touches??0)-(reask?Number(o.memory?.touchesBefore??0):0));
   const outreachTouch=Math.min(sent+1,sequencePlan.length);
+  // The writer part of the agency's account brief (brief.mjs), for its first cold email only. The county figure for the agency's own
+  // setting becomes a source of its own (id "county"), so its numbers pass the checks; it is never stored as a citation.
+  const briefed=work.kind==='outreach'&&brief&&typeof brief==='object'&&Number(o.touches??0)===0&&!o.memory?.reengagedAt&&!o.memory?.lead?brief:null;
   // An agency's own market report (report-link.mjs) is the first touch's next step when there is one.
   const offered=work.kind==='outreach'&&report?.url&&/^https:\/\/www\.caremetricintel\.com\/report\/[A-Za-z0-9_.-]+$/.test(report.url)?report:null;
   // Intel's reports cover home health and hospice agencies only: a nursing home (owner decision 2026-11-16) gets the standard first touch
   // and none of the agency-only report pages. Anything not clearly a nursing home keeps the agency's report-led email.
   const nursingHome=o.product==='caremetric-intel'&&!offered&&intelSetting({name:o.name,evidence:sources})==='nursing_home';
   const withoutLinks=nursingHome?draftLinks(o.product).map(link=>link.url).filter(agencyOnlyPage):[];
-  // The first cold email to a CareMetric Intel prospect is built around a market report (owner direction 2026-11-15).
-  const reportLed=work.kind==='outreach'&&o.product==='caremetric-intel'&&outreachTouch===1&&!reask&&!lead&&!nursingHome;
-  // The writer part of the agency's account brief (brief.mjs), for its first cold email only. The county figure for the agency's own
-  // setting becomes a source of its own (id "county"), so its numbers pass the checks; it is never stored as a citation.
-  const briefed=work.kind==='outreach'&&brief&&typeof brief==='object'&&Number(o.touches??0)===0&&!o.memory?.reengagedAt&&!o.memory?.lead?brief:null;
   // The brief's county figure goes in only when the brief was written for the same kind of organization this email is to: a nursing home
   // never reads an agency's figures, nor an agency a nursing home's.
   const sameSetting=briefed&&(nursingHome?briefed.setting==='nursing_home':briefed.setting!=='nursing_home');
   const county=sameSetting&&briefed.countyFact?.claim?{id:'county',claim:String(briefed.countyFact.claim).slice(0,400),source_url:'https://data.cms.gov/',observed_at:new Date().toISOString()}:null;
-  const arms=messageArms(o,sources,{reportLed,brief:briefed});
+  // The first cold email to a CareMetric Intel prospect is built around a market report (owner direction 2026-11-15).
+  const reportLed=work.kind==='outreach'&&o.product==='caremetric-intel'&&outreachTouch===1&&!reask&&!lead&&!nursingHome;
+  const arms=messageArms(o,sources,{brief:briefed,reportLed});
   const variant=arms.length;
   const armTag=work.kind==='outreach'?[arms.trigger,arms.angle,arms.subject].filter(Boolean).join('-').replace(/_/g,'-').slice(0,60):null;
   const tags=work.kind==='outreach'?linkTags.growthOutreach(o.product,reask?Number(o.touches??0)+1:outreachTouch,armTag):linkTags.accountEmail(o.product,work.kind);
