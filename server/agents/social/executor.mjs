@@ -20,6 +20,13 @@ import { linkedinComment, linkedinPost } from './linkedin.mjs';
 import { publishApprovedVideo } from './video.mjs';
 
 const failure = code => Object.assign(new Error('The social action was not carried out.'), { code });
+/**
+ * Words that no longer pass the writing check (content.mjs, checkSocialText) when they are about to go out: a rule may have changed since
+ * they were approved. The code names the check that refused them (`post_check_long_sentence`, `reply_check_link`), so the owner's
+ * screen can say why (src/admin/teamProtocol.ts). `changed`: the words pass, but checking them again would publish different words
+ * from the ones approved.
+ */
+const checkFailure = (what, checked) => failure(`${what}_check_${checked.ok ? 'changed' : /^[a-z][a-z_]{0,40}$/.test(checked.reason ?? '') ? checked.reason : 'refused'}`);
 const deferred = () => Object.assign(new Error('The post waits for its time slot.'), { code: 'action_deferred' });
 const ctas = new Set(['LEARN_MORE', 'SIGN_UP']);
 
@@ -67,10 +74,10 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       // A link to one of the product's own published articles is allowed beside the product's pages.
       const extraLinks = input.link ? [input.link] : [];
       const checked = checkSocialText(input.message, { surface: input.platform, product: input.product ?? null, extraLinks });
-      if (!checked.ok || checked.text !== input.message) throw failure('invalid_post');
+      if (!checked.ok || checked.text !== input.message) throw checkFailure('post', checked);
       if (input.platform === 'instagram' && !input.videoUrl && !/^https:\/\//.test(input.imageUrl ?? '')) throw failure('image_missing');
       // The link beside a post: one of the product's own pages, as written or with well-formed campaign tags (links.mjs), nothing else.
-      if (input.link && (!/^https:\/\//.test(input.link) || !checkSocialText(`Start here: ${input.link}`, { surface: 'facebook', product: input.product ?? null, extraLinks }).ok)) throw failure('invalid_post');
+      if (input.link && (!/^https:\/\//.test(input.link) || !checkSocialText(`Start here: ${input.link}`, { surface: 'facebook', product: input.product ?? null, extraLinks }).ok)) throw failure('post_check_link');
       if (input.imageUrl && !/^https:\/\//.test(input.imageUrl)) throw failure('invalid_post');
       if (input.videoUrl) {
         const published = await careful(execution, () => publishApprovedVideo(execution, { store, publicOrigin, meta, linkedin: li, now }));
@@ -94,7 +101,7 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       if (Number.isFinite(due) && due - now().getTime() > 2 * 60_000) throw deferred();
       const extraLinks = String(input.message ?? '').match(/https:\/\/[^\s]+/g) ?? [];
       const checked = checkSocialText(input.message, { surface: 'linkedin', product: input.product ?? null, extraLinks });
-      if (!checked.ok || checked.text !== input.message) throw failure('invalid_post');
+      if (!checked.ok || checked.text !== input.message) throw checkFailure('post', checked);
       // Paused, moved off Act or "Keep approving" since it was approved: it no longer goes out on its own.
       if (execution.autoApproved === true && !(typeof store?.actionTrusted === 'function' && await store.actionTrusted(execution.id, execution.execution ?? null) === true)) {
         throw failure('approval_required');
@@ -109,7 +116,7 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       const client = onLinkedIn(input) ? li : meta;
       const surface = input.kind === 'message' ? 'message' : 'comment';
       const checked = checkSocialText(input.message, { surface, product: input.product ?? null });
-      if (!checked.ok || checked.text !== input.message) throw failure('invalid_reply');
+      if (!checked.ok || checked.text !== input.message) throw checkFailure('reply', checked);
       const read = await client.readItem({ platform: input.platform, kind: input.kind, id: input.id, parentId: input.parentId }, { now: now() });
       if (read.gone) throw failure('item_gone');
       if (read.answered || read.fromPage) throw failure('already_answered');

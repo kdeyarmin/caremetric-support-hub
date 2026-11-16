@@ -309,9 +309,62 @@ const errorLabels: Record<string, string> = {
   asset_changed: "The creative asset changed since it was proposed (it was rejected, expired or retired), so nothing changed.",
   invalid_creative_action: "The creative action did not name its asset correctly, so nothing changed.",
   creative_refused: "The database refused the creative hand-over, so nothing changed.",
+  invalid_post: "The post was not in a form the Hub can publish (its platform, a story's image, or an image address that is not https), so nothing was published.",
 };
+/**
+ * Why approved words failed the writing check run again just before they went out (server/agents/social/executor.mjs: a rule may have
+ * changed since they were approved). Each is a reason code of server/agents/social/content.mjs (checkSocialText) or of the checks it runs
+ * (server/agents/content/validate.mjs: textProblems, unclearCopy); server/agents/social/executor.test.mjs holds this list to them.
+ */
+export const writingCheckReasons: Record<string, string> = {
+  changed: "checking it again would change its words, so the words you approved were not the ones that would go out",
+  refused: "a rule refused it",
+  surface: "it was written for a place the Hub cannot publish to",
+  vocabulary: "it uses a word outside the fixed vocabulary (ALR, auditor)",
+  empty: "it has no words",
+  too_long: "it is longer than the platform allows",
+  markup: "it carries formatting the platform would show as code",
+  link: "it links somewhere other than the product's own pages or its published articles",
+  hashtags: "it has more hashtags than allowed, or any where none are allowed",
+  emoji: "it has more than three emoji",
+  identifier: "it appears to carry personal information",
+  personal_information: "it appears to carry personal information",
+  contact_detail: "it carries an email address or phone number",
+  other_product_price: "it states a price that is not this product's",
+  unlisted_price: "it states a price the fact sheet does not",
+  unlisted_number: "it states a number the fact sheet does not",
+  meeting_offer: "it offers a call, a meeting or a demo, which CareMetric does not do",
+  call_offer: "it offers a call, a meeting or a demo, which CareMetric does not do",
+  promise: "it promises a result",
+  guarantee: "it guarantees an outcome",
+  compliance_assurance: "it promises compliance or passing an inspection",
+  certification_claim: "it claims a certification, endorsement, uptime or round-the-clock support",
+  voice_claim: "it describes AI that uses voice or the phone",
+  testimonial: "it refers to customers, testimonials or case studies (none are approved)",
+  competitor_named: "it names a competitor",
+  prove_word: "it uses \"prove\", \"proof\" or \"evidence\" about CareBase",
+  trial_terms: "it says the Intel trial needs no credit card (it needs one, and bills automatically unless canceled)",
+  personal_attribute: "it refers to the reader's personal attributes, which ads may not",
+  ai_mention: "it mentions AI or how it was written",
+  name_echo: "it repeats the person's name back to them",
+  quotes_customer: "it quotes the person's own words back to them",
+  empty_words: "it uses an empty marketing word (unlock, empower, leverage, seamless, solution and the like)",
+  fragments: "it strings one- or two-word fragments together instead of saying who it is for and what it does",
+  long_sentence: "it has a sentence over 30 words",
+};
+const writingCheck = /^(post|reply)_check_([a-z][a-z_]*)$/;
 /** What a stored error code means for the owner; an unknown code is shown as it is. */
-export const errorLabel = (code: string | null | undefined) => (code ? errorLabels[code] ?? code : "");
+export const errorLabel = (code: string | null | undefined) => {
+  if (!code) return "";
+  const check = writingCheck.exec(code);
+  if (check) {
+    const reason = writingCheckReasons[check[2]] ?? check[2].replaceAll("_", " ");
+    return check[1] === "post"
+      ? `The post no longer passes the writing check (a rule may have changed since you approved it), so it was not published: ${reason}. Approve a corrected post instead.`
+      : `The reply no longer passes the writing check, so it was not sent: ${reason}.`;
+  }
+  return errorLabels[code] ?? code;
+};
 /**
  * Why an action that ended `failed` did not go out. A failed action is final, and the "Run what's waiting" button picks up only approved
  * ones, so a lapsed sign-in here is not something that button can put right (a task waiting for the sign-in is: see `errorLabel`).
