@@ -458,6 +458,12 @@ it (`held.top_model_later`); a repair pass stays on the agent's own tier.
 the owner of an agency like this one (`critic.1`) and scores it 1 to 5 for being specific, relevant, clear in its ask and worth a reply.
 Below 4 the email is rewritten once around its weakest sentence, on the same tier, and the better-scored version is kept. The score is
 recorded with the email (`arms.critic`, `arms.rewritten`), and the Monday memo compares replies by score once there are 20 of each.
+Since 2026-11-17 (`20261117160000_growth_diagnostics.sql`, feature `platform.agents.growth-diagnostics.v1`) what the reader said is
+kept beside the email in `private.growth_message_reviews`: the four scores and the sentence that most made them stop reading, for the
+first read and the rewrite's, and what became of the rewrite (`not_needed`, `no_time`, `no_answer`, `failed_checks` with the check's
+code, `unread`, `scored_lower` or `kept`). On the first day all four reviewed emails scored 2 or 3, each was rewritten and none scored
+higher; after about 20 first emails these rows decide whether the rewrite (about 10 cents and 30 to 45 seconds each) is kept. A
+review that cannot be recorded never holds the email (the sweep counts it as `unreviewed`).
 
 **Money.** A brief costs about 30 to 45 cents (research on the draft tier, the brief on the top model); a first email on the top model
 about 7 to 15 cents, the review about a cent. The migration raises the Marketing Manager's daily budget to $15 (owner decision
@@ -483,7 +489,10 @@ emails a day" is under 2%. Two settings, both off until you save them (`20261116
     again. Unlike "Do not contact" it says nothing about the business's wishes, so it never blocks a named person there. You can
     change it on Growth.
   - *No answer* (a greylisting or silent server): asked again after 16 hours, three times at most. Then **Check** sends as before;
-    **Strict** sends the address to your review (eligibility "Needs review") instead.
+    **Strict** sends the address to your review (eligibility "Needs review") instead. Since 2026-11-17 the contact keeps why the
+    latest unanswered try got no answer (`mailbox_reason`: `temporary`, `blocked`, `refused`, `sender_refused`, `unexpected`,
+    `dropped`, `no_mail`, `invalid`, `unreachable` or `error`; never the server's words), also after a later try answers, and each
+    run counts them (`why`). On the first day 25 of 47 addresses went unanswered; these say whether asking again ever helps.
   - It needs Railway's Pro plan (port 25), like the people finder's checks, and is not counted in "Most address checks a day". When
     three servers in a row cannot be reached the checker rests six hours and spends no tries.
 - **Settings → Customer growth → Pause cold email at this bounce rate** (1 to 50; empty: off). When more than this percent of the cold

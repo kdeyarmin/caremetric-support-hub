@@ -251,6 +251,41 @@ describe('a first email written from the brief', () => {
     expect(result.arms).toMatchObject({ critic: '4', rewritten: '1' });
     const rewrite = run.mock.calls.find(([, request]) => request.promptVersion === 'growth.14-c')[1];
     expect(JSON.parse(rewrite.user).fix).toMatch(/scored this email 2 of 5.*certify the most home health patients in Butler County/);
+    // What the reader said on both reads travels with the draft, to be recorded beside it.
+    expect(result.review).toEqual({ promptVersion: 'critic.1', outcome: 'kept',
+      first: { specific: 2, relevant: 3, clearAsk: 4, wouldReply: 2, weakest: 'Do you know which physicians certify the most home health patients in Butler County?' },
+      rewrite: { specific: 4, relevant: 4, clearAsk: 5, wouldReply: 4, weakest: '' } });
+  });
+
+  it('records what became of the rewrite: not needed, scored lower, failed its checks', async () => {
+    const reader = scores => ({ outcome: 'completed', output: { specific: 3, relevant: 3, clearAsk: 3, weakestSentence: '  The last line.  ', ...scores } });
+    const reviewOf = async (reads, rewritten = draft) => {
+      let read = 0;
+      const run = vi.fn(async (_task, request) => (request.promptVersion === 'critic.1' ? reader(reads[read++])
+        : { outcome: 'completed', output: request.promptVersion.endsWith('-c') ? rewritten : draft }));
+      return draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run }, brief, critic: true });
+    };
+    const good = await reviewOf([{ wouldReply: 4 }]);
+    expect(good.review).toEqual({ promptVersion: 'critic.1', outcome: 'not_needed', rewrite: null,
+      first: { specific: 3, relevant: 3, clearAsk: 3, wouldReply: 4, weakest: 'The last line.' } });
+    const lower = await reviewOf([{ wouldReply: 3 }, { wouldReply: 2 }]);
+    expect(lower.subject).toBe(draft.subject);
+    expect(lower.arms).toMatchObject({ critic: '3' });
+    expect(lower.arms.rewritten).toBeUndefined();
+    expect(lower.review).toMatchObject({ outcome: 'scored_lower', first: { wouldReply: 3 }, rewrite: { wouldReply: 2 } });
+    const failed = await reviewOf([{ wouldReply: 2 }], { ...draft, citations: ['nowhere'] });
+    expect(failed.review).toMatchObject({ outcome: 'failed_checks', rewrite: null });
+    expect(failed.review.problem).toMatch(/^[a-z_]+$/);
+    // A rewrite refused for its words comes back without an answer, but it is a failed check, not the model's silence.
+    const worded = await reviewOf([{ wouldReply: 2 }], { ...draft, body: `${draft.body} Ask your financial auditor.` });
+    expect(worded.review).toMatchObject({ outcome: 'failed_checks', problem: 'vocabulary', rewrite: null });
+    expect(worded.subject).toBe(draft.subject);
+    let read = 0;
+    const silent = vi.fn(async (_task, request) => (request.promptVersion === 'critic.1' ? reader([{ wouldReply: 2 }][read++])
+      : request.promptVersion.endsWith('-c') ? { outcome: 'failed', output: null } : { outcome: 'completed', output: draft }));
+    const unanswered = await draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run: silent }, brief, critic: true });
+    expect(unanswered.review).toMatchObject({ outcome: 'no_answer', rewrite: null });
+    expect(unanswered.review).not.toHaveProperty('problem');
   });
 });
 
@@ -259,13 +294,16 @@ describe('the sweep and the brief', () => {
   const base = { product: 'caremetric-intel', stage: 'qualified', owner_agent: 'marketing_manager', internal: false, next_at: '2026-01-01T00:00:00Z', touches: 0, work: [], events: [],
     version: 4, contact_id: 'contact', contact_version: 7, eligibility: 'permitted', memory: {}, assessed_at: now, policy: { version: 9, approved_claim: 'Intel shows referral sources.' },
     evidence: [{ id: 'source', source_url: 'https://example.org', claim: 'A hospice in Erie.', observed_at: now }] };
-  const sweep = async ({ brief = null, enabled = true, qualityWriter = false, items = [{ ...base, id: 'a', organization_id: 'ga' }] } = {}) => {
+  const sweep = async ({ brief = null, enabled = true, qualityWriter = false, critic = false, extra = [], reviewRecord = vi.fn(async () => true),
+    items = [{ ...base, id: 'a', organization_id: 'ga' }] } = {}) => {
     const { growthHandlers } = await import('./worker.mjs');
     const store = { snapshot: vi.fn(async () => ({ total: items.length, items })), plan: vi.fn(async () => 'work'), draft: vi.fn(async () => ({ id: 'message', status: 'draft' })), propose: vi.fn(),
-      briefWriter: vi.fn(async () => brief) };
-    const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: { subject: 'Referral sources in Erie', body: 'Which hospitals send you the most patients? Reply and I will send the steps.', citations: ['source'], needsHuman: false } })) };
-    const growth = { store, model, signingReady: true, hash: x => x, unsubscribeToken: () => 'token', briefs: { enabled, qualityWriter } };
-    const outcome = await growthHandlers({ growth, model, features: new Set([growthBriefFeature]), marketed: ['caremetric-intel'] })['growth.pipeline']({ id: 'task', agent: { autonomy: 'propose' }, kind: 'growth.pipeline' });
+      briefWriter: vi.fn(async () => brief), reviewRecord };
+    const email = { subject: 'Referral sources in Erie', body: 'Which hospitals send you the most patients? Reply and I will send the steps.', citations: ['source'], needsHuman: false };
+    const model = { configured: true, run: vi.fn(async (_task, request) => ({ outcome: 'completed', output: request.promptVersion === 'critic.1'
+      ? { specific: 3, relevant: 4, clearAsk: 4, wouldReply: 4, weakestSentence: 'Reply and I will send the steps.' } : email })) };
+    const growth = { store, model, signingReady: true, hash: x => x, unsubscribeToken: () => 'token', briefs: { enabled, qualityWriter, critic } };
+    const outcome = await growthHandlers({ growth, model, features: new Set([growthBriefFeature, ...extra]), marketed: ['caremetric-intel'] })['growth.pipeline']({ id: 'task', agent: { autonomy: 'propose' }, kind: 'growth.pipeline' });
     return { store, model, outcome };
   };
   it('holds a first email for its brief for a day while briefs are on, and writes as before when they are off', async () => {
@@ -281,5 +319,21 @@ describe('the sweep and the brief', () => {
     const { model, outcome } = await sweep({ brief, qualityWriter: true, items: [{ ...base, id: 'a', organization_id: 'ga' }, { ...base, id: 'b', organization_id: 'gb' }] });
     expect(model.run.mock.calls.filter(([, request]) => request.tier === 'quality')).toHaveLength(1);
     expect(outcome.result).toMatchObject({ drafted: 1, held: { top_model_later: 1 } });
+  });
+  it('records the reader\'s review beside the proposed email once the diagnostics feature is declared, and never in the message itself', async () => {
+    const brief = { angle: 'referral_sources', summary: 'A hospice in Erie.' };
+    const { growthDiagnosticsFeature } = await import('./worker.mjs');
+    const before = await sweep({ brief, critic: true });
+    expect(before.store.draft.mock.calls[0][2]).not.toHaveProperty('review');
+    expect(before.store.reviewRecord).not.toHaveBeenCalled();
+    const after = await sweep({ brief, critic: true, extra: [growthDiagnosticsFeature] });
+    expect(after.store.draft.mock.calls[0][2]).not.toHaveProperty('review');
+    expect(after.store.propose).toHaveBeenCalledWith('task', 'message');
+    expect(after.store.reviewRecord).toHaveBeenCalledWith('message', { promptVersion: 'critic.1', outcome: 'not_needed', rewrite: null,
+      first: { specific: 3, relevant: 4, clearAsk: 4, wouldReply: 4, weakest: 'Reply and I will send the steps.' } });
+    // A review the database refuses never holds the email: it is counted.
+    const refused = await sweep({ brief, critic: true, extra: [growthDiagnosticsFeature], reviewRecord: vi.fn(async () => { throw Object.assign(new Error('Invalid review'), { code: '22023' }); }) });
+    expect(refused.store.propose).toHaveBeenCalledWith('task', 'message');
+    expect(refused.outcome.result).toMatchObject({ drafted: 1, unreviewed: 1 });
   });
 });

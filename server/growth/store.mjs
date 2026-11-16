@@ -66,7 +66,9 @@ export function growthStore(pool) {
     sendHold:messageId=>server('private.growth_send_hold',[messageId]),
     draftHold:contactId=>server('private.growth_draft_hold',[contactId]),
     mailboxCandidates:limit=>server('private.growth_mailbox_candidates',[limit]),
-    mailboxRecord:(contactId,result)=>server('private.growth_mailbox_record',[contactId,result]),
+    // With a reason (20261117160000_growth_diagnostics.sql), also why the server gave no answer.
+    mailboxRecord:(contactId,result,reason)=>server('private.growth_mailbox_record',reason===undefined?[contactId,result]:[contactId,result,reason]),
+    reviewRecord:(messageId,review)=>server('private.growth_review_record',[messageId,JSON.stringify(review)]),
     sendGuardState:()=>server('private.growth_send_guard_state'),
     sendGuard:token=>withSession(pool,token,db=>run(db,'hub.growth_send_guard',[])),
     sendGuardResume:token=>withSession(pool,token,db=>run(db,'hub.growth_send_guard_resume',[])),
