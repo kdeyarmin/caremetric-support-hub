@@ -108,6 +108,20 @@ const phraseEnds = new Set(['a', 'an', 'the', 'this', 'that', 'these', 'those', 
   'pm', 'star', 'point', 'percent', 'second', 'mile', 'page', 'step', 'dollar', 'word', 'x']);
 const plural = word => /s$/.test(word) && !/(?:ss|us|is|ous|as|'s)$/.test(word);
 const yearLike = /^(?:19|20)\d{2}$/;
+// A counted thing used to describe a plural noun names that noun's kind, and the number counts the noun: "5 key staff roles" are roles,
+// "10 home safety tips" are tips, "3 referral sources" are sources. A measure keeps its number ("30 day trials", "120 bed homes"), and so
+// does a noun that only restates the unit ("5 staff members", "33,000 ZIP codes", "12 customer accounts").
+const measures = new Set(['minute', 'hour', 'day', 'week', 'month', 'year', 'time', 'seat', 'bed']);
+const restating = /^(?:members?|workers?|individuals?|professionals?|personnel|hires?|positions?|openings?|accounts?|codes?|markets?)$/;
+const unitOfWord = word => unitOf(word) ?? (word.includes('-') ? unitOf(word.split('-')[0]) : null);
+/** True when the words after a counted unit lead to a plural noun it describes, before the phrase ends or another unit. */
+const describesNoun = rest => {
+  for (const word of rest.slice(0, 3)) {
+    if (word === ',' || phraseEnds.has(word) || unitOfWord(word) || restating.test(word)) return false;
+    if (plural(word)) return true;
+  }
+  return false;
+};
 // A label's number names a step or a place in a list, not a count: "Step 2 Train staff", "Steps 2 and 3", "Tip 3", "Touch 2", "No. 1", "#1".
 // Time words are not labels: "each year 12 hours of training" is 12 hours.
 // A bare "#" is a label only when it touches the number ("#1"): "## 500 homes" is a Markdown heading, and its count is read.
@@ -141,16 +155,19 @@ export function numbersIn(value) {
     // must describe the unit too: a unit straight after a comma begins another clause ("in 12 Pennsylvania, staff can"), and is not this
     // number's.
     let joinable = false, listed = false, read = 0;
-    for (const word of tokens) {
+    for (const [index, word] of tokens.entries()) {
       if (word === ',') {
         if (describing && joinable) { joinable = false; listed = true; continue; }
         break;
       }
       if (++read > 5) break;
       // A hyphenated word is read by its first part as well ("12 month-to-month plans" is 12 months, as before).
-      const unit = unitOf(word) ?? (word.includes('-') ? unitOf(word.split('-')[0]) : null);
+      const unit = unitOfWord(word);
       if (unit) {
-        if (!listed) found.add(`${numberWords[match[1].toLowerCase()] ?? numberOf(match[1])}:${unit}`);
+        // After a space, a counted thing that describes the plural noun after it is not the count ("5 key staff roles"); a hyphenated
+        // number keeps it ("a 3-county region").
+        const describesNext = !dash && !measures.has(unit) && describesNoun(tokens.slice(index + 1));
+        if (!listed && !describesNext) found.add(`${numberWords[match[1].toLowerCase()] ?? numberOf(match[1])}:${unit}`);
         break;
       }
       if (qualifiers.has(word) || (describing && !phraseEnds.has(word) && !plural(word))) { joinable = true; listed = false; continue; }
