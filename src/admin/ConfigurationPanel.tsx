@@ -26,7 +26,8 @@ export function ConfigurationPanel({target,label,client=configurationClient,onAp
   const load=async()=>{
     if(locked)return;setBusy(true);setError('');setMessage('');setPreview(null);setConfirmed(false);setCanApply(false);setSelected(null);
     try{const result=await request({domain,operation:'context',target}) as ConfigurationContext;setContext(result);
-      setEnabled('enabled' in result.state?result.state.enabled:'isEnabled' in result.state?result.state.isEnabled??false:result.state.isDisabled);
+      // "Enable release globally" is ticked only for a release that is on for everyone: a cohort rollout is not global.
+      setEnabled('enabled' in result.state?result.state.enabled:'isEnabled' in result.state?(result.state.rolloutMode==='global'&&result.state.isEnabled===true):result.state.isDisabled);
       setOwner('owner' in result.state?result.state.owner??'':'');setExpires('expiresAt' in result.state?result.state.expiresAt??'':'');
       setCommands(await request({domain,operation:'commands',target,offset:0}) as ConfigurationCommands);
     }catch{setContext(null);setError('Current configuration could not be loaded. Retry after checking your connection and SMS session.');}finally{setBusy(false);}
@@ -41,6 +42,9 @@ export function ConfigurationPanel({target,label,client=configurationClient,onAp
       let requestId=requestIds.current.get(intent);if(!requestId){requestId=crypto.randomUUID();requestIds.current.set(intent,requestId);}
       const op=parseConfigurationOperation({domain,operation:'preview',requestId,target,configurationRevision:context.configurationRevision,parameters:params,reason:why});
       const result=verifyConfigurationPreview(await request(op),context,params,why);setClock(Date.now());setPreview(result);setCanApply(true);
+      // The request identity only protects a review whose answer was lost. Once one arrives, a later review (after this one
+      // expires, say) is a new request, or the application would hand back this same expired review.
+      requestIds.current.delete(intent);
       setSelected({commandId:result.commandId,expectedDigest:result.previewDigest});
     }catch{setError('Review could not be prepared. Check the fields and current configuration. Retrying the same review keeps its request identity.');}finally{setBusy(false);}
   };
@@ -71,6 +75,7 @@ export function ConfigurationPanel({target,label,client=configurationClient,onAp
         :<p>Scope: {context.impact.organizationName??'Global'}. Retained cohorts: {context.impact.retainedCohortCount}; memberships: {context.impact.retainedMembershipCount}. Organization stops: {context.impact.organizationKillSwitchCount}. Next scheduled boundary: {timeLabel(context.impact.nextBoundaryAt)}.</p>}</div>
       <fieldset disabled={locked}><legend>Proposed change</legend>
         <label><input type="checkbox" checked={enabled} onChange={event=>{setEnabled(event.target.checked);changed();}}/>{target.kind==='job'?'Set job stop switch':target.kind==='release'?'Enable release globally':'Stop this feature'}</label>
+        {target.kind==='release'&&'rolloutMode' in context.state&&context.state.rolloutMode==='cohort'&&<p role="note">This release is currently rolled out to a cohort. A change reviewed here replaces that rollout: on for every organization, or off.</p>}
         {target.kind==='release'&&<label>Release owner<input value={owner} maxLength={200} onChange={event=>{setOwner(event.target.value);changed();}}/></label>}
         {(target.kind==='release'||(target.kind==='featureKill'&&enabled))&&<label>Expiry with time zone (optional)<input value={expires} placeholder="2026-10-01T17:00:00Z" onChange={event=>{setExpires(event.target.value);changed();}}/></label>}
         <label>Reason for change<textarea value={reason} minLength={10} maxLength={500} onChange={event=>{setReason(event.target.value);changed();}}/></label>

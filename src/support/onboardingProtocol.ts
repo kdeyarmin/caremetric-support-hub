@@ -1,7 +1,18 @@
 import { z } from "zod";
+import { adminRegistry } from "../../supabase/functions/_shared/adminRegistry.ts";
 
 export const onboardingProducts = ["carebase", "breathe", "caremetric-emr", "caremetric-go", "pennsync", "intel"] as const;
 export const onboardingProduct = z.enum(onboardingProducts);
+/**
+ * Applications whose administration connection can verify an account now: the ones with a reviewed destination. EMR, Go and
+ * PennSync were disconnected on 2026-10-28, so linking or inviting their accounts can only fail; they stay in the enum above so
+ * earlier links and invitations still read.
+ */
+export const connectedOnboardingProducts = onboardingProducts.filter(product => adminRegistry[product].endpoint !== null);
+/** What an application select offers: the connected applications, and, first and unavailable, a disconnected one an earlier invitation names. */
+export function applicationChoices(current: typeof onboardingProducts[number]): Array<typeof onboardingProducts[number]> {
+  return connectedOnboardingProducts.includes(current) ? [...connectedOnboardingProducts] : [current, ...connectedOnboardingProducts];
+}
 const uuid = z.uuid().transform(value => value.toLowerCase());
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
 const nativeId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/);

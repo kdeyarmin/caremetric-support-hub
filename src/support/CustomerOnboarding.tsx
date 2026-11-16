@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { appRequest } from '../lib/appSession';
-import { onboardingPreview, onboardingRequest, onboardingResult, onboardingProducts, type OnboardingPreview } from './onboardingProtocol';
+import { applicationChoices, connectedOnboardingProducts, onboardingPreview, onboardingRequest, onboardingResult, onboardingProducts, type OnboardingPreview } from './onboardingProtocol';
 
 const labels = {carebase:'CareBase',breathe:'CareMetric Breathe','caremetric-emr':'CareMetric EMR','caremetric-go':'CareMetric Go',pennsync:'PennSync',intel:'CareMetric Intel'};
 const send = (body:unknown,signal:AbortSignal) => appRequest('admin/onboarding',body,signal);
@@ -33,7 +33,7 @@ export function CustomerOnboarding({onLinked,request=send,initial}:{onLinked:()=
   return <section className="support-onboarding" aria-label="Link a customer account">
     <h3>Link a customer account</h3><p>Choose an existing app account and the person’s verified Hub SMS account. Review the exact pairing before granting access. For CareBase, employee completion records are configured separately in the course library.</p>
     <form onSubmit={event=>{event.preventDefault();void run({operation:'preview',product,sourceUserId:user.trim(),sourceAccountId:product==='intel'?user.trim():account.trim(),hubUserId:hubUser.trim(),tenantName:name});}}>
-      <fieldset disabled={busy}><label>Application<select value={product} onChange={event=>{clear();setProduct(event.target.value as typeof product);setUser('');setAccount('');}}>{onboardingProducts.map(value=><option value={value} key={value}>{labels[value]}</option>)}</select></label>
+      <fieldset disabled={busy}><label>Application<select value={product} onChange={event=>{clear();setProduct(event.target.value as typeof product);setUser('');setAccount('');}}>{applicationChoices(product).map(value=><option value={value} key={value} disabled={!connectedOnboardingProducts.includes(value)}>{connectedOnboardingProducts.includes(value)?labels[value]:`${labels[value]} (disconnected)`}</option>)}</select></label>
         <label>Native app user ID<input required value={user} maxLength={128} onChange={event=>{clear();setUser(event.target.value);}} /></label>
         {product!=='intel' && <label>{product==='pennsync'?'Native agency ID':'Native organization ID'}<input required value={account} maxLength={128} onChange={event=>{clear();setAccount(event.target.value);}} /></label>}
         {product==='intel' && <p>Intel uses an individual account. Its user ID identifies the account.</p>}
