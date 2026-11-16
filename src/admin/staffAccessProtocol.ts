@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { lifecycleDigest as digest, lifecycleInstant as instant, lifecycleReason as reason, lifecycleUuid as uuid, tenantLifecycleOperation } from "./tenantLifecycleProtocol";
+import { lifecycleDigest as digest, lifecycleInstant as instant, lifecycleReason as reason, lifecycleUuid as uuid, tenantLifecycleOperation } from "./tenantLifecycleProtocol.ts";
 
 /**
  * Breathe's staff sign-in contract, staff.access.v1 (kdeyarmin/PennFit: artifacts/resupply-api/src/lib/staff-access-protocol.ts,
