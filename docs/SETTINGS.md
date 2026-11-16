@@ -95,10 +95,11 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Customer growth | Pause cold email at this bounce rate | Cold email waits for you to resume it on Growth when the last seven days' cold emails bounce above this percent or one is marked as spam (empty: off) |
 | Customer growth | Research prospects with web search; Most prospects to research a day; Most to spend researching one prospect | Deeper research within a cost ceiling |
 | Customer growth | Write from what is working | Drafts use the weekly memo you approve on Growth, or each new memo at once after you hand "Learning memo" over on the AI team page |
-| Creative | County snapshots a week | Images of one public number for a county your prospects are in (0 turns them off) |
+| Creative | County snapshots a week | Images of one public number about home health or hospice for a county of your roster's states, each sending agencies to their free market report (0 turns them off; [Creative Director](CREATIVE_DIRECTOR.md#county-snapshots-2026-11-13)) |
+| Creative | Have a model look at each image before you see it; Least score from the image review | A model reads each finished ad image as a person in a feed would: cut-off, overlapping, unreadable or garbled text or a wrong figure is never shown to you, and an image below the least score (1 to 5) comes with a warning ([Creative Director](CREATIVE_DIRECTOR.md#the-image-review-2026-11-16)) |
 | Social media | Post about new CMS data and observances | The weekly plan may write one post about a new release or an observance |
 | Social media | Write posts for my LinkedIn profile; Posts for my profile a week | Posts in your voice, each approved by you until you hand "Founder posts" over on the AI team page |
-| Paid ads | Most to spend on new campaigns a month | New LinkedIn, Meta and Google search campaigns are proposed only while it is set; after you hand "Ad campaign launch" over, the campaigns that start on their own share it and never pass it together |
+| Paid ads | Most to spend on new campaigns a month | New LinkedIn, Meta and Google search campaigns are proposed only while it is set (Intel's send agencies to the free market report for their own agency); after you hand "Ad campaign launch" over, the campaigns that start on their own share it and never pass it together |
 | Paid ads | Meta retargeting audience; Meta Pixel (dataset) id; LinkedIn conversion rule id | Where new Meta campaigns aim and where leads are reported |
 | Paid ads | Report leads to the ad platforms | Hashed-email lead reports to the platform whose ad was clicked |
 | Paid ads | Google Ads customer id; Google Ads manager account id; Google Ads OAuth client id; Google Ads API version | The Google Ads API |

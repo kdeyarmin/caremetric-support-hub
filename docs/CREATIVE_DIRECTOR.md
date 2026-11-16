@@ -20,9 +20,9 @@ does posts, publishes or spends: the Social Media Manager publishes, and only wh
 marketing plan output ──► creative.plan ──► briefs ──► creative.request ──► drafts (checked copy)
 owner's New brief  ───────────────────────────┘                                │
 rejection note (revision) / winner (refresh) ─┘                                ▼
-                                   creative.render (every 10 min, daily cap) ──► render ──► full compliance check
-                                                                                   │            │
-                                                                   blocked (never shown)   proposed ──► owner
+                                   creative.render (every 10 min, daily cap) ──► render ──► full compliance check ──► image review (when on)
+                                                                                   │            │                         │
+                                                                   blocked (never shown)   proposed ◄─────────────────────┘ ──► owner
                                                                                                          │
                                          approve ──► creative.asset executor ──► "approved" ──► Social Media Manager uses it
                                          reject with a note ──► revision brief ──► creative.request
@@ -47,7 +47,7 @@ A brief names the product, a goal, an audience (organizations and roles, never a
 platforms, images and/or videos with their lengths, an optional angle and an optional offer code. The model is given the brief, the
 product's own pages (by id), the brand kit's voice, banned phrases and required disclaimers, the owner's screenshots (by id and label), the
 product's learnings and its recent headlines (not to repeat), and, for a revision, the asset it replaces and the owner's note. Its system
-prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.8` and `creative-variants.8`) carry the fact sheet and the sales
+prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.9` and `creative-variants.9`) carry the fact sheet and the sales
 playbook (the Sales Executive's fact source) and are cached. The answers are closed JSON schemas.
 
 **What each product does** (`server/agents/content/features.mjs`, data in `intel-features.json` and `carebase-features.json`). Each brief's
@@ -199,7 +199,33 @@ be approved automatically (the database refuses one).
 | `images` | Only the logo (the owner's or the theme's), the theme's own brand imagery (Intel's fire band) and screenshots the owner attested carry no patient, resident or personal information | block |
 | `captions` | Every video has burned-in captions | block |
 | `text_heavy` | Text covers more than a fifth of the picture (for a video, its busiest frame) | warn |
+| `vision_defect` | The image review saw text cut off, overlapping or too faint to read, a garbled word, a figure that differs from the one meant, or part of the image broken (see The image review) | block |
+| `vision_note`, `vision_weak`, `vision_unreviewed` | The image review noted a softer problem (crowded, or anything else), scored the image below "Least score from the image review", or could not look at it | warn |
 | `platform` | The specs above: size, type, file size, video length, copy limits | block or warn |
+
+## The image review (2026-11-16)
+
+The coded checks above read the words and measure the colors, but nothing looked at the finished picture. With **Settings → Creative →
+Have a model look at each image before you see it** on (off by default), every static image that rendered and passed every coded check is
+shown to a model (`server/agents/creative/vision.mjs`, prompt `creative-vision.1`, on the draft tier) before you are asked about it:
+
+1. It reads back every word and number it can see, in reading order.
+2. It lists what is visibly wrong: text cut off, overlapping or too faint to read at feed size, a garbled word, a number that differs from
+   the one the image was meant to show (or one it was not meant to show), part of the image broken, crowded, or anything else the company
+   would be embarrassed to run.
+3. It reads the image as its audience would (the brief's audience, or an owner or director of business development at the kind of
+   organization the product is for, scrolling between appointments) and scores from 1 to 5 whether they would stop and read it, with one
+   sentence on what they take from it and the one change that would most make them stop.
+
+A defect a reader would see blocks the image, so it is never shown to you (`vision_defect`; the server logs the defects and the layout so
+a layout that keeps failing can be fixed). A softer one, or a score below **Least score from the image review** (default 3), is a warning
+beside the image, and the database never approves an image with a warning on its own. When the review cannot run (today's budget is
+spent, the model is unavailable, the file is over 5 MB) the image is shown with a warning that it was not reviewed. The Creative screen
+shows the score and the reader's sentence on the card. The model's answer is kept in the asset's compliance result (`review`); the
+picture is not kept anywhere else. Videos are not reviewed this way: their captions and frames are checked by code.
+
+The runtime sends the PNG as an image block before the words that ask about it; the budget reservation counts an image at the API's
+per-image ceiling (about 4,800 tokens), not its bytes.
 
 ## Approving, rejecting, asking for changes
 
@@ -321,15 +347,36 @@ where id = '<id>';` (the weekly refresh also proposes retiring tired creative).
 ## Cost
 
 Two model calls per brief: the concept and final copy on the quality tier (up to 4,000 output tokens) and the variants on the draft tier (up
-to 5,000). The seeded daily budget is $3.00; a used-up budget puts the brief off to the next Eastern day. Rendering uses no model. HeyGen
-renders are billed by HeyGen and logged in the AI usage ledger.
+to 5,000). The seeded daily budget is $3.00; a used-up budget puts the brief off to the next Eastern day. Rendering uses no model. The
+image review, when on, is one draft-tier call per static image (about 1,000 to 2,800 image tokens and a short answer: about a cent),
+from the same budget. HeyGen renders are billed by HeyGen and logged in the AI usage ledger.
 
 ## County snapshots (2026-11-13)
 
-With Settings → Creative → County snapshots a week above 0 (default 3), the daily plan opens briefs for counties where the Medicare
-roster's prospects are, most first and none pictured in the last eight weeks, each about one public figure from Intel's county figures
-(Medicare beneficiaries aged 85 and over, home health or hospice users, growth in residents aged 65 and over, Medicare Advantage
-share and others, in turn by week). Code fixes the figure, its label and its short source (`server/agents/creative/data.mjs`) and
-every variant is drawn with the stat layout; the model writes only the words around it. A draft that changes the figure, or writes a
-number of its own (the data's year aside), is blocked (`data_figure`, `data_number`), and any stat image now needs its source
-(`stat_source`). The figures are Medicare fee-for-service unless their label says otherwise.
+With Settings → Creative → County snapshots a week above 0 (default 3), the daily plan opens briefs for counties, none pictured in the last
+eight weeks, each about one public figure from Intel's county figures. Code fixes the figure, its label and its short source
+(`server/agents/creative/data.mjs`) and every variant is drawn with the stat layout; the model writes only the words around it. A draft
+that changes the figure, or writes a number of its own (the data's year aside), is blocked (`data_figure`, `data_number`), and any stat
+image now needs its source (`stat_source`). The figures are Medicare fee-for-service unless their label says otherwise.
+
+Since 2026-11-16 (`20261116130000_creative_review.sql`, feature `platform.agents.creative-review.v1`):
+
+- **One care setting each** (owner decision 2026-11-16: keep it in the agency's own industry). A snapshot is about home health or about
+  hospice: it shows that setting's figure, or a general one about the county's people, to that setting's agencies, and its brief tells the
+  model to say nothing about another setting. The setting is the only one with roster agencies located in the county, else the one the
+  county was not pictured with last time, else by week.
+- **Concentration and crowding first.** Each setting's figures, in turn by week: the share of the Medicare patients of the agencies
+  located in the county that its three largest served (`*_top3_share`, from Intel, only where CMS counted every agency located there
+  and at least five are; never a name), how many agencies billed Medicare for the county's residents (including agencies located in
+  other counties), how many and what share of beneficiaries used that setting, then beneficiaries aged 85 and over, growth in residents
+  aged 65 and over since 2020, Medicare Advantage's share and the rest. A long label steps down to fit three lines.
+- **Every county of the roster's states.** The server asks Intel for the states' counties (`counties`) and the database picks the least
+  recently pictured first, then those with the most roster agencies (`private.creative_data_counties(integer, timestamptz, jsonb)`),
+  so a county with no agency located in it (three of Pennsylvania's 67) takes its turn too. Without the list, the roster's own counties,
+  as before.
+- **To the free market report.** Every snapshot sends agencies to the free market report for their own agency (`/market-review`),
+  whatever page the concept chose.
+- **Why none.** A plan run that opens no snapshot says why in its result (`snapshotsSkipped`: `off`, `feed_not_configured`,
+  `database_not_ready`, `no_county_due`, `no_figure_fits`, or the feed's error code). Until the Hub restarts after the migration that
+  declares a feature, it does not see it: the November 15 run opened none because the data creative migration reached production that
+  evening.

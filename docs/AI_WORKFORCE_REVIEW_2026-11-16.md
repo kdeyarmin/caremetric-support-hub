@@ -14,11 +14,14 @@ Reviewed November 16, 2026, against Hub `main` at `1078982` and Intel `main` at 
 - Nothing told the team whether an agency had opened its report.
 - Reach was the tighter limit: most agencies the team knew about could not be written to at all.
 
-This change does four things, each behind its own switch:
+This change does five things, each behind its own switch:
 1. Fixes reach: it checks addresses, stops on bounces, and finds more websites and people.
 2. Gives each agency a real research brief, built from Intel's data and dated web triggers and written on the top model.
 3. Writes the first email from that brief, on the top model, with a reader's review.
 4. Learns which agencies opened their report.
+5. Makes the ads sharper: campaigns and county images send agencies to their own market report, county images say how concentrated and crowded the market is for one care setting and cover every county, and a model looks at each image before you do.
+
+Changes 9 to 12 (ads and creative) were added the same day, in the same pull requests.
 
 ## What production showed (November 16)
 
@@ -33,6 +36,7 @@ This change does four things, each behind its own switch:
 | Research | 19 runs, none on the 16 agencies scored 85+; 5 thrown away whole | Research went to borderline agencies, never the ones being emailed |
 | Experiments | 30 emails over 15 combinations | Four things varied at once; no combination could reach the 20 sends the memo needs |
 | Ads | 34 approved, 0 running, $50 a month, LinkedIn disconnected | Owner steps below |
+| Creative | All 34 approved images are generic (headline, checklist, quote); no county image was ever made | County snapshots shipped November 13, but their migration reached production on the evening of November 15, after that day's plan run |
 
 ## What changed
 
@@ -46,6 +50,10 @@ This change does four things, each behind its own switch:
 | 6 | **The first email from the brief, on the top model** (details below) | Write first emails on the top model |
 | 7 | **A reader's review.** A second model scores each first email 1 to 5 as the agency's owner would. Below 4 it is rewritten once around its weakest sentence. The score is kept with the email | Have a reader review each first email |
 | 8 | **Report opens.** Intel records which agencies opened their report: the agency and the time, never who. You are told on an agency's first open, intent rises, and the second email follows whether it was opened | Learn which agencies opened their report |
+| 9 | **Ads send agencies to their own market report.** New Intel campaigns (LinkedIn, Meta and Google search) land on the free market report for the reader's agency, not the county report. The LinkedIn proposal says to use the roster's company list, because the report is for home health agencies and hospices | Always on (campaigns are still proposed only while "Most to spend on new campaigns a month" is set) |
+| 10 | **County ads that say how crowded and concentrated the market is.** Intel now sends the share of patients the three largest agencies located in a county serve (only where CMS counted every agency and at least five are, never a name). Each county image is about one care setting, home health or hospice, and leads with that figure or how many agencies billed for the county's residents. It sends readers to their market report | County snapshots a week (Settings → Creative) |
+| 11 | **All 67 counties.** County images were chosen only from counties with a roster agency located in them (64 of 67). Intel now lists every county of the roster's states, and the least recently pictured goes first. A run that makes no county image says why | Always on with county snapshots |
+| 12 | **The image review.** A model looks at each finished ad image as a person in a feed would. Cut-off, overlapping, unreadable or garbled text, or a wrong figure, is never shown to you. A weak image (below your least score) comes with a warning and the model's note | Have a model look at each image before you see it; Least score from the image review (Settings → Creative) |
 
 The account brief (change 5) is built in four steps:
 1. **Intel's data:** the agency's market report as data (share, rank and history, the county's leaders, hospitals, ratings, moves), through the new `agency_brief` feed action.
@@ -69,7 +77,7 @@ What stays the same:
 
 ## What you need to do, in this order
 
-1. **Merge and deploy Intel first** ([kdeyarmin/intel#474](https://github.com/kdeyarmin/intel/pull/474); migration 0171), then the Hub ([kdeyarmin/caremetric-support-hub#215](https://github.com/kdeyarmin/caremetric-support-hub/pull/215); migrations `20261116100000` to `20261116120100`).
+1. **Merge and deploy Intel first** ([kdeyarmin/intel#474](https://github.com/kdeyarmin/intel/pull/474); migration 0171), then the Hub ([kdeyarmin/caremetric-support-hub#215](https://github.com/kdeyarmin/caremetric-support-hub/pull/215); migrations `20261116100000` to `20261116130100`).
 2. **Settings → Customer growth:**
    - Check an address before the first email: **Check**.
    - Pause cold email at this bounce rate: **5**.
@@ -81,7 +89,8 @@ What stays the same:
    - **Budget:** the migration raised the Marketing Manager's daily budget to $15, as you approved.
 6. **Reconnect LinkedIn** (Settings → Social media). Both the Page token and the inbox permission are failing.
 7. **Set Intel's Google Analytics property** (Settings → Analytics).
-8. **Ads:** $50 a month is below LinkedIn's $10-a-day minimum, so Monday's ad plan can only create paused campaigns.
+8. **Creative (Settings → Creative):** turn on Have a model look at each image before you see it (Least score 3). Leave County snapshots a week at 3: today's 8:30 plan run is the first that can make them, and Monday's ad plan can use the ones you approve.
+9. **Ads:** $50 a month is below LinkedIn's $10-a-day minimum, so Monday's ad plan can only create paused campaigns. When you start one, use an approved county image: it now sends agencies to their own market report.
 
 ## Cost
 
@@ -91,12 +100,14 @@ What stays the same:
 | One first email on Opus at high effort | 7 to 15 cents |
 | The reader's review | 1 cent (2 with a rewrite) |
 | 25 briefed and reviewed first emails a day, with everything else | $12 to $16 a day |
+| The image review, one per static image (about 40 a day at the render cap) | About a cent each, from the Creative Director's $3 budget |
 
 The $15 budget stops the work rather than overspend. A day that runs out of budget leaves the rest for the next day.
 
 ## Not built in this pass
 
-- **Ads and creative.** These were designed but not built: send new campaigns to the free market review, county-concentration creative, and a vision check of each rendered image before you see it. Ads cannot learn while none is running, the budget is $50 a month and LinkedIn is disconnected.
+- **Ad budget flights.** At $50 a month, a thirtieth a day is below every platform's floor here, so no campaign can run. Spending the month's number in a short flight (for example $5 a day for ten days on Meta) would let ads run and learn. It changes how money is spent, so it waits for your word.
+- **Vision review of videos.** Video frames and captions are checked by code; the model looks at static images only.
 - **A weekly strategist** that names the one binding constraint at the top of the Monday scorecard.
 - **A model that proposes websites** for roster agencies the telephone search still misses. The phone search should show how much of the gap remains.
 - **The other experiment factors.** Subject style and length still vary by hash while experiments are on.
@@ -110,6 +121,8 @@ The $15 budget stops the work rather than overspend. A day that runs out of budg
 - Briefs written, and the share with a trigger and a cited opening.
 - The reader's scores, and replies by score once 20 of each exist (the Monday memo).
 - Report opens per first email, and replies to viewers against non-viewers (the Monday memo, arm `viewed`).
+- County images made per week and why a week made none (`snapshotsSkipped` on the creative plan runs); image review scores and blocks (Creative screen, and `hub_creative_vision_blocked` in the server log).
+- Market report requests from ads (Intel leads with `utm_medium=paid`).
 
 ## Limits of this review
 

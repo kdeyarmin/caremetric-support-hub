@@ -179,6 +179,12 @@ under the hand-over and never past an unsubscribe or an opt-out, a memo is used 
 post handed back keeps its approval. Each test fails closed. Declaring it changes nothing by itself: the steps ship held. The Hub
 server launches campaigns live and publishes automatically approved founder posts only when the feature is declared.
 
+`20261116130100_creative_review_contract.sql` declares `platform.agents.creative-review.v1` only after the settings, Creative Director,
+data creative and roster features are declared, the `creative.vision_review` and `creative.vision_min_score` settings exist, and the
+three-argument `private.creative_data_counties` is executable by `hub_app_server` alone, requires the Hub server connection, keeps a county
+out for 56 days after it is pictured and reports the setting it was pictured with last. Each test fails closed. The Hub server picks
+counties from Intel's list of the roster's states only when the feature is declared, and otherwise from the roster's own counties as before.
+
 `20261116120100_growth_report_views_contract.sql` declares `platform.agents.growth-report-views.v1` only after the settings, growth autonomy
 and roster features are declared, the `growth.report_views` setting exists, an activity event may be `report_viewed`, the read cursor has row
 level security and is closed to every role, `private.growth_report_views_cursor` and `private.growth_report_views_record` are executable by
