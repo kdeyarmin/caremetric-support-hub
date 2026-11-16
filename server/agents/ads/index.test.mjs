@@ -72,6 +72,16 @@ describe('approving a new campaign', () => {
     const online = setup({ googleConfigured: true });
     expect(await online.executors['social.google_campaign']({ id: 'a2', input })).toEqual({ created: true, campaign: 'customers/1/campaigns/5' });
   });
+
+  it('does not report the import file as emailed when a retry finds only the earlier failed attempt', async () => {
+    const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 3000, finalUrl: 'https://www.caremetricintel.com/county-report', plan: googlePlan };
+    const retried = setup();
+    // The same action run again: the notifier's dedupe key says this email was tried before, and that try failed.
+    retried.notifier.send.mockResolvedValueOnce([{ channel: 'email', delivery: 'duplicate', original: 'failed' }]);
+    await expect(retried.executors['social.google_campaign']({ id: 'a3', input })).rejects.toMatchObject({ code: 'notification_failed' });
+    retried.notifier.send.mockResolvedValueOnce([{ channel: 'email', delivery: 'duplicate', original: 'sent' }]);
+    expect(await retried.executors['social.google_campaign']({ id: 'a3', input })).toEqual({ exported: true });
+  });
 });
 
 describe('reporting leads to the ad platforms', () => {
