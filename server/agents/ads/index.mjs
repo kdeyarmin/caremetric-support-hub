@@ -180,6 +180,17 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         let proposedAlready = 0;
         // Handed over: approved on their own and launched live (wording and the budget split only; the database decides again).
         const onItsOwn = kind => handover && trustedWith(task.agent, kind);
+        // With flights on, this month's campaigns on every platform and product are read once, whatever is connected or marketed now: one
+        // created before a platform was disconnected still takes the month's flight. A campaign that was created (whatever its pacing)
+        // takes it, and so does a flight proposed, approved or turned down; a proposal that failed or expired, or one paced over the whole
+        // month that was never created, does not (it is refused when it is created while flights are on), so a flight can replace it.
+        const flightDays = config().flightDays;
+        const flights = flightDays > 0;
+        const history = flights ? await store.adsMonthCampaigns(month) : null;
+        // Not knowing the month's campaigns, the plan proposes no flight rather than risk a second one.
+        if (flights && !Array.isArray(history)) return { result: { proposed: 0, skipped: { flight_history_unread: 1 } } };
+        const takesFlight = item => item.status === 'executed' || item.status === 'executing' || (item.flight === true && !['failed', 'expired'].includes(item.status));
+        const taken = (kind, targetId) => (flights ? history.some(item => item.kind === kind && item.targetId === targetId && takesFlight(item)) : store.socialCampaignProposed(kind, targetId));
 
         // 1. This month's campaigns not yet proposed, product by product: LinkedIn, Meta, then Google search.
         const slots = [];
@@ -192,13 +203,13 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
             if (!client?.configured?.ads || typeof client.createCampaign !== 'function') { skip(`${platform}_not_connected`); continue; }
             if (platform === 'meta' && !/^[0-9]{5,30}$/.test(config().metaAudienceId)) { skip('meta_audience_missing'); continue; }
             const targetId = `${platform}:${product}:${month}`;
-            if (await store.socialCampaignProposed('social.campaign_create', targetId)) { proposedAlready += 1; continue; }
+            if (await taken('social.campaign_create', targetId)) { proposedAlready += 1; continue; }
             slots.push({ product, page, platform, kind: 'social.campaign_create', targetId,
               name: `CareMetric ${productNames[product]} ${platform === 'meta' ? 'retargeting' : 'prospecting'} ${month}` });
           }
           if (!model?.configured) { skip('model_not_configured'); continue; }
           const targetId = `google:${product}:${month}`;
-          if (await store.socialCampaignProposed('social.google_campaign', targetId)) { proposedAlready += 1; continue; }
+          if (await taken('social.google_campaign', targetId)) { proposedAlready += 1; continue; }
           slots.push({ product, page, platform: 'google', kind: 'social.google_campaign', targetId, name: `CareMetric ${productNames[product]} search ${month}` });
         }
         // 2. Launched live: a LinkedIn or Meta campaign with approved creative for its first ad, a Google one through the API. They share the
@@ -208,8 +219,8 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         //    a few days' share of it a day, which ends on its own. The first that can carry it, in the order above, one that would start on
         //    its own first; none while a campaign was already proposed this month, so the month's number is never spent twice. A Google
         //    flight needs the Google Ads API, which sets its last day (an import file cannot).
-        const flightDays = config().flightDays;
-        if (flightDays > 0) {
+        if (flights) {
+          proposedAlready = history.filter(takesFlight).length;
           const fits = slot => ((slot.platform !== 'google' || google().configured)
             ? flightBudget({ monthlyBudgetCents: monthly, maxDailyBudgetCents: social.maxDailyBudgetCents, flightDays }, slot.platform, left.days) : null);
           const starts = slot => onItsOwn(slot.kind) && (slot.platform === 'google' ? google().configured : Boolean(slot.firstAd));

@@ -16,9 +16,9 @@ const asset = platform => ({ id: metaAsset, token, product: 'caremetric-intel', 
   cta: 'Get your report', landingUrl: `https://www.caremetricintel.com/market-review?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}` });
 const trusted = { autonomy: 'act', config: { auto_approve_kinds: ['social.campaign_create', 'social.google_campaign'] } };
 
-function setup({ values = {}, linkedinConnected = true, metaConnected = true, googleConfigured = false, proposed = () => false, handover = false, status = 'proposed' } = {}) {
+function setup({ values = {}, linkedinConnected = true, metaConnected = true, googleConfigured = false, proposed = () => false, history = [], handover = false, status = 'proposed' } = {}) {
   const store = {
-    socialCampaignProposed: vi.fn(async (kind, target) => proposed(target)), proposeAction: vi.fn(async input => ({ id: `a-${input.targetId}`, created: true, status })),
+    socialCampaignProposed: vi.fn(async (kind, target) => proposed(target)), adsMonthCampaigns: vi.fn(async () => history), proposeAction: vi.fn(async input => ({ id: `a-${input.targetId}`, created: true, status })),
     actionTrusted: vi.fn(async () => true), adsLaunchReserve: vi.fn(async (id, execution, daily, least, days) => ({ reserved: true, dailyBudgetCents: daily, days })),
     adsLaunchRelease: vi.fn(async () => true), creativeLiveAssets: vi.fn(async () => [{ id: metaAsset, platform: 'meta', status: 'approved' }]),
   };
@@ -84,8 +84,10 @@ describe('the monthly plan with flights on', () => {
   });
 
   it('never a second campaign in a month that already has one, and never a Google flight without the API to end it', async () => {
-    const taken = setup({ proposed: target => target === 'meta:caremetric-intel:2026-11' });
+    const taken = setup({ history: [{ kind: 'social.campaign_create', targetId: 'meta:caremetric-intel:2026-11', status: 'proposed', flight: true }] });
     const done = await taken.handlers['ads.plan'](task(), { now: monday });
+    expect(taken.store.adsMonthCampaigns).toHaveBeenCalledWith('2026-11');
+    expect(taken.store.socialCampaignProposed).not.toHaveBeenCalled();
     expect(taken.store.proposeAction).not.toHaveBeenCalled();
     expect(done.result.skipped).toMatchObject({ flight_this_month: 2 });
 
@@ -96,6 +98,35 @@ describe('the monthly plan with flights on', () => {
     const online = setup({ linkedinConnected: false, metaConnected: false, googleConfigured: true });
     await online.handlers['ads.plan'](task(), { now: monday });
     expect(online.store.proposeAction.mock.calls.map(([item]) => [item.kind, item.input.dailyBudgetCents, item.input.flightDays])).toEqual([['social.google_campaign', 500, 10]]);
+  });
+
+  it('counts a campaign made on a platform since disconnected, and a flight turned down, but not a proposal that never became a campaign', async () => {
+    const plan = async options => { const h = setup(options); const done = await h.handlers['ads.plan'](task(), { now: monday });
+      return { done, proposed: h.store.proposeAction.mock.calls.map(([item]) => [item.targetId, item.input.flightDays]) }; };
+    // A LinkedIn flight was created, then LinkedIn was disconnected: no Meta flight beside it.
+    const created = await plan({ linkedinConnected: false, history: [{ kind: 'social.campaign_create', targetId: 'linkedin:caremetric-intel:2026-11', status: 'executed', flight: true }] });
+    expect(created.proposed).toEqual([]);
+    expect(created.done.result.skipped).toMatchObject({ linkedin_not_connected: 1, flight_this_month: 2 });
+    // So does a campaign paced over the month that was created before flights were switched on, and a flight the owner turned down.
+    for (const item of [{ status: 'executed', flight: false }, { status: 'rejected', flight: true }, { status: 'approved', flight: true }]) {
+      const result = await plan({ history: [{ kind: 'social.campaign_create', targetId: 'meta:caremetric-intel:2026-11', ...item }] });
+      expect(result.proposed, JSON.stringify(item)).toEqual([]);
+    }
+    // A proposal paced over the month that was refused, turned down or is still waiting never became a campaign (it is refused when it is
+    // created while flights are on), and a flight that failed or expired never ran: each leaves the month's flight free, on the same target.
+    for (const item of [{ status: 'failed', flight: false }, { status: 'rejected', flight: false }, { status: 'proposed', flight: false }, { status: 'failed', flight: true }, { status: 'expired', flight: true }]) {
+      const result = await plan({ linkedinConnected: false, history: [{ kind: 'social.campaign_create', targetId: 'meta:caremetric-intel:2026-11', ...item }] });
+      expect(result.proposed, JSON.stringify(item)).toEqual([['meta:caremetric-intel:2026-11', 10]]);
+    }
+    // Flights off: the plan keeps its one-proposal-per-campaign rule and never reads the month's list.
+    const spread = setup({ values: { 'ads.flight_days': null } });
+    await spread.handlers['ads.plan'](task(), { now: monday });
+    expect(spread.store.adsMonthCampaigns).not.toHaveBeenCalled();
+    expect(spread.store.socialCampaignProposed).toHaveBeenCalled();
+    // A list that could not be read proposes no flight.
+    const unread = await plan({ history: null });
+    expect(unread.proposed).toEqual([]);
+    expect(unread.done.result).toEqual({ proposed: 0, skipped: { flight_history_unread: 1 } });
   });
 
   it('under the hand-over, prefers the campaign that would start on its own with approved creative', async () => {

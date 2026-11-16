@@ -78,8 +78,11 @@ short flight** set (3 to 30 days; empty is off), the month's number funds one ca
 - It runs at the number divided by those days a day, never below the platform's least (so fewer days when the number is small) nor
   above the daily ad-set limit, and never past the month. At $50 and 10 days: Meta $5 a day for 10 days, or LinkedIn $10 a day for 5.
 - The plan proposes one campaign a month: the first that can carry the flight in its usual order (LinkedIn, Meta, Google search),
-  one that would start on its own with approved creative first when you handed launch over. None in a month that already has a
-  campaign, so the number is never spent twice.
+  one that would start on its own with approved creative first when you handed launch over. None in a month whose flight is taken,
+  so the number is never spent twice. The month's campaigns are read on every platform and product, connected or not
+  (`private.ads_month_campaigns`): one that was created takes the flight whatever its pacing (a LinkedIn flight made before LinkedIn was
+  disconnected still counts), and so does a flight still waiting, approved or one you turned down. A proposal that failed or expired,
+  or one paced over the whole month that was never created, leaves the flight free, so a flight can take its place.
 - It is created with its last day, so it ends on its own: started later than the day you approve it, it runs fewer days, never more.
   Handed over, it reserves only its own days of the month's number (`private.ads_launch_reserve`).
 - A Google flight needs the Google Ads API (an import file cannot carry its last day).

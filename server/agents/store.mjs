@@ -56,6 +56,8 @@ export function sqlAgentStore(pool, { fenced = false, growth = false, social = f
         adsConversionCandidates: (platform, limit) => call('private.ads_conversion_candidates', [platform, limit]),
         adsConversionRecord: (lead, platform, status, code) => call('private.ads_conversion_record', [lead, platform, status, code]),
         socialCampaignProposed: (kind, target) => call('private.social_campaign_proposed', [kind, target]),
+        // 20261117110000_ads_flights.sql: read only while flights are on, which needs that migration's setting.
+        adsMonthCampaigns: month => call('private.ads_month_campaigns', [month]),
       } : {}),
       ...(creativeData ? {
         creativeDataCounties: (perWeek, weekStart) => call('private.creative_data_counties', [perWeek, weekStart]),
