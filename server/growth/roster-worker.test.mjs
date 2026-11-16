@@ -121,3 +121,32 @@ it('fails the run on a first page Intel refuses outright, and keeps what it read
   const { result } = await later.run();
   expect(result).toMatchObject({ read: { pages: 1 }, stopped: 'feed_rate_limited', looked: 0 });
 });
+
+it('searches by the agency\'s CMS telephone number when its name finds no confirmed site, and accepts only a site that shows that number', async () => {
+  const named = [{ domain: 'valleyhealthpartners.com', url: 'https://valleyhealthpartners.com/', name: 'Valley Health Partners', claim: 'Primary care in Philadelphia.' }];
+  const byNumber = [
+    { domain: 'yelp.com', url: 'https://www.yelp.com/biz/valley', name: 'Valley Hospice - Yelp', claim: 'Call 215-555-0199.' },
+    { domain: 'valleyhospicecare.org', url: 'https://valleyhospicecare.org/contact', name: 'Contact us', claim: 'Call us at (215) 555-0199.' },
+  ];
+  const search = vi.fn(async (_product, { query }) => (query.startsWith('"') ? byNumber : named));
+  const own = { email: 'info@valleyhospicecare.org', sourceUrl: 'https://valleyhospicecare.org/contact', phoneSeen: true, site: { url: 'https://valleyhospicecare.org/', claim: 'Valley Hospice Care.' } };
+  const { store, growth, run } = setup({ search, sync: { period: '2026Q3', states: ['PA'], cursor: null, complete: true, syncedAt: '2026-11-12T00:00:00Z' } });
+  growth.contacts.find = vi.fn(async domain => (domain === 'valleyhospicecare.org' ? own : { email: null, phoneSeen: false, site: { url: `https://${domain}/`, claim: 'Primary care.' } }));
+  const { result } = await run();
+  expect(search.mock.calls.map(([, request]) => request.query)).toEqual(['valley hospice Philadelphia PA', '"215-555-0199"']);
+  expect(growth.contacts.find.mock.calls.map(([domain]) => domain)).toEqual(['valleyhealthpartners.com', 'valleyhospicecare.org']);
+  expect(store.rosterResolved).toHaveBeenCalledWith('391501', expect.objectContaining({ outcome: 'graduated', domain: 'valleyhospicecare.org', confirmation: 'phone' }));
+  expect(result).toMatchObject({ looked: 1, graduated: 1, byPhone: 1 });
+});
+
+it('leaves the agency unresolved when no site found by its number shows it, and makes no second search without a number', async () => {
+  const search = vi.fn(async (_product, { query }) => (query.startsWith('"')
+    ? [{ domain: 'otherhospice.org', url: 'https://otherhospice.org/', name: 'Other Hospice', claim: 'Hospice in Philadelphia.' }] : []));
+  const { store, growth, run } = setup({ search, sync: { period: '2026Q3', states: ['PA'], cursor: null, complete: true, syncedAt: '2026-11-12T00:00:00Z' } });
+  growth.contacts.find = vi.fn(async () => ({ email: null, phoneSeen: false, site: { url: 'https://otherhospice.org/', claim: 'Other Hospice.' } }));
+  expect((await run()).result).toMatchObject({ looked: 1, graduated: 0, unresolved: 1 });
+  expect(store.rosterResolved).toHaveBeenCalledWith('391501', { outcome: 'unresolved', reason: 'no_site' });
+  const plain = setup({ targets: [{ ...target, facts: {} }], search: vi.fn(async () => []), sync: { period: '2026Q3', states: ['PA'], cursor: null, complete: true, syncedAt: '2026-11-12T00:00:00Z' } });
+  await plain.run();
+  expect(plain.growth.research.search).toHaveBeenCalledTimes(1);
+});

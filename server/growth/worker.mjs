@@ -12,7 +12,7 @@ import { enrichProspects } from './enrichment.mjs';
 import { discoveryQueries, linkablePages, senderFor } from './playbook.mjs';
 import { searchResultLimit } from './research.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
-import { chooseSite, confirmsSite, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
+import { chooseSite, confirmsSite, phoneCandidates, phoneQuery, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
 const deferred=()=>Object.assign(new Error('Action is deferred'),{code:'action_deferred'});
 const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
 /** The calendar day in America/New_York, matching every other send cap and notice. */
@@ -330,7 +330,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
       }
     }
     // 2. Look up the day's best agencies. Without a search provider nothing is claimed, so no agency waits a week for nothing.
-    const looked={looked:0,graduated:0,unresolved:0,contacts:0};
+    const looked={looked:0,graduated:0,unresolved:0,contacts:0,byPhone:0};
     const daily=Number.isInteger(live(roster.daily))?live(roster.daily):25;
     if(growth.research?.configured&&growth.contacts?.configured&&daily>0&&!stopped) {
       for(let n=0;n<rosterLookupsPerRun;n++) {
@@ -339,25 +339,43 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
         if(!target)break;
         looked.looked++;
         const outcome=await lookUp(target,{signal});
-        if(outcome.graduated){looked.graduated++;if(outcome.contact)looked.contacts++;}else looked.unresolved++;
+        if(outcome.graduated){looked.graduated++;if(outcome.contact)looked.contacts++;if(outcome.byPhone)looked.byPhone++;}else looked.unresolved++;
         if(outcome.retry)break;
         await pause(Number(growth.research.paceMs)||0,signal);
       }
     }
-    return {result:{period,states:states.length,...(read.pages?{read}:{}),...(stopped?{stopped}:{}),...looked}};
+    const {byPhone,...counts}=looked;
+    return {result:{period,states:states.length,...(read.pages?{read}:{}),...(stopped?{stopped}:{}),...counts,...(byPhone?{byPhone}:{})}};
   }
-  /** One roster agency: find its own website, confirm it, and graduate it into the pipeline with its public record as evidence. */
+  /**
+   * One roster agency: find its own website, confirm it, and graduate it into the pipeline with its public record as evidence. The search
+   * by its name and place comes first; when it finds no site that confirms, one search by its CMS telephone number, whose results are
+   * accepted only when the site itself shows that number (2026-11-16: the name search left 35 of the first 44 agencies unresolved).
+   */
   async function lookUp(target,{signal}) {
     let rows;
     try {rows=await growth.research.search('caremetric-intel',{query:resolutionQuery(target),count:10,signal});}
     catch(error) {if(signal?.aborted)throw error; await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'retry'}); return {graduated:false,retry:true};}
-    const choice=chooseSite(target,rows);
-    if(!choice){await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'no_site'});return {graduated:false};}
-    let found;
-    try {found=await growth.contacts.find(choice.domain,{signal,phone:target.facts?.phone??null});}
-    catch(error) {if(signal?.aborted)throw error; await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'retry'}); return {graduated:false};}
-    const confirmation=confirmsSite(target,found,choice);
-    if(!confirmation){await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'not_confirmed'});return {graduated:false};}
+    let choice=chooseSite(target,rows),found=null,confirmation=null,byPhone=false;
+    const reason=choice?'not_confirmed':'no_site', tried=new Set();
+    if(choice) {
+      tried.add(choice.domain);
+      try {found=await growth.contacts.find(choice.domain,{signal,phone:target.facts?.phone??null});}
+      catch(error) {if(signal?.aborted)throw error; await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'retry'}); return {graduated:false};}
+      confirmation=confirmsSite(target,found,choice);
+    }
+    const phone=phoneQuery(target);
+    if(!confirmation&&phone) {
+      let phoneRows=[];
+      try {await pause(Number(growth.research.paceMs)||0,signal); phoneRows=await growth.research.search('caremetric-intel',{query:phone,count:10,signal});}
+      catch(error) {if(signal?.aborted)throw error;}
+      for(const candidate of phoneCandidates(target,phoneRows,tried)) {
+        let read;
+        try {read=await growth.contacts.find(candidate.domain,{signal,phone:target.facts.phone});} catch(error) {if(signal?.aborted)throw error; continue;}
+        if(read?.phoneSeen===true){choice=candidate;found=read;confirmation='phone';byPhone=true;break;}
+      }
+    }
+    if(!confirmation){await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason});return {graduated:false,phoneSearched:Boolean(phone)};}
     const site=found.site;
     const evidence=site?.claim&&/^https:\/\//.test(site.url??'')?[{url:String(site.url).slice(0,2000),claim:String(site.claim).slice(0,4000)}]:[];
     let resolved;
@@ -372,7 +390,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
       catch(error) {if(error?.code!=='22023')throw error; recorded=await growth.store.recordContact(resolved.organizationId,null,null);}
       contact=Boolean(recorded?.found);
     }
-    return {graduated:true,contact};
+    return {graduated:true,contact,byPhone};
   }
   // The guardrail check that messages nobody approved need (growth.1, within 30 days). Synthetic cases only: no model, no customer data.
   async function evaluate(task,{now=()=>new Date()}={}) {
