@@ -12,7 +12,7 @@ const week = (over = {}) => ({
   conversion: { trialStarts: 2, activated: 1, paid: 0, ...over.conversion },
   spend: { marketingCents: 1036, budgetCents: 1500, budgetDays: 0, ...over.spend },
   approvals: over.approvals ?? 3,
-  settings: { coldEmailCap: 10, presendCheck: 'check', ...over.settings },
+  settings: { coldEmailCap: 10, presendCheck: 'check', productDailyLimit: 50, ...over.settings },
 });
 
 describe('the strategist\'s rules', () => {
@@ -37,14 +37,25 @@ describe('the strategist\'s rules', () => {
   it('calls the cap binding only when it held most days, approved drafts waited and bounces were low, within the setting\'s 100', () => {
     const capped = candidates(week({ prospects: { strongNoContact: 10 }, email: { capDays: 6, waiting: 12, approvedWaiting: 12, delivered: 60, bounced: 0 } }));
     expect(capped[0]).toMatchObject({ key: 'volume', evidence: { capDays: 6, cap: 10, suggestedCap: 20 } });
-    expect(capped[0].move).toBe('Raise "Most cold emails a day" from 10 to 20.');
+    expect(capped[0].move).toBe('Raise "Most cold emails a day" (Settings → Customer growth) from 10 to 20.');
     expect(candidates(week({ prospects: { strongNoContact: 10 }, email: { capDays: 6, waiting: 12, approvedWaiting: 12, delivered: 60, bounced: 2 } })).map(c => c.key)).not.toContain('volume');
     // Drafts still waiting for your approval could not go out whatever the cap.
     expect(candidates(week({ prospects: { strongNoContact: 10 }, email: { capDays: 6, waiting: 12, approvedWaiting: 2, delivered: 60, bounced: 0 } })).map(c => c.key)).not.toContain('volume');
-    const near = candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 98 }, email: { capDays: 6, approvedWaiting: 12, delivered: 600, bounced: 0 } }));
+    const near = candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 98, productDailyLimit: 100 }, email: { capDays: 6, approvedWaiting: 12, delivered: 600, bounced: 0 } }));
     expect(near.find(c => c.key === 'volume').evidence.suggestedCap).toBe(100);
-    expect(candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 100 }, email: { capDays: 6, approvedWaiting: 12, delivered: 600, bounced: 0 } }))
+    expect(candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 100, productDailyLimit: 100 }, email: { capDays: 6, approvedWaiting: 12, delivered: 600, bounced: 0 } }))
       .map(c => c.key)).not.toContain('volume');
+  });
+
+  it('names the limit that binds: Intel\'s own daily limit is checked before the cold-email cap', () => {
+    // Both at 10: raising only the cap would change nothing, so the move raises both.
+    const both = candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 10, productDailyLimit: 10 }, email: { capDays: 5, limitDays: 5, approvedWaiting: 12, delivered: 60, bounced: 0 } }));
+    expect(both[0]).toMatchObject({ key: 'volume', evidence: { cap: 10, productLimit: 10, suggestedCap: 20 } });
+    expect(both[0].move).toBe('Raise "Most cold emails a day" (Settings → Customer growth) from 10 to 20 and Intel\'s "Maximum messages per day" (Growth) from 10 to 20.');
+    // Intel's limit lower than the cap: only it is raised, and the days it was reached count.
+    const product = candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 50, productDailyLimit: 8 }, email: { capDays: 0, limitDays: 6, approvedWaiting: 12, delivered: 60, bounced: 0 } }));
+    expect(product[0]).toMatchObject({ key: 'volume', evidence: { limitDays: 6, suggestedCap: 16 } });
+    expect(product[0].move).toBe('Raise Intel\'s "Maximum messages per day" (Growth) from 8 to 16.');
   });
 
   it('takes the bounce rate over every cold email attempted, not only those whose delivery has been reported', () => {

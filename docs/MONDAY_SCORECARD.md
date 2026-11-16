@@ -75,14 +75,16 @@ figure to watch next Monday.
    fits (75 or more) not yet written to and how many have an address the team may write to, roster agencies resolved and still
    unresolved, addresses checked and unanswered, cold first emails and later touches, every cold email attempted (the bounce rate's
    denominator, counted by message), deliveries, hard bounces (addresses the Hub suppressed) and soft ones, complaints, agencies that
-   replied or opened their report, trial starts, first value and paid, days the cold-email cap was reached, drafts waiting and how many
+   replied or opened their report, trial starts, first value and paid, days the cold-email cap or Intel's own daily limit was reached
+   (and both limits), drafts waiting and how many
    of them are approved, briefs written, the Marketing Manager's spend and the days its budget ran out,
    proposals waiting for you, the bounce guard's own window and the current cap and address-check mode. Internal organizations never
    count. Strong fits, waiting drafts and approvals are as of the read.
 2. **The candidates** (`server/agents/strategist/rules.mjs`), scored 0 to 100 from the figures alone: email bouncing (a complaint, or
    2% or more hard bounces of at least 10 sent; half weight when the bounce guard's window since shows 10 clean sends), too few agencies
-   ready, strong fits with no address (half or more), the daily cap (reached on 4 or more days with 5 or more approved drafts waiting,
-   bounces under 2% and the cap under the setting's 100), first emails not read or answered (30 sent over two weeks, no reply, under 10%
+   ready, strong fits with no address (half or more), a daily limit (the cold-email cap or Intel's own "Maximum messages per day" on
+   Growth, which the send claim checks first, reached on 4 or more days with 5 or more approved drafts waiting and bounces under 2%;
+   the move raises whichever limits sit below the new number, at most 100), first emails not read or answered (30 sent over two weeks, no reply, under 10%
    of the two weeks' first emails opened), interest without trials, trials without
    first value, the Marketing Manager's budget (3 or more days), and proposals waiting for you (10 or more). A constraint the figures do
    not show is never offered.

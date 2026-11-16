@@ -56,6 +56,7 @@ export function weekFigures(facts) {
     firstSent: n(e.firstSent), followups: n(e.followups), sent, delivered: n(e.delivered), bounced: n(e.bounced), bounceRate: pct(n(e.bounced), sent),
     complaints: n(e.complaints), replies: n(e.replies), reportViews: n(e.reportViews), openRate: pct(n(e.reportViews), n(e.firstSent)),
     capDays: n(e.capDays), cap: n(facts?.settings?.coldEmailCap), waiting: n(e.approvedWaiting ?? e.waiting),
+    limitDays: n(e.limitDays), productLimit: n(facts?.settings?.productDailyLimit),
     trialStarts: n(c.trialStarts), activated: n(c.activated), paid: n(c.paid),
     spendDollars: Math.round(n(s.marketingCents) / 100), budgetDollars: Math.round(n(s.budgetCents) / 100), budgetDays: n(s.budgetDays),
     approvals: n(facts?.approvals),
@@ -65,7 +66,7 @@ export function weekFigures(facts) {
 }
 
 /** The figures that are counts of the week itself; the others (strong fits, drafts waiting, approvals, the cap) are as of the read. */
-export const snapshotFigures = Object.freeze(['strong', 'ready', 'strongNoContact', 'rosterOpen', 'waiting', 'cap', 'approvals', 'budgetDollars', 'guardSent', 'guardBounced']);
+export const snapshotFigures = Object.freeze(['strong', 'ready', 'strongNoContact', 'rosterOpen', 'waiting', 'cap', 'productLimit', 'approvals', 'budgetDollars', 'guardSent', 'guardBounced']);
 export const weekOnly = figures => Object.fromEntries(Object.entries(figures).filter(([key]) => !snapshotFigures.includes(key)));
 
 /**
@@ -107,12 +108,20 @@ export function candidates(facts, previous = null) {
       `${f.strongNoContact} of ${f.strong} strong-fit agencies (${share}%) have no address the team may write to.`,
       'Raise "Most address checks a day" so the people finder tries more decision-makers per agency.', 'strongNoContact');
   }
-  // The cap held sending back on most days while approved drafts waited and bounces stayed low. The setting stops at 100.
-  if (f.capDays >= 4 && f.waiting >= 5 && f.sent >= 20 && f.bounceRate < 2 && f.complaints === 0 && f.cap < 100) {
-    const next = Math.min(100, Math.max(f.cap + 5, Math.min(f.cap * 2, 25)));
-    add('volume', 50 + f.capDays * 5, { capDays: f.capDays, cap: f.cap, waiting: f.waiting, bounceRate: f.bounceRate, suggestedCap: next },
-      `The cap of ${f.cap} cold emails a day was reached on ${f.capDays} of 7 days with ${f.waiting} approved drafts waiting and ${f.bounceRate}% bounces.`,
-      `Raise "Most cold emails a day" from ${f.cap} to ${next}.`, 'firstSent');
+  // A daily limit held sending back on most days while approved drafts waited and bounces stayed low. Two limits apply, and the send
+  // claim checks Intel's own "Maximum messages per day" (Growth) before the cold-email cap: the lower one binds, and the move raises
+  // every limit below the new number, which stops at the settings' 100.
+  const limit = f.productLimit > 0 ? Math.min(f.cap, f.productLimit) : f.cap;
+  const limitedDays = Math.max(f.capDays, f.limitDays);
+  if (limitedDays >= 4 && f.waiting >= 5 && f.sent >= 20 && f.bounceRate < 2 && f.complaints === 0 && limit > 0 && limit < 100) {
+    const next = Math.min(100, Math.max(limit + 5, Math.min(limit * 2, 25)));
+    const raises = [
+      ...(f.cap < next ? [`"Most cold emails a day" (Settings → Customer growth) from ${f.cap} to ${next}`] : []),
+      ...(f.productLimit > 0 && f.productLimit < next ? [`Intel's "Maximum messages per day" (Growth) from ${f.productLimit} to ${next}`] : []),
+    ];
+    add('volume', 50 + limitedDays * 5, { capDays: f.capDays, limitDays: f.limitDays, cap: f.cap, productLimit: f.productLimit, waiting: f.waiting, bounceRate: f.bounceRate, suggestedCap: next },
+      `The daily limit of ${limit} emails was reached on ${limitedDays} of 7 days with ${f.waiting} approved drafts waiting and ${f.bounceRate}% bounces.`,
+      `Raise ${raises.join(' and ')}.`, 'firstSent');
   }
   // Delivered but not read or answered: the message, not the list. Judged over two weeks, sends, replies and opens alike, so one quiet
   // week is not called a pattern.

@@ -136,6 +136,11 @@ try {
   await setting('growth.cold_email_daily_cap', 3);
   assert.ok((await facts()).email.capDays >= 1, 'a day with as many cold emails as the cap is counted');
   assert.equal((await facts()).settings.coldEmailCap, 3, 'the move can name the cap as it is');
+  // Intel's own daily limit (Growth), checked by the send claim before the cap: its days are counted too, and the move can name it.
+  await admin.query("update private.growth_policies set daily_limit=3 where product='caremetric-intel'");
+  const limited = await facts();
+  assert.equal(limited.settings.productDailyLimit, 3);
+  assert.ok(limited.email.limitDays >= 1, 'a day Intel sent as many emails as its own limit is counted');
   await assert.rejects(agents.strategyFacts({ since: new Date(Date.now() - 40 * 86_400_000), until: new Date() }), refused('22023'), 'at most 31 days');
   await assert.rejects(pool.query('select private.growth_strategy_facts_json(now()-interval \'1 day\', now())'), refused('42501'), 'the funnel helper is closed');
 

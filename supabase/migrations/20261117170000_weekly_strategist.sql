@@ -9,7 +9,8 @@
 -- 2. private.growth_strategy_facts(since, until): the week's Intel funnel, counts only (never a name, address or amount of a customer):
 --    strong fits not yet written to and how many the team may write to, roster agencies resolved and still unresolved, addresses
 --    checked, cold first emails and later touches sent, cold emails attempted, delivered, hard and soft bounces, complaints, agencies that
---    replied or opened their report, days the cold-email cap was reached, drafts waiting (and how many of them are approved), briefs
+--    replied or opened their report, days the cold-email cap or Intel's own daily limit was reached, drafts waiting (and how many of
+--    them are approved), briefs
 --    written, trial starts, first value and paid,
 --    the Marketing Manager's spend and the days its budget ran out, proposals waiting for the owner, the bounce guard's own window, and
 --    the settings a move would change. Hub server only, at most 31 days. Snapshot figures (strong fits, waiting drafts, approvals) are
@@ -116,6 +117,12 @@ select jsonb_build_object(
     -- The cap covers every cold email of both products, by the Eastern day (private.agent_day_start).
     'capDays', (select count(*) from (select (x.attempted_at at time zone 'America/New_York')::date as day, count(*) as n from cold x
       where x.attempted_at >= p_since and x.attempted_at < p_until group by 1) days where days.n >= coalesce(private.growth_cold_email_cap(), 10)),
+    -- Intel's own daily limit (Growth -> the product's "Maximum messages per day", growth_policies.daily_limit) counts every Intel email
+    -- of the Eastern day and is checked before the cold-email cap, so either can be the one that held sending back.
+    'limitDays', (select count(*) from (select (x.attempted_at at time zone 'America/New_York')::date as day, count(*) as n
+      from private.growth_messages x join private.growth_opportunities y on y.id = x.opportunity_id
+      where y.product = 'caremetric-intel' and x.attempted_at >= p_since and x.attempted_at < p_until group by 1) days
+      where days.n >= (select p.daily_limit from private.growth_policies p where p.product = 'caremetric-intel')),
     'waiting', (select count(*) from private.growth_messages m join opp on opp.id = m.opportunity_id join private.growth_contacts c on c.id = m.contact_id
       where m.status = 'proposed' and m.purpose = 'marketing' and private.growth_message_class('marketing_manager', m.purpose, c.source_kind) = 'growth.cold_email'),
     -- Of those, the ones approved (by the owner or on their own) and not expired: only these could go out if the cap allowed.
@@ -135,7 +142,8 @@ select jsonb_build_object(
   'approvals', (select count(*) from private.agent_actions where status = 'proposed' and expires_at > now()),
   'guard', (select jsonb_build_object('on', coalesce((value ->> 'on')::boolean, false), 'since', value -> 'since',
       'sent', coalesce((value ->> 'sent')::integer, 0), 'bounced', coalesce((value ->> 'bounced')::integer, 0)) from guard),
-  'settings', jsonb_build_object('coldEmailCap', coalesce(private.growth_cold_email_cap(), 10), 'presendCheck', private.growth_presend_mode())
+  'settings', jsonb_build_object('coldEmailCap', coalesce(private.growth_cold_email_cap(), 10), 'presendCheck', private.growth_presend_mode(),
+    'productDailyLimit', (select p.daily_limit from private.growth_policies p where p.product = 'caremetric-intel'))
 );
 $$;
 revoke all on function private.growth_strategy_facts_json(timestamptz, timestamptz) from public, anon, authenticated, service_role, hub_app_server;
