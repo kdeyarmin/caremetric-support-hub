@@ -85,13 +85,17 @@ const numberWords = {
 };
 // Words that may stand between a number and its unit ("40 scheduled working hours", "3 marketer seats", "10 new customers").
 const qualifiers = new Set(['more', 'fewer', 'less', 'additional', 'extra', 'full', 'new', 'scheduled', 'working', 'business', 'calendar', 'licensed',
-  'marketer', 'manager', 'annual', 'direct', 'care', 'training', 'unannounced', 'separate', 'paying', 'active', 'other', 'public', 'healthcare']);
+  'marketer', 'manager', 'annual', 'direct', 'care', 'training', 'unannounced', 'separate', 'paying', 'active', 'other', 'public', 'healthcare',
+  'us', 'american']);
 const chapterNumbers = new Set(['2600', '2800', '6400', '3270', '3280', '3290']);
 // The whole number, decimals included: "6.5 months" is 6.5 months, never 6. A "+" after it ("3,200+ counties", "500 + homes") is read
 // like "more than": the number is the same one, so "150+" and "more than 150" both read as 150 and either one allows the other.
 const numberStart = new RegExp(String.raw`(?<![\w.$§,/])((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?|${Object.keys(numberWords).join('|')})(?=\s|[-–+])`, 'gi');
 // What follows the number, up to its unit: an optional "+", then a space or a dash, then words.
 const unitWords = /^(?:\s*\+)?(?:\s*[-–]\s*|\s+)([a-z' ]+)/i;
+// The country between a number and its unit ("3,200 U.S. counties", "50 US states", "U.S.A."), written as one word, "US", before the unit
+// is looked for: a word stops at a full stop, so "U.S." would otherwise hide the number. "US" and "American" are qualifiers above.
+const country = /\bU\.?\s?S\.?(?:\s?A\.?)?(?![a-z])/gi;
 /** A written number as a number: "1,299.50" is 1299.5 and "199.00" is 199, so equal amounts compare equal however they are written. */
 const numberOf = text => Number(String(text).replace(/[$,%\s]/g, ''));
 
@@ -108,7 +112,7 @@ export function numbersIn(value) {
     if (chapterNumbers.has(match[1].replace(/,/g, '').split('.')[0])
       || /(?:chapters?|ch\.|§+|sections?|part|title|code)\s*(?:\d+(?:\.\d+)?(?:\([a-z0-9]+\))*\s*(?:and|or|,)\s*)?$/i.test(text.slice(Math.max(0, match.index - 32), match.index))) continue;
     const after = text.slice(match.index + match[0].length, match.index + match[0].length + 80);
-    const words = unitWords.exec(after)?.[1].trim().toLowerCase().split(/\s+/).slice(0, 4) ?? [];
+    const words = unitWords.exec(after.replace(country, 'US'))?.[1].trim().toLowerCase().split(/\s+/).slice(0, 4) ?? [];
     for (const word of words) {
       const unit = unitOf(word);
       if (unit) {
