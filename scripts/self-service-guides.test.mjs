@@ -21,9 +21,10 @@ describe('the self-service guide migration', () => {
     expect(sql).toContain('not exists(select 1 from hub.products p where p.id=cp.product_id and p.slug=any(v_apps))');
   });
 
-  it('keeps the article text the first generated migration published, so unchanged guides keep their revision', () => {
-    const first = readFileSync(new URL('20261027145524_self_service_guidance.sql', directory), 'utf8');
-    for (const item of guides) expect(first, item.id).toContain(guideBody(item).replaceAll("'", "''"));
+  it('writes the article exactly as the earlier generator did, so a guide whose text did not change keeps its revision', () => {
+    // A fixed fixture, not guides.json: the file changes with every edit; the format must not (20261027145524 published in it).
+    expect(guideBody(guide())).toBe(['## Prerequisites\n\n- One', '## Permitted roles\n\n- Two', '## Setup\n\n1. Three\n2. Four', '## Normal use\n\n1. Five',
+      '## Common problems\n\n- Six', '## FAQ\n\n- Seven', '## Helpful tips\n\n- Eight'].join('\n\n'));
   });
 
   it('publishes the current guides in the newest generated migration and never rewrites a migration that has run', () => {
