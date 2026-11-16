@@ -114,6 +114,27 @@ describe('the fact sheet', () => {
     expect(textProblems(added, { product: 'intel' }).filter(code => code !== 'personal_information')).toEqual([]);
   });
 
+  it('shows every agent each area CareBase publishes, with the plan it needs, and keeps the human sheet aligned', () => {
+    const text = factSheetText();
+    const carebase = products.carebase;
+    // One line per area on cmcarebase.com/features, in the page's order, with the page's own plan or add-on label in brackets.
+    const { areas } = JSON.parse(readFileSync(new URL('./carebase-features.json', import.meta.url), 'utf8'));
+    expect(carebase.capabilities.map(line => line.slice(0, line.indexOf(']:') + 1))).toEqual(areas.map(area => `${area.name} [${area.plan}]`));
+    for (const line of [...carebase.capabilities, ...carebase.whyChoose, ...carebase.whoUses]) {
+      expect(text).toContain(`- ${line}`);
+      expect(doc, line).toContain(line);
+    }
+    // The page's own conditions travel with the areas they qualify.
+    expect(carebase.capabilities.find(line => line.startsWith('Medication management'))).toMatch(/documented switch .* imported medication events are read-only/);
+    expect(carebase.capabilities.find(line => line.startsWith('Survey readiness'))).toMatch(/readiness score does not predict survey results/);
+    expect(carebase.capabilities.find(line => line.startsWith('Workforce'))).toMatch(/exclusion-list checks remain outside CareBase/);
+    expect(carebase.capabilities.find(line => line.startsWith('Resident billing'))).toMatch(/alongside the accounting ledger and claims system/);
+    // The summary states no number, so it lets no draft state one (validate.mjs allowedNumbers) and makes no claim.
+    const added = [...carebase.capabilities, ...carebase.whoUses].join('\n');
+    expect(added).not.toMatch(/\d/);
+    expect(textProblems(added, { product: 'carebase' })).toEqual([]);
+  });
+
   it('delivers all priority industries and their access conditions to agents and keeps the human sheet aligned', () => {
     const text = factSheetText();
     const { industryUseCases, industryGuidance } = products.intel;
