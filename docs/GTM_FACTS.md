@@ -20,9 +20,10 @@ Buying guidance covers plan selection, rollout, trial evaluation, ongoing costs,
 
 **CareBase reference updated 2026-11-16:** cmcarebase.com/features was redesigned, and the
 [CareBase feature and function reference](#carebase-feature-and-function-reference) now follows it: 112 capabilities across 8 areas,
-each with the plan or add-on the page names, read from the live public pages on 2026-11-16 (`npm run refresh:features`). Intel's
-inventory still uses the 2026-11-09 snapshot. Reading the public pages is not a new verification of production availability or pricing,
-and the rewritten reference awaits the owner's confirmation below.
+each with the plan or add-on the page names, read from the live public pages on 2026-11-16 (`npm run refresh:features`). The
+CareBase summary "Everything it does, by area" (and `capabilities` in `facts.mjs`) follows the same eight areas. Intel's inventory still
+uses the 2026-11-09 snapshot. Reading the public pages is not a new verification of production availability or pricing, and the
+rewritten reference and summary await the owner's confirmation below.
 
 ## Which offering fits the company
 
@@ -143,12 +144,14 @@ CareBase connects the records and daily work a care organization needs to manage
 
 **Everything it does, by area:**
 
-- Training and requirements: maintained courses, graded quizzes, competency checklists, role-based assignments, custom requirements, reminders, a compliance matrix, reports, document storage and eligible offline training.
-- Reviewed AI assistance and live classes: the CareMetric team prepares courses from source documents for human review, with optional presenter videos. The text copilot answers from facility records and regulatory references and drafts follow-up for approval. Trainers schedule classes, manage rosters, record attendance and retain signed attendance sheets.
-- Resident care and operations: inquiries, admissions, census, room readiness, agreements, assessments, support plans, clinical notes and vitals, change-of-condition follow-up, daily services, dietary checks, transportation and resident financial records. Compatible clinical systems can supply records through configured FHIR connections. Imported medication events are read-only; native eMAR requires enrollment, clinical approval and a documented switch.
-- Credentials and workforce: clearances, qualifications, licenses, provisional-employment deadlines, continuing education, medication authorization, policy acknowledgments, shift scheduling, cross-facility staff and time-off coverage.
-- Survey, safety and facilities: binder exports, a readiness score for prioritizing recorded gaps, Survey Day Mode, documentation rooms, incidents, complaints, reporting deadlines, corrective work, fire drills, emergency operations, maintenance, quality projects and assigned work queues. The readiness score does not predict survey results.
-- Access and onboarding: organization and facility roles, scoped guest links, certificate verification, staff roster imports, invitations, online signup, configured reminders and an installable employee training player. Employees see their own records; surveyors receive scoped documentation links without a CareBase sign-in.
+- Resident care & daily operations [CareBase Core]: inquiries, admissions and move-in checklists; census and room readiness; resident assessments and support plans, with reassessment deadlines and review triggers; agreements signed through guest links; clinical charting of vitals, progress notes and care plans; daily services, care tasks and refusals; change-of-condition follow-up and provider notifications; dietary and food-safety rounds; meal and activity calendars; appointments and transportation; resident documents and history; designated-person and move-in portals; discharge records; maintenance work orders; and emergency plans with resident accountability.
+- Staff training & learning [Staff Training add-on or CareMetric Train]: a course catalog the CareMetric team maintains and maps to Pennsylvania requirements; graded quizzes, completion records and certificates; role-based plans and automatic assignments; custom requirements and renewal dates; a training-compliance matrix with export; live classes with digital sign-in, trainer-managed rosters and signed attendance sheets; outside training reviewed by a manager; retraining; an offline-capable training player; certificate verification; and training reports. Required accredited or external training still needs an eligible provider.
+- Medication management & eMAR [eMAR add-on · facility activation required]: medication rounds and passes; orders with independent review; scheduled and as-needed (PRN) medications; resident, medication and barcode checks; administration limited to staff whose medication training and insulin qualification are current; refusals, omissions and amendments; PRN follow-up; prescriber holds; controlled-substance counts with a witness; refills and leave packages; printable medication records and downtime packets; and oversight reports. Native eMAR requires facility enrollment, clinical approval and a documented switch to CareBase as the official medication record; until then the facility keeps its existing record, and imported medication events are read-only.
+- Survey readiness, safety & quality [Survey & Compliance tools; confidential incidents require Core]: the Today workspace; a readiness score for prioritizing tracked gaps; binder and survey-packet exports; Survey Day Mode with the entrance-conference checklist and an on-shift roster; resident deadlines, including medical evaluations; mock surveys and request tracking; a crosswalk to Pennsylvania's personal care home and ALF rules; time-limited, read-only documentation rooms for surveyors; incidents and reporting deadlines; confidential incidents; complaints and resident rights; violations and plans of correction; fire drills and life-safety records; document templates and DHS forms; quality projects; an assigned work queue with escalation; and policy acknowledgments. The readiness score does not predict survey results, and staff still make and document required reports.
+- Workforce, credentials & scheduling [Workforce add-on]: employee records and invitations; clearances; provisional-employment deadlines; licenses, TB and employment-eligibility records; administrator qualifications and continuing education; competency checklists and observed assessments; the medication authorization roster, practicums and annual observations; shift handoffs; shift scheduling with templates and auto-fill; coverage gaps; cross-facility float staff; time-off approvals; and schedules on a phone. Federal exclusion-list checks remain outside CareBase.
+- Resident billing & payments [Resident Billing & Payments add-on]: a resident subledger with account history; rate agreements and effective-dated charges; care-level rates; facility billing runs and batch statements; receivables and payment allocation; family payments through the portal; autopay authorization records; personal-funds transactions and statements; independent approval for protected fund actions; move-out closeout; and exports for the accounting workflow. It works alongside the accounting ledger and claims system, not in place of them.
+- AI assistance with human review [Staff Training and Survey & Compliance tools]: courses the CareMetric team drafts with AI assistance from policies and source documents, with lesson text, video scripts and graded quiz drafts, optional presenter videos, and a named reviewer's approval before publication. The text copilot answers from facility records and regulatory references, drafts plans of correction and mock-survey preparation, and proposes follow-up that a person must approve.
+- Access, integrations & onboarding [Platform tools · access depends on your plan and role]: online signup and guided setup; staff roster imports reviewed before they apply; an import center; FHIR imports of medications, allergies and diagnoses from compatible clinical systems; role-based access by facility; account verification by text message and security policies; private documents with expiring links; a record of actions taken; email, in-app and (when enabled) text alerts with escalation; time-limited guest access; an installable employee app; organization-wide reports; in-app help and product updates; and single sign-on and enterprise provisioning through a managed rollout. Employees see their own records; surveyors receive scoped documentation links without a CareBase sign-in.
 
 **Who uses it, and for what:**
 
@@ -157,7 +160,7 @@ CareBase connects the records and daily work a care organization needs to manage
 - Trainers: assign courses, schedule classes, record attendance and manage practicum documentation.
 - Employees: complete their own training, view published shifts, sign policies and upload records from a browser or phone.
 - Surveyors: review only the documentation shared through a scoped, time-limited link, without editing records or receiving a CareBase sign-in.
-- Guests and designated persons: use time-limited links for shared move-in records, agreements and documentation without a full user account.
+- Guests, families and designated persons: use time-limited links for shared move-in records, agreements and documentation without a full user account; with Resident Billing & Payments, families can also pay through the portal.
 
 **Example workflow:** import and review a staff roster, configure applicable requirements, and assign courses or a live class.
 Record completion or reviewed attendance, resolve missing requirements, and prepare the requested documentation for a surveyor.
@@ -606,8 +609,9 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
 - [x] 2026-11-12: the founder's story wording. The owner confirmed: the founder built Intel, and currently runs a home health and
   hospice agency and a consulting company.
 - [ ] 2026-11-16: the CareBase feature and function reference, rewritten from the redesigned cmcarebase.com/features (112 capabilities
-  across 8 areas, each with the plan or add-on the page names) and its "What the team can do" descriptions. Tick this box when you
-  approve the pull request that adds it.
+  across 8 areas, each with the plan or add-on the page names) and its "What the team can do" descriptions; and CareBase's "Everything
+  it does, by area" summary in the same eight areas, which the AI team reads (`capabilities` in `facts.mjs`), with families' portal
+  payments added to who uses it. Tick this box when you approve the pull request that adds them.
 
 ## Feature and function reference
 
