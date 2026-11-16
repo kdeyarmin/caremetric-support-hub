@@ -55,3 +55,44 @@ export function databaseConfig(environment = process.env, now = Date.now()) {
     ssl: { rejectUnauthorized: true, servername: url.hostname, ...(ca ? { ca } : {}) },
   };
 }
+
+/**
+ * Keeps a dropped database connection from stopping the Hub. pg-pool emits 'error' on the pool when an idle connection fails, and a pg
+ * client emits 'error' on itself when its socket dies while it is checked out (pg-pool removes its own listener on checkout, and the Hub
+ * holds connections across Stripe and Telnyx calls inside transactions). With no listener either one is an uncaught exception and the
+ * process exits. The query in flight still fails and its caller handles that; the pool opens a new connection for the next one.
+ * One line per lost connection, logged by the connection's own listener, without the error's text, which can name the host or role.
+ */
+export function guardPool(pool, log = console) {
+  const dropped = () => log.warn('A database connection dropped; the next query opens a new one.');
+  // An idle connection's failure is reported on the connection first (below), then on the pool: counted once.
+  pool.on('error', () => {});
+  pool.on('connect', client => client.on('error', dropped));
+  return pool;
+}
+
+// The database could not be reached just now: a refused or reset connection, a name that did not resolve, a connect timeout, Postgres
+// starting up or shutting down (57P01-57P03), too many connections (53300) or any SQLSTATE class 08 (connection exception).
+const unreachableCodes = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH', 'EPIPE',
+  '57P01', '57P02', '57P03', '53300']);
+export const databaseUnreachable = error => Boolean(error) && (unreachableCodes.has(error.code) || /^08[0-9A-Z]{3}$/.test(error.code ?? '')
+  || /timeout exceeded when trying to connect|Connection terminated/i.test(error.message ?? '') || (error.cause !== error && databaseUnreachable(error.cause)));
+
+/**
+ * Runs a startup query, retrying while the database cannot be reached, until `deadline` (75 seconds from now by default; startup passes
+ * one deadline to both of its reads). That stays inside Railway's 120-second deploy healthcheck, a last attempt's 10-second connect
+ * timeout included, and outlasts a Supabase restart or failover, which otherwise used up the service's restarts and left the Hub down
+ * until someone redeployed it. Anything else (a release that does not match the database, wrong credentials) fails at once.
+ * The lines logged carry no error text, which can name the host or role.
+ */
+export async function untilReachable(operation, { now = Date.now, deadline = now() + 75_000, wait = ms => new Promise(resolve => setTimeout(resolve, ms)), log = console } = {}) {
+  for (let attempt = 1; ; attempt += 1) {
+    try { return await operation(); }
+    catch (error) {
+      const delay = Math.min(15_000, 1000 * 2 ** (attempt - 1));
+      if (!databaseUnreachable(error) || now() + delay > deadline) throw error;
+      log.warn(`The database could not be reached (attempt ${attempt}); trying again in ${delay / 1000} seconds.`);
+      await wait(delay);
+    }
+  }
+}

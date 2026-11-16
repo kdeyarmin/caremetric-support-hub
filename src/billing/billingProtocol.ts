@@ -96,7 +96,7 @@ export const localBillingActions: ReadonlySet<string> = new Set(['account.link',
 
 export const billingResultSchema = z.object({
   ok: z.literal(true), url: z.string().optional(), key: z.string().optional(),
-  migrated: z.number().int().optional(), failed: z.number().int().optional(), synced: z.number().int().optional(),
+  migrated: z.number().int().optional(), failed: z.number().int().optional(), incomplete: z.literal(true).optional(), synced: z.number().int().optional(),
   id: z.string().optional(),
 }).strict();
 export type BillingResult = z.infer<typeof billingResultSchema>;

@@ -12,6 +12,7 @@ import { actionExecutor, recordOnlyExecutors } from './actions.mjs';
 import { ownerNotifier } from './notify.mjs';
 import { agentAdmin } from './admin.mjs';
 import { builtInHandlers } from './tasks/index.mjs';
+import { senderServices } from './tasks/brief.mjs';
 import { conciergeExecutors, draftingFor } from './concierge/index.mjs';
 import { lifecycleExecutors } from './accounts/executor.mjs';
 import { externalEmailAvailable, externalEmailExecutors, externalEmailRecovery } from './external-email.mjs';
@@ -106,7 +107,7 @@ export function agentTeam({
     ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log, creative: creativeLink, feed: growth?.roster?.feed ?? null }),
     ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log, feed: growth?.roster?.feed ?? null }),
     ...adsWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, social: socialWork.ads?.settings ?? {}, marketed: marketedSource, creative: creativeLink, publicOrigin, log }),
-    ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, visitors: visitorMetrics ? input => visitorMetrics.read(input) : null, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, inboundFollowup, toolkit: toolkitNow, watchdogIdleDays, services: { sms: Boolean(sms?.configured), email: Boolean(email?.configured) } }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+    ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, visitors: visitorMetrics ? input => visitorMetrics.read(input) : null, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, inboundFollowup, toolkit: toolkitNow, watchdogIdleDays, services: senderServices(sms, email) }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   // Settings → AI team → Tasks at once: how many tasks may run side by side.
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now, claimLimit: concurrentTasks });
   const admin = agentAdmin({
