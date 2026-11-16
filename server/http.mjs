@@ -129,6 +129,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
             '/api/internal/publications/authorize':'publication',
             '/api/internal/media/authorize':'media', '/api/internal/admin/authorize':'carebase',
             '/api/internal/admin/breathe/authorize':'breathe', '/api/internal/admin/emr/authorize':'caremetric-emr',
+            // Breathe's and Intel's change endpoints redeem their own command audience (20261117100000_app_command_audiences.sql).
+            '/api/internal/command/breathe/authorize':'breathe.command', '/api/internal/command/intel/authorize':'intel.command',
             '/api/internal/admin/pennsync/authorize':'pennsync', '/api/internal/command/carebase/authorize':'carebase.command',
             '/api/internal/admin/go/authorize':'caremetric-go',
             '/api/internal/admin/intel/authorize':'intel',
@@ -492,6 +494,15 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
         // Advisors' own body limit: two 3,000-character notes (the change and what the owner saw) can need about 18 KB.
         if(path==='/api/admin/advisors-command' && req.method==='POST') return json(await delegations.advisorsCommand(session,await jsonBody(req,20000)));
         if(path==='/api/admin/command' && req.method==='POST') return json(await delegations.command(session,await jsonBody(req,4096)));
+        // Breathe organization suspend and restore (tenant.lifecycle.v1).
+        if(path==='/api/admin/tenant-lifecycle' && req.method==='POST') {
+          if(url.search)throw new HttpError(400,'Query parameters are not supported.','invalid_request');
+          const body=await jsonBody(req,4096);const controller=new AbortController();
+          const abort=()=>{if(!res.writableEnded)controller.abort();};
+          req.once('aborted',abort);res.once('close',abort);
+          try{return json(await delegations.tenantLifecycle(session,body,controller.signal));}
+          finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
+        }
         if(path==='/api/admin/registration' && req.method==='POST') {
           if(url.search)throw new HttpError(400,'Invitation query parameters are not supported.');
           return json(await delegations.registration.admin(session,await jsonBody(req,4096)));

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Activity, ArrowRight, Bot, Boxes, CreditCard, Globe2, Headphones, Inbox, Link2, Mail, MessageCircle, MessageSquareText, Phone, Plug, Radio, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { Activity, ArrowRight, Bot, Boxes, CreditCard, Globe2, Headphones, Inbox, KeyRound, Link2, Mail, MessageCircle, MessageSquareText, Phone, Plug, Radio, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { repository } from "../data";
 import type { ContentItem, HubRepository, Product, SupportCase } from "../domain";
 import { config } from "../lib/config";
@@ -72,7 +72,7 @@ function Row({ icon: Icon, label, children }: { icon: typeof Activity; label: st
 
 function ApplicationPanel({ card, communicationsLoading, intakeLoading, usageLoading, preview, recordsStale = false }: { card: ApplicationCard; communicationsLoading: boolean; intakeLoading: boolean; usageLoading: boolean; preview: boolean; recordsStale?: boolean }) {
   const connection = card.connection.state;
-  const { support, intake, directory, integration, subscriptions, health, links } = card;
+  const { support, intake, directory, integration, subscriptions, health, links, controls } = card;
   return <article className="panel control-app" aria-label={`${card.name} controls`}>
     <header className="control-app-head"><div><h3>{card.name}</h3><p>{card.scope}</p></div>
       <Status done={connection === "verified"} yes="Connection verified" no={connection === "pending" ? "Connection pending" : "Unavailable"} /></header>
@@ -93,6 +93,10 @@ function ApplicationPanel({ card, communicationsLoading, intakeLoading, usageLoa
       <Row icon={Users} label="Users & organizations">
         <span className={directory.state === "available" ? "" : "control-muted"}>{directory.label}</span>
         {(directory.organizations || directory.users) && <div className="control-links">{directory.organizations && <Link to={links.organizations}>Organizations</Link>}{directory.users && <Link to={links.users}>Users</Link>}{directory.accessControls && <small>Suspension and activation access changes are reviewed in the workspace.</small>}</div>}
+      </Row>
+      <Row icon={KeyRound} label="Controls">
+        <span className={controls.state === "available" ? "" : "control-muted"}>{controls.label}</span>
+        {controls.state === "available" && <div className="control-links"><Link to={card.product === "advisors" ? links.inquiries : card.product === "breathe" ? links.organizations : card.product === "intel" ? links.users : links.workspace}>Make a change</Link></div>}
       </Row>
       <Row icon={Link2} label="Integration">
         {card.product === "advisors" ? <div>Help SDK: <span className="control-muted">Not applicable</span> <small>Consulting site with no in-app help</small></div>

@@ -43,6 +43,12 @@ integer alone does not establish compatibility. Both entry points require these
 | `support.bulk-email.v1` | Governed bulk email preparation and delivery |
 | `learning.catalog-authoring.v1` | Reviewed course unpublish and published-lesson corrections |
 
+`20261117100100_app_command_audiences_contract.sql` declares `platform.admin.app-commands.v1` only after
+`20261117100000_app_command_audiences.sql` has given Breathe and CareMetric Intel command audiences of their own
+(`breathe.command`, `intel.command`) while keeping every existing audience, and the SMS, administrator-command and Intel
+foundations are declared. It is optional: the Hub server reads it at boot and, until it is present, refuses those audiences and
+hides Breathe's and Intel's change capabilities from the browser ([central access commands](CENTRAL_ADMIN_COMMANDS.md)).
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a
