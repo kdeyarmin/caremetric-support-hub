@@ -47,14 +47,15 @@ const clamp = value => Math.max(0, Math.min(100, Math.round(value)));
 /** The week's figures as the rules and the model read them: whole numbers and whole percents only. */
 export function weekFigures(facts) {
   const e = facts?.email ?? {}, p = facts?.prospects ?? {}, c = facts?.conversion ?? {}, s = facts?.spend ?? {};
-  const sent = n(e.delivered) + n(e.bounced);
+  // Cold emails attempted in the week, counted by message as the bounce guard counts them; delivery events can lag or be missing.
+  const sent = Math.max(n(e.sent), n(e.delivered) + n(e.bounced));
   return {
     strong: n(p.strong), ready: n(p.strongReachable), strongNoContact: n(p.strongNoContact), briefed: n(p.briefed),
     rosterOpen: n(facts?.roster?.unresolved), rosterResolved: n(facts?.roster?.resolvedInWeek),
     checked: n(facts?.addresses?.checked), unanswered: n(facts?.addresses?.unanswered),
     firstSent: n(e.firstSent), followups: n(e.followups), sent, delivered: n(e.delivered), bounced: n(e.bounced), bounceRate: pct(n(e.bounced), sent),
     complaints: n(e.complaints), replies: n(e.replies), reportViews: n(e.reportViews), openRate: pct(n(e.reportViews), n(e.firstSent)),
-    capDays: n(e.capDays), cap: n(facts?.settings?.coldEmailCap), waiting: n(e.waiting),
+    capDays: n(e.capDays), cap: n(facts?.settings?.coldEmailCap), waiting: n(e.approvedWaiting ?? e.waiting),
     trialStarts: n(c.trialStarts), activated: n(c.activated), paid: n(c.paid),
     spendDollars: Math.round(n(s.marketingCents) / 100), budgetDollars: Math.round(n(s.budgetCents) / 100), budgetDays: n(s.budgetDays),
     approvals: n(facts?.approvals),
@@ -106,17 +107,20 @@ export function candidates(facts, previous = null) {
       `${f.strongNoContact} of ${f.strong} strong-fit agencies (${share}%) have no address the team may write to.`,
       'Raise "Most address checks a day" so the people finder tries more decision-makers per agency.', 'strongNoContact');
   }
-  // The cap held sending back on most days while drafts waited and bounces stayed low.
-  if (f.capDays >= 4 && f.waiting >= 5 && f.sent >= 20 && f.bounceRate < 2 && f.complaints === 0) {
-    const next = Math.max(f.cap + 5, Math.min(f.cap * 2, 25));
+  // The cap held sending back on most days while approved drafts waited and bounces stayed low. The setting stops at 100.
+  if (f.capDays >= 4 && f.waiting >= 5 && f.sent >= 20 && f.bounceRate < 2 && f.complaints === 0 && f.cap < 100) {
+    const next = Math.min(100, Math.max(f.cap + 5, Math.min(f.cap * 2, 25)));
     add('volume', 50 + f.capDays * 5, { capDays: f.capDays, cap: f.cap, waiting: f.waiting, bounceRate: f.bounceRate, suggestedCap: next },
       `The cap of ${f.cap} cold emails a day was reached on ${f.capDays} of 7 days with ${f.waiting} approved drafts waiting and ${f.bounceRate}% bounces.`,
       `Raise "Most cold emails a day" from ${f.cap} to ${next}.`, 'firstSent');
   }
-  // Delivered but not read or answered: the message, not the list. Judged over two weeks so one quiet week is not called a pattern.
-  if (twoWeeksSent >= 30 && f.replies + (before?.replies ?? 0) === 0 && f.openRate < 10) {
-    add('engagement', 55 + Math.min(twoWeeksSent, 100) / 5, { sentTwoWeeks: twoWeeksSent, replies: 0, reportViews: f.reportViews, openRate: f.openRate },
-      `${twoWeeksSent} cold emails in two weeks drew no reply, and ${f.reportViews} ${f.reportViews === 1 ? 'agency' : 'agencies'} opened its report.`,
+  // Delivered but not read or answered: the message, not the list. Judged over two weeks, sends, replies and opens alike, so one quiet
+  // week is not called a pattern.
+  const firstTwoWeeks = f.firstSent + (before?.firstSent ?? 0), viewsTwoWeeks = f.reportViews + (before?.reportViews ?? 0);
+  const openTwoWeeks = pct(viewsTwoWeeks, firstTwoWeeks);
+  if (twoWeeksSent >= 30 && f.replies + (before?.replies ?? 0) === 0 && openTwoWeeks < 10) {
+    add('engagement', 55 + Math.min(twoWeeksSent, 100) / 5, { sentTwoWeeks: twoWeeksSent, firstTwoWeeks, replies: 0, reportViewsTwoWeeks: viewsTwoWeeks, openRateTwoWeeks: openTwoWeeks },
+      `${twoWeeksSent} cold emails in two weeks drew no reply, and ${viewsTwoWeeks} ${viewsTwoWeeks === 1 ? 'agency' : 'agencies'} opened its report.`,
       'Read the reader\'s weakest sentences on Growth and change the first email\'s offer, not its wording.', 'openRate');
   }
   // Interest without trials.
@@ -144,9 +148,9 @@ export function candidates(facts, previous = null) {
   return list.sort((a, b) => b.score - a.score || Object.keys(constraintLabels).indexOf(a.key) - Object.keys(constraintLabels).indexOf(b.key));
 }
 
-/** Every number the model may write: the week's figures, the week before's, and the candidates' evidence. */
-export function allowedNumbers(facts, previous, list) {
-  const values = new Set([7]);
+/** Every number the model may write: the week's figures, the week before's, the candidates' evidence and any `extra` it was given. */
+export function allowedNumbers(facts, previous, list, extra = []) {
+  const values = new Set([7, ...extra.filter(Number.isFinite)]);
   for (const figures of [weekFigures(facts), previous ? weekFigures(previous) : null]) for (const value of Object.values(figures ?? {})) values.add(value);
   for (const candidate of list) for (const value of Object.values(candidate.evidence)) if (Number.isFinite(value)) values.add(value);
   return values;

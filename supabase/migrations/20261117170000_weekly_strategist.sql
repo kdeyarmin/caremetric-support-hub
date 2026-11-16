@@ -8,8 +8,9 @@
 -- 1. Settings -> AI team -> "Name the week's binding constraint" (agents.strategist): off until the owner turns it on.
 -- 2. private.growth_strategy_facts(since, until): the week's Intel funnel, counts only (never a name, address or amount of a customer):
 --    strong fits not yet written to and how many the team may write to, roster agencies resolved and still unresolved, addresses
---    checked, cold first emails and later touches sent, delivered, hard and soft bounces, complaints, agencies that replied or opened
---    their report, days the cold-email cap was reached, approved drafts waiting, briefs written, trial starts, first value and paid,
+--    checked, cold first emails and later touches sent, cold emails attempted, delivered, hard and soft bounces, complaints, agencies that
+--    replied or opened their report, days the cold-email cap was reached, drafts waiting (and how many of them are approved), briefs
+--    written, trial starts, first value and paid,
 --    the Marketing Manager's spend and the days its budget ran out, proposals waiting for the owner, the bounce guard's own window, and
 --    the settings a move would change. Hub server only, at most 31 days. Snapshot figures (strong fits, waiting drafts, approvals) are
 --    as of the read, so the strategist reads them for the week just ended only.
@@ -100,6 +101,9 @@ select jsonb_build_object(
       and c.mailbox_result in ('unknown', 'unreachable'))),
   'email', jsonb_build_object(
     'firstSent', (select count(*) from touches where first_touch), 'followups', (select count(*) from touches where not first_touch),
+    -- Every cold Intel email attempted in the week, colleagues' copies included: the hard-bounce rate's denominator, counted by message
+    -- as the bounce guard counts it, so a delivery event that has not arrived yet never shrinks it.
+    'sent', (select count(*) from intel_cold ic where ic.attempted_at >= p_since and ic.attempted_at < p_until),
     'delivered', (select count(*) from events where kind = 'delivered'),
     'bounced', (select count(*) from events e where e.kind = 'bounced'
       and exists (select 1 from private.email_suppressions s where s.email_hash = encode(extensions.digest(e.email, 'sha256'), 'hex'))),
@@ -113,7 +117,12 @@ select jsonb_build_object(
     'capDays', (select count(*) from (select (x.attempted_at at time zone 'America/New_York')::date as day, count(*) as n from cold x
       where x.attempted_at >= p_since and x.attempted_at < p_until group by 1) days where days.n >= coalesce(private.growth_cold_email_cap(), 10)),
     'waiting', (select count(*) from private.growth_messages m join opp on opp.id = m.opportunity_id join private.growth_contacts c on c.id = m.contact_id
-      where m.status = 'proposed' and m.purpose = 'marketing' and private.growth_message_class('marketing_manager', m.purpose, c.source_kind) = 'growth.cold_email')),
+      where m.status = 'proposed' and m.purpose = 'marketing' and private.growth_message_class('marketing_manager', m.purpose, c.source_kind) = 'growth.cold_email'),
+    -- Of those, the ones approved (by the owner or on their own) and not expired: only these could go out if the cap allowed.
+    'approvedWaiting', (select count(*) from private.growth_messages m join opp on opp.id = m.opportunity_id join private.growth_contacts c on c.id = m.contact_id
+      join private.agent_actions a on a.id = m.action_id
+      where m.status = 'proposed' and m.purpose = 'marketing' and private.growth_message_class('marketing_manager', m.purpose, c.source_kind) = 'growth.cold_email'
+        and a.status in ('approved', 'auto_approved') and (a.expires_at is null or a.expires_at > now()))),
   'conversion', jsonb_build_object(
     'trialStarts', coalesce((select n from firsts where kind = 'trial_started'), 0), 'activated', coalesce((select n from firsts where kind = 'first_value'), 0),
     'paid', coalesce((select n from firsts where kind = 'paid'), 0)),

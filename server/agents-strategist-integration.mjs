@@ -14,6 +14,7 @@ import { growthStore } from './growth/store.mjs';
 import { sqlAgentStore } from './agents/store.mjs';
 import { strategistFeature, strategistHandlers } from './agents/strategist/index.mjs';
 import { weekStart } from './agents/accounts/week.mjs';
+import { schemaDefects } from './agents/runtime/schema.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -98,7 +99,7 @@ try {
   await store.delivery(`strategist-hard:${run}`, hard.id, 'bounced', new Date().toISOString());
   const softly = await touch(soft);
   await store.delivery(`strategist-soft:${run}`, softly.id, 'bounced', new Date().toISOString(), false);
-  await touch(waiting, { send: false });
+  const held = await touch(waiting, { send: false });
   for (const [org, kind, key] of [[opened.org, 'report_viewed', 'view-1'], [opened.org, 'report_viewed', 'view-2'], [opened.org, 'reply', 'reply'],
     [opened.org, 'trial_started', 'trial'], [internal.org, 'report_viewed', 'internal-view'], [internal.org, 'reply', 'internal-reply']]) {
     await admin.query('insert into private.customer_activity_events(product,organization_id,event_key,kind,occurred_at) values($1,$2,$3,$4,now())', ['caremetric-intel', org, `strategist-${key}:${run}`, kind]);
@@ -118,13 +119,20 @@ try {
     bounced: delta(after, before, 'email.bounced'), softBounced: delta(after, before, 'email.softBounced'), replies: delta(after, before, 'email.replies'),
     reportViews: delta(after, before, 'email.reportViews'), waiting: delta(after, before, 'email.waiting'), trialStarts: delta(after, before, 'conversion.trialStarts'),
     resolved: delta(after, before, 'roster.resolvedInWeek'), unresolved: delta(after, before, 'roster.unresolved'), marketingCents: delta(after, before, 'spend.marketingCents'),
+    sent: delta(after, before, 'email.sent'), approvedWaiting: delta(after, before, 'email.approvedWaiting'),
   }, {
     // Strong fits never written to: the waiting one (reachable) and the one with no address; the sent ones and the internal one are not.
     strong: 2, strongNoContact: 1, strongReachable: 1, briefed: 1,
     firstSent: 3, followups: 0, delivered: 1, bounced: 1, softBounced: 1, replies: 1, reportViews: 1, waiting: 1, trialStarts: 1,
     resolved: 1, unresolved: 1, marketingCents: 12,
+    // Every cold email attempted counts as sent, whatever its delivery events say; a waiting draft is approved only once its action is.
+    sent: 3, approvedWaiting: ['approved', 'auto_approved'].includes((await row('select status from private.agent_actions where id=$1', [held.action])).status) ? 1 : 0,
   }, 'the week\'s funnel counts Intel\'s outside agencies only, and a bounce as hard only once the address is suppressed');
   assert.ok(after.spend.budgetDays >= 1, 'a day the Marketing Manager ran out of budget is counted');
+  // A draft whose action still waits for the owner is waiting, but not approved.
+  await admin.query("update private.agent_actions set status='proposed' where id=$1", [held.action]);
+  const proposedOnly = await facts();
+  assert.deepEqual([delta(proposedOnly, before, 'email.waiting'), delta(proposedOnly, before, 'email.approvedWaiting')], [1, 0], 'an unapproved draft is not ready to send');
   await setting('growth.cold_email_daily_cap', 3);
   assert.ok((await facts()).email.capDays >= 1, 'a day with as many cold emails as the cap is counted');
   assert.equal((await facts()).settings.coldEmailCap, 3, 'the move can name the cap as it is');
@@ -151,6 +159,8 @@ try {
 
   // ---- 3. The strategist, end to end, with a stand-in model ---------------------------------------------------------------------------
   const model = { configured: true, run: async (_task, request) => {
+    // The real runtime refuses a request whose answer format it cannot enforce (runtime/schema.mjs), before any model call.
+    assert.deepEqual(schemaDefects(request.schema), [], 'the answer format is one the runtime accepts');
     const user = JSON.parse(request.user);
     assert.ok(user.candidates.length >= 1, 'the model is offered the week\'s candidates');
     assert.doesNotMatch(request.user, /@|example\.org/, 'no address reaches the model');

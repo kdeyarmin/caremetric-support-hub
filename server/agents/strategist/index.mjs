@@ -35,11 +35,11 @@ Name the ONE constraint that most limits new paying customers this week, from th
 - Write plainly, for a busy owner. Every number you write must be one of the figures given. Never name a person, an agency, a link or an email address.
 - headline: one sentence, the constraint and the figure that shows it. why: two or three sentences. move: one sentence. watch: the figure that shows next Monday whether the move worked.`;
 
-const textField = max => ({ type: 'string', maxLength: max });
+// The runtime's schemas take no length keywords (runtime/schema.mjs): the lengths are checked in strategyProblem.
 export const strategistSchema = {
   type: 'object', additionalProperties: false, required: ['constraint', 'headline', 'why', 'move', 'watch'],
   properties: {
-    constraint: { type: 'string', enum: Object.keys(constraintLabels) }, headline: textField(200), why: textField(600), move: textField(300),
+    constraint: { type: 'string', enum: Object.keys(constraintLabels) }, headline: { type: 'string' }, why: { type: 'string' }, move: { type: 'string' },
     watch: { type: 'string', enum: Object.keys(watchLabels) },
   },
 };
@@ -86,8 +86,10 @@ export function strategistHandlers({ store, model = null, features = null, enabl
     const last = await store.strategyNote(shift(week, -7));
     if (signal?.aborted) throw stopped();
     const list = candidates(current, previous);
-    const numbers = allowedNumbers(current, previous, list);
     const figures = weekFigures(current), before7 = weekFigures(previous);
+    // Last week's watched figure as its note recorded it is given to the model, so the model may write it.
+    const watchedThen = last?.watch && Number.isFinite(Number(last.figures?.[last.watch])) ? Number(last.figures[last.watch]) : null;
+    const numbers = allowedNumbers(current, previous, list, watchedThen === null ? [] : [watchedThen]);
 
     let note = null, chosenBy = 'rules', modelName = null, why = null;
     if (!list.length) why = 'no_candidate';
@@ -98,7 +100,7 @@ export function strategistHandlers({ store, model = null, features = null, enabl
         week: { from: week, to: shift(week, 6) }, figures, weekBefore: weekOnly(before7),
         candidates: list.map(({ key, score, evidence, headline, move, watch }) => ({ key, label: constraintLabels[key], score, evidence, headline, move, watch })),
         // What last week's note said to watch, as its own figures recorded it then, and as it stands now.
-        lastWeek: last ? { constraint: last.constraint, move: last.move, watch: last.watch, watchedThen: last.watch ? last.figures?.[last.watch] ?? null : null,
+        lastWeek: last ? { constraint: last.constraint, move: last.move, watch: last.watch, watchedThen,
           watchedNow: last.watch ? figures[last.watch] ?? null : null } : null,
         settings: current?.settings ?? {}, watchable: watchLabels,
       });

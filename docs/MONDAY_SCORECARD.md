@@ -73,20 +73,23 @@ figure to watch next Monday.
 
 1. **The figures.** `private.growth_strategy_facts(since, until)` reads CareMetric Intel's funnel for the week, counts only: strong
    fits (75 or more) not yet written to and how many have an address the team may write to, roster agencies resolved and still
-   unresolved, addresses checked and unanswered, cold first emails and later touches, deliveries, hard bounces (addresses the Hub
-   suppressed) and soft ones, complaints, agencies that replied or opened their report, trial starts, first value and paid, days the
-   cold-email cap was reached, approved drafts waiting, briefs written, the Marketing Manager's spend and the days its budget ran out,
+   unresolved, addresses checked and unanswered, cold first emails and later touches, every cold email attempted (the bounce rate's
+   denominator, counted by message), deliveries, hard bounces (addresses the Hub suppressed) and soft ones, complaints, agencies that
+   replied or opened their report, trial starts, first value and paid, days the cold-email cap was reached, drafts waiting and how many
+   of them are approved, briefs written, the Marketing Manager's spend and the days its budget ran out,
    proposals waiting for you, the bounce guard's own window and the current cap and address-check mode. Internal organizations never
    count. Strong fits, waiting drafts and approvals are as of the read.
 2. **The candidates** (`server/agents/strategist/rules.mjs`), scored 0 to 100 from the figures alone: email bouncing (a complaint, or
    2% or more hard bounces of at least 10 sent; half weight when the bounce guard's window since shows 10 clean sends), too few agencies
-   ready, strong fits with no address (half or more), the daily cap (reached on 4 or more days with drafts waiting and bounces under
-   2%), first emails not read or answered (30 sent over two weeks, no reply, under 10% opened), interest without trials, trials without
+   ready, strong fits with no address (half or more), the daily cap (reached on 4 or more days with 5 or more approved drafts waiting,
+   bounces under 2% and the cap under the setting's 100), first emails not read or answered (30 sent over two weeks, no reply, under 10%
+   of the two weeks' first emails opened), interest without trials, trials without
    first value, the Marketing Manager's budget (3 or more days), and proposals waiting for you (10 or more). A constraint the figures do
    not show is never offered.
 3. **The choice.** One call on the top model (high effort, about 10 to 20 cents) reads the figures, the week before's counts, the
    candidates and last week's note with what its watched figure did since, and picks one candidate. Every number it writes must be one
-   of the figures, and a link, an address or a person's title is refused. When the model is not configured, out of budget or refused,
+   of the figures (last week's watched figure included), and a link, an address or a person's title is refused. Lengths are checked
+   in code: the runtime's answer formats take no length keywords. When the model is not configured, out of budget or refused,
    the top candidate goes as the rules wrote it, and the note says the rules chose it.
 
 The note is kept in `private.agent_strategy_notes` (one row per reported week, closed to every role). A scheduled run writes the week

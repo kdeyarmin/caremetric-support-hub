@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { allowedNumbers, candidates, textProblem, weekFigures } from './rules.mjs';
-import { rulesNote, strategistFeature, strategistHandlers, strategyProblem } from './index.mjs';
+import { rulesNote, strategistFeature, strategistHandlers, strategistSchema, strategyProblem } from './index.mjs';
+import { schemaDefects } from '../runtime/schema.mjs';
 
 // A week shaped like the first one with the address check on (2026-11-16), counts only.
 const week = (over = {}) => ({
@@ -33,17 +34,30 @@ describe('the strategist\'s rules', () => {
     expect(since[0].key).toBe('reach');
   });
 
-  it('calls the cap binding only when it held most days, drafts waited and bounces were low', () => {
-    const capped = candidates(week({ prospects: { strongNoContact: 10 }, email: { capDays: 6, waiting: 12, delivered: 60, bounced: 0 } }));
+  it('calls the cap binding only when it held most days, approved drafts waited and bounces were low, within the setting\'s 100', () => {
+    const capped = candidates(week({ prospects: { strongNoContact: 10 }, email: { capDays: 6, waiting: 12, approvedWaiting: 12, delivered: 60, bounced: 0 } }));
     expect(capped[0]).toMatchObject({ key: 'volume', evidence: { capDays: 6, cap: 10, suggestedCap: 20 } });
     expect(capped[0].move).toBe('Raise "Most cold emails a day" from 10 to 20.');
-    expect(candidates(week({ prospects: { strongNoContact: 10 }, email: { capDays: 6, waiting: 12, delivered: 60, bounced: 2 } })).map(c => c.key)).not.toContain('volume');
+    expect(candidates(week({ prospects: { strongNoContact: 10 }, email: { capDays: 6, waiting: 12, approvedWaiting: 12, delivered: 60, bounced: 2 } })).map(c => c.key)).not.toContain('volume');
+    // Drafts still waiting for your approval could not go out whatever the cap.
+    expect(candidates(week({ prospects: { strongNoContact: 10 }, email: { capDays: 6, waiting: 12, approvedWaiting: 2, delivered: 60, bounced: 0 } })).map(c => c.key)).not.toContain('volume');
+    const near = candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 98 }, email: { capDays: 6, approvedWaiting: 12, delivered: 600, bounced: 0 } }));
+    expect(near.find(c => c.key === 'volume').evidence.suggestedCap).toBe(100);
+    expect(candidates(week({ prospects: { strongNoContact: 10 }, settings: { coldEmailCap: 100 }, email: { capDays: 6, approvedWaiting: 12, delivered: 600, bounced: 0 } }))
+      .map(c => c.key)).not.toContain('volume');
+  });
+
+  it('takes the bounce rate over every cold email attempted, not only those whose delivery has been reported', () => {
+    expect(weekFigures(week({ email: { sent: 100, delivered: 9, bounced: 1 } }))).toMatchObject({ sent: 100, bounceRate: 1 });
+    expect(candidates(week({ email: { sent: 100, delivered: 9, bounced: 1 } })).map(c => c.key)).not.toContain('deliverability');
   });
 
   it('judges the message over two weeks, and interest without trials, and trials without first value', () => {
     const quiet = { prospects: { strongNoContact: 10 }, email: { delivered: 20, bounced: 0, replies: 0, reportViews: 1, firstSent: 20 } };
     expect(candidates(week(quiet)).map(c => c.key)).not.toContain('engagement');
-    expect(candidates(week(quiet), week(quiet)).map(c => c.key)).toContain('engagement');
+    expect(candidates(week(quiet), week(quiet)).find(c => c.key === 'engagement')).toMatchObject({ evidence: { sentTwoWeeks: 40, reportViewsTwoWeeks: 2, openRateTwoWeeks: 5 } });
+    // Opens the week before count too: a busy week then a quiet one is not a pattern.
+    expect(candidates(week(quiet), week({ email: { delivered: 20, bounced: 0, replies: 0, reportViews: 20, firstSent: 20 } })).map(c => c.key)).not.toContain('engagement');
     expect(candidates(week({ prospects: { strongNoContact: 10 }, email: { replies: 2 }, conversion: { trialStarts: 0 } }))[0].key).toBe('conversion');
     expect(candidates(week({ prospects: { strongNoContact: 10 }, conversion: { trialStarts: 1, activated: 0 } }), week({ conversion: { trialStarts: 1, activated: 0 } }))
       .map(c => c.key)).toContain('activation');
@@ -79,6 +93,10 @@ describe('the weekly strategist', () => {
   };
   const now = () => new Date('2026-11-16T12:35:00Z');
 
+  it('asks for its answer in a format the model runtime accepts', () => {
+    expect(schemaDefects(strategistSchema)).toEqual([]);
+  });
+
   it('is registered only with the feature declared', () => {
     expect(strategistHandlers({ store: { strategyFacts: vi.fn() } })).toEqual({});
     expect(Object.keys(strategistHandlers({ store: { strategyFacts: vi.fn() }, features }))).toEqual(['strategy.weekly']);
@@ -100,6 +118,13 @@ describe('the weekly strategist', () => {
     expect(JSON.stringify(user)).not.toMatch(/@/);
     expect(store.strategySave).toHaveBeenCalledWith('2026-11-09', expect.objectContaining({ ...answer, chosenBy: 'model', model: 'top-model',
       candidates: [expect.objectContaining({ key: 'reach' }), expect.objectContaining({ key: 'engagement' })] }));
+  });
+
+  it('lets the model quote last week\'s watched figure as last week\'s note recorded it', async () => {
+    const harnessed = harness({ output: { ...answer, why: 'Strong fits with no address went from 81 to 66; the move did not work.' } });
+    harnessed.store.strategyNote.mockImplementation(async when => (when === '2026-11-02' ? { constraint: 'reach', move: 'Raise checks.', watch: 'strongNoContact', figures: { strongNoContact: 81 } } : null));
+    expect((await harnessed.run(task(), { now })).result).toMatchObject({ chosenBy: 'model' });
+    expect(JSON.parse(harnessed.model.run.mock.calls[0][1].user).lastWeek).toMatchObject({ watchedThen: 81, watchedNow: 66 });
   });
 
   it('falls back to the rules when the model is not configured, fails, or writes what the checks refuse', async () => {
