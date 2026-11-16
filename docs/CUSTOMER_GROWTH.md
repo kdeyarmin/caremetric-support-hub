@@ -427,7 +427,9 @@ whatever their numbers (`server/growth/standing.mjs`), and an Intel email that s
    SSVI), the county's public figures for the agency's own setting (home health figures to a home health agency, hospice figures to a
    hospice; never a dollar figure), the evidence the Hub holds and the leaders already found. A nursing home found on the web (one
    `intelSetting` reads as a nursing home, with no roster agency) is briefed as a nursing home: no market report is asked for, the
-   writer is told it is not an agency, and only nursing home figures are its own.
+   writer is told it is not an agency, and only nursing home figures are its own. Intel's shares are rounded to four places first: JSON writes every digit
+   of a fraction, and the identifier screen read those runs of digits as card numbers, so nine briefs in ten were skipped
+   (`skipped: identifier`) until 2026-11-16.
 2. **Web research** on the draft tier looks for dated triggers: a job listing for a liaison or marketer, a new location or service
    line, a leadership change, an award, news (`research.2`, shared with `growth.research`). What it keeps becomes evidence.
 3. **The top model** (Opus, high effort, `brief.1`) writes the brief: what the agency is, where, who owns it, its triggers, two or

@@ -167,13 +167,21 @@ export function briefParts(output, { evidence, countyFigures, people, intel, set
   return { writer, research };
 }
 
+/**
+ * Shares travel from Intel as fractions, and JSON writes every digit of one (0.04057017543859649). A long run of digits reads to the
+ * identifier screen as a card or social security number, which held back nine briefs in ten in production (2026-11-16). Four places
+ * are more than a brief needs; whole numbers (counts, ranks) are kept as they are.
+ */
+export const roundShares = value => JSON.parse(JSON.stringify(value ?? null,
+  (_key, item) => (typeof item === 'number' && Number.isFinite(item) && !Number.isInteger(item) ? Math.round(item * 10000) / 10000 : item)));
+
 /** Intel's agency data as the brief writer and the team read it: no physician names ever arrive, and this keeps the payload small. */
-const intelForBrief = brief => (brief ? {
+export const intelForBrief = brief => (brief ? roundShares({
   setting: brief.setting, year: brief.year, county: brief.county?.name ?? null, unpublished: brief.unpublished ?? false, position: brief.position,
   history: (brief.history ?? []).slice(-6), competitors: (brief.competitors ?? []).slice(0, 6), countyPatients: brief.county_patients ?? null,
   countyProviders: brief.county_providers ?? null, hospitals: (brief.hospitals ?? []).slice(0, 5), clinicians: brief.clinicians ?? null,
   ratings: (brief.ratings ?? []).slice(0, 8), moves: brief.moves ?? [],
-} : null);
+}) : null);
 
 export function briefHandlers({ growth, model, features = null, marketed = null, clock = () => Date.now() }) {
   const declared = features instanceof Set ? features.has(growthBriefFeature) : Array.isArray(features) && features.includes(growthBriefFeature);

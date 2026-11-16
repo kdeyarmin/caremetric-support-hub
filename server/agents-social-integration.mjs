@@ -122,6 +122,25 @@ try {
   await assert.rejects(admin.query('select private.social_video_stage($1,1,$2,null)', [videoPost.id, 'read']), error => error.code === '42501');
 
   await assert.rejects(admin.query('select private.social_open_targets()'), error => error.code === '42501', 'Only the Hub server reads open targets');
+
+  // ---- The month's campaigns for the ad plan's flights (20261117120000_ads_flights.sql): every platform's, with status and pacing ----
+  const adsStore = sqlAgentStore(pool, { creative: true, ads: true });
+  const month = `2099-${String(1 + (parseInt(run, 16) % 12)).padStart(2, '0')}`;
+  const adsPlan = await runningTask('social_manager', 'ads.plan');
+  const campaign = (platform, status, input) => admin.query(`insert into private.agent_actions (task_id, agent_key, kind, target_kind, target_id, preview, input, status)
+    values ($1, 'social_manager', $2, 'social_item', $3, 'Synthetic campaign', $4::jsonb, $5)`,
+  [adsPlan, platform === 'google' ? 'social.google_campaign' : 'social.campaign_create', `${platform}:caremetric-intel:${month}`, JSON.stringify(input), status]);
+  await campaign('linkedin', 'executed', { dailyBudgetCents: 1000, flightDays: 5 });
+  await campaign('meta', 'rejected', { dailyBudgetCents: 167 });
+  await campaign('google', 'failed', { dailyBudgetCents: 500, flightDays: 10 });
+  assert.deepEqual(await adsStore.adsMonthCampaigns(month), [
+    { kind: 'social.campaign_create', targetId: `linkedin:caremetric-intel:${month}`, status: 'executed', flight: true },
+    { kind: 'social.campaign_create', targetId: `meta:caremetric-intel:${month}`, status: 'rejected', flight: false },
+    { kind: 'social.google_campaign', targetId: `google:caremetric-intel:${month}`, status: 'failed', flight: true },
+  ], 'Every platform\'s campaign of the month, connected or not, with its status and whether it is a flight');
+  assert.deepEqual(await adsStore.adsMonthCampaigns('2098-01'), [], 'Another month has none');
+  for (const bad of ['2099-13', '2099-1', 'month', null]) await assert.rejects(adsStore.adsMonthCampaigns(bad), error => error.code === '22023', String(bad));
+  await assert.rejects(admin.query('select private.ads_month_campaigns($1)', [month]), error => error.code === '42501', 'Only the Hub server reads the month\'s campaigns');
   console.log('Social Media Manager database checks passed.');
 } finally {
   if (videoBrief) {

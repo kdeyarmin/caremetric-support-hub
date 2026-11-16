@@ -21,7 +21,7 @@ This change does five things, each behind its own switch:
 4. Learns which agencies opened their report.
 5. Makes the ads sharper: campaigns and county images send agencies to their own market report, county images say how concentrated and crowded the market is for one care setting and cover every county, and a model looks at each image before you do.
 
-Changes 9 to 12 (ads and creative) were added the same day, in the same pull requests.
+Changes 9 to 12 (ads and creative) were added the same day, in the same pull requests; change 13 (budget flights) in the next one.
 
 ## What production showed (November 16)
 
@@ -54,6 +54,7 @@ Changes 9 to 12 (ads and creative) were added the same day, in the same pull req
 | 10 | **County ads that say how crowded and concentrated the market is.** Intel now sends the share of patients the three largest agencies located in a county serve (only where CMS counted every agency and at least five are, never a name). Each county image is about one care setting, home health or hospice, and leads with that figure or how many agencies billed for the county's residents. It sends readers to their market report | County snapshots a week (Settings → Creative) |
 | 11 | **All 67 counties.** County images were chosen only from counties with a roster agency located in them (64 of 67). Intel now lists every county of the roster's states, and the least recently pictured goes first. A run that makes no county image says why | Always on with county snapshots |
 | 12 | **The image review.** A model looks at each finished ad image as a person in a feed would. Cut-off, overlapping, unreadable or garbled text, or a wrong figure, is never shown to you. A weak image (below your least score) comes with a warning and the model's note | Have a model look at each image before you see it; Least score from the image review (Settings → Creative) |
+| 13 | **Budget flights** (your decision, November 16). At $50 a month a thirtieth a day is below every platform's least, so no campaign could run. A flight spends the month's number in one campaign over a few days ($5 a day for 10 days on Meta, or $10 a day for 5 on LinkedIn), then it ends on its own; one a month, never past the month or your daily ad-set limit | Run each month's campaign as a short flight (Settings → Paid ads) |
 
 The account brief (change 5) is built in four steps:
 1. **Intel's data:** the agency's market report as data (share, rank and history, the county's leaders, hospitals, ratings, moves), through the new `agency_brief` feed action.
@@ -90,7 +91,7 @@ What stays the same:
 6. **Reconnect LinkedIn** (Settings → Social media). Both the Page token and the inbox permission are failing.
 7. **Set Intel's Google Analytics property** (Settings → Analytics).
 8. **Creative (Settings → Creative):** turn on Have a model look at each image before you see it (Least score 3). Leave County snapshots a week at 3: today's 8:30 plan run is the first that can make them, and Monday's ad plan can use the ones you approve.
-9. **Ads:** $50 a month is below LinkedIn's $10-a-day minimum, so Monday's ad plan can only create paused campaigns. When you start one, use an approved county image: it now sends agencies to their own market report.
+9. **Ads (Settings → Paid ads):** set Run each month's campaign as a short flight to **10**. Monday's plan then proposes one $50 flight ($5 a day for 10 days on Meta while LinkedIn is disconnected). Approve it and start it the same day with an approved county image: it ends on its own and sends agencies to their own market report.
 
 ## Cost
 
@@ -106,7 +107,6 @@ The $15 budget stops the work rather than overspend. A day that runs out of budg
 
 ## Not built in this pass
 
-- **Ad budget flights.** At $50 a month, a thirtieth a day is below every platform's floor here, so no campaign can run. Spending the month's number in a short flight (for example $5 a day for ten days on Meta) would let ads run and learn. It changes how money is spent, so it waits for your word.
 - **Vision review of videos.** Video frames and captions are checked by code; the model looks at static images only.
 - **A weekly strategist** that names the one binding constraint at the top of the Monday scorecard.
 - **A model that proposes websites** for roster agencies the telephone search still misses. The phone search should show how much of the gap remains.
