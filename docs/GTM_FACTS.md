@@ -227,8 +227,9 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   (briefs, supported reporting questions, drafted outreach) are text.
 - **The bigger picture** (owner direction 2026-11-12; `bigPicture`, `capabilities`, `whoUses` and `present` in `facts.mjs`, written
   from Intel's own /features page and home page with no numbers): see "CareMetric Intel: the bigger picture" below.
-- **Trial:** a **30-day** free trial covering 3 marketer seats + 1 manager, 1 branch, home health and hospice, 1 county
-  (`TRIAL_DAYS = 30`, the `trial` plan; owner decision 2026-11-12, it was 14 days). **A credit card is required to start the
+- **Trial:** a **30-day** free trial covering 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your
+  choice, 1 county (`TRIAL_DAYS = 30`, the `trial` plan; owner decision 2026-11-12, it was 14 days; the coverage as Intel's billing
+  catalog states it since 2026-11-16, where it was 1 branch, home health and hospice). **A credit card is required to start the
   trial**, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then (Hub billing
   since 2026-11-14, [Platform billing](PLATFORM_BILLING.md); Intel's site: "Credit card required · Cancel before trial end to avoid
   charges"). Never write "no credit card" for Intel (`trialCardTerms` in `facts.mjs`).
@@ -627,6 +628,9 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
   (125 features across 12 areas, including the public data library, 8 data families and the site's 10 care settings). The site’s other
   five care settings are listed as secondary markets; the pre-visit card and spoken debrief pillar never leads; the count of Intel's
   datasets and the AI apps and CRM it connects to are written generically. Tick this box when you approve the pull request that adds them.
+- [ ] 2026-11-16: Intel's trial covers 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of the customer's choice
+  and 1 county, as Intel's billing catalog states it (it said 1 branch, home health and hospice). The plans' own descriptions still say
+  branches and home health and hospice. Tick this box when you approve the pull request that changes it.
 
 ## Feature and function reference
 
@@ -845,7 +849,7 @@ Use the linked training-requirement guide and official sources for exact deadlin
 
 “All plans; subject to scope” means the saved source has no additional plan or role label. Territory, purchased capacity, data coverage and organization access rules still apply.
 An owner or location-manager label is required authority, not a feature available to every user. Configured-service conditions also apply where described.
-The source describes Pro feature access during the trial within its one-county footprint; the reviewed trial seats, branch and duration above remain the limits.
+The source describes Pro feature access during the trial within its one-county footprint; the reviewed trial seats, location, service lines and duration above remain the limits.
 
 #### Healthcare marketing CRM
 

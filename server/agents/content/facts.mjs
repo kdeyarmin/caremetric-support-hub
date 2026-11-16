@@ -17,9 +17,11 @@
  * needs, in words only; the CareBase reference in docs/GTM_FACTS.md was rewritten from the same page. Later on 2026-11-16 Intel's
  * `capabilities` follow its refreshed catalog (intel-features.json): twelve areas with the public data library, in words only, with no
  * count of its data and nothing spoken; who Intel is for stays as written here until its positioning is settled (owner decision).
+ * Also on 2026-11-16 Intel's reviewed trial follows its billing catalog: 1 location and up to 2 healthcare service lines of the
+ * customer's choice, where it said 1 branch, home health and hospice. The plans' own descriptions are unchanged here.
  */
 
-export const factsVersion = '2026-11-16.2';
+export const factsVersion = '2026-11-16.3';
 
 /**
  * Where public help articles live. An article's help-center address is `${helpCenterOrigin}/help/articles/<slug>`; that is its
@@ -102,7 +104,7 @@ export const intelReviewedFacts = deepFreeze({
     'Extra branches are $99 per month each ($990 per year on annual billing) and extra states $199 per month each ($1,990 per year on annual billing). Annual billing saves about 17%.',
   ],
   offers: [
-    `A 30-day free trial, covering 3 marketer seats + 1 manager, 1 branch, home health and hospice, 1 county. ${trialCardTerms}`,
+    `A 30-day free trial, covering 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your choice, 1 county. ${trialCardTerms}`,
     foundersSaleTerms,
     'Eligible Intel products: Starter, Growth and Pro. Intel Starter is $174.50 per organization per month during the introductory year, or $1,740 for the first annual payment, then the regular rate. Onboarding is free on every plan.',
   ],
