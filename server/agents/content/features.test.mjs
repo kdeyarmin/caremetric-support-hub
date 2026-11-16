@@ -12,21 +12,28 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(total).toBe(intel.publishedCount);
     expect(total).toBeGreaterThanOrEqual(90);
     expect(intel.areas.map(area => area.name)).toEqual(expect.arrayContaining(['Healthcare marketing CRM', 'Daily field work', 'Expenses, mileage and reimbursement',
-      'Referral and admission tracking', 'Prospecting and targeting', 'Market and territory research', 'Competitor intelligence', 'Manager and team tools']));
+      'Referral and admission tracking', 'Prospecting and targeting', 'Market and territory research', 'Public data library', 'Competitor intelligence', 'Manager and team tools']));
     expect(intel.areas.every(area => area.intro && area.features.every(feature => feature.name && feature.does))).toBe(true);
-    expect(intel.pillars).toHaveLength(9);
+    expect(intel.pillars).toHaveLength(12);
     expect(intel.pillars.every(pillar => pillar.title && pillar.why && pillar.area)).toBe(true);
-    expect(intel.data.map(family => family.family)).toEqual(['Providers', 'Facilities', 'Territories', 'Utilization & quality', 'Your results']);
+    expect(intel.data.map(family => family.family)).toEqual(['Providers', 'Facilities', 'Medicare use & share', 'Demographics', 'Payers & Medicare Advantage',
+      'Community need', 'Competitors', 'Your results']);
+    // The manager view is the site's own section, never a pillar read twice.
+    expect(intel.managers.map(item => item.name)).toEqual(['Focus the work before the week starts', 'See how the team is spending its effort', 'Keep referrals part of the review']);
     expect(intel.data.every(family => family.includes.length && family.source && family.question && family.decision && family.limit)).toBe(true);
     expect(intel.sources.features).toBe('https://www.caremetricintel.com/features');
     expect(intel.reviewed).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it('describes every care setting the fact sheet names, in the site\'s words', () => {
+    // The primary audience is exactly the fact sheet's five (owner decision 2026-11-16); the other settings the site describes are
+    // secondary markets, kept apart so a prompt never treats them as targets.
     const settings = intel.settings.map(setting => setting.name.toLowerCase());
     expect(settings).toEqual(segments['caremetric-intel']);
     for (const setting of settings) expect(products.intel.forWhom.toLowerCase()).toContain(setting);
-    expect(careSettingText('caremetric-intel', 'hospitals')).toContain('hospital and post-acute utilization');
+    expect(intel.otherSettings.map(setting => setting.name)).toEqual(expect.arrayContaining(['Physician practices & clinics', 'Behavioral health', 'Rehabilitation & therapy', 'Diagnostics, dialysis & DME']));
+    expect(featuresText('caremetric-intel')).toMatch(/Also served \(secondary markets: [^)]*\):\n- Physician practices & clinics:/);
+    expect(careSettingText('caremetric-intel', 'hospitals')).toContain('post-discharge Medicare spending');
     expect(careSettingText('caremetric-intel', 'dental offices')).toBeNull();
     expect(careSettingText('carebase', 'hospitals')).toBeNull();
   });
@@ -40,7 +47,10 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(problems).not.toContain('vocabulary');
     // The prompt carries the features, the data and its sources, and the site's own caveats.
     for (const phrase of ['Stark annual limit tracking', 'Competitor rankings', 'EMR report imports', 'County intelligence', 'NPPES', 'Care Compare', 'American Community Survey',
-      'not a promise of referrals', 'The 30-day free trial includes everything Pro does, in one county.']) expect(text).toContain(phrase);
+      'not a promise of referrals', 'The 30-day trial includes Pro features in one county', 'Site finder', 'Public data library']) expect(text).toContain(phrase);
+    // The AI apps and CRM Intel connects to are written generically, and so is the count of its datasets until the owner approves
+    // data-scale figures (the fact sheet's Intel boundaries: it "states no counts about its data").
+    expect(text).not.toMatch(/ChatGPT|Claude|HubSpot|\b150\b/);
     expect(featuresText('intel')).toBe(text);
     expect(featuresText('advisors')).toBe('');
   });
@@ -61,7 +71,7 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(focusFor('caremetric-intel', 'Send an email campaign to your referral sources', 0).title).not.toBe(email.title);
     const led = new Set(Array.from({ length: intel.pillars.length * 2 }, (_, turn) => focusFor('caremetric-intel', 'A tip for the week', turn).title));
     expect(led.has(email.title)).toBe(false);
-    expect(led.size).toBe(intel.pillars.length - 2);
+    expect(led.size).toBe(intel.pillars.length - 3);
     // Even with every other part used this week, the next brief does not fall back to email.
     const others = new Set(intel.pillars.filter(pillar => pillar !== email).map(pillar => pillar.title));
     expect(focusFor('caremetric-intel', 'A tip for the week', 3, others).title).not.toBe(email.title);
@@ -77,6 +87,18 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(led.has(intel.pillars.find(pillar => /field activity/i.test(pillar.area)).title)).toBe(true);
     const others = new Set(intel.pillars.filter(pillar => pillar !== expenses).map(pillar => pillar.title));
     expect(focusFor('caremetric-intel', 'A tip for the week', 3, others).title).not.toBe(expenses.title);
+  });
+
+  it('never leads a brief with the pre-visit card and spoken debrief: AI is text only in what the team writes (owner direction 2026-11-16)', () => {
+    const spoken = intel.pillars.find(pillar => /spoken debrief/i.test(pillar.area));
+    expect(spoken).toBeTruthy();
+    expect(focusFor('caremetric-intel', 'Walk into the visit prepared, then debrief', 0).title).not.toBe(spoken.title);
+    const led = new Set(Array.from({ length: intel.pillars.length * 2 }, (_, turn) => focusFor('caremetric-intel', 'A tip for the week', turn).title));
+    expect(led.has(spoken.title)).toBe(false);
+    // The field-visit pillar still leads, and so do the other new ones.
+    for (const title of ['Give every visit a purpose', 'Answer referrals faster', 'Find where to grow next']) expect(led.has(title), title).toBe(true);
+    expect(focusFor('caremetric-intel', 'How fast do you answer referrals?', 0).title).toBe('Answer referrals faster');
+    expect(focusFor('caremetric-intel', 'Where should the next office open? Try the Site finder', 0).title).toBe('Find where to grow next');
   });
 
   it('tells every catalog prompt that one feature never stands for the product', () => {
