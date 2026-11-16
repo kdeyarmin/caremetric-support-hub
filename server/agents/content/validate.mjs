@@ -112,12 +112,24 @@ const yearLike = /^(?:19|20)\d{2}$/;
 // "10 home safety tips" are tips, "3 referral sources" are sources. A measure keeps its number ("30 day trials", "120 bed homes"), and so
 // does a noun that only restates the unit ("5 staff members", "33,000 ZIP codes", "12 customer accounts"). Only a unit in its singular
 // form describes a noun: a plural one is the subject itself, whatever follows it ("500 homes use CareBase workflows" are 500 homes), and
-// so is the unit after "1". "Staff", "personnel" and "people" are both, so for them only the very next word counts ("5 staff roles", but
-// "40 staff complete annual trainings").
+// so is the unit after "1". "Staff", "personnel" and "people" are both, so for them only the next word counts, after any nouns of staff
+// work ("5 staff roles", "5 staff training tips", but "40 staff complete annual trainings").
 const measures = new Set(['minute', 'hour', 'day', 'week', 'month', 'year', 'time', 'seat', 'bed']);
 const restating = /^(?:members?|workers?|individuals?|professionals?|personnel|hires?|positions?|openings?|accounts?|codes?|markets?)$/;
 const unitOfWord = word => unitOf(word) ?? (word.includes('-') ? unitOf(word.split('-')[0]) : null);
 const eitherNumber = new Set(['staff', 'personnel', 'people']);
+// Nouns that describe staff work and are never a verb after them, so the next word after them still decides: "5 staff training tips" are
+// tips, "10 staff onboarding steps" are steps, but "40 staff complete annual trainings" and "40 staff working weekends" are 40 staff.
+const staffWork = new Set(['training', 'care', 'onboarding', 'orientation', 'scheduling', 'retention', 'recruitment', 'recruiting', 'hiring',
+  'development', 'management', 'safety', 'wellness', 'engagement', 'compliance', 'turnover', 'communication', 'education', 'performance',
+  'payroll', 'coverage', 'competency', 'certification', 'documentation', 'satisfaction', 'appreciation', 'recognition', 'meeting', 'huddle',
+  'handbook', 'policy', 'burnout', 'morale', 'productivity', 'shortage']);
+/** The words after "staff", "personnel" or "people" that decide what it describes: the nouns of staff work, then the next word. */
+const afterStaff = rest => {
+  let skipped = 0;
+  while (skipped < 2 && staffWork.has(rest[skipped])) skipped += 1;
+  return rest.slice(0, skipped + 1);
+};
 /** True when the words after a counted unit lead to a plural noun it describes, before the phrase ends or another unit. */
 const describesNoun = rest => {
   for (const word of rest.slice(0, 3)) {
@@ -172,7 +184,7 @@ export function numbersIn(value) {
         // number keeps it ("a 3-county region").
         const count = numberWords[match[1].toLowerCase()] ?? numberOf(match[1]);
         const describesNext = !dash && !measures.has(unit) && count !== 1 && !plural(word)
-          && describesNoun(tokens.slice(index + 1, eitherNumber.has(word) ? index + 2 : undefined));
+          && describesNoun(eitherNumber.has(word) ? afterStaff(tokens.slice(index + 1)) : tokens.slice(index + 1));
         if (!listed && !describesNext) found.add(`${count}:${unit}`);
         break;
       }

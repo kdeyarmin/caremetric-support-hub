@@ -255,6 +255,10 @@ describe('each check that rejects a draft', () => {
     for (const [text, pair] of [['500 homes use CareBase workflows.', '500:facility'], ['500 customers receive updates', '500:customer'],
       ['40 staff complete annual trainings', '40:staff'], ['1 resident needs help', '1:resident']]) expect(numbersIn(text), text).toEqual([pair]);
     expect(textProblems('500 homes use CareBase workflows.', { numbers: allowedNumbers([]) })).toEqual(['unlisted_number']);
+    // After "staff", "personnel" or "people", the nouns of staff work are stepped over, and the next word decides; a verb keeps the count.
+    expect(numbersIn('5 staff training tips; 5 key staff training tips; 10 staff onboarding steps; 3 people management tips; 40 staff training sessions')).toEqual([]);
+    for (const [text, pair] of [['40 staff working weekends', '40:staff'], ['40 staff need training', '40:staff'], ['12 staff training hours', '12:staff'],
+      ['40 staff training', '40:staff']]) expect(numbersIn(text), text).toEqual([pair]);
     // A count no source states is refused; one the catalog states may be written with a describing word.
     expect(reasons(withSentence('CareBase is used in 500 Pennsylvania homes.'))).toEqual(['unlisted_number']);
     expect(reasons(withSentence('CareBase is used in 500 rural and urban homes.'))).toEqual(['unlisted_number']);
