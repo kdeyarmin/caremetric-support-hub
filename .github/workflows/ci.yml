@@ -247,6 +247,9 @@ jobs:
           node server/agents-work-recovery-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-work-recovery-integration.mjs
+          node server/agents-growth-priority-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/agents-growth-priority-integration.mjs
           node server/agents-growth-learning-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-growth-learning-integration.mjs

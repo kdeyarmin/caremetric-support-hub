@@ -74,6 +74,17 @@ opportunity's intent follows each activity event, a trial from the owner's or a 
 what the team lost. Each test fails closed. The Hub server renders the blocked images again and reads the platforms' refusals only when
 the feature is declared ([AI workforce review, November 17](AI_WORKFORCE_REVIEW_2026-11-17.md)).
 
+`20261117190100_growth_priority_contract.sql` declares `platform.agents.growth-priority.v1` once the work recovery, report views, account
+brief, learning, address check and colleague features are declared, the three-argument `private.growth_defer_action`,
+`private.growth_quiet_candidates`, `private.sales_growth_context`, the replaced `private.agent_actions_ready` and
+`private.growth_learning_facts` are executable by `hub_app_server` alone and require its connection, the band, score, send-hours,
+report-open and context-reading helpers are closed to every role, the six stage 2 settings have rows, and each change of stage 2 is in
+place: the send claim holds cold email outside the owner's send hours (`outside_hours`), the ready queue reads "Send to the best prospects
+first", the pipeline snapshot carries each opportunity's band and first form, a brief needs an agency that can be emailed, a first report
+open brings the second email forward, and the memo's facts count report opens per arm and the reader's weaknesses. Each test fails
+closed. The Hub server passes a deferral's reason, lists quiet prospects, writes the short first email and gives the Sales Executive its
+context only when the feature is declared ([AI workforce review, November 17](AI_WORKFORCE_REVIEW_2026-11-17.md), stage 2).
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a

@@ -127,6 +127,9 @@ describe('growth.brief', () => {
     expect(store.discover).toHaveBeenCalledWith('caremetric-intel', [expect.objectContaining({ url: 'https://www.indeed.com/viewjob?jk=1' })]);
     const synthesis = model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.2')[1];
     expect(synthesis).toMatchObject({ tier: 'quality', effort: 'high', timeoutMs: 120_000 });
+    // The write-up holds what is left of the brief's 60 cents after the research (9 cents of search here).
+    expect(synthesis.ceilingCents).toBeGreaterThan(0);
+    expect(synthesis.ceilingCents).toBeLessThanOrEqual(51);
     const sent = JSON.parse(synthesis.user);
     expect(sent.countyFigures.map(figure => figure.key)).toEqual(['home_health_agencies_in_county', 'medicare_advantage_share']);
     expect(sent.intel.position.county_rank).toBe(9);
@@ -191,7 +194,7 @@ describe('a first email written from the brief', () => {
     const result = await draftMessage({ opportunity: o, work, task: { id: 't' }, model, brief, quality: true });
     expect(result).toBeTruthy();
     const [, request] = model.run.mock.calls[0];
-    expect(request).toMatchObject({ tier: 'quality', effort: 'high', maxTokens: 6000, timeoutMs: 120_000, promptVersion: 'growth.14' });
+    expect(request).toMatchObject({ tier: 'quality', effort: 'high', maxTokens: 6000, timeoutMs: 120_000, promptVersion: 'growth.15' });
     const input = JSON.parse(request.user);
     expect(input.brief).toMatchObject({ hook: brief.hook.sentence, hookSourceId: 'e2', angle: 'referral_sources' });
     expect(input.sources.find(source => source.id === 'county').claim).toBe(brief.countyFact.claim);
@@ -241,7 +244,7 @@ describe('a first email written from the brief', () => {
   it('has a reader score the first email and rewrites it once around its weakest sentence when the score is under 4', async () => {
     const better = { ...draft, subject: 'Your liaison\'s first referral map' };
     const run = vi.fn(async (_task, request) => {
-      if (request.promptVersion === 'critic.1') return { outcome: 'completed', output: JSON.parse(request.user).email.subject === better.subject
+      if (request.promptVersion === 'critic.2') return { outcome: 'completed', output: JSON.parse(request.user).email.subject === better.subject
         ? { specific: 4, relevant: 4, clearAsk: 5, wouldReply: 4, weakestSentence: '' }
         : { specific: 2, relevant: 3, clearAsk: 4, wouldReply: 2, weakestSentence: 'Do you know which physicians certify the most home health patients in Butler County?' } };
       return { outcome: 'completed', output: request.promptVersion.endsWith('-c') ? better : draft };
@@ -249,10 +252,10 @@ describe('a first email written from the brief', () => {
     const result = await draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run }, brief, critic: true });
     expect(result.subject).toBe(better.subject);
     expect(result.arms).toMatchObject({ critic: '4', rewritten: '1' });
-    const rewrite = run.mock.calls.find(([, request]) => request.promptVersion === 'growth.14-c')[1];
+    const rewrite = run.mock.calls.find(([, request]) => request.promptVersion === 'growth.15-c')[1];
     expect(JSON.parse(rewrite.user).fix).toMatch(/scored this email 2 of 5.*certify the most home health patients in Butler County/);
     // What the reader said on both reads travels with the draft, to be recorded beside it.
-    expect(result.review).toEqual({ promptVersion: 'critic.1', outcome: 'kept',
+    expect(result.review).toEqual({ promptVersion: 'critic.2', outcome: 'kept',
       first: { specific: 2, relevant: 3, clearAsk: 4, wouldReply: 2, weakest: 'Do you know which physicians certify the most home health patients in Butler County?' },
       rewrite: { specific: 4, relevant: 4, clearAsk: 5, wouldReply: 4, weakest: '' } });
   });
@@ -261,12 +264,12 @@ describe('a first email written from the brief', () => {
     const reader = scores => ({ outcome: 'completed', output: { specific: 3, relevant: 3, clearAsk: 3, weakestSentence: '  The last line.  ', ...scores } });
     const reviewOf = async (reads, rewritten = draft) => {
       let read = 0;
-      const run = vi.fn(async (_task, request) => (request.promptVersion === 'critic.1' ? reader(reads[read++])
+      const run = vi.fn(async (_task, request) => (request.promptVersion === 'critic.2' ? reader(reads[read++])
         : { outcome: 'completed', output: request.promptVersion.endsWith('-c') ? rewritten : draft }));
       return draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run }, brief, critic: true });
     };
     const good = await reviewOf([{ wouldReply: 4 }]);
-    expect(good.review).toEqual({ promptVersion: 'critic.1', outcome: 'not_needed', rewrite: null,
+    expect(good.review).toEqual({ promptVersion: 'critic.2', outcome: 'not_needed', rewrite: null,
       first: { specific: 3, relevant: 3, clearAsk: 3, wouldReply: 4, weakest: 'The last line.' } });
     const lower = await reviewOf([{ wouldReply: 3 }, { wouldReply: 2 }]);
     expect(lower.subject).toBe(draft.subject);
@@ -281,7 +284,7 @@ describe('a first email written from the brief', () => {
     expect(worded.review).toMatchObject({ outcome: 'failed_checks', problem: 'vocabulary', rewrite: null });
     expect(worded.subject).toBe(draft.subject);
     let read = 0;
-    const silent = vi.fn(async (_task, request) => (request.promptVersion === 'critic.1' ? reader([{ wouldReply: 2 }][read++])
+    const silent = vi.fn(async (_task, request) => (request.promptVersion === 'critic.2' ? reader([{ wouldReply: 2 }][read++])
       : request.promptVersion.endsWith('-c') ? { outcome: 'failed', output: null } : { outcome: 'completed', output: draft }));
     const unanswered = await draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run: silent }, brief, critic: true });
     expect(unanswered.review).toMatchObject({ outcome: 'no_answer', rewrite: null });
@@ -300,7 +303,7 @@ describe('the sweep and the brief', () => {
     const store = { snapshot: vi.fn(async () => ({ total: items.length, items })), plan: vi.fn(async () => 'work'), draft: vi.fn(async () => ({ id: 'message', status: 'draft' })), propose: vi.fn(),
       briefWriter: vi.fn(async () => brief), reviewRecord };
     const email = { subject: 'Referral sources in Erie', body: 'Which hospitals send you the most patients? Reply and I will send the steps.', citations: ['source'], needsHuman: false };
-    const model = { configured: true, run: vi.fn(async (_task, request) => ({ outcome: 'completed', output: request.promptVersion === 'critic.1'
+    const model = { configured: true, run: vi.fn(async (_task, request) => ({ outcome: 'completed', output: request.promptVersion === 'critic.2'
       ? { specific: 3, relevant: 4, clearAsk: 4, wouldReply: 4, weakestSentence: 'Reply and I will send the steps.' } : email })) };
     const growth = { store, model, signingReady: true, hash: x => x, unsubscribeToken: () => 'token', briefs: { enabled, qualityWriter, critic } };
     const outcome = await growthHandlers({ growth, model, features: new Set([growthBriefFeature, ...extra]), marketed: ['caremetric-intel'] })['growth.pipeline']({ id: 'task', agent: { autonomy: 'propose' }, kind: 'growth.pipeline' });
@@ -329,7 +332,7 @@ describe('the sweep and the brief', () => {
     const after = await sweep({ brief, critic: true, extra: [growthDiagnosticsFeature] });
     expect(after.store.draft.mock.calls[0][2]).not.toHaveProperty('review');
     expect(after.store.propose).toHaveBeenCalledWith('task', 'message');
-    expect(after.store.reviewRecord).toHaveBeenCalledWith('message', { promptVersion: 'critic.1', outcome: 'not_needed', rewrite: null,
+    expect(after.store.reviewRecord).toHaveBeenCalledWith('message', { promptVersion: 'critic.2', outcome: 'not_needed', rewrite: null,
       first: { specific: 3, relevant: 4, clearAsk: 4, wouldReply: 4, weakest: 'Reply and I will send the steps.' } });
     // A review the database refuses never holds the email: it is counted.
     const refused = await sweep({ brief, critic: true, extra: [growthDiagnosticsFeature], reviewRecord: vi.fn(async () => { throw Object.assign(new Error('Invalid review'), { code: '22023' }); }) });

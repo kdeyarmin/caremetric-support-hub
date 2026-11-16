@@ -13,6 +13,10 @@
  * - a prospect asking about a product the team does not market (marketing.mjs: CareBase while it is in its pilot) is not sent to the
  *   model and gets no drafted answer: a first message gets the fixed acknowledgment, and the owner is told the conversation is theirs.
  *
+ * With "Give the Sales Executive the account brief" on (Settings → Customer growth; review 2026-11-17, row 2.9) and the database's
+ * reading declared (platform.agents.growth-priority.v1), a growth prospect's draft is also written from the account brief's writer part,
+ * the email they answered and whether their market report was opened (context.mjs); the reply never says it knows about an open.
+ *
  * It keeps no message text: the task result, the run summary and the owner's email carry kinds, the product and the reference only.
  */
 import { replyRoute } from '../concierge/policy.mjs';
@@ -25,6 +29,7 @@ import { permanent, recordRun } from '../tasks/shared.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { checkSalesReply, guideLinks, replyLinks, wordLimits } from './check.mjs';
 import { buildUserMessage, responseSchema, salesPromptVersion, systemPrompt } from './prompt.mjs';
+import { salesContextFor } from './context.mjs';
 import { live } from '../../live.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -51,8 +56,15 @@ function skipReason(snapshot, payload) {
  * admits session-less answers (platform.agents.concierge-autosend.v1): a checked, drafted answer going back by email or chat is then a
  * `communication.answer`, which goes out without the owner's session once approved, or on its own once the owner hands "Sales answers"
  * over. Nothing it proposes offers a demo, a call or a meeting (owner decisions 2026-11-08 and 2026-11-09).
+ * `context` is `(communicationId, messageId) => raw | null` (context.mjs) and `contextOn` the owner's switch with the database's feature,
+ * read for each message; either missing keeps the reply to the conversation alone.
  */
-export function salesReplyHandler({ store, notifier = null, drafting: draftingOption = null, answers = false, marketed = null, log = line => console.warn(line) }) {
+export function salesReplyHandler({ store, notifier = null, drafting: draftingOption = null, answers = false, marketed = null, context = null, contextOn = () => false, log = line => console.warn(line) }) {
+  /** The prospect's account context, or null: off, not a growth prospect, or the database could not answer (the reply goes on without). */
+  async function accountFor(payload) {
+    if (typeof context !== 'function' || contextOn() !== true) return null;
+    try { return salesContextFor(await context(payload.communicationId, payload.messageId)); } catch { return null; }
+  }
   // `drafting` may be a function (the owner's switch in Settings), read once per message.
   async function askModel({ task, snapshot, inbound, route, payload, signal, drafting }) {
     const prior = (snapshot.messages ?? []).filter(message => message.id !== inbound.id).slice(-2);
@@ -66,13 +78,14 @@ export function salesReplyHandler({ store, notifier = null, drafting: draftingOp
     let guides = [];
     try { guides = guideLinks(await drafting.guides?.top?.(text, { productSlug: payload.product }) ?? []); } catch { guides = []; }
     const effort = efforts.has(task.agent?.config?.effort) ? task.agent.config.effort : 'medium';
+    const account = await accountFor(payload);
     let result;
     try {
       result = await drafting.model.run(task, {
         promptVersion: salesPromptVersion, system: [{ text: systemPrompt, cache: true }, ...catalogBlocks([payload.product])], schema: responseSchema, effort, maxTokens: 3000,
         user: buildUserMessage({
           product: products[payload.product], channel: snapshot.channel, stage: payload.opportunity?.stage ?? null, contacted: payload.opportunity?.contacted === true,
-          firstMessage: (snapshot.outboundCount ?? 0) === 0, words: wordLimits[route], links, guides, text, history,
+          firstMessage: (snapshot.outboundCount ?? 0) === 0, words: wordLimits[route], links, guides, text, history, account,
         }),
         describe: output => `Read CM-${snapshot.reference} (${products[payload.product]} prospect): ${output.intent}${output.needsOwner ? ', needs the owner' : ''}${output.possiblePhi ? ', possible identifiers' : ''}; next step ${output.nextStep}.`,
       }, { signal });
@@ -88,10 +101,12 @@ export function salesReplyHandler({ store, notifier = null, drafting: draftingOp
     if (ownerOnly.has(reading.intent)) return { state: 'owner_only', intent: reading.intent, objection };
     if (reading.intent === 'support') return { state: 'support', intent: reading.intent, objection };
     if (reading.needsOwner || !reading.reply.trim()) return { state: 'needs_owner', intent: reading.intent, objection };
-    const checked = checkSalesReply({ reply: reading.reply, product: payload.product, route, guides, text: [text, ...history.map(message => message.text)].join('\n') });
-    if (!checked.ok) return { state: 'rejected', reason: checked.reason, intent: reading.intent, objection };
+    const checked = checkSalesReply({ reply: reading.reply, product: payload.product, route, guides, text: [text, ...history.map(message => message.text)].join('\n'),
+      prospect: [text, ...history.filter(message => message.direction !== 'outbound').map(message => message.text)].join('\n') });
+    if (!checked.ok) return { state: 'rejected', reason: checked.reason, intent: reading.intent, objection, context: Boolean(account) };
     const cited = guides.filter(guide => checked.reply.includes(guide.url)).map(guide => guide.label);
-    return { state: 'drafted', intent: reading.intent, objection, nextStep: reading.nextStep, draft: checked, sources: ['CareMetric fact sheet', 'Sales playbook', ...cited].slice(0, 5) };
+    return { state: 'drafted', intent: reading.intent, objection, nextStep: reading.nextStep, draft: checked, context: Boolean(account),
+      sources: ['CareMetric fact sheet', 'Sales playbook', ...(account?.brief ? ['Account brief'] : []), ...cited].slice(0, 5) };
   }
 
   async function propose({ task, snapshot, route, body, template, intent, payload, sources = [] }) {
@@ -207,6 +222,7 @@ export function salesReplyHandler({ store, notifier = null, drafting: draftingOp
       result: {
         outcome: proposed ? 'proposed' : outcome, reference: snapshot.reference, product: payload.product, reply: template ?? 'owner_only', draft: asked.state,
         ...(asked.intent ? { intent: asked.intent } : {}), ...(asked.reason ? { draftReason: asked.reason } : {}), ...(alert ? { alert } : {}),
+        ...(asked.context ? { context: true } : {}),
       },
     };
   };

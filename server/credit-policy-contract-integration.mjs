@@ -11,9 +11,12 @@ const migration=await readFile(new URL('../supabase/migrations/20260911215751_le
 const historicalIntents=await readFile(new URL('../supabase/migrations/20260911215749_learning_credit_policy_intents.sql',import.meta.url),'utf8');
 const readContract=async()=> (await client.query('select hub.get_backend_contract() as contract')).rows[0].contract;
 // Historical declarations gate on billing features that platform billing retired; replay them from a contract that still lists them.
+// The credit policy gate (2026-09-11) also bounds the list at 99 features, a sanity bound of its day that production never runs again;
+// it predates every AI team feature (platform.agents.*, declared from 2026-11-02 on), so it is replayed against a contract without them,
+// as it could have seen it. Nothing it checks is left out (src/lib/backendContract.ts moved the app's own bound to 1,000 for this reason).
 const declareHistorical=async()=>{
   const contract=await readContract();
-  const historical={...contract,features:contract.features.flatMap(feature=>feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']
+  const historical={...contract,features:contract.features.filter(feature=>!feature.startsWith('platform.agents.')).flatMap(feature=>feature==='learning.draft-editing.v1'?[feature,'billing.portal.v1']
     :feature==='support.customer-registration.v1'?[feature,'billing.checkout.v1']:[feature])};
   const sql=(await client.query("select format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal($1::text)||'::jsonb') as sql",[JSON.stringify(historical)])).rows[0].sql;
   await client.query(sql);
