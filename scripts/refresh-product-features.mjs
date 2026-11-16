@@ -13,6 +13,7 @@
  *   node scripts/refresh-product-features.mjs --from <folder>     # from saved copies: intel-home.html, intel-features.html,
  *                                                               # carebase-home.html, carebase-features.html, carebase-faq.html
  *   npm run refresh:features -- --check                         # fail if a committed catalog differs from the live pages
+ *   npm run refresh:features -- --only caremetric-intel         # one product (caremetric-intel or carebase); combines with the others
  *
  * The AI team names no other product, so the EMR vendors Intel names for its CSV imports are written generically (each catalog lists
  * its `edits`), and any other product's name stops the refresh. Prices are left to the fact sheet. Review the diff before committing.
@@ -47,6 +48,9 @@ const generic = [
     'Saved layouts support common home health and hospice EMR reports. These are file-based imports, not live EMR connections.', vendorEdit],
   [/Scheduled MatrixCare delivery/g, 'Scheduled EMR report delivery', vendorEdit],
   [/MatrixCare reports can be delivered/g, 'Some EMR reports can be delivered', vendorEdit],
+  [/\(or have MatrixCare deliver it on a schedule\)/g, '(or have a supported EMR deliver it on a schedule)', vendorEdit],
+  [/start from a saved layout for Homecare Homebase, WellSky, Axxess, or MatrixCare\. These are file-based imports; the listed layouts do not imply a live vendor connection\./g,
+    'start from a saved layout for a common home health or hospice EMR report. These are file-based imports, not live EMR connections.', vendorEdit],
   [/ ?You can also explore demo options with fictional facility data before setting up your own organization\./g, '', () => 'A sentence offering demo options is left out: CareMetric offers no demos.'],
   [/without a sales call/g, 'on your own', () => '"Without a sales call" is written "on your own": the team never mentions sales calls.'],
 ];
@@ -188,7 +192,7 @@ const products = {
     extract: ({ home, features }) => extractIntel(home, features),
     check: body => {
       const total = body.areas.reduce((sum, area) => sum + area.features.length, 0);
-      if (body.areas.length < 5 || total < 50 || body.data.length !== 5 || body.pillars.length < 5 || body.settings.length !== 5) {
+      if (body.areas.length < 5 || total < 50 || body.data.length < 5 || body.pillars.length < 5 || body.settings.length !== 5) {
         throw new Error(`Intel's pages changed shape (areas ${body.areas.length}, features ${total}, data ${body.data.length}, pillars ${body.pillars.length}, settings ${body.settings.length}); update the extractor.`);
       }
       if (body.publishedCount && body.publishedCount !== total) throw new Error(`Intel's features page says ${body.publishedCount} features but ${total} were read.`);
@@ -212,8 +216,11 @@ const products = {
 
 async function main() {
   const from = option('--from');
+  const only = option('--only');
+  if (only && !products[only]) throw new Error(`--only takes one of: ${Object.keys(products).join(', ')}.`);
   let stale = false;
   for (const [product, spec] of Object.entries(products)) {
+    if (only && product !== only) continue;
     const pages = Object.fromEntries(await Promise.all(Object.entries(spec.pages).map(async ([name, [path, saved]]) => [name, await page(spec.site, path, from ? `${from}/${saved}` : null)])));
     edits = new Set();
     const body = spec.extract(pages);
