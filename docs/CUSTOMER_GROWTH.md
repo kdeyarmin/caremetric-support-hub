@@ -432,13 +432,16 @@ whatever their numbers (`server/growth/standing.mjs`), and an Intel email that s
    (`skipped: identifier`) until 2026-11-16.
 2. **Web research** on the draft tier looks for dated triggers: a job listing for a liaison or marketer, a new location or service
    line, a leadership change, an award, news (`research.2`, shared with `growth.research`). What it keeps becomes evidence.
-3. **The top model** (Opus, high effort, `brief.1`) writes the brief: what the agency is, where, who owns it, its triggers, two or
+3. **The top model** (Opus, high effort, `brief.2`) writes the brief: what the agency is, where, what kind of owner it has, its triggers, two or
    three questions about problems Intel answers, the angle to lead with, one cited opening sentence and the county figure most worth
    stating, plus its own fit and what is still unknown.
 4. **Code checks it.** A brief has two parts (`private.growth_briefs`). The writer part may state only what a citable source states:
    a sentence with any other number is dropped, so the agency's own share, rank, ratings and patient counts never reach an email (the
-   owner's rule); a source address it was not given is dropped. The research part keeps those for you. Growth shows both on the
-   opportunity. The writer reads only the writer part (`private.growth_brief_writer`).
+   owner's rule); a source address it was not given is dropped. A sentence that names someone on the agency's people list (its
+   president, an owner from CMS's ownership file) is dropped too, since an email addresses the agency, never a person (`brief.2`,
+   2026-11-16). The research part keeps those for you. Growth shows both on the opportunity. The writer reads only the writer part
+   (`private.growth_brief_writer`). A county figure reads with the county's name in its place: "billing for Dallas County's Medicare
+   FFS beneficiaries" (before 2026-11-16 the name was added at the end, "...located in other counties in Dallas County").
 
 While briefs are on, an Intel agency's first email waits up to a day for its brief (`held.brief_pending` on the sweep); after that it is
 written as before.
