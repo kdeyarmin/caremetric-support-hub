@@ -168,12 +168,19 @@ export function briefParts(output, { evidence, countyFigures, people, intel, set
 }
 
 /** Intel's agency data as the brief writer and the team read it: no physician names ever arrive, and this keeps the payload small. */
-const intelForBrief = brief => (brief ? {
+// Intel sends shares as full doubles (bene_count / market_total, e.g. 0.04452690166975881). A run of 13 to 19 digits that passes the
+// card checksum, or a lone 9-digit run, is what the identifier screen below refuses, so about nine briefs in ten were skipped as
+// `identifier` before any model saw them. Four decimal places (0.0445, a 4.45% share) are all a brief needs and leave no such run.
+const fourPlaces = value => (typeof value === 'number' ? (Number.isFinite(value) && !Number.isInteger(value) ? Math.round(value * 1e4) / 1e4 : value)
+  : Array.isArray(value) ? value.map(fourPlaces)
+  : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, fourPlaces(item)]))
+  : value);
+const intelForBrief = brief => (brief ? fourPlaces({
   setting: brief.setting, year: brief.year, county: brief.county?.name ?? null, unpublished: brief.unpublished ?? false, position: brief.position,
   history: (brief.history ?? []).slice(-6), competitors: (brief.competitors ?? []).slice(0, 6), countyPatients: brief.county_patients ?? null,
   countyProviders: brief.county_providers ?? null, hospitals: (brief.hospitals ?? []).slice(0, 5), clinicians: brief.clinicians ?? null,
   ratings: (brief.ratings ?? []).slice(0, 8), moves: brief.moves ?? [],
-} : null);
+}) : null);
 
 export function briefHandlers({ growth, model, features = null, marketed = null, clock = () => Date.now() }) {
   const declared = features instanceof Set ? features.has(growthBriefFeature) : Array.isArray(features) && features.includes(growthBriefFeature);
