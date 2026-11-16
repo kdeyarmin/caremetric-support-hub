@@ -158,6 +158,28 @@ export function resolutionQuery(target) {
   return [name, target.city, target.state, said ? '' : settingWords[target.setting][0]].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
+/** A second search when the name search finds no confirmed site (2026-11-16): the agency's CMS telephone number, quoted. Null without one. */
+export function phoneQuery(target) {
+  const digits = String(target?.facts?.phone ?? '').replace(/\D/g, '');
+  return /^\d{10}$/.test(digits) ? `"${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}"` : null;
+}
+
+/**
+ * The sites a telephone search found worth reading, at most two, best first: an operator's own https site (never a directory), not one
+ * that places the result in another state, not one already read; a result whose own words carry the number first. Only a site whose
+ * pages show the agency's CMS telephone number is then accepted (worker.mjs `lookUp`, confirmsSite 'phone').
+ */
+export function phoneCandidates(target, rows, tried = new Set()) {
+  const digits = String(target?.facts?.phone ?? '').replace(/\D/g, '');
+  const seen = new Map();
+  for (const row of rows ?? []) {
+    if (!row?.domain || tried.has(row.domain) || !operatorHost(row.domain) || !/^https:\/\//.test(row.url ?? '') || wrongState(target, row)) continue;
+    const carries = phonesIn(`${row.name ?? ''} ${row.claim ?? ''}`).has(digits);
+    if (!seen.has(row.domain) || (carries && !seen.get(row.domain).carries)) seen.set(row.domain, { domain: row.domain, url: row.url, carries });
+  }
+  return [...seen.values()].sort((a, b) => Number(b.carries) - Number(a.carries)).slice(0, 2).map(({ domain, url }) => ({ domain, url }));
+}
+
 const domainLabel = domain => String(domain ?? '').toLowerCase().replace(/^www\./, '').split('.').slice(0, -1).join('');
 
 /** How strongly one search result looks like the agency's own site (0 to 100), and how much of its name the domain carries. */

@@ -102,6 +102,22 @@ describe('a research run', () => {
     expect(roomy.seen[0]).toMatchObject({ max_tokens: 3000, tools: serverTools(aiModels.draft, { tools: ['web_search', 'web_fetch'], maxSearches: 4, maxFetches: 3 }) });
   });
 
+  it('sends every round the tool definitions of the first, trimming only output tokens, and stops rather than change them', async () => {
+    const paused = message({ stop_reason: 'pause_turn' });
+    // The first round fits the full caps; its continuation, with a longer conversation, fits by asking for fewer output tokens only.
+    const tight = fixture({ steps: [reply(paused), reply(message())] });
+    expect(await tight.runner.research(task(), request({ ceilingCents: 9 }))).toMatchObject({ outcome: 'completed', rounds: 2 });
+    expect(tight.seen).toHaveLength(2);
+    expect(tight.seen[1].tools).toEqual(tight.seen[0].tools);
+    expect(tight.seen[0].tools.find(tool => tool.name === 'web_search').max_uses).toBe(4);
+    expect(tight.seen[1].max_tokens).toBeLessThan(3000);
+    // A continuation that could not afford the same searches with the fewest output tokens stops at the ceiling. It used to ask for
+    // fewer searches instead, which changed the tools and so the request's cached prefix.
+    const short = fixture({ steps: [reply(paused), reply(message())] });
+    expect(await short.runner.research(task(), request({ ceilingCents: 7.5 }))).toMatchObject({ outcome: 'stopped', stopped: 'ceiling', rounds: 1 });
+    expect(short.seen).toHaveLength(1);
+  });
+
   it('keeps the text of a paused turn with the text that finishes it', async () => {
     const paused = message({ stop_reason: 'pause_turn', content: [searchBlock, { type: 'text', text: 'Valley Hospice opened a Bucks County office.' }] });
     const f = fixture({ steps: [reply(paused), reply(message())] });

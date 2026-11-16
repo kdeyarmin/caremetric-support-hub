@@ -25,7 +25,8 @@ const kit = (product: BrandKit["product"]): BrandKit => ({
   voiceNotes: "", requiredDisclaimers: [], bannedPhrases: [], videoAvatarId: null, videoVoiceId: null, captionsDefault: true, version: 1, updatedAt: at, screenshots: [],
 });
 const studio = (over: Partial<CreativeStudio> = {}): CreativeStudio => studioSchema.parse({
-  assets: [asset(), asset({ id: "44444444-4444-4444-8444-444444444444", variantLabel: "B", hookType: "problem", compliance: { verdict: "warn", reasons: [{ rule: "text_heavy", level: "warn", message: "Text covers about 30% of the picture." }] } }),
+  assets: [asset(), asset({ id: "44444444-4444-4444-8444-444444444444", variantLabel: "B", hookType: "problem", compliance: { verdict: "warn", reasons: [{ rule: "text_heavy", level: "warn", message: "Text covers about 30% of the picture." }],
+      review: { score: 2, reader: "I would scroll past it.", fix: "Lead with the number." } } }),
     asset({ id: "55555555-5555-4555-8555-555555555555", variantLabel: "A-15s", kind: "video", placement: "meta.video_vertical", width: 1080, height: 1920, durationSeconds: 15, lengthKey: "15s", contentType: "video/mp4", status: "approved", actionStatus: "executed" })],
   total: 3, statusCounts: { proposed: 2, approved: 1 }, blocked: 4, briefs: [], brandKits: [kit("carebase"), kit("caremetric-intel")], learnings: [],
   themes: [
@@ -48,6 +49,8 @@ describe("the Creative screen", () => {
     expect(await screen.findAllByText("Territory plans from public data")).toHaveLength(3);
     expect(screen.getAllByText("Passed every check", { selector: "span" })).toHaveLength(2);
     expect(screen.getByText("1 warning")).toBeTruthy();
+    // The image review's score and what its reader took from it, beside the image it looked at.
+    expect(screen.getByText("Image review: 2 of 5 as its audience would see it. I would scroll past it.")).toBeTruthy();
     expect(screen.getByText("Blocked by the checks (not shown)").parentElement?.textContent).toContain("4");
     expect(document.querySelector('img[src="/api/admin/creative/file/22222222-2222-4222-8222-222222222222"]')).toBeTruthy();
     expect(document.querySelector('video[src="/api/admin/creative/file/55555555-5555-4555-8555-555555555555"]')).toBeTruthy();

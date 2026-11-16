@@ -78,7 +78,9 @@ const carebaseFeatures = ({ published = 3, extra = '' } = {}) => `<section class
 <section id="recently-shipped" class="c"><div><p>Explore three tools.</p></div><article class="a"><div class="b"><span aria-hidden="true" class="c"></span><span class="d">In focus</span><span class="e">Survey Day Mode</span></div><h3 class="f">A single workspace</h3><p class="g">Open Survey Day Mode.</p></article></section>
 <section id="resident-lifecycle" class="c"><ol class="a"><span aria-hidden="true" class="b"></span><li class="c"><div class="d"><span class="e">01</span><div><h3>Inquiry &amp; admission</h3><p>Track inquiries.</p></div></div></li></ol></section>
 <section id="roles" class="c"><ul><li><div><span aria-hidden="true">01</span><h3>Facility manager</h3></div><p><span>Sees</span>assigned sites only.</p><p><span>Does</span>resolves gaps.</p></li></ul></section>`;
-const carebaseHome = `<section><h1>Compliance on track.</h1><div><p class="hero">Manage staff training in one place.</p></div></section>
+const carebaseHome = `<section id="top" class="relative"><h1>Compliance on track.</h1><div><p class="hero">Manage staff training in one place.</p></div>
+<div class="grid"><div class="lg:border-l"><div class="flex flex-col gap-2"><div class="font-serif tabular-nums text-mkt-ink">12–16 hrs</div><div class="text-mkt-muted">annual training tracked per direct care worker, by facility type</div></div></div>
+<div class="lg:border-l"><div class="flex flex-col gap-2"><div class="font-serif tabular-nums text-mkt-ink">60+</div><div class="text-mkt-muted">survey-ready form templates included</div></div></div></div></section>
 <section><p>In plain English</p><h2>One system</h2></div><p>CareBase brings records together.</p>
 <div><div><span>01</span><span>Survey readiness</span></div><h3>Prepare for your next survey</h3><p>Keep supporting records together.</p></div></section>
 <section><p>What sets it apart</p><h2>Built around the way Pennsylvania care works.</h2><div><div><span></span><span>01</span></div><h3>Pennsylvania is built into the workflow</h3><p>Chapters 2600 and 2800 differ.</p><p>Dementia requirements stay distinct.</p><p><span class="a"></span>Rules and timing that reflect your setting</p></div>
@@ -98,6 +100,8 @@ describe('reading CareBase\'s published capabilities', () => {
     expect(catalog.publishedAreas).toBe(2);
     expect(catalog.overview).toBe('Manage staff training in one place.');
     expect(catalog.summary).toBe('CareBase brings records together.');
+    // The home page's own figures, from the strip under its hero.
+    expect(catalog.figures).toEqual([{ figure: '12–16 hrs', label: 'annual training tracked per direct care worker, by facility type' }, { figure: '60+', label: 'survey-ready form templates included' }]);
     expect(catalog.intro).toBe('Explore resident care, training and eMAR. Start with Core.');
     expect(catalog.legend).toBe('Core covers resident operations. Add training or eMAR.');
     expect(catalog.areas).toEqual([
@@ -144,6 +148,7 @@ describe('checking what was read from CareBase\'s pages', () => {
     expect(changed(body => { body.areas[0].capabilities.pop(); })).toThrow(new RegExp(`partly read: ${committed.areas[0].key}`));
     expect(changed(body => { body.areas[1].plan = ''; })).toThrow(new RegExp(`partly read: ${committed.areas[1].key}`));
     expect(changed(body => { body.newest = []; })).toThrow(/newest 0/);
+    expect(changed(body => { body.figures = []; })).toThrow(/figures 0/);
     expect(changed(body => { body.legend = ''; })).toThrow(/no intro or plan note/);
     expect(changed(body => { body.pillars.push({ ...body.pillars[0], title: body.chapters[0].title }); })).toThrow(/\(1 from the chapters\)/);
   });

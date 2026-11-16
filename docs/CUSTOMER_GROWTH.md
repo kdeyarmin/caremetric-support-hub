@@ -384,6 +384,116 @@ Checking needs outbound connections to mail servers (port 25), which Railway all
 every server unreachable, rests for six hours, and the AI team page's "Named decision-makers" row and the Growth screen say so;
 choose "Addresses businesses publish on their own websites" to stop trying.
 
+## Which agencies opened their market report
+
+Owner decision 2026-11-16: Intel may record when an agency's market report link is opened (which agency and when, never who or an IP
+address) and tell the Hub. Open and click tracking stay off in both mail services, so before this the team knew nothing between an email
+and a reply (`20261116120000_growth_report_views.sql`, gate `20261116120100_growth_report_views_contract.sql`, feature
+`platform.agents.growth-report-views.v1`; Intel's side is `docs/HUB_MARKETING_FEED.md` "Report views" in the Intel repository).
+
+- **Settings → Customer growth → Learn which agencies opened their report.** Every 15 minutes the Marketing Manager's `growth.views` task
+  (`server/growth/views.mjs`) reads the opens Intel recorded since its last read (`POST /api/hub/report-views`, signed with the roster's
+  shared secret). Intel counts only a person's browser: never a prefetch, a link scanner or a bot, once an hour at most per link.
+- **What counts.** An open counts for a CareMetric Intel opportunity only when its first email went out at least two minutes earlier (your
+  own preview and a mail service's scan at delivery come before that), once per open. It is recorded as a `report_viewed` activity
+  event, raises the opportunity's intent to at least 50 and notes when its report was first opened. The Hub's own check that a report
+  opens before offering it is signed without the reference, so it is never counted.
+- **You are told** the first time an agency opens its report ("<agency> opened its market report").
+- **The second email follows it.** For an agency whose first email carried its own report, the second email either picks up from the
+  report (one concrete way Intel turns it into a plan, a question, the trial) when someone opened it, or brings a new angle with the report
+  link again when nobody did. It never says or hints that you know. Which one is recorded as an arm (`viewed`: `yes` or `no`), so the
+  Monday memo can compare replies.
+- An open does not stop or start any email.
+
+`server/agents-growth-report-views-integration.mjs` runs the database side through the real roles in CI.
+
+## An account brief before the first email, written and reviewed on the top model
+
+Owner decision 2026-11-16 ([review](AI_WORKFORCE_REVIEW_2026-11-16.md)): research every Intel agency before it is first written to,
+write the first email from that research on the top model, and have a second model read it as the buyer would. Before this, the writer
+saw about four web snippets, and research went only to borderline prospects, never to the ones about to be emailed
+(`20261116110000_growth_brief.sql`, gate `20261116110100_growth_brief_contract.sql`, feature `platform.agents.growth-brief.v1`).
+
+**The brief** (Settings → Customer growth → Write an account brief before the first email; Most account briefs a day, 25; Most to spend
+on one account brief, 60 cents). Every 20 minutes the Marketing Manager's `growth.brief` task (`server/growth/brief.mjs`) briefs one
+agency: qualified ones with a permitted contact first (they are about to be written to), then the best fit, then agencies the Medicare
+roster confirmed; never one already emailed. A saved brief rests the agency 30 days; an attempt that saved none (a timeout, a failure,
+today's budget spent) rests it a day, then it is tried again. Writer-part sentences that state any rating, rank or share are left out
+whatever their numbers (`server/growth/standing.mjs`), and an Intel email that states an agency's star rating or rank is refused
+(`own_standing`); asking where the agency stands is fine.
+
+1. **Code gathers** the agency's market report as data from Intel's feed (`agency_brief`: its Medicare share and rank and how they have
+   moved, the county's leaders, the hospitals its residents use, its public ratings and three moves; never physician names or the
+   SSVI), the county's public figures for the agency's own setting (home health figures to a home health agency, hospice figures to a
+   hospice; never a dollar figure), the evidence the Hub holds and the leaders already found. A nursing home found on the web (one
+   `intelSetting` reads as a nursing home, with no roster agency) is briefed as a nursing home: no market report is asked for, the
+   writer is told it is not an agency, and only nursing home figures are its own.
+2. **Web research** on the draft tier looks for dated triggers: a job listing for a liaison or marketer, a new location or service
+   line, a leadership change, an award, news (`research.2`, shared with `growth.research`). What it keeps becomes evidence.
+3. **The top model** (Opus, high effort, `brief.1`) writes the brief: what the agency is, where, who owns it, its triggers, two or
+   three questions about problems Intel answers, the angle to lead with, one cited opening sentence and the county figure most worth
+   stating, plus its own fit and what is still unknown.
+4. **Code checks it.** A brief has two parts (`private.growth_briefs`). The writer part may state only what a citable source states:
+   a sentence with any other number is dropped, so the agency's own share, rank, ratings and patient counts never reach an email (the
+   owner's rule); a source address it was not given is dropped. The research part keeps those for you. Growth shows both on the
+   opportunity. The writer reads only the writer part (`private.growth_brief_writer`).
+
+While briefs are on, an Intel agency's first email waits up to a day for its brief (`held.brief_pending` on the sweep); after that it is
+written as before.
+
+**The first email** (Settings → Customer growth → Write first emails on the top model). An Intel agency's first cold email that has a
+brief is written on the top model at high effort (`growth.13`), from the brief: its opening, one of its questions, its angle, and the
+county figure (the writer may state it once, as a fact about the county with its source, never about the agency; a brief written for
+an agency gives a nursing home no figure, and one written for a nursing home gives an agency none). The brief's angle
+replaces the hashed angle; while experiments run, a quarter of agencies keep the hashed one (`arms.angle_by`: `brief` or `hash`), so the
+learning memo can tell whether the brief's choice draws more replies. At most one such email per fifteen-minute sweep, started early in
+it (`held.top_model_later`); a repair pass stays on the agent's own tier.
+
+**The reader's review** (Settings → Customer growth → Have a reader review each first email). A second model reads each first email as
+the owner of an agency like this one (`critic.1`) and scores it 1 to 5 for being specific, relevant, clear in its ask and worth a reply.
+Below 4 the email is rewritten once around its weakest sentence, on the same tier, and the better-scored version is kept. The score is
+recorded with the email (`arms.critic`, `arms.rewritten`), and the Monday memo compares replies by score once there are 20 of each.
+
+**Money.** A brief costs about 30 to 45 cents (research on the draft tier, the brief on the top model); a first email on the top model
+about 7 to 15 cents, the review about a cent. The migration raises the Marketing Manager's daily budget to $15 (owner decision
+2026-11-16), enough for about 25 briefed and reviewed first emails a day. Nothing spends it until the settings are on.
+`server/agents-growth-brief-integration.mjs` runs the database side through the real roles in CI.
+
+## Checking an address before the first email, and the bounce guard
+
+Owner decision 2026-11-16 ([review](AI_WORKFORCE_REVIEW_2026-11-16.md)). Of the first 22 cold emails, 3 bounced (14%), all to
+addresses read from the agencies' own websites. Mailbox providers judge a sender by its bounces, and the rule for raising "Most cold
+emails a day" is under 2%. Two settings, both off until you save them (`20261116100000_growth_address_check.sql`, gate
+`20261116100100_growth_address_check_contract.sql`, feature `platform.agents.growth-address-check.v1`):
+
+- **Settings → Customer growth → Check an address before the first email.** Before the first cold email to an address (a role
+  address such as info@, a named person, an imported one), the Marketing Manager's `growth.verify` task (every half hour,
+  `server/growth/verify.mjs`) asks the business's own mail server whether the mailbox exists, with the same checker the people finder
+  uses: a made-up mailbox first, then the address, from the null sender, and the conversation ends before anything is sent. Addresses
+  with an email already waiting go first, then the best fit. Until the answer arrives, no first email is drafted (no model call is
+  paid for it) and one already approved waits.
+  - *Exists*, or a server that accepts any address (it can say no more): the email goes as before.
+  - *Does not exist*: the contact becomes **undeliverable** (a new eligibility; only "permitted" is ever written to), its waiting
+    emails are cancelled, the business's never-emailed opportunities may take another contact, and the people finder looks there
+    again. Unlike "Do not contact" it says nothing about the business's wishes, so it never blocks a named person there. You can
+    change it on Growth.
+  - *No answer* (a greylisting or silent server): asked again after 16 hours, three times at most. Then **Check** sends as before;
+    **Strict** sends the address to your review (eligibility "Needs review") instead.
+  - It needs Railway's Pro plan (port 25), like the people finder's checks, and is not counted in "Most address checks a day". When
+    three servers in a row cannot be reached the checker rests six hours and spends no tries.
+- **Settings → Customer growth → Pause cold email at this bounce rate** (1 to 50; empty: off). When more than this percent of the cold
+  emails sent in the last seven days (at least 20 of them) bounced for good, or anyone marked one as spam, cold email waits: no first
+  email is drafted and every approved cold email is held before the send claim, tried again every 15 minutes. A soft bounce (a full
+  mailbox, a server that was down) does not count. Replies to people who wrote in and customer emails are never held. You are told
+  once a day ("Cold email is paused") and resume it on Growth → Send guard → **Resume cold email**, which starts the seven days
+  afresh (audited as `growth.cold_email_resumed`). A trip holds until you resume or change the number: the bounces behind it leaving
+  the seven days never start cold email again by themselves (`private.growth_send_guard.tripped_at`). Saving the number also starts them afresh, so bounces from before you switched the
+  guard on never trip it. 5 suits a small volume: at 20 emails one bounce is 5%.
+
+The send claim (`private.growth_claim_message`) is unchanged and still decides every send; the checks above only make an email wait.
+Growth → Send guard shows the mode, the guard's counts and how many addresses were confirmed, accept anything, do not exist, have not
+answered yet or are waiting. `server/agents-growth-address-check-integration.mjs` runs all of it through the real roles in CI.
+
 ## Several decision-makers at one organization
 
 Owner decision 2026-11-15: the Marketing Manager's cold outreach reaches several decision-makers at the same agency (owner,

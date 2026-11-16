@@ -121,6 +121,10 @@ it('lets a draft state the numbers and percentages its own cited sources state, 
  expect(draftProblem(answer('You serve 14 counties.'),{product:'caremetric-intel',sources,outreach:true})).toBe('claim');
  expect(draftProblem(answer('Hospice Solutions of Erie cares for families.'),{product:'caremetric-intel',sources,outreach:true})).toBe('unclear');
  expect(draftProblem(answer('Hospice Solutions of Erie cares for families.'),{product:'caremetric-intel',sources,outreach:true,organization:'Hospice Solutions of Erie'})).toBeNull();
+ // An agency's own rating or rank never goes in an email, even with no number the claim check would catch; asking where it stands does.
+ expect(draftProblem(answer('Valley Home Health has a 4.5-star rating. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBe('own_standing');
+ expect(draftProblem(answer('Your agency ranks ninth in Erie County. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBe('own_standing');
+ expect(draftProblem(answer('Where does your agency rank in its county? Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBeNull();
 });
 it('keeps the organization\'s numbers in sentences about the organization, never in one about CareMetric or in the first person',()=>{
  const sources=[{id:'s',claim:'The agency serves 12 counties and grew 15% last year.'}];
