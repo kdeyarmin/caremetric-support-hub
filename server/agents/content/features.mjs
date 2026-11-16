@@ -85,6 +85,11 @@ function intelText(catalog) {
     for (const feature of area.features) lines.push(`- ${feature.name}${feature.access ? ` [${feature.access}]` : ''}: ${feature.does}`);
   }
   lines.push('', 'The data behind it:');
+  // Owner approval 2026-11-16: the site's own figures about its data are the only ones the team may state (facts.mjs, Intel boundaries).
+  if (catalog.scale?.length) {
+    lines.push('By the numbers (the site\'s own figures about its data, the only ones to state, worded as the site words them):',
+      ...catalog.scale.map(item => `- ${item.figure} ${item.label}: ${item.text}`));
+  }
   for (const family of catalog.data) {
     lines.push(`- ${family.family}: ${family.headline} Includes: ${family.includes.join('; ')}. Source: ${family.source}. The decision it helps make: ${family.question} ${family.decision} Limit: ${family.limit}`);
   }

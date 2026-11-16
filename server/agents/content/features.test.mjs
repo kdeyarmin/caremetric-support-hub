@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { segments } from '../creative/copy.mjs';
-import { careSettingText, catalogBlocks, catalogGuidance, catalogNumbers, featuresText, focusFor, productFeatures } from './features.mjs';
+import { careSettingText, catalogBlocks, catalogGuidance, featuresText, focusFor, productFeatures } from './features.mjs';
 import { products } from './facts.mjs';
 import { textProblems } from './validate.mjs';
 
@@ -48,13 +48,12 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     // The prompt carries the features, the data and its sources, and the site's own caveats.
     for (const phrase of ['Stark annual limit tracking', 'Competitor rankings', 'EMR report imports', 'County intelligence', 'NPPES', 'Care Compare', 'American Community Survey',
       'not a promise of referrals', 'The 30-day trial includes Pro features in one county', 'Site finder', 'Public data library']) expect(text).toContain(phrase);
-    // The AI apps and CRM Intel connects to are written generically. The count of its datasets is the site's own, approved by the owner
-    // on 2026-11-16 (facts.mjs `dataFigures`), so drafts about Intel may state it (validate.mjs allowedNumbers).
+    // The AI apps and CRM Intel connects to are written generically. The count of its datasets is the site's own, which the owner
+    // approved on 2026-11-16 (the fact sheet's Intel boundaries).
     expect(text).not.toMatch(/ChatGPT|Claude|HubSpot/);
-    expect(text).toContain('150+ public healthcare datasets');
     expect(text).toContain('More than 150 public healthcare datasets');
-    expect(intel.edits.join('\n')).not.toMatch(/count of Intel's datasets/);
-    expect(catalogNumbers('intel').has('150:dataset')).toBe(true);
+    // The site's own figures about its data, the only ones the team may state (the fact sheet's Intel boundaries).
+    for (const figure of ['- 150+ public healthcare datasets:', '- 33,000+ ZIP areas and 3,200+ counties:', '- Every NPI in the national provider registry:']) expect(text).toContain(figure);
     expect(featuresText('intel')).toBe(text);
     expect(featuresText('advisors')).toBe('');
   });

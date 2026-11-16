@@ -123,8 +123,8 @@ describe("control center", () => {
     expect(within(rows[1]).getByText("Not connected")).toBeTruthy();
     expect(within(rows[1]).getByText("Not live")).toBeTruthy();
     expect(within(rows[2]).getByText("Receiving · replies not configured")).toBeTruthy();
-    expect(href(within(rows[1]).getByRole("link", { name: "Open Text messages conversations" }))).toBe("/communications?channel=sms");
-    expect(within(rows[1]).getByRole("link", { name: "Open Text messages conversations" }).textContent).toBe("1 waiting");
+    expect(href(within(rows[1]).getByRole("link", { name: "1 waiting: open Text messages conversations" }))).toBe("/communications?channel=sms");
+    expect(within(rows[1]).getByRole("link", { name: "1 waiting: open Text messages conversations" }).textContent).toBe("1 waiting");
     expect(href(within(channels).getByRole("link", { name: /Open inbox/ }))).toBe("/communications");
     expect(href(within(channels).getByRole("link", { name: "Phone numbers and routing" }))).toBe("/phone-numbers");
   });
@@ -239,6 +239,17 @@ describe("control center", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh everything" }));
     await waitFor(() => expect(clients.hub.listCases).toHaveBeenCalledTimes(2));
     expect(clients.hub.listContent).toHaveBeenCalledTimes(2);
+  });
+
+  it("says the case counts are from sign-in when they could not be refreshed", async () => {
+    const clients = connectedClients();
+    clients.hub.listCases.mockRejectedValue(new Error("down"));
+    renderCenter({ ...clients, communications: fakeCommunications() });
+    const glance = screen.getByRole("region", { name: "Portfolio at a glance" });
+    const figure = within(glance).getByText("Open support cases").parentElement!;
+    expect(await within(figure).findByText("Could not refresh · counts from when you signed in")).toBeTruthy();
+    const carebase = await screen.findByRole("article", { name: "CareBase (PennTrain) controls" });
+    expect(within(carebase).getByText(/as of sign-in, refresh failed/)).toBeTruthy();
   });
 
   it("keeps the inbox failure isolated and marks only its figures unavailable", async () => {

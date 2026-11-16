@@ -20,9 +20,9 @@
  * Also on 2026-11-16 Intel's reviewed trial follows its billing catalog: 1 location and up to 2 healthcare service lines of the
  * customer's choice, where it said 1 branch, home health and hospice, and so do the plans' descriptions: locations instead of
  * branches, service lines of the customer's choice, and Growth "for growing healthcare teams" (it said "the usual agency plan").
- * The Founders Sale terms name the same add-on: "Intel extra seats/locations/states".
- * Also on 2026-11-16 the owner approved Intel's count of its datasets, more than 150 (`dataFigures`, and its catalog states it again);
- * no other count of Intel's data is approved.
+ * The Founders Sale terms name the same add-on: "Intel extra seats/locations/states". Later on 2026-11-16 the owner approved
+ * data-scale figures: Intel's boundaries let the team state the figures about its data that its site publishes ("By the numbers" on
+ * its home page), which the features catalog carries.
  */
 
 export const factsVersion = '2026-11-16.4';
@@ -288,14 +288,8 @@ export const products = deepFreeze({
       'Intel imports referral and admission reports from the EHR as files: an upload, an SFTP folder or email. It is not a live connection to any EHR, and no message names an EHR vendor.',
       'Intel works in a phone\'s web browser and can be added to the home screen, where it opens like an app. It is not an app in the app stores.',
       'Public Medicare data shows which physicians certify home health patients and which agencies serve a county. It does not show who referred which patient to whom.',
-      'Intel has no approved customer results, and the only count about its data it states is its number of public healthcare datasets, under "Approved figures about its data". Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files), and point to the free county report and the free trial instead of results.',
+      'Intel has no approved customer results: point to the free county report and the free trial instead. The only figures about its data the team may state are the ones Intel\'s own site publishes ("By the numbers" in its catalog: its public healthcare datasets, every NPI in the national registry, its ZIP areas and counties, and daily checks for new releases), worded as the site words them (owner approval); state no other count about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files).',
       'Intel is evaluated with a free trial, its prices are on its website, and questions get written answers. Describe what Intel does; never describe or compare what other products do.',
-    ],
-    // Owner approval 2026-11-16 (docs/GTM_FACTS.md, Owner confirmation): Intel's count of its datasets, as its own site states it ("150+",
-    // "More than 150"). It is a number every draft may state (validate.mjs allowedNumbers); no other count of Intel's data is approved
-    // (docs/INTEL_MARKETING_PLAYBOOK.md, "Decisions for the owner").
-    dataFigures: [
-      'More than 150 public healthcare datasets, which Intel\'s own site writes as "150+". It is the only count about Intel\'s data you may state: never give a count of its ZIP areas, counties or providers.',
     ],
     whyChoose: [
       'Put the whole marketing program in one workspace. Research, account relationships, visits, follow-ups, expenses and recorded results share the same working context.',
@@ -575,7 +569,6 @@ export function factSheetText() {
     if (product.leadWith?.length) lines.push('What to lead with, one at a time (rotate them across your work; email and expenses never lead):', ...product.leadWith.map(line => `- ${line}`));
     if (product.whyNow?.length) lines.push('Why now (market context; check any rule, model or date on cms.gov before you state it):', ...product.whyNow.map(line => `- ${line}`));
     if (product.boundaries?.length) lines.push('What it is not, and how to say so:', ...product.boundaries.map(line => `- ${line}`));
-    if (product.dataFigures?.length) lines.push('Approved figures about its data:', ...product.dataFigures.map(line => `- ${line}`));
     if (product.trialDays) lines.push(`Free trial: ${product.trialDays} days.`);
     lines.push('Pricing:', ...product.pricing.map(line => `- ${line}`), 'Offers:', ...product.offers.map(line => `- ${line}`));
   }

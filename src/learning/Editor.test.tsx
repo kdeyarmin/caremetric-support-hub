@@ -192,3 +192,20 @@ it("links course editors to material imports from Course authoring, and nobody e
   await waitFor(() => expect(api.editorAccess).toHaveBeenCalledTimes(2));
   expect(screen.queryByRole("link", { name: "Review material imports" })).toBeNull();
 });
+
+it("asks before a link inside the Hub discards unsaved course edits", async () => {
+  render(<MemoryRouter initialEntries={["/library/courses/new"]}><Routes>
+    <Route path="/library/courses/:itemId" element={<CourseEditor products={products} />} />
+    <Route path="/library" element={<p>Library page</p>} />
+  </Routes></MemoryRouter>);
+  await screen.findByLabelText("Course title");
+  fillRequired();
+  const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+  fireEvent.click(screen.getByRole("link", { name: "Course library" }));
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText("Library page")).toBeNull();
+  expect((screen.getByLabelText("Course title") as HTMLInputElement).value).toBe("Home safety basics");
+  confirm.mockReturnValueOnce(true);
+  fireEvent.click(screen.getByRole("link", { name: "Course library" }));
+  expect(await screen.findByText("Library page")).toBeTruthy();
+});

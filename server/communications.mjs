@@ -51,6 +51,20 @@ export function parseMailbox(value) {
   const name = angle ? angle[1].trim().replace(/^"(.*)"$/, '$1').trim() : '';
   return emailAddress.test(address) && address.length <= 320 ? { address, name: name.slice(0, 160) || null } : null;
 }
+/**
+ * Whether SendGrid's checks show the From address is really the sender's: SPF passed for an envelope sender in the From domain, or
+ * a DKIM signature from the From domain passed (DMARC-style alignment, a parent or child domain counting as the same). Anyone can
+ * write any From header, so a reply joins an existing conversation by its [CM-…] reference only when this holds.
+ * `spf` is SendGrid's SPF field ("pass", "softfail", …); `dkim` is its dkim field ("{@agency.test : pass, @other.test : fail}").
+ */
+export function senderAuthenticated({ spf, dkim, envelopeFrom, from }) {
+  const domainOf = value => String(value || '').trim().toLowerCase().split('@').at(-1)?.replace(/[>\s.]+$/, '') ?? '';
+  const fromDomain = domainOf(from);
+  if (!fromDomain) return false;
+  const aligned = domain => Boolean(domain) && (domain === fromDomain || fromDomain.endsWith(`.${domain}`) || domain.endsWith(`.${fromDomain}`));
+  if (/^\s*pass\b/i.test(String(spf || '')) && aligned(domainOf(envelopeFrom))) return true;
+  return [...String(dkim || '').matchAll(/@([a-z0-9.-]+)\s*:\s*([a-z]+)/gi)].some(([, domain, result]) => result.toLowerCase() === 'pass' && aligned(domain.toLowerCase()));
+}
 /** support+breathe@… routes to an application; any other address leaves the conversation for triage. */
 export function productFromAddresses(addresses) {
   for (const value of addresses) {
@@ -258,9 +272,13 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
       const messageId = /^Message-ID:\s*(<[^>\r\n]{1,290}>)/im.exec(headers)?.[1] ?? digest([sender.address, field('subject'), field('text'), /^Date:.*$/im.exec(headers)?.[0] ?? ''].join('\n'));
       const subject = field('subject').trim();
       // Outbound subjects end with the conversation's reference, so the last one is ours.
-      const reference = [...subject.matchAll(/\[CM-(\d{4,12})\]/g)].at(-1)?.[1] ?? null;
+      const cited = [...subject.matchAll(/\[CM-(\d{4,12})\]/g)].at(-1)?.[1] ?? null;
+      // A reply joins that conversation only from an authenticated sender; a forged From starts a new conversation that says so.
+      const verified = senderAuthenticated({ spf: field('SPF'), dkim: field('dkim'), envelopeFrom: envelope.from, from: sender.address });
+      const reference = verified ? cited : null;
       const attachments = Number(field('attachments') || '0');
-      const text = [(field('text') || htmlToText(field('html'))).trim(), attachments > 0 ? `[${attachments} attachment(s) were not stored. Ask the sender to describe them without patient information.]` : ''].filter(Boolean).join('\n\n');
+      const text = [cited && !verified ? `[This email names conversation CM-${cited}, but its sender's address could not be verified, so it was kept separate. Check who sent it before replying.]` : '',
+        (field('text') || htmlToText(field('html'))).trim(), attachments > 0 ? `[${attachments} attachment(s) were not stored. Ask the sender to describe them without patient information.]` : ''].filter(Boolean).join('\n\n');
       const product = productFromAddresses([...(Array.isArray(envelope.to) ? envelope.to : []), ...field('to').split(',')]);
       const result = await server('select private.ingest_inbound_communication($1,$2,$3,$4,$5,$6,$7,$8,$9,null) as result',
         ['email', messageId, messageId, reference, product, subject || null, text || '[Empty email]', sender.name, sender.address]);

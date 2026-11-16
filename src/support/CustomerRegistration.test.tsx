@@ -9,10 +9,10 @@ const preview={reviewId:id,proofDigest:'b'.repeat(64),expiresAt:new Date(Date.no
 const invitation={invitationId:id,identity,displayName:preview.displayName,tenantName:preview.tenantName,phoneEnding:'0100',expiresAt:new Date(Date.now()+900000).toISOString(),state:'pending',hubUserId:null};
 afterEach(cleanup);
 function fill(){for(const [label,value] of [['Invited app user ID','Native_User'],['Invited app organization ID',id],['Customer mobile number','2025550100'],['Customer display name',preview.displayName],['Invited customer account name',preview.tenantName]])fireEvent.change(screen.getByLabelText(label),{target:{value}});}
-it('reviews all six eligible apps and preserves one invitation code and request ID after an uncertain response',async()=>{
+it('offers the three connected apps and preserves one invitation code and request ID after an uncertain response',async()=>{
   let issued=0;const request=vi.fn(async(body:unknown)=>{const op=body as {operation:string};if(op.operation==='list')return {rows:[],offset:0,total:0};if(op.operation==='preview')return preview;
     if(++issued===1)throw new Error('Response interrupted');return invitation;});
-  render(<MemoryRouter><CustomerRegistration request={request} onLinked={()=>{}}/></MemoryRouter>);expect((screen.getByLabelText('Invitation application') as HTMLSelectElement).options).toHaveLength(6);fill();
+  render(<MemoryRouter><CustomerRegistration request={request} onLinked={()=>{}}/></MemoryRouter>);expect(Array.from((screen.getByLabelText('Invitation application') as HTMLSelectElement).options).map(option=>option.value)).toEqual(['carebase','breathe','intel']);fill();
   fireEvent.click(screen.getByRole('button',{name:'Review new customer invitation'}));const create=await screen.findByRole('button',{name:'Create invitation code'});expect(create).toHaveProperty('disabled',true);
   fireEvent.click(screen.getByRole('checkbox'));fireEvent.click(create);await screen.findByRole('alert');fireEvent.click(create);await screen.findByLabelText('New invitation code');
   const attempts=request.mock.calls.map(([body])=>body as {operation:string;claimCode:string}).filter(op=>op.operation==='issue');expect(attempts).toHaveLength(2);expect(attempts[0]).toEqual(attempts[1]);

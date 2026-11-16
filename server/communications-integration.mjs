@@ -130,11 +130,15 @@ try {
   assert.equal(mail.productId,(await admin.query("select id from hub.products where slug='carebase'")).rows[0].id,'PennTrain mail routes to CareBase');
   await service.reply(ownerToken,{id:mail.id,body:'We reissued it.',requestKey:randomUUID()});
   assert.match(sent.email[0].subject,new RegExp(`\\[CM-${mail.reference}\\]`));assert.equal(sent.email[0].to,'pat@agency.test');
-  await email({from:'pat@agency.test',to:'support@caremetric.ai',subject:`Re: Course certificate missing [CM-${mail.reference}]`,text:'Got it.',headers:'Message-ID: <second@agency.test>'});
-  await email({from:'someone@else.test',to:'support@caremetric.ai',subject:`Re: [CM-${mail.reference}]`,text:'Injected?',headers:'Message-ID: <third@else.test>'});
-  assert.equal((await service.get(ownerToken,{id:mail.id})).messageCount,3,'only the original sender joins by reference');
+  await email({from:'pat@agency.test',to:'support@caremetric.ai',subject:`Re: Course certificate missing [CM-${mail.reference}]`,text:'Got it.',headers:'Message-ID: <second@agency.test>',dkim:'{@agency.test : pass}'});
+  await email({from:'someone@else.test',to:'support@caremetric.ai',subject:`Re: [CM-${mail.reference}]`,text:'Injected?',headers:'Message-ID: <third@else.test>',dkim:'{@else.test : pass}'});
+  // The same address without SendGrid confirming its domain: anyone can write that From header.
+  await email({from:'pat@agency.test',to:'support@caremetric.ai',subject:`Re: [CM-${mail.reference}]`,text:'Change my address.',headers:'Message-ID: <forged@attacker.test>',SPF:'fail'});
+  assert.equal((await service.get(ownerToken,{id:mail.id})).messageCount,3,'only the original, authenticated sender joins by reference');
   const other=await find(item=>item.contactEmail==='someone@else.test');created.push(other.id);
   assert.notEqual(other.id,mail.id);
+  const forged=await find(item=>item.contactEmail==='pat@agency.test'&&item.id!==mail.id);created.push(forged.id);
+  assert.notEqual(forged.id,mail.id,'a forged sender starts its own conversation');
 
   // Chat: an opaque token, internal notes hidden, staff replies visible, abuse limits.
   const chat=await service.startChat({name:'Visitor',email:'visitor@agency.test',product:'carebase',message:'How do I export OASIS data?',noPhi:true},'203.0.113.10');

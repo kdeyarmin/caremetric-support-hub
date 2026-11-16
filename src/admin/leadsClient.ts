@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { config } from "../lib/config";
-import { sessionEvent } from "../lib/appSession";
+import { sessionEvent, responseErrorMessage } from "../lib/appSession";
 import { leadPageSchema, leadSchema } from "./leadsProtocol";
 import type { Lead, LeadKind, LeadPage, LeadSource, LeadStatus } from "./leadsProtocol";
 
@@ -28,7 +28,7 @@ async function post<S extends z.ZodType>(path: string, body: unknown, schema: S,
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new Event(sessionEvent));
-    const message = data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : "The request could not be completed.";
+    const message = responseErrorMessage(data) ?? "The request could not be completed.";
     throw new LeadsApiError(response.status, message);
   }
   return schema.parse(data);

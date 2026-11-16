@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { config } from "../lib/config";
-import { sessionEvent } from "../lib/appSession";
+import { sessionEvent, responseErrorMessage } from "../lib/appSession";
 import { SettingsApiError } from "./settingsClient";
 
 export type SocialProvider = "meta" | "linkedin";
@@ -32,7 +32,7 @@ async function post(body: unknown, signal?: AbortSignal): Promise<unknown> {
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new Event(sessionEvent));
-    throw new SettingsApiError(response.status, data && typeof data === "object" && "error" in data && typeof data.error === "string" ? data.error : "The connection request could not be completed.");
+    throw new SettingsApiError(response.status, responseErrorMessage(data) ?? "The connection request could not be completed.");
   }
   return data;
 }

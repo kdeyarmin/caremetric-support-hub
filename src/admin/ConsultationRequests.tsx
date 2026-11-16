@@ -18,7 +18,8 @@ function changeFailure(caught: unknown) {
     : code === "401" || code === "403" ? "Your Hub sign-in has expired. Sign in again, then retry."
     : code === "unconfigured" ? "The Advisors connection is not switched on yet."
     : code === "invalid_request" ? "Notes can be up to 3,000 characters without special control characters."
-    : "Advisors did not answer. Try again; nothing changed.";
+    // A timeout or dropped connection can come after Advisors saved the change, so never claim that nothing changed.
+    : "Advisors did not confirm the change. Reload the list to see whether it was saved, then try again if it was not.";
 }
 
 /** Status, notes and deletion for one request. Every change names what the owner last saw, so Advisors refuses it if the request changed meanwhile. */

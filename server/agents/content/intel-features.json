@@ -906,6 +906,28 @@
       "limit": "Results reflect your records. CSV imports are file-based, not live EMR connections; patient-identifying columns are dropped."
     }
   ],
+  "scale": [
+    {
+      "figure": "150+",
+      "label": "public healthcare datasets",
+      "text": "From CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP."
+    },
+    {
+      "figure": "Every NPI",
+      "label": "in the national provider registry",
+      "text": "Physicians, practices and organizations with their practice locations and specialties, kept current from CMS’s weekly update files."
+    },
+    {
+      "figure": "33,000+",
+      "label": "ZIP areas and 3,200+ counties",
+      "text": "Each with Census age, income, disability, living-alone and growth figures beside the providers and facilities located there."
+    },
+    {
+      "figure": "Daily",
+      "label": "checks for new CMS releases",
+      "text": "Every view names the release it uses and when it was loaded, so your team can judge a figure before acting on it."
+    }
+  ],
   "settings": [
     {
       "name": "Home health agencies",

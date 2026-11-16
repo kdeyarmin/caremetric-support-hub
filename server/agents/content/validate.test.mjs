@@ -185,7 +185,7 @@ describe('each check that rejects a draft', () => {
     // A count no source states is refused, for an article, and for outreach, sales and social copy (catalogNumbers).
     for (const sentence of ['CareBase is used in 500+ facilities.', 'CareBase is used in 500 + facilities.', 'Teams of 10,000+ staff use it.'])
       expect(reasons(withSentence(sentence)), sentence).toEqual(['unlisted_number']);
-    expect(textProblems('CareMetric Intel covers 3,200+ counties and 33,000+ ZIP areas.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual(['unlisted_number']);
+    expect(textProblems('CareMetric Intel covers 4,000+ counties and 40,000+ ZIP areas.', { product: 'intel', numbers: catalogNumbers('intel') })).toEqual(['unlisted_number']);
     // A count the product's catalog states may be written with "+".
     const intelArticle = { ...referralDraft, body: `${referralDraft.body}\n\nCareMetric Intel lists accounts that go 45+ days without a visit.` };
     expect(checkDraft(intelArticle, { topic: referral, promptVersion: 'content.3' }).reasons).toContain('unlisted_number');
@@ -199,14 +199,15 @@ describe('each check that rejects a draft', () => {
         expect(textProblems(sentence, { product: 'intel', numbers }), `${source}: ${sentence}`).toEqual([]);
       expect(textProblems('Intel draws on 200+ public healthcare datasets.', { product: 'intel', numbers }), source).toEqual(['unlisted_number']);
     }
-    // The owner approved Intel's count on 2026-11-16: its catalog states it as the site does, and so does the fact sheet, so copy about
-    // Intel may state it either way. A different count, and the data-scale figures that are not approved, are still refused.
-    for (const numbers of [catalogNumbers('intel'), allowedNumbers([])]) {
-      for (const sentence of ['Intel draws on 150+ public healthcare datasets.', 'Intel draws on more than 150 public healthcare datasets.'])
-        expect(textProblems(sentence, { product: 'intel', numbers }), sentence).toEqual([]);
-      expect(textProblems('Intel draws on 200+ public healthcare datasets.', { product: 'intel', numbers })).toEqual(['unlisted_number']);
-      expect(textProblems('Intel covers 3,200+ counties and 33,000+ ZIP areas.', { product: 'intel', numbers })).toEqual(['unlisted_number']);
-    }
+    // The owner approved the figures Intel's site publishes about its data on 2026-11-16 ("By the numbers" in its catalog): copy about
+    // Intel may state them as the site words them, or as "more than", and no other count.
+    const intel = catalogNumbers('intel');
+    for (const sentence of ['Intel draws on 150+ public healthcare datasets.', 'Intel draws on more than 150 public healthcare datasets.', 'Intel covers 33,000+ ZIP areas and 3,200+ counties.'])
+      expect(textProblems(sentence, { product: 'intel', numbers: intel }), sentence).toEqual([]);
+    for (const sentence of ['Intel draws on 200+ public healthcare datasets.', 'Intel covers 40,000+ ZIP areas.', 'Intel covers 3,300+ counties.'])
+      expect(textProblems(sentence, { product: 'intel', numbers: intel }), sentence).toEqual(['unlisted_number']);
+    // They are Intel's figures: copy about CareBase may state none of them.
+    expect(textProblems('CareBase draws on 150+ public healthcare datasets.', { product: 'carebase', numbers: catalogNumbers('carebase') })).toEqual(['unlisted_number']);
   });
 
   it('rejects guarantees, compliance assurances and certifications', () => {

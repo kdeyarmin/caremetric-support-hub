@@ -366,12 +366,8 @@ The playbook keeps the vendor detail and figures for people, not for prompts.
 - Intel imports referral and admission reports from the EHR as files: an upload, an SFTP folder or email. It is not a live connection to any EHR, and no message names an EHR vendor.
 - Intel works in a phone's web browser and can be added to the home screen, where it opens like an app. It is not an app in the app stores.
 - Public Medicare data shows which physicians certify home health patients and which agencies serve a county. It does not show who referred which patient to whom.
-- Intel has no approved customer results, and the only count about its data it states is its number of public healthcare datasets, under "Approved figures about its data". Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files), and point to the free county report and the free trial instead of results.
+- Intel has no approved customer results: point to the free county report and the free trial instead. The only figures about its data the team may state are the ones Intel's own site publishes ("By the numbers" in its catalog: its public healthcare datasets, every NPI in the national registry, its ZIP areas and counties, and daily checks for new releases), worded as the site words them (owner approval); state no other count about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files).
 - Intel is evaluated with a free trial, its prices are on its website, and questions get written answers. Describe what Intel does; never describe or compare what other products do.
-
-**Approved figures about its data** (owner approval 2026-11-16; no other count of Intel's data is approved):
-
-- More than 150 public healthcare datasets, which Intel's own site writes as "150+". It is the only count about Intel's data you may state: never give a count of its ZIP areas, counties or providers.
 
 The sales playbook gained matching written answers for EHR connection and security questions (`integration` and `security` in
 `server/growth/playbook.mjs`), and three outreach angles that follow the lead order: visit preparation, the hospital outcomes packet and
@@ -642,10 +638,11 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
   and Growth "For growing healthcare teams" instead of "The usual agency plan"; the Founders Sale's excluded add-ons say "Intel extra
   seats/locations/states" to match. Prices and the offer's scope are unchanged. The owner confirmed this wording on 2026-11-16
   (kdeyarmin/caremetric-support-hub#222).
-- [x] 2026-11-16: Intel's count of its datasets, as its own site states it: more than 150 public healthcare datasets ("150+"). It is on
-  the fact sheet ("Approved figures about its data") and back in Intel's catalog, so every draft may state it. Approved by the owner on
-  2026-11-16. No other data-scale figure is approved: not its ZIP areas, counties, NPI refresh or release checks
-  (docs/INTEL_MARKETING_PLAYBOOK.md, "Decisions for the owner").
+- [x] 2026-11-16: data-scale figures. The team may state the figures about its data that Intel's own site publishes, worded as the site
+  words them, and no other count about its data: 150+ public healthcare datasets, every NPI in the national provider registry, 33,000+
+  ZIP areas and 3,200+ counties, and daily checks for new CMS releases (the home page's "by the numbers" band, which the features catalog
+  carries). Intel still has no approved customer results. Approved by the owner on 2026-11-16. Also confirmed that day: the pre-visit card and spoken
+  debrief pillar never leads a brief.
 
 ## Feature and function reference
 
@@ -658,7 +655,7 @@ packet or a log of recorded actions, never the state's survey. Binder and survey
 than as a readiness guarantee.
 The Intel source also describes spoken visit entry, a pre-visit card read aloud and spoken questions to its AI Assistant; below, visit
 logging, debriefs and directions use the approved written workflow only. As in the catalog, the AI apps and CRM Intel connects to are
-not named. The count of its datasets is the site's own ("150+", "More than 150"), which the owner approved on 2026-11-16.
+not named; the figures about its data are the site's own ("Intel's data, by the numbers" below), approved by the owner on 2026-11-16.
 This preserves the owner's text-only AI rule and does not authorize voice or phone claims. Static presenter videos remain course media.
 
 ### CareBase feature and function reference
@@ -1074,6 +1071,17 @@ Control who can see what, keep a record of it, and know where every figure comes
 | Public data, clearly sourced | Provider, facility and market figures come from CMS, NPPES, the U.S. Census Bureau and state licensing files, with each dataset’s release shown. Public research uses no patient-level data. | All plans; subject to scope |
 | Patient privacy by design | Patient-identifying columns are dropped from referral imports, briefs and scorecards leave notes out, and exports carry no patient names. | All plans; subject to scope |
 | Send data out | An organization admin sends the organization’s own accounts, referrals and visit counts out every night: three CSV files to an SFTP server whose host key you pin, or accounts to a supported CRM as companies. Notes, check-in positions and patient details never leave Intel; passwords and tokens are stored encrypted. | Setting it: owners |
+
+#### Intel's data, by the numbers
+
+The site's own figures about its data (owner approval 2026-11-16): the only figures about its data the team may state, worded as the site words them.
+
+| Figure | What it counts | On the site |
+| --- | --- | --- |
+| 150+ | public healthcare datasets | From CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by NPI, CCN, county and ZIP. |
+| Every NPI | in the national provider registry | Physicians, practices and organizations with their practice locations and specialties, kept current from CMS’s weekly update files. |
+| 33,000+ | ZIP areas and 3,200+ counties | Each with Census age, income, disability, living-alone and growth figures beside the providers and facilities located there. |
+| Daily | checks for new CMS releases | Every view names the release it uses and when it was loaded, so your team can judge a figure before acting on it. |
 
 #### Data, sources and what they can tell the company
 

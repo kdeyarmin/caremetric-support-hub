@@ -395,7 +395,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .phi-warning strong { display: block; font-size: var(--text-sm); }
 .phi-warning p { margin: 3px 0 0; font-size: var(--text-xs); line-height: 1.5; }
 .case-form { padding: 18px 20px 21px; }
-.case-form label > span small { margin-left: 4px; color: #64748b; font-weight: 500; }
+.case-form label > span small { margin-left: 4px; color: var(--muted); font-weight: 500; }
 .case-form input, .case-form select, .case-form textarea { font-size: var(--text-sm); }
 .form-grid { display: grid; grid-template-columns: 1.2fr 1fr .7fr .8fr; gap: 12px; }
 .check-row { display: flex !important; align-items: flex-start; gap: 9px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #eef3fc; cursor: pointer; }

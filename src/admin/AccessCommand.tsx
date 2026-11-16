@@ -20,7 +20,7 @@ function message(error: unknown) {
 }
 
 /** Preview and apply remain distinct user actions; an ambiguous retry retains its key. */
-export function AccessCommand({ target, client = commandClient, onClose, onApplied }: { target: AccessTarget; client?: CommandClient; onClose: () => void; onApplied: () => void }) {
+export function AccessCommand({ target, client = commandClient, onClose, onApplied, onBusyChange }: { target: AccessTarget; client?: CommandClient; onClose: () => void; onApplied: () => void; onBusyChange?: (busy: boolean) => void }) {
   const [value, setValue] = useState("");
   const [reason, setReason] = useState("");
   const [preview, setPreview] = useState<CommandPreview | null>(null);
@@ -32,6 +32,9 @@ export function AccessCommand({ target, client = commandClient, onClose, onAppli
   const controller = useRef(new AbortController());
   useEffect(() => { const current = new AbortController(); controller.current = current; return () => current.abort(); }, []);
   useEffect(() => { heading.current?.focus(); }, [preview, completed]);
+  // The table keeps every other "Change access" button disabled while a change is in flight, so its outcome is never discarded.
+  useEffect(() => { onBusyChange?.(busy); }, [busy, onBusyChange]);
+  useEffect(() => () => onBusyChange?.(false), [onBusyChange]);
   async function createPreview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
     try {
