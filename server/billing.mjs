@@ -644,6 +644,34 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
   const appResponse = entitlement => ({ ...entitlement, cache_ttl_seconds: entitlementCacheSeconds, checked_at: entitlement.checked_at ?? new Date(now()).toISOString() });
 
+  /**
+   * Whether a trialing Intel subscription has a card Stripe confirms (trial-card.mjs). Intel locks an organization to its Billing page
+   * whenever the Hub cannot answer its entitlement, so a Stripe failure here must not fail the whole answer: before, one Stripe hiccup
+   * locked out every trialing Intel customer, those whose trial needs no card included. A failure never unlocks a trial: the answer
+   * falls back to the last time Stripe confirmed this tenant's subscription's card, within a day, else false. A confirmation is kept
+   * in memory only, and a check that finds no card forgets it at once.
+   */
+  const confirmedCards = new Map();
+  const cardMemoryMs = 24 * 60 * 60 * 1000;
+  async function trialCardAnswer(entitlement) {
+    const subscriptions = (entitlement.products ?? []).filter(product => product.kind === 'plan' && product.status === 'trialing').map(product => product.subscription).sort();
+    const key = `${entitlement.tenant_id}:${subscriptions.join(',')}`;
+    try {
+      const confirmed = await trialCardOnFile(await stripe(), entitlement);
+      confirmedCards.delete(key);
+      if (confirmed) {
+        confirmedCards.set(key, now());
+        if (confirmedCards.size > 5000) confirmedCards.delete(confirmedCards.keys().next().value);
+      }
+      return confirmed;
+    } catch {
+      const at = confirmedCards.get(key);
+      const recent = at !== undefined && now() - at < cardMemoryMs;
+      log.warn(`Stripe could not confirm an Intel trial's card; answering ${recent ? 'the card it confirmed in the last 24 hours' : 'not confirmed'} until it can.`);
+      return recent;
+    }
+  }
+
   async function entitlements(authorization, input) {
     const parsed = entitlementRequestSchema.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Send the application account id.');
@@ -652,7 +680,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       return appResponse((await one(db, 'select private.scoped_app_billing_entitlements($1,$2) as e', [app.product_id, parsed.data.account])).e);
     });
     if (answer.app === 'caremetric-intel' && answer.status === 'trialing' && answer.entitled) {
-      answer.payment_method_on_file = await trialCardOnFile(await stripe(), answer);
+      answer.payment_method_on_file = await trialCardAnswer(answer);
     }
     return answer;
   }
