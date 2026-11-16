@@ -9,6 +9,14 @@ import { timeLabel } from "./readState";
 
 export interface AccessTarget { id: string; label: string; action: CommandAction; }
 const applicationName: Record<AppCommandProduct, string> = { carebase: "CareBase", intel: "CareMetric Intel" };
+/** An Intel organization's status as Intel stores it (billing's, or `disabled` while CareMetric has it suspended), in words. */
+const intelOrganizationStatuses: Record<string, string> = {
+  payment_required: "Awaiting payment details", trial: "Trial", active: "Active", past_due: "Past due", canceled: "Canceled", disabled: "Suspended",
+};
+/** How an application's organization status reads in the Hub. Unknown values are shown as sent. */
+export function organizationStatusLabel(product: string, status: string | null): string | null {
+  return product === "intel" && status !== null ? intelOrganizationStatuses[status] ?? status : status;
+}
 const fieldLabels = { active: "Profile active", status: "Status", billingState: "Access state", stateSource: "Access source", compedUntil: "Complimentary access ends" };
 function message(error: unknown) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
@@ -31,6 +39,8 @@ export function AccessCommand({ target, product = "carebase", client = commandCl
   const [error, setError] = useState("");
   const [completed, setCompleted] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const intelOrganization = product === "intel" && target.action === "organizations.setSuspension";
+  const shown = (field: string, value: string | null) => intelOrganization && field === "status" ? organizationStatusLabel(product, value) : value;
   const pending = useRef<PendingMutationRequest | null>(null);
   const controller = useRef(new AbortController());
   useEffect(() => { const current = new AbortController(); controller.current = current; return () => current.abort(); }, []);
@@ -60,8 +70,9 @@ export function AccessCommand({ target, product = "carebase", client = commandCl
     finally { if (!controller.current.signal.aborted) setBusy(false); }
   }
   return <section className="panel access-command" aria-label="Review application access change"><div className="panel-heading"><h2 ref={heading} tabIndex={-1}>Change access · {target.label}</h2><button type="button" className="button button-secondary button-small" onClick={onClose} disabled={busy}>Close</button></div><p>{applicationName[product]} records the administrator, reason, and exact before-and-after values. These controls change application access; subscriptions and charges are managed in the Hub's Billing workspace.</p>
-    {completed ? <p role="status">{completed}</p> : preview ? <><p>Review expires {timeLabel(preview.expiresAt)}. Reason: {preview.reason}</p><table><thead><tr><th>Setting</th><th>Current</th><th>Proposed</th></tr></thead><tbody>{preview.changes.map(change => <tr key={change.field}><td>{fieldLabels[change.field]}</td><td>{change.before ?? "Not set"}</td><td>{change.after ?? "Not set"}</td></tr>)}</tbody></table>{preview.changes.length === 0 && <p>The requested values already match the current record.</p>}<button type="button" className="button button-primary" disabled={busy} onClick={() => void apply()}>{busy ? "Checking recorded result…" : "Apply previewed change"}</button></> : <form onSubmit={event => void createPreview(event)}><label>Desired access<select required disabled={busy} value={value} onChange={event => setValue(event.target.value)}><option value="">Select a change</option>{target.action === "users.setActive" ? product === "intel" ? <><option value="active">Turn the account back on</option><option value="inactive">Turn the account off and end its sessions</option></>
-              : <><option value="active">Activate profile</option><option value="inactive">Deactivate profile and revoke sessions</option></> : <><option value="suspended">Suspend organization access</option><option value="restored">Remove manual suspension</option></>}</select></label><label>Reason<input required minLength={10} maxLength={500} disabled={busy} value={reason} onChange={event => setReason(event.target.value)} placeholder="Describe the administrative reason" /></label><button type="submit" className="button button-secondary" disabled={busy || !value || reason.trim().length < 10}>{busy ? "Preparing preview…" : "Preview change"}</button></form>}
+    {completed ? <p role="status">{completed}</p> : preview ? <><p>Review expires {timeLabel(preview.expiresAt)}. Reason: {preview.reason}</p>{intelOrganization && <p>A suspended organization's members keep their sign-ins but can open only Billing, and are told to contact CareMetric. Restoring it has Intel check its billing with the Hub again.</p>}<table><thead><tr><th>Setting</th><th>Current</th><th>Proposed</th></tr></thead><tbody>{preview.changes.map(change => <tr key={change.field}><td>{fieldLabels[change.field]}</td><td>{shown(change.field, change.before) ?? "Not set"}</td><td>{shown(change.field, change.after) ?? "Not set"}</td></tr>)}</tbody></table>{preview.changes.length === 0 && <p>The requested values already match the current record.</p>}<button type="button" className="button button-primary" disabled={busy} onClick={() => void apply()}>{busy ? "Checking recorded result…" : "Apply previewed change"}</button></> : <form onSubmit={event => void createPreview(event)}><label>Desired access<select required disabled={busy} value={value} onChange={event => setValue(event.target.value)}><option value="">Select a change</option>{target.action === "users.setActive" ? product === "intel" ? <><option value="active">Turn the account back on</option><option value="inactive">Turn the account off and end its sessions</option></>
+              : <><option value="active">Activate profile</option><option value="inactive">Deactivate profile and revoke sessions</option></> : intelOrganization ? <><option value="suspended">Suspend the organization (its members keep only Billing)</option><option value="restored">Restore the organization and check its billing again</option></>
+              : <><option value="suspended">Suspend organization access</option><option value="restored">Remove manual suspension</option></>}</select></label><label>Reason<input required minLength={10} maxLength={500} disabled={busy} value={reason} onChange={event => setReason(event.target.value)} placeholder="Describe the administrative reason" /></label><button type="submit" className="button button-secondary" disabled={busy || !value || reason.trim().length < 10}>{busy ? "Preparing preview…" : "Preview change"}</button></form>}
     {error && <p role="alert">{error}</p>}
   </section>;
 }

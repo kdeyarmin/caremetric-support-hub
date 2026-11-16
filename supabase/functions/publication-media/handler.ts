@@ -80,7 +80,7 @@ export function createPublicationMediaHandler({serviceKey,fetchImpl=fetch}:{serv
         return removed.ok?json({cleaned:true}):json({error:"Cleanup unavailable"},503);
       }
       if(!keys(capability,["path","operation","contentType","sha256","byteLength","maxBytes","range"])
-        || typeof capability.path!=="string" || !objectPath.test(capability.path) || !["upload","download"].includes(String(capability.operation))
+        || typeof capability.path!=="string" || !objectPath.test(capability.path) || !["upload","download","sign","check"].includes(String(capability.operation))
         || !["text/markdown","video/mp4","text/vtt","text/plain"].includes(String(capability.contentType))
         || typeof capability.sha256!=="string" || !/^[0-9a-f]{64}$/.test(capability.sha256)
         || !Number.isSafeInteger(capability.maxBytes) || Number(capability.maxBytes)<1 || Number(capability.maxBytes)>536870912
@@ -91,6 +91,29 @@ export function createPublicationMediaHandler({serviceKey,fetchImpl=fetch}:{serv
         || (part==="primary" && !["text/markdown","video/mp4"].includes(String(capability.contentType)))
         || (capability.contentType!=="video/mp4" && Number(capability.maxBytes)>(capability.contentType==="text/markdown"?2097152:10485760)))) return json({error:"Invalid asset capability"},403);
       const encoded=capability.path.split("/").map(encodeURIComponent).join("/");
+      if(capability.operation==="sign" || capability.operation==="check") {
+        // The Hub's direct transfer (docs/PUBLICATION_IMPORTS.md), which keeps large files off this function's time and CPU limits.
+        // "sign": a one-time upload address for this exact object that cannot overwrite it (no x-upsert), or {stored: true} when
+        // Storage already holds the object, so a retry after a lost answer goes straight to the check. "check": a short-lived read
+        // address the Hub uses to hash what Storage holds before the bytes are recorded. Only the token is returned: the Hub builds
+        // the address from its own Storage origin and the object it asked for.
+        if(capability.range!==null) return json({error:"Invalid capability"},403);
+        const sign=capability.operation==="sign";
+        const signed=await fetchImpl(`${storageOrigin}/storage/v1/object/${sign?"upload/sign":"sign"}/${bucket}/${encoded}`,{
+          method:"POST",headers:{...serviceHeaders,"Content-Type":"application/json"},body:sign?"{}":JSON.stringify({expiresIn:600}),
+          redirect:"manual",signal:AbortSignal.timeout(10000),
+        });
+        if(!signed.ok) {
+          if(sign && await duplicateUpload(signed)) return json({stored:true});
+          await signed.body?.cancel().catch(()=>{});
+          return json({error:"Storage unavailable"},503);
+        }
+        const answer=await boundedJson(signed);
+        const address=answer && typeof answer==="object" && !Array.isArray(answer) ? (answer as Record<string,unknown>)[sign?"url":"signedURL"] : undefined;
+        const prefix=`/object/${sign?"upload/sign":"sign"}/${bucket}/${encoded}?token=`;
+        if(typeof address!=="string" || !address.startsWith(prefix) || !/^[A-Za-z0-9._~-]{16,4096}$/.test(address.slice(prefix.length))) return json({error:"Invalid storage response"},503);
+        return json({token:address.slice(prefix.length)});
+      }
       if(capability.operation==="upload") {
         if(capability.range!==null || request.headers.has("Range") || request.headers.get("Content-Type")?.split(";")[0]!==capability.contentType || !request.body) return json({error:"Invalid upload"},415);
         let bytes=0; let verified=false; const hash=createHash("sha256");

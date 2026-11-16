@@ -111,9 +111,9 @@ describe("control center model", () => {
 
   it("says what the owner can change in each application, only from what its connection advertises", () => {
     const lifecycle: PortfolioOperationName[] = ["organizations.lifecycle.context", "organizations.lifecycle.preview", "organizations.lifecycle.apply", "organizations.lifecycle.resume"];
-    const [carebase, breathe, intel, advisors, offline] = applicationCards({
+    const [carebase, breathe, intel, advisors, offline, intelWithOrganizations] = applicationCards({
       apps: [app("carebase", ["organizations.list", "users.list", "commands.preview", "commands.apply"]), app("breathe", ["organizations.list", "users.list", ...lifecycle]),
-        app("intel", ["users.list", "commands.preview", "commands.apply"]), app("advisors", ["inquiries.list"]), app("intel", null)],
+        app("intel", ["users.list", "commands.preview", "commands.apply"]), app("advisors", ["inquiries.list"]), app("intel", null), app("intel", ["organizations.list", "users.list", "commands.preview", "commands.apply"])],
       products, cases: [], content: [], communications: null, readiness: null, aiUsage: null,
     });
     expect(carebase.controls).toEqual({ state: "available", label: "Organization suspension and profile access" });
@@ -121,6 +121,8 @@ describe("control center model", () => {
     expect(breathe.directory.label).toBe("Organizations, users and access controls");
     expect(intel.controls).toEqual({ state: "available", label: "Turn accounts on and off" });
     expect(intel.directory).toMatchObject({ state: "partial", label: "Users and access controls", accessControls: true });
+    expect(intelWithOrganizations.controls).toEqual({ state: "available", label: "Organization suspension and account access" });
+    expect(intelWithOrganizations.directory).toMatchObject({ state: "available", label: "Organizations, users and access controls" });
     expect(advisors.controls.state).toBe("available");
     expect(offline.controls.state).toBe("unavailable");
     const [viewOnly] = applicationCards({ apps: [app("breathe", ["organizations.list", "users.list"])], products, cases: [], content: [], communications: null, readiness: null, aiUsage: null });

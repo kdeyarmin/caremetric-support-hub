@@ -109,24 +109,6 @@ describe('growth.brief', () => {
     expect(result).toEqual({ briefed: 1, version: 1, facts: 1, triggers: 1, hook: true, countyFact: true, intel: true, cents: 23 });
   });
 
-  it('rounds Intel\'s shares to four places, so a full-precision share is never read as a card number and the agency is briefed', async () => {
-    const { feed, model, run } = setup();
-    // 312 / 7007 as Intel computes it (bene_count::float8 / market_total): its 17 digits pass the card checksum.
-    const share = 312 / 7007;
-    expect(JSON.stringify(share)).toBe('0.04452690166975881');
-    feed.agencyBrief.mockResolvedValue({ found: true, brief: { setting: 'home_health', county: { fips: '42003', name: 'Allegheny County', state: 'PA' }, year: '2024',
-      position: { patients: 312, county_share: share, county_rank: 9, county_providers: 48, state_share: 312 / 412_345 },
-      history: [{ year: '2023', patients: 300, county_share: 300 / 7010, county_rank: 10 }], competitors: [{ name: 'A', patients: 900, share: 900 / 7007, is_agency: false }],
-      hospitals: [{ name: 'H', city: 'Pittsburgh', share: 41 / 913, cases: 41 }], ratings: [], moves: [] } });
-    const { result } = await run();
-    expect(result).toMatchObject({ briefed: 1, intel: true });
-    const sent = JSON.parse(model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.1')[1].user);
-    expect(sent.intel.position).toMatchObject({ patients: 312, county_share: 0.0445, county_rank: 9, state_share: 0.0008 });
-    expect(sent.intel.history[0].county_share).toBe(0.0428);
-    expect(sent.intel.competitors[0].share).toBe(0.1284);
-    expect(JSON.stringify(sent.intel)).not.toMatch(/\d{9}/);
-  });
-
   it('briefs a nursing home found on the web as a nursing home: no market report to ask for, never an agency\'s figures', async () => {
     const { store, feed, model, run } = setup({ pick: { id: 'o2', organizationId: 'g2', product: 'caremetric-intel', fit: 80, stage: 'qualified',
       name: 'Maple Ridge Nursing and Rehabilitation Center', domain: 'mapleridge.example.org', agencies: [], evidence, people: [] } });
@@ -136,6 +118,20 @@ describe('growth.brief', () => {
     expect(sent.agency.setting).toBe('nursing home');
     expect(sent.countyFigures).toEqual([]);
     expect(store.briefSave.mock.calls[0][1].writer.setting).toBe('nursing_home');
+  });
+
+  it('writes the brief when Intel\'s shares carry every digit of a fraction, which the identifier screen read as a card number', async () => {
+    const h = setup();
+    // 12 / 912 is 0.013157894736842105 in JSON: its digits pass the card number check, so before 2026-11-16 the brief was skipped.
+    h.feed.agencyBrief.mockResolvedValueOnce({ found: true, brief: { setting: 'home_health', county: { fips: '42003', name: 'Allegheny County', state: 'PA' }, year: '2024',
+      position: { patients: 12, county_share: 12 / 912, county_rank: 30, county_providers: 48 }, history: [{ data_year: '2023', patients: 15, county_share: 15 / 912, county_rank: 28 }],
+      competitors: [{ name: 'Another agency', patients: 120, share: 120 / 912, is_agency: false }], figures: [], hospitals: [], ratings: [], moves: [] } });
+    const { result } = await h.run();
+    expect(result).toMatchObject({ briefed: 1, intel: true });
+    const sent = JSON.parse(h.model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.1')[1].user);
+    expect(sent.intel.position).toEqual({ patients: 12, county_share: 0.0132, county_rank: 30, county_providers: 48 });
+    expect(sent.intel.history[0].county_share).toBe(0.0164);
+    expect(sent.intel.competitors[0].share).toBe(0.1316);
   });
 
   it('does nothing when off, in Observe, or with nobody to brief', async () => {

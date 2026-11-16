@@ -30,7 +30,10 @@ await admin.query("insert into private.staff_permissions(user_id,permission,prod
 await admin.query('insert into private.sms_identities(user_id,phone_e164) values($1,$4),($2,$5),($3,$6)',[owner,scoped,learner,phones.owner,phones.scoped,phones.learner]);
 const provider={send:async()=>randomUUID(),verify:async(_id,_phone,code)=>code==='123456'};
 const auth=smsAuth({pool,provider}), api=gateway(pool), objects=new Map();
-let baseUrl,storageWrites=0,lastCapability,loseUploadResponse=false;
+let baseUrl,storageWrites=0,lastCapability,loseUploadResponse=false,directMode=false,loseDirectResponse=false;
+// One-time Storage addresses the publication-media function signs for the Hub's direct transfer: token -> object path.
+const signedUploads=new Map(),signedReads=new Map();
+const signedToken=()=>`${token()}.${token()}.${token()}`;
 const edge=createPublicationMediaHandler({serviceKey:'synthetic-storage-only',fetchImpl:async(url,options)=>{
   if(url.startsWith('https://support-hub-web-production.up.railway.app/api/internal/publications/')) {
     return fetch(baseUrl+new URL(url).pathname,options);
@@ -44,6 +47,18 @@ const edge=createPublicationMediaHandler({serviceKey:'synthetic-storage-only',fe
     assert.equal(url,base+'hub-publications');
     for(const path of JSON.parse(options.body).prefixes) objects.delete(path);
     return Response.json([]);
+  }
+  if(options.method==='POST' && url.startsWith(base+'upload/sign/hub-publications/')) {
+    const path=url.slice((base+'upload/sign/hub-publications/').length); assert.equal(headers.get('x-upsert'),null,'a signed upload never overwrites');
+    if(objects.has(path)) return new Response('{}',{status:409});
+    const value=signedToken(); signedUploads.set(value,path);
+    return Response.json({url:`/object/upload/sign/hub-publications/${path}?token=${value}`});
+  }
+  if(options.method==='POST' && url.startsWith(base+'sign/hub-publications/')) {
+    const path=url.slice((base+'sign/hub-publications/').length); assert.deepEqual(JSON.parse(options.body),{expiresIn:600});
+    if(!objects.has(path)) return Response.json({statusCode:'404',error:'not_found',message:'Object not found'},{status:400});
+    const value=signedToken(); signedReads.set(value,path);
+    return Response.json({signedURL:`/object/sign/hub-publications/${path}?token=${value}`});
   }
   if(options.method==='POST') {
     const path=url.slice((base+'hub-publications/').length); assert.equal(headers.get('x-upsert'),'false');
@@ -61,7 +76,26 @@ const edge=createPublicationMediaHandler({serviceKey:'synthetic-storage-only',fe
   }
   responseHeaders['Content-Length']=String(bytes.length); return new Response(bytes,{status,headers:responseHeaders});
 }});
+// The Hub's own requests to Storage's signed addresses: no credentials, only the token the function signed for that object.
+async function signedStorage(url,options) {
+  const address=new URL(url), headers=new Headers(options.headers);
+  assert.equal(address.origin,'https://xgauehtwksmnoqhgqegm.supabase.co'); assert.equal(options.redirect,'error');
+  assert.equal(headers.get('Authorization'),null); assert.equal(headers.get('apikey'),null);
+  const upload=address.pathname.startsWith('/storage/v1/object/upload/sign/hub-publications/');
+  const path=address.pathname.slice((upload?'/storage/v1/object/upload/sign/hub-publications/':'/storage/v1/object/sign/hub-publications/').length);
+  assert.equal((upload?signedUploads:signedReads).get(address.searchParams.get('token')),path,'a signed address names only its own object');
+  if(!upload) {
+    const object=objects.get(path); assert.ok(object);
+    return new Response(object.bytes,{headers:{'Content-Type':object.type,'Content-Length':String(object.bytes.length)}});
+  }
+  assert.equal(options.method,'PUT'); assert.equal(headers.get('x-upsert'),'false');
+  if(objects.has(path)) return new Response('{}',{status:409});
+  objects.set(path,{bytes:new Uint8Array(await new Response(options.body).arrayBuffer()),type:headers.get('Content-Type')}); storageWrites++;
+  if(loseDirectResponse) { loseDirectResponse=false; throw new Error('Synthetic lost Storage response'); }
+  return Response.json({Key:`hub-publications/${path}`});
+}
 const nativeFetch=async(url,options)=>{
+  if(url.startsWith('https://xgauehtwksmnoqhgqegm.supabase.co/storage/v1/object/')) return signedStorage(url,options);
   assert.equal(url,'https://xgauehtwksmnoqhgqegm.supabase.co/functions/v1/publication-media');
   lastCapability=options.headers.Authorization;
   const response=await edge(new Request(url,{...options,duplex:'half'}));
@@ -69,7 +103,8 @@ const nativeFetch=async(url,options)=>{
   return response;
 };
 const caps=delegations({pool,storageUrl:'https://xgauehtwksmnoqhgqegm.supabase.co',fetchImpl:nativeFetch});
-const service=publications({pool,delegations:caps,storageUrl:'https://xgauehtwksmnoqhgqegm.supabase.co',fetchImpl:nativeFetch});
+// Streamed through the function first, then (directMode) straight to Storage as knowledge.publications.direct-storage.v1 does.
+const service=publications({pool,delegations:caps,storageUrl:'https://xgauehtwksmnoqhgqegm.supabase.co',fetchImpl:nativeFetch,directStorage:()=>directMode});
 const server=appServer({auth,gateway:api,delegations:caps,publications:service,origins:['https://hub.test']});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve)); baseUrl=`http://127.0.0.1:${server.address().port}`;
 let jar={};
@@ -174,6 +209,28 @@ try {
   assert.equal((await call(`publications/imports/${first.id}/commit`,commit)).status,403,'current permission is required even for a receipt replay');
   await admin.query('update private.staff_permissions set revoked_at=null where user_id=$1',[owner]);
   await expireUncommitted();
+  // Straight to Storage (knowledge.publications.direct-storage.v1): the Hub keeps the import open, sends the checked file to a
+  // signed upload address, reads it back to hash it, and only then records it. Every later upload in this run goes this way.
+  directMode=true;
+  const directManifest=await fixtureManifest(); directManifest.source.content_key='integration-direct-guide';
+  const directStage=await stage(directManifest), directWrites=storageWrites;
+  await admin.query("update private.publication_imports set expires_at=now()+interval '5 minutes' where id=$1",[directStage.id]);
+  loseDirectResponse=true;
+  assert.equal((await upload(directStage,articleBytes)).status,503,'a lost Storage answer does not attest the bytes');
+  assert.equal((await admin.query("select verified_at from private.publication_import_assets where import_id=$1 and part='primary'",[directStage.id])).rows[0].verified_at,null);
+  assert.equal(storageWrites,directWrites+1); assert.ok(objects.has(`publications/${directStage.id}/primary`));
+  assert.ok((await admin.query("select expires_at>now()+interval '29 minutes' as open from private.publication_imports where id=$1",[directStage.id])).rows[0].open,
+    'the transfer kept the import open for at least 30 more minutes');
+  const directUpload=await upload(directStage,articleBytes); assert.equal(directUpload.status,200,JSON.stringify(directUpload.body));
+  assert.deepEqual(directUpload.body.uploadedParts,['primary']);
+  assert.equal(storageWrites,directWrites+1,'the retry finds the object stored and reads it back instead of writing it again');
+  assert.equal((await call(`publications/imports/${directStage.id}/preview`,{})).status,200,'a file sent straight to Storage previews like one streamed');
+  const lateStage=await stage({...structuredClone(directManifest),source:{...directManifest.source,content_key:'integration-direct-late'}});
+  await admin.query("update private.publication_imports set created_at=now()-interval '3 hours 45 minutes',expires_at=now()+interval '10 minutes' where id=$1",[lateStage.id]);
+  assert.equal((await upload(lateStage,articleBytes)).status,409,'an import cannot be kept open past four hours');
+  assert.equal(storageWrites,directWrites+1,'nothing is stored once the window has closed');
+  await assert.rejects(admin.query("update private.publication_imports set expires_at=created_at+interval '4 hours 1 minute' where id=$1",[lateStage.id]),/publication_imports_window_check/);
+  await expireUncommitted();
   const video=await fixtureManifest('video'); video.source.content_key='integration-video';
   const videoStage=await prepared(video,videoBytes); const videoResult=await call(`publications/imports/${videoStage.id}/commit`,request(videoStage)); assert.equal(videoResult.status,200,JSON.stringify(videoResult.body));
   const videoId=videoResult.body.revisionId;
@@ -265,11 +322,16 @@ try {
 } finally {
   await new Promise(resolve=>server.close(resolve));
   // DocStudio provenance and published assets are immutable. These rows are the run's own,
-  // so the teardown lifts those guards for its own transaction only.
+  // so the teardown lifts those guards for its own transaction only. The content the run
+  // published and its customer tenant go too, so the next run can use the same keys and slug.
   await removeTestIdentities(admin,[owner,scoped,learner],{
     also:[
       'delete from private.publication_revision_provenance where import_id in (select id from private.publication_imports where actor_id = any($1::uuid[]))',
       'delete from private.publication_imports where actor_id = any($1::uuid[])',
+      'delete from hub.content_publications where item_id in (select id from hub.content_items where created_by = any($1::uuid[]))',
+      'delete from hub.media_assets where content_item_id in (select id from hub.content_items where created_by = any($1::uuid[]))',
+      'delete from hub.content_items where created_by = any($1::uuid[])',
+      'delete from hub.tenants where id in (select tenant_id from hub.tenant_product_memberships where user_id = any($1::uuid[]))',
     ],
     unlock:[
       ['private.publication_revision_provenance','publication_provenance_immutable'],

@@ -62,12 +62,22 @@ describe('an account change in CareMetric Intel', () => {
     expect(JSON.parse(options.body)).toEqual({ ...preview, targetId: account });
   });
 
-  it("refuses CareBase's organization action and a UUID account id for Intel", async () => {
+  it("refuses a UUID id for Intel before anything is issued", async () => {
     const fetchImpl = vi.fn();
     const service = delegations({ pool: pool([signedIn]), storageUrl: 'https://storage.test', fetchImpl, appCommands: true });
-    await expect(service.command('token', { ...intelPreview, action: 'organizations.setSuspension', parameters: { suspended: true } })).rejects.toMatchObject({ status: 400 });
     await expect(service.command('token', { ...intelPreview, targetId: target })).rejects.toMatchObject({ status: 400 });
+    await expect(service.command('token', { ...intelPreview, action: 'organizations.setSuspension', parameters: { suspended: true }, targetId: target })).rejects.toMatchObject({ status: 400 });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("sends an Intel organization's suspension to Intel's own command endpoint, as reviewed", async () => {
+    const suspension = { ...intelPreview, action: 'organizations.setSuspension', parameters: { suspended: true } };
+    const fetchImpl = vi.fn(async () => Response.json({ ...intelEnvelope, data: { ...intelEnvelope.data, action: 'organizations.setSuspension' } }));
+    const result = await delegations({ pool: pool([signedIn, signedIn]), storageUrl: 'https://storage.test', fetchImpl, appCommands: true }).command('token', suspension);
+    expect(result.data).toMatchObject({ action: 'organizations.setSuspension', targetId: account, changes: [{ field: 'status', before: 'active', after: 'disabled' }] });
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(url).toBe('https://www.caremetricintel.com/functions/centralAdminCommand');
+    expect(JSON.parse(options.body)).toEqual({ ...preview, action: 'organizations.setSuspension', parameters: { suspended: true }, targetId: account });
   });
 
   it("shows the application's reason for a refusal in the Hub's own words, never its text", async () => {

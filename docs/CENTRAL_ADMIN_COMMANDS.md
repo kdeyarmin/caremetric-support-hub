@@ -37,11 +37,13 @@ mapped administrator again; the Hub never holds an application credential.
 | --- | --- | --- | --- | --- |
 | Breathe | Suspend or restore an organization (`tenant.lifecycle.v1`: context, preview, apply, resume) | `https://cmbreathe.com/resupply-api/central-admin/tenant-lifecycle` | `breathe.command` | `CAREMETRIC_ADMIN_TENANT_COMMANDS_ENABLED=true` on Breathe |
 | Breathe | Turn a staff sign-in off, as Team → Revoke does, or back on when the Hub turned it off (`staff.access.v1`: context, preview, apply, resume) | `https://cmbreathe.com/resupply-api/central-admin/staff-access` | `breathe.command` | `CAREMETRIC_ADMIN_STAFF_COMMANDS_ENABLED=true` on Breathe |
-| CareMetric Intel | Turn an account off or back on (`users.setActive`, this contract) | `https://www.caremetricintel.com/functions/centralAdminCommand` | `intel.command` | `CAREMETRIC_ADMIN_COMMANDS_ENABLED=true` on Intel |
+| CareMetric Intel | Turn an account off or back on (`users.setActive`), and suspend or restore an organization (`organizations.setSuspension`), both this contract | `https://www.caremetricintel.com/functions/centralAdminCommand` | `intel.command` | `CAREMETRIC_ADMIN_COMMANDS_ENABLED=true` on Intel |
 
 - **Where:** Applications → Breathe → Organizations ("Suspend or restore"), Applications → Breathe → Users ("Turn off or
-  on") and Applications → CareMetric Intel → Users ("Change access"). The control center's application cards and the portfolio coverage matrix say, per application, whether
-  changes are available or the application is view only, from what its live connection advertises.
+  on"), and Applications → CareMetric Intel → Users and → Organizations ("Change access"). The control center's application
+  cards and the portfolio coverage matrix say, per application, whether changes are available or the application is view
+  only, from what its live connection advertises. Intel lists its organizations only from the release that can suspend them,
+  so its Organizations tab appears with its control.
 - **Authority:** the browser calls `POST /api/admin/tenant-lifecycle` (both Breathe changes, told apart by `domain`) or
   `POST /api/admin/command` (`product: "intel"`). The
   server issues a 30-second, one-use capability of the application's command audience, bound to the exact operation. The
@@ -49,9 +51,15 @@ mapped administrator again; the Hub never holds an application credential.
   exactly `user_id`, `role`, `method`, `session_id`, `session_started_at`, `assurance_expires_at` and `operation`. A read
   capability can never authorize a change, and a capability for one application never authorizes another.
 - **Refusals:** an application refuses a change it does not allow with 422 and a closed reason code (own account, protected
-  administrator, last administrator, invited account, seat limit, no change, shared sign-in). The Hub shows its own fixed wording
-  for the code and never forwards the application's text. Breathe shows its seed organization and archived organizations as not
+  administrator, last administrator, invited account, seat limit, no change, shared sign-in, and for Intel organizations its
+  legacy organization and any organization the mapped Intel administrator works in). The Hub shows its own fixed wording for
+  the code and never forwards the application's text. Breathe shows its seed organization and archived organizations as not
   changeable before any review.
+- **Intel organizations:** suspending uses Intel's own `disabled` organization status. Its members keep their sign-ins but can
+  open only Billing, and are told CareMetric suspended it and to contact support rather than to pay; Intel's billing sync leaves
+  it alone, so a payment can't lift it. Restoring puts back the status the Hub's suspension took it from (else canceled) and has
+  Intel ask the Hub for its billing again on the next request. A billing change between review and apply makes the apply
+  answer "changed". See Intel's `docs/INTEL_HUB_CONNECTION.md`.
 - **Breathe staff sign-ins:** Breathe decides, before any review, whether a sign-in can be turned off or back on and says why
   not: your own sign-in, a platform operator, an organization's last active admin, an invitation not yet accepted, a sign-in
   that also backs a shop, patient-portal or provider-portal login, or (to turn it back on) one the Hub did not turn off or that

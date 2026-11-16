@@ -66,6 +66,9 @@ describe("super-admin coverage matrix", () => {
     expect(staffOnly.cells.controls).toEqual({ state: "available", label: "Staff sign-ins on and off" });
     const [partialBreathe] = coverageMatrix([app("breathe", ["organizations.list", "users.list", "organizations.lifecycle.context"])]);
     expect(partialBreathe.cells.controls.state).toBe("missing");
+    const [intelAccounts, intelOrganizations] = coverageMatrix([app("intel", ["users.list", "commands.preview", "commands.apply"]), app("intel", ["organizations.list", "users.list", "commands.preview", "commands.apply"])]);
+    expect(intelAccounts.cells.controls).toEqual({ state: "available", label: "Turn accounts on and off" });
+    expect(intelOrganizations.cells.controls).toEqual({ state: "available", label: "Organization suspension and account access" });
     const [offline] = coverageMatrix([app("intel", null)]);
     expect(offline.cells.controls.state).toBe("unavailable");
   });

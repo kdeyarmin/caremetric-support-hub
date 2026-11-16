@@ -29,7 +29,8 @@ describe('publication Edge transport',()=>{
     expect(await response.json()).toEqual({uploaded:true,sha256:base.sha256,byteLength:bytes.length}); expect(calls).toHaveLength(2);
   });
   it.each([
-    {...base,path:'publications/../../other/private'}, {...base,url:'https://caller.invalid'}, {...base,operation:'sign'},
+    {...base,path:'publications/../../other/private'}, {...base,url:'https://caller.invalid'}, {...base,operation:'delete'},
+    {...base,operation:'sign',range:'bytes=0-1'}, {...base,operation:'check',range:'bytes=0-1'},
     {...base,maxBytes:536870913}, {...base,range:'bytes=0-1'}, {...base,contentType:'text/html'},
   ])('fails closed for an invalid capability %#',async capability=>{
     const fetcher=vi.fn(async()=>Response.json(capability));
@@ -98,8 +99,55 @@ describe('publication Edge transport',()=>{
     }});
     expect((await handler(request())).status).toBe(503); expect(calls).toBe(2);
   });
+  it.each(['sign','check'])('%s returns only a one-time token for the exact authorized object, never overwriting it',async operation=>{
+    const calls=[]; const token='eyJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJ4In0.c2lnbmVk';
+    const route=operation==='sign'?'upload/sign':'sign';
+    const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async(url,options)=>{
+      calls.push(url);
+      if(calls.length===1) return Response.json({...base,operation});
+      expect(url).toBe(`https://xgauehtwksmnoqhgqegm.supabase.co/storage/v1/object/${route}/hub-publications/${base.path}`);
+      expect(options.method).toBe('POST'); expect(options.headers.Authorization).toBe('Bearer synthetic-only');
+      expect(options.headers['x-upsert']).toBeUndefined(); expect(options.redirect).toBe('manual');
+      expect(JSON.parse(options.body)).toEqual(operation==='sign'?{}:{expiresIn:600});
+      const address=`/object/${route}/hub-publications/${base.path}?token=${token}`;
+      return Response.json(operation==='sign'?{url:address}:{signedURL:address});
+    }});
+    const response=await handler(request({'Content-Type':'application/json'},'{}')); expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({token}); expect(calls).toHaveLength(2);
+  });
+  it.each([
+    ['another object',{url:`/object/upload/sign/hub-publications/publications/${randomUUID()}/primary?token=eyJhbGciOiJIUzI1NiJ9.e30.c2ln`}],
+    ['another bucket',{url:'/object/upload/sign/hub-learning/x?token=eyJhbGciOiJIUzI1NiJ9.e30.c2ln'}],
+    ['an absolute address',{url:'https://attacker.invalid/object/upload/sign/hub-publications/x?token=eyJhbGciOiJIUzI1NiJ9.e30.c2ln'}],
+    ['an unsafe token',{token:'<script>alert(1)</script>'}],
+    ['no address',{}],
+  ])('refuses a signing answer for %s',async(_name,answer)=>{
+    let calls=0;
+    const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async()=>{
+      if(++calls===1) return Response.json({...base,operation:'sign'});
+      return Response.json(answer.token?{url:`/object/upload/sign/hub-publications/${base.path}?token=${answer.token}`}:answer);
+    }});
+    expect((await handler(request({'Content-Type':'application/json'},'{}'))).status).toBe(503); expect(calls).toBe(2);
+  });
+  it.each([409,'legacy'])('answers stored when Storage already holds the object, so a retry goes straight to the check (%s)',async duplicate=>{
+    let calls=0;
+    const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async()=>{
+      if(++calls===1) return Response.json({...base,operation:'sign'});
+      return duplicate===409?new Response('{}',{status:409}):Response.json({statusCode:'409',error:'Duplicate',message:'The resource already exists'},{status:400});
+    }});
+    const response=await handler(request({'Content-Type':'application/json'},'{}'));
+    expect(response.status).toBe(200); expect(await response.json()).toEqual({stored:true}); expect(calls).toBe(2);
+  });
+  it.each([[403,'sign'],[500,'sign'],[404,'check'],[409,'check']])('never reads %s from %s as a stored object',async(status,operation)=>{
+    let calls=0;
+    const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async()=>{
+      if(++calls===1) return Response.json({...base,operation});
+      return Response.json({code:'AccessDenied'},{status});
+    }});
+    expect((await handler(request({'Content-Type':'application/json'},'{}'))).status).toBe(503); expect(calls).toBe(2);
+  });
   it('public tickets use only their fixed audience and can never become uploads',async()=>{
-    for(const operation of ['upload','download']) {
+    for(const operation of ['upload','download','sign','check']) {
       let calls=0;
       const handler=createPublicationMediaHandler({serviceKey:'synthetic-only',fetchImpl:async(url)=>{
         if(++calls===1) {
@@ -110,7 +158,7 @@ describe('publication Edge transport',()=>{
         return new Response(bytes,{headers:{'Content-Type':'text/markdown','Content-Length':String(bytes.length)}});
       }});
       const response=await handler(request({'X-CareMetric-Publication-Mode':'public'}));
-      expect(response.status).toBe(operation==='upload'?403:200); expect(calls).toBe(operation==='upload'?1:2);
+      expect(response.status).toBe(operation==='download'?200:403); expect(calls).toBe(operation==='download'?2:1);
     }
   });
   it('requires the upstream range and length to exactly match the authorized range',async()=>{

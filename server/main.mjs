@@ -71,7 +71,8 @@ const setting=settings.reader;
 const observer=distributionObserver({pool,token:process.env.CAREBASE_DISTRIBUTION_OBSERVER_TOKEN});
 // Breathe and Intel access changes, once the database declares their command audiences (20261117110100_app_command_audiences_contract.sql).
 const capabilities=delegations({pool,storageUrl,provider,observer,legacyDistributionOptIn:setting('learning.legacy_distribution_opt_in'),appCommands:features.has('platform.admin.app-commands.v1')});
-const publicationService=publications({pool,delegations:capabilities,storageUrl});
+// Large publication files go straight to Storage once the database can keep an import open (20261117130100_publication_import_window_contract.sql).
+const publicationService=publications({pool,delegations:capabilities,storageUrl,directStorage:features.has('knowledge.publications.direct-storage.v1')});
 const ai=aiAssistance({apiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record});
 const aiCases=aiCaseAssistance({ai,rpc:(name,args,sessionToken)=>api.rpc(name,args,sessionToken),rows:(name,sessionToken)=>api.rows(name,sessionToken)});
 const automation=aiAutomation({ai,store:sqlAutomationStore(pool),enabled:setting('support.ai_automation'),draftTier:setting('support.ai_draft_tier'),

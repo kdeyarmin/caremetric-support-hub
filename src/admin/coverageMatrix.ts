@@ -77,7 +77,8 @@ export function accessControls(app: RollupAppSnapshot): { state: "available" | "
   const commands = has(app, "commands.preview") && has(app, "commands.apply");
   if (app.product === "carebase") return commands ? { state: "available", label: "Organization suspension and profile access", nextStep: "" }
     : { state: "view-only", label: "View only", nextStep: "Switch on CareBase's access commands (CAREMETRIC_ADMIN_COMMANDS_ENABLED on CareBase)." };
-  if (app.product === "intel") return commands ? { state: "available", label: "Turn accounts on and off", nextStep: "" }
+  // Intel lists its organizations from the release that can suspend them, so the list is what tells the two releases apart.
+  if (app.product === "intel") return commands ? { state: "available", label: has(app, "organizations.list") ? "Organization suspension and account access" : "Turn accounts on and off", nextStep: "" }
     : { state: "view-only", label: "View only", nextStep: "Deploy Intel's account command and switch it on (CAREMETRIC_ADMIN_COMMANDS_ENABLED on Intel)." };
   if (app.product === "breathe") {
     const lifecycle = (["organizations.lifecycle.context", "organizations.lifecycle.preview", "organizations.lifecycle.apply", "organizations.lifecycle.resume"] as const).every(name => has(app, name));

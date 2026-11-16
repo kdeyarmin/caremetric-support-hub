@@ -73,6 +73,12 @@ describe('the Google search plan', () => {
     expect(operations[0].campaignBudgetOperation.create.amountMicros).toBe('10000000');
     await expect(client.createSearchCampaign({ ...campaign, live: true })).rejects.toMatchObject({ code: 'google_invalid_request' });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+    // A flight the owner approved: paused, with its last day, so it ends on its own once started; a malformed day is refused first.
+    await client.createSearchCampaign({ ...campaign, endDate: '2026-11-25' });
+    expect(JSON.parse(fetchImpl.mock.calls.at(-1)[1].body).mutateOperations[1].campaignOperation.create).toMatchObject({ status: 'PAUSED', endDateTime: '2026-11-25 23:59:59' });
+    const before = fetchImpl.mock.calls.length;
+    await expect(client.createSearchCampaign({ ...campaign, endDate: 'next week' })).rejects.toMatchObject({ code: 'google_invalid_request' });
+    expect(fetchImpl).toHaveBeenCalledTimes(before);
   });
 
   it('signs in as the Hub\'s service account when no refresh token is set, and sends no retired developer token', async () => {
