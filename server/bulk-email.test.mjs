@@ -146,3 +146,41 @@ describe('the unsubscribe page', () => {
     expect(await pageFor({ valid: false }).page(token, true)).toContain('Link not recognized');
   });
 });
+
+describe('the mailing address every bulk email carries', () => {
+  const harness = postalAddress => {
+    const calls = [];
+    const batches = [[{ id: '11111111-1111-4111-8111-111111111111', token, to: 'a@agency.test', subject: 'S', body: 'B', applications: 'CareBase' }]];
+    const query = async sql => {
+      calls.push(sql);
+      if (/sms_sessions/.test(sql)) return { rows: [{ id: 's', user_id: 'u', auth_method: 'sms' }] };
+      if (/claim_email_batch/.test(sql)) return { rows: [{ result: batches.shift() ?? [] }] };
+      return { rows: [{ result: { ok: true } }] };
+    };
+    const mail = { configured: true, send: vi.fn(async () => ({ delivery: 'sent', id: 'sg-1' })) };
+    const service = bulkEmail({ pool: { connect: async () => ({ query, release() {} }) }, publicOrigin: origin, mail, postalAddress });
+    return { calls, mail, service, ran: pattern => calls.some(sql => pattern.test(sql)) };
+  };
+  const campaign = { id: '22222222-2222-4222-8222-222222222222', version: 1, recipients: 3 };
+
+  it('is required before a campaign is queued, naming the setting to fill in', async () => {
+    const blank = harness(() => '  ');
+    await expect(blank.service.send('session', campaign)).rejects.toMatchObject({ status: 503, message: expect.stringContaining('Settings → Email → Mailing address in email footers') });
+    expect(blank.ran(/queue_email_campaign/)).toBe(false);
+    const set = harness(() => '1 Main St, Altoona, PA 16601');
+    await set.service.send('session', campaign);
+    expect(set.ran(/queue_email_campaign/)).toBe(true);
+  });
+
+  it('holds delivery while it is blank, and still runs the housekeeping', async () => {
+    const blank = harness('');
+    await blank.service.tick();
+    expect(blank.ran(/email_housekeeping/)).toBe(true);
+    expect(blank.ran(/claim_email_batch/)).toBe(false);
+    expect(blank.mail.send).not.toHaveBeenCalled();
+    const set = harness('1 Main St, Altoona, PA 16601');
+    await set.service.tick();
+    expect(set.mail.send).toHaveBeenCalledOnce();
+    expect(set.mail.send.mock.calls[0][0].text).toContain('1 Main St, Altoona, PA 16601');
+  });
+});

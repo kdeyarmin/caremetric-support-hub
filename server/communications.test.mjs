@@ -235,6 +235,27 @@ describe('inbound webhooks', () => {
     expect(calls).toHaveLength(1);
     expect(communications({ pool, delegations: {}, sendgridInboundPublicKey: '!!!' }).emailWebhook).toBeTypeOf('function');
   });
+  it('receives an email with large attachments, up to what SendGrid posts, and still stores none of them', async () => {
+    // SendGrid Inbound Parse posts messages up to 30 MB with their attachments; a 10 MB cap answered 413 and the message never arrived.
+    const { pool, calls } = fakePool();
+    const service = communications({ pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
+    const scan = new File([Buffer.alloc(12 * 1024 * 1024, 1)], 'scan.pdf', { type: 'application/pdf' });
+    const { payload, headers } = await signedEmail({ from: 'pat@agency.test', to: 'support@caremetric.ai', subject: 'Invoice question', text: 'See the scan.', attachments: '1', attachment1: scan });
+    expect(payload.length).toBeGreaterThan(10 * 1024 * 1024);
+    expect(await service.emailWebhook(request(payload, headers))).toEqual({ received: true, reference: 1001 });
+    expect(calls[0].values[6]).toBe('See the scan.\n\n[1 attachment(s) were not stored. Ask the sender to describe them without patient information.]');
+  });
+  it('refuses a post without a current SendGrid signature before reading its body', async () => {
+    const service = communications({ pool: fakePool().pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
+    let read = false;
+    const body = () => Object.assign(Readable.from((function* () { read = true; yield Buffer.from('x'); })()), {});
+    const type = { 'content-type': 'multipart/form-data; boundary=x' };
+    const stale = String(Math.floor(Date.now() / 1000) - 3600);
+    for (const headers of [type, { ...type, 'x-twilio-email-event-webhook-signature': 'sig' }, { ...type, 'x-twilio-email-event-webhook-signature': 'sig', 'x-twilio-email-event-webhook-timestamp': stale }]) {
+      await expect(service.emailWebhook(Object.assign(body(), { headers }))).rejects.toMatchObject({ status: 403 });
+    }
+    expect(read).toBe(false);
+  });
   it('threads an HTML-only customer reply that quotes the Hub reply and stores only readable text', async () => {
     const { pool, calls } = fakePool();
     const service = communications({ pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });

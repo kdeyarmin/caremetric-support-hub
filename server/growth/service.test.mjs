@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {createHmac,createHash} from 'node:crypto';
+import {createHmac,createHash,generateKeyPairSync,sign} from 'node:crypto';
 import {growthService} from './service.mjs';
 import {customerActivityClient} from './event-client.mjs';
 const key='synthetic-key-for-tests-only-32-characters';
@@ -39,4 +39,27 @@ it('native activity uses a hashed application key, rejects purchase assertions a
  appEvent.mockRejectedValue(Object.assign(new Error('missing'),{code:'P0002'}));
  await expect(service.appActivity('Bearer '+appKey,input)).rejects.toMatchObject({status:503});
  expect(service.readiness()).toMatchObject({appEvents:true,events:{'caremetric-intel':false}});
+});
+
+it('records a SendGrid block as a bounce without opting the contact out, once the database knows soft bounces', async () => {
+ const {privateKey,publicKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});
+ const pem=publicKey.export({type:'spki',format:'pem'});
+ const message='33333333-3333-4333-8333-333333333333';
+ const stamp=String(now/1000);
+ const post=async(service,rows)=>{const raw=Buffer.from(JSON.stringify(rows));
+  const signature=sign('sha256',Buffer.concat([Buffer.from(stamp),raw]),privateKey).toString('base64');
+  return service.delivery(raw,{'x-twilio-email-event-webhook-timestamp':stamp,'x-twilio-email-event-webhook-signature':signature},now);};
+ const rows=[{event:'bounce',type:'blocked',sg_event_id:'blocked-1',growth_message_id:message,timestamp:now/1000},
+  {event:'bounce',type:'bounce',sg_event_id:'hard-1',growth_message_id:message,timestamp:now/1000},
+  {event:'bounce',sg_event_id:'untyped-1',growth_message_id:message,timestamp:now/1000},
+  {event:'dropped',sg_event_id:'dropped-1',growth_message_id:message,timestamp:now/1000}];
+ const at=new Date(now).toISOString();
+ const soft=vi.fn(async()=>true);
+ await expect(post(growthService({store:{delivery:soft},features:new Set(['platform.agents.customer-growth.v1','platform.agents.growth-soft-bounce.v1']),webhookPublicKey:pem}),rows)).resolves.toEqual({accepted:4});
+ // A block is the receiving server refusing for now (reputation, a spam filter), not a bad address: it stays a bounce, without the opt-out.
+ expect(soft.mock.calls).toEqual([['blocked-1',message,'bounced',at,false],['hard-1',message,'bounced',at],['untyped-1',message,'bounced',at],['dropped-1',message,'bounced',at]]);
+ // Before the database can record a bounce without the opt-out, a block keeps its old treatment.
+ const legacy=vi.fn(async()=>true);
+ await post(growthService({store:{delivery:legacy},features:new Set(['platform.agents.customer-growth.v1']),webhookPublicKey:pem}),rows);
+ expect(legacy.mock.calls[0]).toEqual(['blocked-1',message,'bounced',at]);
 });

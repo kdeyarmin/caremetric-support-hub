@@ -145,7 +145,10 @@ export function growthService({store,research,contacts=null,roster=null,people=n
       if(!Array.isArray(rows)||rows.length>500)throw new HttpError(400,'Invalid events.');
       let accepted=0; const kinds={delivered:'delivered',bounce:'bounced',dropped:'bounced',spamreport:'complaint',unsubscribe:'unsubscribe',group_unsubscribe:'unsubscribe'};
       for(const row of rows) {if(!kinds[row.event]||!z.uuid().safeParse(row.growth_message_id).success||typeof row.sg_event_id!=='string'||row.sg_event_id.length>200||!Number.isFinite(row.timestamp))continue;
-        await store.delivery(row.sg_event_id,row.growth_message_id,kinds[row.event],new Date(row.timestamp*1000).toISOString()); accepted++;
+        // A block (bounce of type "blocked") is the receiving server refusing for now, for the sender's reputation or a spam filter, not a
+        // bad address: like a soft SES bounce it is a bounce without the opt-out, once the database can record one (soft-bounce feature).
+        const soft=row.event==='bounce'&&row.type==='blocked'&&features?.has(growthSoftBounceFeature);
+        await store.delivery(...[row.sg_event_id,row.growth_message_id,kinds[row.event],new Date(row.timestamp*1000).toISOString(),...(soft?[false]:[])]); accepted++;
       }
       return {accepted};
     },

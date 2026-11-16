@@ -42,12 +42,13 @@ export function ChatPanel({ productSlug, productName, client = chatClient, avail
     return () => { controller.abort(); window.clearInterval(timer); };
   }, [client, available, retry]);
 
-  async function run(work: () => Promise<void>) {
+  /** Runs one action; text the action returns is shown as a load error (the chat exists but cannot be shown), which offers Retry. */
+  async function run(work: () => Promise<string | void>) {
     if (sending.current) return;
     sending.current = true;
     version.current += 1;
     setBusy(true); setError("");
-    try { await work(); setLoadError(""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Your message could not be sent. Please try again or call (877) 521-2890."); }
+    try { setLoadError((await work()) ?? ""); } catch (cause) { setError(cause instanceof Error ? cause.message : "Your message could not be sent. Please try again or call (877) 521-2890."); }
     finally { sending.current = false; setBusy(false); }
   }
   function start(event: FormEvent) {
@@ -55,8 +56,10 @@ export function ChatPanel({ productSlug, productName, client = chatClient, avail
     if (!form.noPhi) { setError("Confirm that your message contains no patient information."); return; }
     void run(async () => {
       await client.start({ name: form.name, email: form.email, message: form.message, noPhi: true, ...(productSlug ? { product: productSlug } : {}) });
-      setThread(await client.thread());
+      // Every start is a new conversation: once this one exists, the form must not come back to send it again.
       setForm(value => ({ ...value, message: "" }));
+      try { setThread(await client.thread()); }
+      catch { return "Your chat was started, but it could not be shown just now. It is saved. Please try again."; }
     });
   }
   function send(event: FormEvent) {

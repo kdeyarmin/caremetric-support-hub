@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+import { Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import { contactPaths, growthContactFinder, pinnedFetch, privateAddress, roleAddresses, roleLocalParts, robotsAllows } from './contacts.mjs';
 
@@ -152,6 +154,25 @@ describe('the contact finder', () => {
     expect(rebinding.mock.calls.length).toBeGreaterThanOrEqual(2);
     await expect(pinnedFetch(async () => [{ address: '10.0.0.5', family: 4 }])('https://example.org/')).rejects.toMatchObject({ code: 'EPRIVATEADDRESS' });
     await expect(pinnedFetch(async () => [])('https://example.org/')).rejects.toMatchObject({ code: 'EPRIVATEADDRESS' });
+  });
+
+  it('treats an answer whose status a Response cannot hold (LinkedIn answers 999) as no page, without stopping the process', async () => {
+    // A stand-in for https.request that answers the way Node does: on a later turn, with any three-digit status. A throw inside that
+    // callback is uncaught, so before this was handled one such website stopped the whole Hub.
+    const answering = status => (options, onResponse) => {
+      const outgoing = new EventEmitter();
+      outgoing.end = () => setImmediate(() => {
+        const incoming = Readable.from([Buffer.from('<p>blocked</p>')]);
+        Object.assign(incoming, { statusCode: status, headers: { 'content-type': 'text/html' } });
+        onResponse(incoming);
+      });
+      return outgoing;
+    };
+    for (const status of [999, 600]) {
+      await expect(pinnedFetch(publicLookup, answering(status))('https://example.org/')).rejects.toMatchObject({ code: 'EBADSTATUS' });
+    }
+    const ok = await pinnedFetch(publicLookup, answering(200))('https://example.org/');
+    expect([ok.status, await ok.text()]).toEqual([200, '<p>blocked</p>']);
   });
 
   it('never connects to a name that resolves to a private address, an address literal or a malformed domain', async () => {

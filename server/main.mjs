@@ -7,7 +7,8 @@ import { gateway } from './gateway.mjs';
 import { delegations } from './delegations.mjs';
 import { appServer } from './http.mjs';
 import { assertBackendContract } from '../src/lib/backendContract.ts';
-import { databaseConfig } from './database-config.mjs';
+import { databaseConfig, guardPool, untilReachable } from './database-config.mjs';
+import { guardProcess } from './process-guards.mjs';
 import { publications } from './publications.mjs';
 import { distributionObserver } from './distribution-observer.mjs';
 import { aiAssistance } from './ai-assistance.mjs';
@@ -47,12 +48,15 @@ import { hubSettings } from './hub-settings.mjs';
 import { socialConnections } from './social-connections.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
-const pool=new pg.Pool(databaseConfig());
-// Refuse an incomplete release before replacing the running application.
-await pool.query('select c.credential_version,s.auth_method from private.password_credentials c,private.sms_sessions s limit 0');
+// A dropped connection is logged and replaced, never an uncaught error (guardPool).
+const pool=guardPool(new pg.Pool(databaseConfig()));
+// Refuse an incomplete release before replacing the running application. A database that cannot be reached yet (a restart or failover)
+// is waited for, 75 seconds at most for both reads together; a release that does not match it fails at once (untilReachable).
+const reachableBy=Date.now()+75_000;
+await untilReachable(()=>pool.query('select c.credential_version,s.auth_method from private.password_credentials c,private.sms_sessions s limit 0'),{deadline:reachableBy});
 const provider=smsProvider({apiKey:process.env.HUB_TELNYX_API_KEY,profileId:process.env.HUB_TELNYX_VERIFY_PROFILE_ID});
 const api=gateway(pool);
-const contract=await api.rpc('get_backend_contract',{});
+const contract=await untilReachable(()=>api.rpc('get_backend_contract',{}),{deadline:reachableBy});
 assertBackendContract(contract);
 // Optional features (declared ahead of the builds that use them) are read once at boot, like the AI team's.
 const features=new Set(contract.features);
@@ -167,6 +171,8 @@ const syncCatalogs=async()=>{
   if(catalogSyncRunning)return;
   catalogSyncRunning=true;
   try{
+    // The full refresh from Stripe, once: a no-op after it has run, and the retry when Stripe could not be reached at the start.
+    await billing.reconcileOnce();
     const result=!settings.get('billing.intel_price_sync')?null
       :await billing.syncAppCatalog('caremetric-intel',process.env.INTEL_CATALOG_URL?{url:process.env.INTEL_CATALOG_URL}:{});
     if(result?.applied) console.info(`Intel prices: ${result.applied} Stripe product(s) and price(s) brought in step with catalog ${result.version}.`);
@@ -175,7 +181,7 @@ const syncCatalogs=async()=>{
   }catch{console.warn('The Intel price catalog or Founders Sale prices could not be synced; it will retry.');}
   finally{catalogSyncRunning=false;}
 };
-void billing.start().then(ready => ready && billing.reconcile()).then(()=>syncCatalogs()).catch(() => {});
+void billing.reconcileOnce().then(()=>syncCatalogs()).catch(() => {});
 const catalogTimer=setInterval(()=>void syncCatalogs(),15*60*1000);catalogTimer.unref();
 let billingSweepRunning=false;
 const billingTimer=setInterval(()=>{
@@ -230,6 +236,8 @@ const runAgents=async()=>{try{await team.tick();}catch{console.warn('The AI team
 const agentTimer=setInterval(()=>void runAgents(),60*1000);agentTimer.unref();void runAgents();
 const deliverEmail=async()=>{try{await announcements.tick();}catch{console.warn('Bulk email delivery could not complete; it will retry.');}};
 const emailTimer=setInterval(()=>void deliverEmail(),60*1000);emailTimer.unref();void deliverEmail();
+// Started: from here a stray rejection is logged and the Hub keeps running; an uncaught exception is logged and still stops it.
+guardProcess();
 server.requestTimeout=130000; server.headersTimeout=15000;
 server.listen(Number(process.env.PORT || 8080),'0.0.0.0');
 // A second signal while the first is still closing connections must not end the pool again: pg rejects that, and the

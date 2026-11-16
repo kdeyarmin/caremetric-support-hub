@@ -593,8 +593,11 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   async function migrateSubscribers(live, actor, request, newPrice, oldPrice) {
     let migrated = 0, failed = 0;
     const subscriptions = await live.list('/v1/subscriptions', { price: request.price, status: 'all' }, 1000);
-    for (const subscription of subscriptions) {
-      if (['canceled', 'incomplete_expired'].includes(subscription.status)) continue;
+    for (const listed of subscriptions) {
+      if (['canceled', 'incomplete_expired'].includes(listed.status)) continue;
+      // Stripe lists a subscription with its first ten items only; the old price may be further down.
+      let subscription;
+      try { subscription = await withAllSubscriptionItems(live, listed); } catch { failed++; continue; }
       for (const item of subscription.items.data.filter(entry => (entry.price?.id ?? entry.price) === request.price)) {
         try {
           await live.post(`/v1/subscription_items/${item.id}`, { price: newPrice, quantity: item.quantity,
@@ -605,7 +608,8 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       }
     }
     await transaction(pool, db => audit(db, actor, 'billing.price.migrate', oldPrice.tenant_id, null, { price_from: request.price, price_to: newPrice, migrated, failed }));
-    return { migrated, failed };
+    // More subscriptions were on the old price than one pass reads (1000): the rest are still on it, and the administrator is told so.
+    return { migrated, failed, ...(subscriptions.truncated ? { incomplete: true } : {}) };
   }
 
   // ---------------------------------------------------------------------------
@@ -964,6 +968,17 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
 
   /**
+   * The full refresh from Stripe, once per process, as soon as Stripe can be verified: at the start, or on a later sweep when Stripe could
+   * not be reached then (before, a Stripe outage at the start meant no refresh until the next deploy). Webhooks keep the mirror current
+   * after it. Resolves to null while Stripe cannot be verified, so the next call tries again.
+   */
+  let reconciled = null;
+  function reconcileOnce() {
+    reconciled ??= reconcile().then(result => { if (result === null) reconciled = null; return result; }, error => { reconciled = null; throw error; });
+    return reconciled;
+  }
+
+  /**
    * Founders Sale prices that later changes replaced keep the offer for the
    * applications in FOUNDERS_FOLLOW_APPS (server/founders-sale.mjs). Reads every
    * price, archived ones included, of the Founders products of those
@@ -1091,7 +1106,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   }
 
   return {
-    start: verify, reconcile, reconcileUsage, syncAppCatalog, refreshFounders,
+    start: verify, reconcile, reconcileOnce, reconcileUsage, syncAppCatalog, refreshFounders,
     reconcileCustomerCheckouts: async () => {
       const result = await customerSelfService.reconcileCheckouts();
       if (result.failed || result.unbound) log.warn(`Customer Checkout reconciliation: ${result.failed} failed and ${result.unbound} unbound pending purchases.`);
