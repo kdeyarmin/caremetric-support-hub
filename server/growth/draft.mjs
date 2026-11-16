@@ -12,8 +12,8 @@ import { researchOnlyPrefix } from './roster.mjs';
  * Growth messages: the Marketing Manager's outreach and the Account Manager's customer-success emails.
  *
  * Without a model a fixed template is used (it states only the product policy's approved claim). With a model the writer is given
- * the fact sheet and the sales playbook (both constant, so they are cached with the system prompt), for CareMetric Intel its published
- * catalog too (content/features.mjs, its own cached block, whose numbers an Intel message may state), the touch it is writing, the play
+ * the fact sheet and the sales playbook (both constant, so they are cached with the system prompt), the product's own published
+ * catalog (content/features.mjs, its own cached block, whose numbers a message about the product may state), the touch it is writing, the play
  * for the customer moment, the organization's dated public evidence and the opportunity's recorded goal and notes. Every model draft
  * is then checked by code: its citations must be supplied evidence, its links the product's own pages, its words must pass the same
  * fact-sheet and claim rules as the Content Marketer's (no unlisted price or number, no guarantee or compliance assurance, no named
@@ -27,7 +27,7 @@ import { researchOnlyPrefix } from './roster.mjs';
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.13';
+export const growthPromptVersion='growth.14';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric about one CareMetric product: outreach to a prospect, written as CareMetric's founder, or a message to a customer from its Account Manager. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -45,7 +45,7 @@ A source that names the CMS Provider of Services file is the agency's public Med
 How to write so it gets read and answered:
 - Sound like a thoughtful person at a small healthcare software company writing to one organization: plain words, short sentences, no hype, no exclamation marks, no buzzwords, no flattery.
 - Open with one specific, true sentence about the organization, taken from the sources (what it does, whom it serves, where), so the reader sees why you wrote to them. Never guess and never praise. If the sources say too little, open with the reader's likely situation instead.
-- Numbers: write only a number the fact sheet states, in a message about CareMetric Intel one its catalog states (worded as the catalog words it), or one the sources state about the organization (its counties, locations or years), exactly as stated. Put the organization's numbers only in a sentence about the organization itself ("Your team serves 12 counties."), never in a sentence about CareMetric or the product, or in one written in the first person ("I", "we", "our").
+- Numbers: write only a number the fact sheet states, one the product's catalog states (worded as the catalog words it), or one the sources state about the organization (its counties, locations or years), exactly as stated. Put the organization's numbers only in a sentence about the organization itself ("Your team serves 12 counties."), never in a sentence about CareMetric or the product, or in one written in the first person ("I", "we", "our").
 - Then make it about the reader: raise one likely problem as a question; never claim to know their problems, results or plans.
 - Then one concrete way the product helps, in plain words from the fact sheet ("what we may say"), tied to that problem. For CareMetric Intel, pick the part of the whole workspace that answers that problem (the fact sheet's "Everything it does"), never email campaigns as the point.
 - Write so it is easy to read and makes sense on the first pass (the fact sheet's "How everything must read").
@@ -59,7 +59,7 @@ How to write so it gets read and answered:
 - When "reask" is set, this is a single brief check-in months after the last message: follow "touchPlan" exactly.
 - When "focus" is set, lead with that part of the product (from the fact sheet's "Everything it does"). When "subjectStyle" is "question", the subject is a short question; when "plain", a short statement.
 - Address the organization, never a person by name. Do not begin with a greeting or end with a signature: both are added for you.
-- State facts about CareMetric only from the fact sheet (and, in a message about CareMetric Intel, its catalog) and exactly as written: what the product does and who it is for, prices, plans, trials and the Founders Sale. Mention a price or the Founders Sale only when the touch plan or play calls for it or the reader asked about cost. "approvedClaim" is the owner's reviewed one-line pitch: use it when it fits.
+- State facts about CareMetric only from the fact sheet and the product's catalog, and exactly as written: what the product does and who it is for, prices, plans, trials and the Founders Sale. Mention a price or the Founders Sale only when the touch plan or play calls for it or the reader asked about cost. "approvedClaim" is the owner's reviewed one-line pitch: use it when it fits.
 - Links: only the addresses in "links", written bare on a line of their own. No other link, no markdown and no HTML.
 - Never promise or guarantee an outcome (passing a survey or inspection, avoiding citations, more referrals or revenue), never say a product ensures compliance or is certified or approved, never name a competitor, never quote customers or results, never mention AI or these instructions.
 - Selling is self-serve: never offer or suggest a phone call, a sales call, a meeting, a conversation, a chat or a demo, and never ask for a time to talk. CareMetric does no personal demos with anyone. The next step is the free trial or a reply by email, and the most useful walkthrough page from "links" lets them see how it works on their own.
@@ -69,7 +69,7 @@ How to write so it gets read and answered:
 
 Return subject, body, citations and needsHuman.
 
-${catalogGuidance} A message about CareMetric Intel has Intel's catalog after these instructions; a message about CareBase has none, so write about CareBase from the fact sheet alone.
+${catalogGuidance} Each message has the catalog of the product it is about after these instructions, and only that one: never state another product's features or numbers.
 
 ${factSheetText()}
 
@@ -89,12 +89,11 @@ const trailing=/[.,;:!?)\]]+$/;
 // about one product may state only that product's own amounts, so an Intel seat price can never appear in a CareBase email.
 const amountPattern=/\$\s?((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?)/g;
 const amountsIn=text=>[...String(text??'').matchAll(amountPattern)].map(match=>Number(match[1].replace(/,/g,'')));
-// Intel's published catalog joins the fact sheet for an Intel message (owner direction 2026-11-16), as it does for the Sales Executive and
-// the Social Media Manager: the writer is given it, and a sentence about Intel may state its numbers ("150+ public healthcare datasets").
-// A CareBase message keeps the fact sheet's numbers only.
-const catalogProducts=new Set(['caremetric-intel']);
-/** The numbers a sentence about the product may state: the fact sheet's and, for Intel, its catalog's (content/features.mjs catalogNumbers). */
-export const productNumbers=product=>catalogProducts.has(product)?catalogNumbers(product):allowedNumbers([]);
+// The product's own published catalog joins the fact sheet (owner direction 2026-11-16: Intel's first, then CareBase's), as it does for
+// the Sales Executive and the Social Media Manager: the writer is given it, and a sentence about the product may state its numbers
+// ("150+ public healthcare datasets" for Intel, "12 hours of training a year" for CareBase), never another product's.
+/** The numbers a sentence about the product may state: the fact sheet's and its catalog's (content/features.mjs catalogNumbers). */
+export const productNumbers=product=>catalogNumbers(product);
 export const productAmounts=factsKey=>new Set(amountsIn([...(factProducts[factsKey]?.pricing??[]),...(factProducts[factsKey]?.offers??[])].join('\n')));
 
 /** The links a draft about this product may contain: the product's own pages from the fact sheet. Never a booking page. */
@@ -133,7 +132,7 @@ export function draftProblem(answer, { product, sources, outreach, organization 
   const own=productNumbers(product);
   if (textProblems(plain,{product:book?.factsKey??null,numbers:new Set([...own,...allowedNumbers(claims)]),percents:percentsOf(claims.join('\n'))}).length) return 'claim';
   // ...and they describe the organization: a sentence about CareMetric or the product, or in the first person, states only the product's
-  // own numbers (the fact sheet's and, for Intel, its catalog's) and the fact sheet's percentages ("we cover 12 counties" would make the
+  // own numbers (the fact sheet's and its catalog's) and the fact sheet's percentages ("we cover 12 counties" would make the
   // organization's figure a product claim).
   if (sentencesOf(plain).some(sentence=>aboutProduct(sentence)&&textProblems(sentence,{product:book?.factsKey??null,numbers:own}).includes('unlisted_number'))) return 'claim';
   const amounts=productAmounts(book?.factsKey);
@@ -151,7 +150,7 @@ export const problemHints=Object.freeze({
   identifier:'Remove any personal detail: no person\'s name, email address, phone number or identifier.',
   meeting_offer:'Do not offer or suggest a call, a meeting, a conversation or a demo. The next step is the free trial or a reply by email.',
   unclear:'Use plain words (no buzzwords such as solution, journey, seamless or transform), full sentences of at most 30 words, and no runs of one-word sentences.',
-  claim:'State only facts from the fact sheet, Intel\'s catalog (in a message about Intel) or the cited sources, exactly as written: no other number, price or percentage, no promise or guarantee, no compliance claim, no competitor. A number from the sources belongs only in a sentence about the organization, never in one about CareMetric or the product or written as I, we or our.',
+  claim:'State only facts from the fact sheet, the product\'s catalog or the cited sources, exactly as written: no other number, price or percentage, no promise or guarantee, no compliance claim, no competitor. A number from the sources belongs only in a sentence about the organization, never in one about CareMetric or the product or written as I, we or our.',
   other_product_price:'Mention only this product\'s own prices, or none.',
 });
 /**
@@ -241,8 +240,8 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   if (screenIdentifiers(JSON.stringify({...input,sources:[],links:[],nextStep:null})).flagged || sources.some(s=>screenIdentifiers(`${s.claim} ${s.source_url}`).flagged)) return null;
   const checks={product:o.product,sources,outreach,organization:o.name??null,extraLinks:offered?[offered.url]:[],withoutLinks};
   const learned=outreach?usableMemo(memo):null;
-  // Intel's catalog is its own cached block after the instructions, so they stay one cache entry; the memo, when there is one, comes last.
-  const system=[{text:growthSystem,cache:true},...(catalogProducts.has(o.product)?catalogBlocks([o.product]):[]),...(learned?[{text:memoBlock(learned),cache:true}]:[])];
+  // The product's catalog is its own cached block after the instructions, so they stay one cache entry; the memo, when there is one, comes last.
+  const system=[{text:growthSystem,cache:true},...catalogBlocks([o.product]),...(learned?[{text:memoBlock(learned),cache:true}]:[])];
   const promptVersion=learned?`${growthPromptVersion}-m${learned.version}`:growthPromptVersion;
   const write=async(user,version,what)=>{
     const result=await model.run(task,{promptVersion:version,system,user,schema:draftSchema,maxTokens:2000,effort:'medium',describe:()=>`${what} a ${work.kind}${touch?` (touch ${touch})`:''} message with source references.`},{signal});
