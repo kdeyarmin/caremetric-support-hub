@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { withSession, transaction, HttpError, digest, token } from './sms-auth.mjs';
 import {
   parsePublicationStageRequest, parsePublicationStage, publicationId, publicationPart, publicationCommitSchema,
@@ -9,8 +9,41 @@ import { spoolPublicationAsset, checkedPublicationAsset, publicationRange } from
 import { partKey, partUploads } from './upload-parts.mjs';
 
 const codes={P4040:404,P4090:409,P4130:413,P4290:429,'22023':400,'23505':409,'28000':401,'42501':403};
+// Each way of the direct transfer. private.keep_publication_import_open leaves at least 30 minutes, and cleanup waits 5 more, so a
+// transfer started after it cannot outlive its import (20261117120000_publication_import_window.sql).
+const transferMs=600000;
+const storageToken=/^[A-Za-z0-9._~-]{16,4096}$/;
+
+// Storage answers an existing key with 409, or with its older 400 "Duplicate" body. Any other refusal is not read as one.
+async function storageDuplicate(response) {
+  if(response.status===409) return true;
+  if(response.status!==400) return false;
+  try {
+    const error=JSON.parse((await response.text()).slice(0,8192));
+    return ['ResourceAlreadyExists','KeyAlreadyExists','already_exists'].includes(error?.code) || (error?.error==='Duplicate' && [400,409,'400','409'].includes(error?.statusCode));
+  } catch { return false; }
+}
+
+// Reads what Storage holds back and hashes it: only the exact checked bytes may be recorded.
+async function storedMatches(response,asset) {
+  if(response.status!==200 || !response.body || response.headers.get('content-type')?.split(';')[0]!==asset.contentType) return false;
+  const hash=createHash('sha256'); let bytes=0;
+  for await(const chunk of response.body) {
+    bytes+=chunk.byteLength;
+    if(bytes>asset.byteLength) return false;
+    hash.update(chunk);
+  }
+  return bytes===asset.byteLength && hash.digest('hex')===asset.sha256;
+}
+
+/**
+ * directStorage (knowledge.publications.direct-storage.v1): keep an import open as its parts arrive, and send a checked file to
+ * Storage from this server rather than through the publication-media function, whose request time and CPU limits a large video
+ * outgrows. Without it, files stream through that function as before.
+ */
 // Two 512 MiB videos at once, as with whole-file uploads.
-export function publications({pool,delegations,storageUrl,fetchImpl=fetch,parts=partUploads({budget:2*536870912})}) {
+export function publications({pool,delegations,storageUrl,fetchImpl=fetch,parts=partUploads({budget:2*536870912}),directStorage=false}) {
+  const direct=typeof directStorage==='function'?directStorage:()=>directStorage;
   async function dbCall(session,name,args=[],required=true) {
     // Names are constants in this module, never caller-selected RPC names.
     try {
@@ -46,8 +79,64 @@ export function publications({pool,delegations,storageUrl,fetchImpl=fetch,parts=
   }
   const get=(session,id)=>dbCall(session,'get_publication_import',[publicationId.parse(id)]).then(parsePublicationStage);
   let uploads=0;
-  // Stores a checked asset through the immutable Storage function, then records it once Storage confirms the same bytes.
+  // At least 30 more minutes for this import, up to four hours after it was staged (private.keep_publication_import_open).
+  async function keepOpen(session,id) {
+    try { await dbCall(session,'keep_publication_import_open',[id]); }
+    catch(error) {
+      if(error instanceof HttpError && error.status===409) throw new HttpError(409,'This import has been open too long to finish. Start it again.');
+      throw error;
+    }
+  }
+  // A one-time Storage token from the publication-media function: an upload address (sign) or a read address (check).
+  async function storageAddress(session,id,part,operation) {
+    let response;
+    try { response=await delegations.publication(session,id,part,operation); }
+    catch(error) {
+      if(error instanceof HttpError) throw error;
+      throw new HttpError(503,'Publication storage was unavailable. Retry the same file.');
+    }
+    if(!response.ok) { await response.body?.cancel(); throw new HttpError(503,'Publication storage did not accept the asset.'); }
+    const answer=await response.json().catch(()=>null);
+    const keys=answer && typeof answer==='object' ? Object.keys(answer).join(',') : '';
+    if(operation==='sign' && keys==='stored' && answer.stored===true) return null;
+    if(keys!=='token' || typeof answer.token!=='string' || !storageToken.test(answer.token)) throw new HttpError(503,'Publication storage verification failed.');
+    return answer.token;
+  }
+  // The direct transfer: keep the import open, send the checked file to the signed upload address (never overwriting an object),
+  // then read the object back and hash it. A retry after a lost answer finds the object stored and goes straight to the check.
+  async function storeDirect(session,id,part,asset) {
+    await keepOpen(session,id);
+    const object=`hub-publications/publications/${id}/${part}`;
+    const upload=await storageAddress(session,id,part,'sign');
+    if(upload!==null) {
+      let response;
+      try {
+        response=await fetchImpl(`${storageUrl}/storage/v1/object/upload/sign/${object}?token=${encodeURIComponent(upload)}`,{
+          method:'PUT',headers:{'Content-Type':asset.contentType,'x-upsert':'false'},body:await asset.blob(),redirect:'error',signal:AbortSignal.timeout(transferMs),
+        });
+      } catch { throw new HttpError(503,'Publication storage did not confirm the upload. Retry the same file.'); }
+      if(response.status===413) { await response.body?.cancel().catch(()=>{}); throw new HttpError(413,'Storage refused a file this large: its upload limit is lower than this file.'); }
+      if(!response.ok && !await storageDuplicate(response)) { await response.body?.cancel().catch(()=>{}); throw new HttpError(503,'Publication storage did not accept the asset.'); }
+      await response.body?.cancel().catch(()=>{});
+    }
+    const read=await storageAddress(session,id,part,'check');
+    let matches=false;
+    try {
+      const response=await fetchImpl(`${storageUrl}/storage/v1/object/sign/${object}?token=${encodeURIComponent(read)}`,{
+        headers:{'Accept-Encoding':'identity'},redirect:'error',signal:AbortSignal.timeout(transferMs),
+      });
+      try { matches=await storedMatches(response,asset); }
+      finally { await response.body?.cancel().catch(()=>{}); }
+    } catch { throw new HttpError(503,'Publication storage could not be read back. Retry the same file.'); }
+    if(!matches) throw new HttpError(503,'Publication storage verification failed.');
+  }
+  // Stores a checked asset in Storage, then records it once Storage confirms the same bytes.
   const store=(session,id,part)=>async asset=>{
+    if(direct()) {
+      await storeDirect(session,id,part,asset);
+      await dbCall(session,'verify_publication_asset',[id,part,asset.sha256,asset.byteLength,asset.bodyText]);
+      return get(session,id);
+    }
     let response;
     try { response=await delegations.publication(session,id,part,'upload',asset.stream(),asset.contentType); }
     catch(error) {
@@ -95,6 +184,8 @@ export function publications({pool,delegations,storageUrl,fetchImpl=fetch,parts=
       const expected=publicationPartRules(stage.manifest,part);
       if(contentType?.split(';')[0]!==expected.contentType) throw new HttpError(415,'Invalid publication asset media type.');
       if(upload.total>expected.maxBytes || (expected.byteLength!==null && upload.total!==expected.byteLength)) throw new HttpError(413,'Publication file exceeds its declared limit.');
+      // Each part keeps the import open for 30 more minutes, so a slow upload of a large video does not outlast it.
+      if(direct()) await keepOpen(session,id);
       return parts.receive(partKey(session,`publication:${id}:${part}`),upload,body,file=>checkedPublicationAsset(stage.manifest,part,file,store(session,id,part)));
     },
     async preview(session,id) {

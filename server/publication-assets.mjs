@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream, openAsBlob } from 'node:fs';
 import { mkdtemp, open, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -57,7 +57,9 @@ export async function checkedPublicationAsset(manifest, part, {file, sha256, byt
       if(part==='primary') bodyText=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(textBytes);
     }
   } catch { throw new HttpError(422,'Publication asset content checks failed.'); }
-  return await operation({sha256,byteLength,bodyText,contentType:rules.contentType,stream:()=>Readable.toWeb(createReadStream(file))});
+  // stream() for the publication-media function; blob() for the Hub's direct transfer, read from disk with its length known.
+  return await operation({sha256,byteLength,bodyText,contentType:rules.contentType,stream:()=>Readable.toWeb(createReadStream(file)),
+    blob:()=>openAsBlob(file,{type:rules.contentType})});
 }
 
 /** One byte range only. All calculations stay within the 512MiB asset bound. */

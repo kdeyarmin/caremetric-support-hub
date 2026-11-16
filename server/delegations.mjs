@@ -58,14 +58,16 @@ const appCommandCapabilities=new Set([...tenantLifecycleCapabilities,...staffAcc
 async function authorize(db,audience,payload,{appCommands=false}={}) {
   if (['pennsync','caremetric-emr','caremetric-go'].includes(audience)) throw new HttpError(403,'Application disconnected.');
   if(audience==='publication') {
+    // upload streams the file through the publication-media function; sign and check are the Hub's direct transfer (an upload
+    // address, then a read address to hash what Storage holds: docs/PUBLICATION_IMPORTS.md) and are authorized exactly as an upload.
     if(!payload || Object.keys(payload).sort().join(',')!=='id,operation,part,range'
-      || !['upload','download'].includes(payload.operation) || (payload.operation==='upload' && payload.range!==null)) throw new HttpError(400,'Invalid publication capability.');
+      || !['upload','download','sign','check'].includes(payload.operation) || (payload.operation!=='download' && payload.range!==null)) throw new HttpError(400,'Invalid publication capability.');
     publicationId.parse(payload.id); publicationPart.parse(payload.part);
     await db.query('reset role');
-    const asset=(await db.query('select private.publication_object($1,$2,$3) as result',[payload.id,payload.part,payload.operation])).rows[0].result;
+    const asset=(await db.query('select private.publication_object($1,$2,$3) as result',[payload.id,payload.part,payload.operation==='download'?'download':'upload'])).rows[0].result;
     await db.query('set local role authenticated');
     const range=payload.operation==='download'?publicationRange(payload.range,asset.byteLength):null;
-    return {...asset,range:range?.header ?? null};
+    return {...asset,operation:payload.operation,range:range?.header ?? null};
   }
   if (['carebase','breathe','caremetric-emr','pennsync','caremetric-go','intel','advisors'].includes(audience)) {
     if(payload?.operation==='learning.source.snapshot') {
