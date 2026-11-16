@@ -77,6 +77,15 @@ describe('one model run', () => {
     expect(g.seen).toHaveLength(0);
   });
 
+  it('waits longer for one call that asks for it, never sends the wait to the provider, and refuses a wait out of range', async () => {
+    const f = fixture();
+    await f.run(request({ timeoutMs: 120_000 }));
+    expect(f.seen[0].body).not.toHaveProperty('timeoutMs');
+    const g = fixture();
+    for (const timeoutMs of [5_000, 200_000, 1.5]) expect(await rejection(g.run(request({ timeoutMs }))), String(timeoutMs)).toMatchObject({ code: 'request_rejected' });
+    expect(g.seen).toHaveLength(0);
+  });
+
   it('puts the cache breakpoint only on the blocks marked for it and takes the model from the agent\'s tier', async () => {
     const f = fixture({ taskOver: { agent: { modelTier: 'fast' } }, steps: [ok(message({ model: aiModels.fast }))] });
     await f.run(request({ system: [{ text: 'Static rules', cache: true }, { text: 'Per-product notes' }], effort: 'low', maxTokens: 1200 }));

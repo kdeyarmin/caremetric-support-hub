@@ -54,6 +54,11 @@ export function growthStore(pool) {
     // A found address and how: 'published' with its page on the business's own site, or 'mail_server' (20261113290000_growth_people_finder.sql).
     personAddress:(person,email,name,found,sourceUrl)=>server('private.growth_person_address',[person,email,name??null,found,sourceUrl??null]),
     importServer:rows=>server('private.growth_import_server',[JSON.stringify(rows)]),
+    // An account brief per agency before its first email (20261116110000_growth_brief.sql).
+    briefNext:daily=>server('private.growth_brief_next',[daily]),
+    briefSave:(opportunity,brief)=>server('private.growth_brief_save',[opportunity,JSON.stringify(brief)]),
+    briefWriter:opportunity=>server('private.growth_brief_writer',[opportunity]),
+    brief:(token,opportunity)=>withSession(pool,token,db=>run(db,'hub.growth_brief',[opportunity])),
     // Addresses checked before the first email, and the bounce guard (20261116100000_growth_address_check.sql).
     sendHold:messageId=>server('private.growth_send_hold',[messageId]),
     draftHold:contactId=>server('private.growth_draft_hold',[contactId]),

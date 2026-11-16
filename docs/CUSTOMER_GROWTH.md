@@ -374,6 +374,52 @@ Checking needs outbound connections to mail servers (port 25), which Railway all
 every server unreachable, rests for six hours, and the AI team page's "Named decision-makers" row and the Growth screen say so;
 choose "Addresses businesses publish on their own websites" to stop trying.
 
+## An account brief before the first email, written and reviewed on the top model
+
+Owner decision 2026-11-16 ([review](AI_WORKFORCE_REVIEW_2026-11-16.md)): research every Intel agency before it is first written to,
+write the first email from that research on the top model, and have a second model read it as the buyer would. Before this, the writer
+saw about four web snippets, and research went only to borderline prospects, never to the ones about to be emailed
+(`20261116110000_growth_brief.sql`, gate `20261116110100_growth_brief_contract.sql`, feature `platform.agents.growth-brief.v1`).
+
+**The brief** (Settings → Customer growth → Write an account brief before the first email; Most account briefs a day, 25; Most to spend
+on one account brief, 60 cents). Every 20 minutes the Marketing Manager's `growth.brief` task (`server/growth/brief.mjs`) briefs one
+agency: qualified ones with a permitted contact first (they are about to be written to), then the best fit, then agencies the Medicare
+roster confirmed; never one already emailed, and each at most once in 30 days.
+
+1. **Code gathers** the agency's market report as data from Intel's feed (`agency_brief`: its Medicare share and rank and how they have
+   moved, the county's leaders, the hospitals its residents use, its public ratings and three moves; never physician names or the
+   SSVI), the county's public figures for the agency's own setting (home health figures to a home health agency, hospice figures to a
+   hospice; never a dollar figure), the evidence the Hub holds and the leaders already found.
+2. **Web research** on the draft tier looks for dated triggers: a job listing for a liaison or marketer, a new location or service
+   line, a leadership change, an award, news (`research.2`, shared with `growth.research`). What it keeps becomes evidence.
+3. **The top model** (Opus, high effort, `brief.1`) writes the brief: what the agency is, where, who owns it, its triggers, two or
+   three questions about problems Intel answers, the angle to lead with, one cited opening sentence and the county figure most worth
+   stating, plus its own fit and what is still unknown.
+4. **Code checks it.** A brief has two parts (`private.growth_briefs`). The writer part may state only what a citable source states:
+   a sentence with any other number is dropped, so the agency's own share, rank, ratings and patient counts never reach an email (the
+   owner's rule); a source address it was not given is dropped. The research part keeps those for you. Growth shows both on the
+   opportunity. The writer reads only the writer part (`private.growth_brief_writer`).
+
+While briefs are on, an Intel agency's first email waits up to a day for its brief (`held.brief_pending` on the sweep); after that it is
+written as before.
+
+**The first email** (Settings → Customer growth → Write first emails on the top model). An Intel agency's first cold email that has a
+brief is written on the top model at high effort (`growth.12`), from the brief: its opening, one of its questions, its angle, and the
+county figure (the writer may state it once, as a fact about the county with its source, never about the agency). The brief's angle
+replaces the hashed angle; while experiments run, a quarter of agencies keep the hashed one (`arms.angle_by`: `brief` or `hash`), so the
+learning memo can tell whether the brief's choice draws more replies. At most one such email per fifteen-minute sweep, started early in
+it (`held.top_model_later`); a repair pass stays on the agent's own tier.
+
+**The reader's review** (Settings → Customer growth → Have a reader review each first email). A second model reads each first email as
+the owner of an agency like this one (`critic.1`) and scores it 1 to 5 for being specific, relevant, clear in its ask and worth a reply.
+Below 4 the email is rewritten once around its weakest sentence, on the same tier, and the better-scored version is kept. The score is
+recorded with the email (`arms.critic`, `arms.rewritten`), and the Monday memo compares replies by score once there are 20 of each.
+
+**Money.** A brief costs about 30 to 45 cents (research on the draft tier, the brief on the top model); a first email on the top model
+about 7 to 15 cents, the review about a cent. The migration raises the Marketing Manager's daily budget to $15 (owner decision
+2026-11-16), enough for about 25 briefed and reviewed first emails a day. Nothing spends it until the settings are on.
+`server/agents-growth-brief-integration.mjs` runs the database side through the real roles in CI.
+
 ## Checking an address before the first email, and the bounce guard
 
 Owner decision 2026-11-16 ([review](AI_WORKFORCE_REVIEW_2026-11-16.md)). Of the first 22 cold emails, 3 bounced (14%), all to

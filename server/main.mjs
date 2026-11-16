@@ -108,6 +108,9 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   deepResearch:{enabled:setting('growth.deep_research'),perDay:setting('growth.deep_research_per_day'),cents:setting('growth.deep_research_cents')},
   // The weekly "what is working" memo, used in drafts once the owner approves it (Settings → Customer growth → Write from what is working).
   learning:{enabled:setting('growth.learning_memo')},
+  // An account brief per agency, and first emails written from it on the quality tier with a reader's review (Settings → Customer growth).
+  briefs:{enabled:setting('growth.account_brief'),perDay:setting('growth.brief_per_day'),cents:setting('growth.brief_cents'),
+    qualityWriter:setting('growth.quality_writer'),critic:setting('growth.draft_critic')},
   // Each Medicare roster agency's free market report on Intel, linked in its outreach (growth/report-link.mjs; the feed's shared secret).
   reports:reportLinks({key:process.env.HUB_INTEL_FEED_SECRET}),importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
   sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});

@@ -33,8 +33,13 @@ const armNames = {
   angle: { referral_sources: 'leading with referral sources', territory: 'leading with territory planning', competitors: 'leading with the competitive picture',
     visit_prep: 'leading with visit preparation', hospital_outcomes: 'leading with the hospital outcomes packet', slipping_sources: 'leading with slipping referral sources',
     staff_training: 'leading with staff training', survey_ready: 'leading with survey readiness', daily_records: 'leading with daily records' },
+  // How the lead angle was chosen (2026-11-16): from the agency's account brief, or by the hash the brief is compared with.
+  angle_by: { brief: 'first emails led with the angle the account brief chose', hash: 'first emails led with an angle picked without the brief' },
+  // The reader's score of a first email (1 to 5) before it was kept.
+  critic: { 1: 'first emails the reader scored 1 of 5', 2: 'first emails the reader scored 2 of 5', 3: 'first emails the reader scored 3 of 5',
+    4: 'first emails the reader scored 4 of 5', 5: 'first emails the reader scored 5 of 5' },
 };
-const armOrder = ['angle', 'subject', 'length'];
+const armOrder = ['angle_by', 'critic', 'angle', 'subject', 'length'];
 const percent = (part, whole) => `${Math.round((100 * part) / whole)}%`;
 const replyRate = arm => arm.replied / arm.sent;
 

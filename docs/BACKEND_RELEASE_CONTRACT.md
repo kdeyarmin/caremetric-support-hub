@@ -179,6 +179,14 @@ under the hand-over and never past an unsubscribe or an opt-out, a memo is used 
 post handed back keeps its approval. Each test fails closed. Declaring it changes nothing by itself: the steps ship held. The Hub
 server launches campaigns live and publishes automatically approved founder posts only when the feature is declared.
 
+`20261116110100_growth_brief_contract.sql` declares `platform.agents.growth-brief.v1` only after the settings, growth autonomy, roster and
+research features are declared, the five settings exist (`growth.account_brief`, `growth.brief_per_day`, `growth.brief_cents`,
+`growth.quality_writer`, `growth.draft_critic`), `private.growth_briefs` and `private.growth_brief_log` have row level security and are
+closed to every role, `private.growth_brief_next`, `private.growth_brief_save` and `private.growth_brief_writer` are executable by
+`hub_app_server` alone and require the Hub server connection, the writer's reader returns only a brief's writer part and never its research
+part, `hub.growth_brief` needs a signed-in owner, and the Marketing Manager's `growth.brief` task is scheduled. Each test fails closed. The
+Hub server writes briefs, drafts from them and shows them on Growth only when the feature is declared.
+
 `20261116100100_growth_address_check_contract.sql` declares `platform.agents.growth-address-check.v1` only after the settings,
 growth autonomy, people finder and colleagues features are declared, the settings `growth.presend_check` (text) and
 `growth.bounce_guard_percent` (number) exist, the send guard table has row level security and is closed to every role,

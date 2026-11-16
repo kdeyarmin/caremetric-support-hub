@@ -79,7 +79,7 @@ const count = value => (Number.isFinite(value) && value >= 0 ? Math.round(value)
 /** What the request asks for, or a permanent error when the caller got it wrong. Nothing is sent before this passes. */
 function checkRequest(request) {
   const reject = () => { throw aiError('request_rejected'); };
-  const { promptVersion, system, user, schema, maxTokens = 3000, effort = 'medium', tier = null } = request ?? {};
+  const { promptVersion, system, user, schema, maxTokens = 3000, effort = 'medium', tier = null, timeoutMs = null } = request ?? {};
   if (typeof promptVersion !== 'string' || !versionPattern.test(promptVersion)) reject();
   if (!Array.isArray(system) || system.length === 0 || system.length > 4) reject();
   if (system.some(block => typeof block?.text !== 'string' || block.text.length === 0)) reject();
@@ -88,7 +88,9 @@ function checkRequest(request) {
   if (!efforts.has(effort)) reject();
   if (schemaDefects(schema).length > 0) reject();
   if (tier !== null && !tiers.has(tier)) reject();
-  return { ...request, maxTokens, effort, tier };
+  // A longer wait for one call (an account brief or a first email on the quality tier), never past the run's own deadline.
+  if (timeoutMs !== null && (!Number.isInteger(timeoutMs) || timeoutMs < 10_000 || timeoutMs > 180_000)) reject();
+  return { ...request, maxTokens, effort, tier, timeoutMs };
 }
 
 const usageOf = message => {
@@ -330,7 +332,7 @@ export function modelRunner({
       let reply = null;
       let failure = null;
       try {
-        reply = await client.create(body, { signal: signal ? AbortSignal.any([signal, deadline]) : deadline });
+        reply = await client.create(body, { signal: signal ? AbortSignal.any([signal, deadline]) : deadline, ...(spec.timeoutMs ? { timeoutMs: spec.timeoutMs } : {}) });
       } catch (error) {
         failure = classify(error);
         // Fixed fields and the provider's request id only: never the message, which can quote the request.

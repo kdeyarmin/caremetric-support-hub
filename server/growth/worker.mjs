@@ -5,6 +5,7 @@ import { assessProspect } from './assessment.mjs';
 import { planOpportunity, products } from './policy.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
 import { draftMessage } from './draft.mjs';
+import { growthBriefFeature } from './brief.mjs';
 import { growthLearningFeature } from './learning.mjs';
 import { renderEmail, themeFor } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
@@ -54,6 +55,8 @@ export const qualifyLimit=100;
 // scheduler's four minutes; an assessment the model could not give is not asked for again for six hours.
 export const assessLimit=20;
 export const assessRetryMs=6*3_600_000;
+// How long a first email to an Intel agency waits for its account brief, from its last assessment, while briefs are on.
+export const briefWaitMs=24*3_600_000;
 // A sweep or a discovery run stops starting new model calls, searches and website reads this long after it began, and leaves the
 // rest for the next run, so it always ends inside the scheduler's four minutes.
 export const workBudgetMs=150_000;
@@ -93,6 +96,9 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   // The owner-approved learning memo (learning.mjs), while Settings → Customer growth → "Write from what is working" is on.
   const learning=(features instanceof Set?features.has(growthLearningFeature):Array.isArray(features)&&features.includes(growthLearningFeature))
     &&typeof growth.store.learningActive==='function';
+  // An account brief for each Intel agency's first email (brief.mjs; Settings → Customer growth).
+  const briefing=(features instanceof Set?features.has(growthBriefFeature):Array.isArray(features)&&features.includes(growthBriefFeature))
+    &&typeof growth.store.briefWriter==='function';
   // First emails wait for their address's check, and cold email for a tripped bounce guard (Settings → Customer growth).
   const holding=(features instanceof Set?features.has(growthAddressCheckFeature):Array.isArray(features)&&features.includes(growthAddressCheckFeature))
     &&typeof growth.store.draftHold==='function';
@@ -157,8 +163,10 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0,reengaged=0;
     // Why drafts were not kept, by check (draft.mjs codes), so the run shows which rule throws good openings away.
     const rejected={};
-    // First emails not drafted yet because they wait (an address not yet checked, the bounce guard), by reason.
+    // First emails not drafted yet because they wait (an address not yet checked, the bounce guard, a brief), by reason.
     const held={};
+    // First emails written on the quality tier this sweep: one at most, started early, so the sweep ends inside the scheduler's limit.
+    let topDrafts=0;
     // Each product's active memo, read once a sweep.
     const memos=new Map();
     const memoFor=async product=>{
@@ -214,10 +222,20 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
             const hold=await growth.store.draftHold(o.contact_id);
             if(hold){held[hold]=(held[hold]??0)+1;continue;}
           }
+          // The agency's account brief, for its first cold email: while briefs are on, that email waits up to a day for one.
+          let brief=null,quality=false;
+          const critic=briefing&&live(growth.briefs?.critic)===true;
+          if(briefing&&work.kind==='outreach'&&o.product==='caremetric-intel'&&Number(o.touches??0)===0&&!o.memory?.reengagedAt&&!o.memory?.lead) {
+            brief=await growth.store.briefWriter(o.id);
+            if(!brief&&live(growth.briefs?.enabled)===true&&now().getTime()-Date.parse(o.assessed_at??0)<briefWaitMs){held.brief_pending=(held.brief_pending??0)+1;continue;}
+            quality=Boolean(brief)&&live(growth.briefs?.qualityWriter)===true;
+            if(quality&&(topDrafts>=1||clock()-started>45_000)){held.top_model_later=(held.top_model_later??0)+1;continue;}
+          }
           const memo=work.kind==='outreach'?await memoFor(o.product):null;
           // The agency's own report, only once Intel has opened it (report-link.mjs checkedLinkFor); otherwise the review page.
           const report=work.kind==='outreach'&&growth.reports?(growth.reports.checkedLinkFor?await growth.reports.checkedLinkFor(o,{signal}):growth.reports.linkFor?.(o))??null:null;
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
+          if(quality)topDrafts++;
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           let saved;

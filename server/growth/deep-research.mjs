@@ -92,6 +92,33 @@ export function screenedNotes(text) {
   return { notes: kept.join('\n').trim(), dropped: lines.length - kept.length };
 }
 
+/**
+ * One organization's web research, its notes screened line by line and turned into kept facts (keptFacts). Shared by growth.research and
+ * the account brief (brief.mjs). Returns { facts, outcome, droppedLines, searches, fetches, cents }, or { skipped } when the request itself
+ * holds an identifier. Nothing is stored here.
+ */
+export async function researchOrganization({ model, task, organization, product, cents, signal, maxSearches = 4, maxFetches = 3 }) {
+  const book = playbookFor(product);
+  const user = JSON.stringify({ organization: { name: organization.name, domain: organization.domain }, product: book?.name ?? product,
+    goodFit: book?.icp?.fits ?? [], strongSignals: book?.icp?.strongSignals ?? [] });
+  if (screenIdentifiers(user).flagged) return { skipped: 'identifier' };
+  const found = await model.research(task, { promptVersion: researchPromptVersion, system: [{ text: researchSystem, cache: true }], user,
+    tools: ['web_search', 'web_fetch'], maxSearches, maxFetches, maxRounds: 3, maxTokens: 3000, effort: 'medium', ceilingCents: cents,
+    describe: ({ searches, fetches, sources }) => `Researched one prospect: ${searches} searches, ${fetches} page reads, ${sources} sources.` }, { signal });
+  const spent = { searches: found.searches, fetches: found.fetches, cents: found.costCents };
+  if (!['completed', 'stopped'].includes(found.outcome) || !found.text?.trim() || !found.sources?.length) return { facts: [], outcome: found.outcome };
+  // A line holding something that looks like an identifier is left out; the rest of what the run paid for is kept.
+  const { notes, dropped } = screenedNotes(found.text.slice(0, 12_000));
+  const screened = dropped ? { droppedLines: dropped } : {};
+  if (!notes) return { facts: [], ...screened, ...spent };
+  const extracted = await model.run(task, { promptVersion: `${researchPromptVersion}-x`, system: [{ text: extractSystem, cache: true }], schema: factSchema,
+    user: JSON.stringify({ organization: { name: organization.name, domain: organization.domain }, today: new Date().toISOString().slice(0, 10), notes,
+      sources: found.sources.slice(0, 30).map(source => source.url) }),
+    maxTokens: 2000, effort: 'low', tier: 'fast', describe: output => `Kept ${output.facts.length} researched facts.` }, { signal });
+  const facts = extracted.outcome === 'completed' ? keptFacts(extracted.output.facts, { sources: found.sources, domain: organization.domain, name: organization.name }) : [];
+  return { facts, ...screened, ...spent };
+}
+
 export function researchHandlers({ growth, model, features = null, marketed = null }) {
   const declared = features instanceof Set ? features.has(growthResearchFeature) : Array.isArray(features) && features.includes(growthResearchFeature);
   if (!growth || !declared) return {};
@@ -104,28 +131,13 @@ export function researchHandlers({ growth, model, features = null, marketed = nu
     const pick = await growth.store.researchNext(perDay);
     if (!pick) return { result: { researched: 0 } };
     if (!markets(await marketedNow(marketed), pick.product)) return { result: { researched: 0, skipped: 'not_marketed' } };
-    const book = playbookFor(pick.product);
-    const user = JSON.stringify({ organization: { name: pick.name, domain: pick.domain }, product: book?.name ?? pick.product,
-      goodFit: book?.icp?.fits ?? [], strongSignals: book?.icp?.strongSignals ?? [] });
-    if (screenIdentifiers(user).flagged) return { result: { researched: 0, skipped: 'identifier' } };
     const cents = Number.isInteger(live(settings.cents)) ? live(settings.cents) : 30;
-    const found = await model.research(task, { promptVersion: researchPromptVersion, system: [{ text: researchSystem, cache: true }], user,
-      tools: ['web_search', 'web_fetch'], maxSearches: 4, maxFetches: 3, maxRounds: 3, maxTokens: 3000, effort: 'medium', ceilingCents: cents,
-      describe: ({ searches, fetches, sources }) => `Researched one prospect: ${searches} searches, ${fetches} page reads, ${sources} sources.` }, { signal });
-    if (!['completed', 'stopped'].includes(found.outcome) || !found.text?.trim() || !found.sources?.length) {
-      return { result: { researched: 1, facts: 0, outcome: found.outcome } };
-    }
-    // A line holding something that looks like an identifier is left out; the rest of what the run paid for is kept.
-    const { notes, dropped } = screenedNotes(found.text.slice(0, 12_000));
-    const screened = dropped ? { droppedLines: dropped } : {};
-    if (!notes) return { result: { researched: 1, facts: 0, ...screened, searches: found.searches, fetches: found.fetches, cents: found.costCents } };
-    const extracted = await model.run(task, { promptVersion: `${researchPromptVersion}-x`, system: [{ text: extractSystem, cache: true }], schema: factSchema,
-      user: JSON.stringify({ organization: { name: pick.name, domain: pick.domain }, today: new Date().toISOString().slice(0, 10), notes,
-        sources: found.sources.slice(0, 30).map(source => source.url) }),
-      maxTokens: 2000, effort: 'low', tier: 'fast', describe: output => `Kept ${output.facts.length} researched facts.` }, { signal });
-    const facts = extracted.outcome === 'completed' ? keptFacts(extracted.output.facts, { sources: found.sources, domain: pick.domain, name: pick.name }) : [];
+    const done = await researchOrganization({ model, task, organization: pick, product: pick.product, cents, signal });
+    if (done.skipped) return { result: { researched: 0, skipped: done.skipped } };
+    if (done.outcome) return { result: { researched: 1, facts: 0, outcome: done.outcome } };
+    const { facts, ...rest } = done;
     if (facts.length) await growth.store.discover(pick.product, facts.map(fact => ({ name: pick.name, domain: pick.domain, url: fact.url.slice(0, 2000), claim: fact.claim })));
-    return { result: { researched: 1, facts: facts.length, ...screened, searches: found.searches, fetches: found.fetches, cents: found.costCents } };
+    return { result: { researched: 1, facts: facts.length, ...(rest.droppedLines ? { droppedLines: rest.droppedLines } : {}), searches: rest.searches, fetches: rest.fetches, cents: rest.cents } };
   }
   return { 'growth.research': research };
 }

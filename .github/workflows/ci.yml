@@ -232,6 +232,9 @@ jobs:
           node server/agents-growth-address-check-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-growth-address-check-integration.mjs
+          node server/agents-growth-brief-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/agents-growth-brief-integration.mjs
           node server/agents-growth-learning-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-growth-learning-integration.mjs

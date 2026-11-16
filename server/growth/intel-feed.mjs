@@ -44,7 +44,9 @@ const factsSchema = z.object({ contract: z.literal(intelFeedContract), action: z
     hhvbp: z.record(z.string(), z.unknown()).nullable(), hospice_care_index: z.record(z.string(), z.unknown()).nullable() })).max(25) });
 const figure = z.object({ key: z.string().max(80), label: z.string().max(200), value: z.number().finite(), unit: z.string().max(40),
   data_year: z.string().max(10).nullable(), period: z.string().max(80).nullable(), dataset: z.string().max(200), source_line: z.string().max(1000),
-  short_source: z.string().max(200).optional() });
+  short_source: z.string().max(200).optional(),
+  // The care setting a figure is about (Intel 2026-11-16): an email states county figures for the agency's own setting only.
+  setting: z.enum(['home_health', 'hospice', 'nursing_home', 'general']).optional() });
 const releasesSchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('releases'), source_line: z.string().max(1000),
   releases: z.array(z.object({ dataset: z.string().regex(/^[a-z0-9_]{1,100}$/), title: z.string().min(1).max(300), data_year: z.string().max(10).nullable(),
     period_start: date, period_end: date, published: date, loaded: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })).max(25) });
@@ -60,6 +62,31 @@ const countySchema = z.object({ contract: z.literal(intelFeedContract), action: 
 const matchSchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('agency_match'), period: z.string().regex(/^\d{4}Q[1-4]$/).nullable(),
   source_line: z.string().max(1000), matches: z.array(z.object({ key: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/), ccn: z.string().regex(/^[0-9A-Z]{6}$/).nullable(),
     matched_by: z.enum(['phone', 'name_place']).nullable(), reason: z.string().regex(/^[a-z_]{1,40}$/).nullable(), agency: item.nullable() })).max(25) });
+
+// agency_brief (Intel 2026-11-16): one agency's market report as data, for research only. Never physician names, NPIs or the SSVI. The
+// agency's own share, rank, ratings and patient counts are never quoted to it: the Hub keeps them in a brief's research part.
+const share = z.number().finite().nullable();
+const briefSchema = z.object({ contract: z.literal(intelFeedContract), action: z.literal('agency_brief'), ccn: z.string().regex(/^[0-9A-Z]{6}$/),
+  source_line: z.string().max(1000).optional(), found: z.boolean(),
+  brief: z.object({
+    setting: z.string().max(20), agency: z.object({ ccn: z.string().max(10), name: z.string().max(300), place: z.string().max(300).nullable().optional() }).nullable(),
+    unpublished: z.boolean().optional(),
+    county: z.object({ fips: z.string().max(5), name: z.string().max(200), state: z.string().max(2) }).nullable(),
+    year: z.string().max(10).nullable(),
+    position: z.object({ patients: count, county_share: share, county_rank: count, county_providers: count, state_share: share, state_rank: count,
+      state_providers: count, state_code: z.string().max(2).nullable().optional() }).nullable(),
+    history: z.array(z.object({ data_year: z.string().max(10), patients: count, county_share: share, county_rank: count, state_share: share.optional(),
+      state_rank: count.optional() })).max(15).default([]),
+    competitors: z.array(z.object({ name: z.string().max(300), patients: count, share, is_agency: z.boolean() })).max(12).default([]),
+    county_patients: count.optional(), county_providers: count.optional(),
+    figures: z.array(z.object({ key: z.string().max(80), label: z.string().max(200), value: z.string().max(80), source: z.string().max(200).nullable().optional() })).max(12).default([]),
+    hospitals: z.array(z.object({ name: z.string().max(300), city: z.string().max(200).nullable().optional(), share, cases: count.optional() })).max(8).default([]),
+    hospital_year: z.string().max(10).nullable().optional(),
+    clinicians: z.object({ count_label: z.string().max(200).nullable().optional(), listed: count.optional(),
+      specialties: z.array(z.object({ specialty: z.string().max(200).nullable(), count })).max(20).default([]) }).nullable().optional(),
+    ratings: z.array(z.string().max(300)).max(12).default([]),
+    moves: z.array(z.object({ title: z.string().max(200), body: z.string().max(1500) })).max(3).default([]),
+  }).nullable() });
 
 async function readJson(response) {
   const declared = Number(response.headers?.get?.('content-length'));
@@ -132,5 +159,7 @@ export function intelFeedReader({ features = null, enabled = false, key = '', fe
     agencyMatch: ({ candidates, signal } = {}) => call({ action: 'agency_match', candidates }, matchSchema, { signal }),
     /** Up to 25 agencies' owners (CMS All Owners), HHVBP score and Hospice Care Index, for research only. */
     agencyFacts: ({ ccns, signal } = {}) => call({ action: 'agency_facts', ccns }, factsSchema, { signal }),
+    /** One agency's market report as data (share, rank, county leaders, hospitals, ratings, moves): research only, never quoted to it. */
+    agencyBrief: ({ ccn, signal } = {}) => call({ action: 'agency_brief', ccn }, briefSchema, { signal }),
   };
 }
