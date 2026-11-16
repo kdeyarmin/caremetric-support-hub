@@ -77,6 +77,22 @@ describe('the brief\'s two parts', () => {
     const elsewhere = briefParts({ ...output, hookSourceUrl: 'https://made-up.example.org/' }, { evidence, countyFigures: [], people: [], setting: 'home_health' });
     expect(elsewhere.writer.hook).toBeNull();
   });
+  it('keeps the people its sources name out of the writer part: the email addresses the agency, never a person', () => {
+    const named = briefParts({ ...output,
+      summary: 'Valley Home Health is a family-owned home health agency serving Allegheny and Butler counties. Its sources name Jane Doe as Administrator.',
+      ownership: 'Owned by Jane  Doe and her family.', hook: 'Jane Doe leads Valley Home Health.' },
+    { evidence, countyFigures: [], people: [{ name: 'Jane Doe', title: 'Administrator' }], setting: 'home_health' });
+    expect(named.writer.summary).toBe('Valley Home Health is a family-owned home health agency serving Allegheny and Butler counties.');
+    expect(named.writer.ownership).toBe('');
+    expect(named.writer.hook).toBeNull();
+    // The agency's own name is not a person's, and the team still sees who leads it.
+    expect(named.research.leaders).toEqual([{ name: 'Jane Doe', title: 'Administrator' }]);
+    // An initial or a title never splits a sentence, so neither leaves the name, nor a stray "Dr.", behind.
+    const initial = briefParts({ ...output, summary: 'Valley Home Health is family-owned. Jane A. Doe is its president. Dr. John Roe is its medical director.' },
+      { evidence, countyFigures: [], people: [{ name: 'Jane A. Doe', title: 'President' }, { name: 'John Roe', title: 'Medical Director' }], setting: 'home_health' });
+    expect(initial.writer.summary).toBe('Valley Home Health is family-owned.');
+  });
+
   it('keeps the agency\'s own rating, rank or share out of the writer part even with no number the check would catch', () => {
     const parts = briefParts({ ...output, summary: 'Valley Home Health has a 4.5-star quality rating.', serviceArea: 'It ranks ninth in Erie County.',
       ownership: 'It is the third-largest agency in the county.' }, { evidence, countyFigures: [], people: [], setting: 'home_health' });
@@ -109,7 +125,7 @@ describe('growth.brief', () => {
     expect(feed.agencyBrief).toHaveBeenCalledWith(expect.objectContaining({ ccn: '397001' }));
     expect(feed.countyFigures).toHaveBeenCalledWith(expect.objectContaining({ countyFips: ['42003'] }));
     expect(store.discover).toHaveBeenCalledWith('caremetric-intel', [expect.objectContaining({ url: 'https://www.indeed.com/viewjob?jk=1' })]);
-    const synthesis = model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.1')[1];
+    const synthesis = model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.2')[1];
     expect(synthesis).toMatchObject({ tier: 'quality', effort: 'high', timeoutMs: 120_000 });
     const sent = JSON.parse(synthesis.user);
     expect(sent.countyFigures.map(figure => figure.key)).toEqual(['home_health_agencies_in_county', 'medicare_advantage_share']);
@@ -117,7 +133,7 @@ describe('growth.brief', () => {
     expect(sent.evidence.find(item => item.claim.startsWith(researchOnlyPrefix)).teamOnly).toBe(true);
     const [opportunity, saved] = store.briefSave.mock.calls[0];
     expect(opportunity).toBe('o1');
-    expect(saved).toMatchObject({ model: 'claude-opus-5-5', promptVersion: 'brief.1', costCents: 23, research: { fit: 88, intel: { position: { county_rank: 9 } } } });
+    expect(saved).toMatchObject({ model: 'claude-opus-5-5', promptVersion: 'brief.2', costCents: 23, research: { fit: 88, intel: { position: { county_rank: 9 } } } });
     expect(JSON.stringify(saved.writer)).not.toMatch(/312|county_rank/);
     expect(result).toEqual({ briefed: 1, version: 1, facts: 1, triggers: 1, hook: true, countyFact: true, intel: true, cents: 23 });
   });
@@ -127,7 +143,7 @@ describe('growth.brief', () => {
       name: 'Maple Ridge Nursing and Rehabilitation Center', domain: 'mapleridge.example.org', agencies: [], evidence, people: [] } });
     await run();
     expect(feed.agencyBrief).not.toHaveBeenCalled();
-    const sent = JSON.parse(model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.1')[1].user);
+    const sent = JSON.parse(model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.2')[1].user);
     expect(sent.agency.setting).toBe('nursing home');
     expect(sent.countyFigures).toEqual([]);
     expect(store.briefSave.mock.calls[0][1].writer.setting).toBe('nursing_home');
@@ -141,7 +157,7 @@ describe('growth.brief', () => {
       competitors: [{ name: 'Another agency', patients: 120, share: 120 / 912, is_agency: false }], figures: [], hospitals: [], ratings: [], moves: [] } });
     const { result } = await h.run();
     expect(result).toMatchObject({ briefed: 1, intel: true });
-    const sent = JSON.parse(h.model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.1')[1].user);
+    const sent = JSON.parse(h.model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.2')[1].user);
     expect(sent.intel.position).toEqual({ patients: 12, county_share: 0.0132, county_rank: 30, county_providers: 48 });
     expect(sent.intel.history[0].county_share).toBe(0.0164);
     expect(sent.intel.competitors[0].share).toBe(0.1316);
