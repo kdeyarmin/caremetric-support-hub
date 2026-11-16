@@ -67,7 +67,7 @@ a sensible hour and acts on interest. Stage 3 waits for a week of clean data.
 Turned-down drafts stay final, as before (a prospect behind one waits for you). The watchdog now counts them, and a one-time rewrite from
 your note is listed below as not built.
 
-The database side is one migration pair (`20261117150000_work_recovery.sql`, gate `20261117150100_work_recovery_contract.sql`, feature
+The database side is one migration pair (`20261117160000_work_recovery.sql`, gate `20261117160100_work_recovery_contract.sql`, feature
 `platform.agents.work-recovery.v1`). It changes no table and adds no setting.
 
 What stays the same:

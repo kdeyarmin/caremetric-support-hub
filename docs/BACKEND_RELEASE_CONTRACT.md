@@ -62,7 +62,7 @@ signs one-time upload addresses (`upload-sign`), so deploy that function first. 
 lesson media straight to the `hub-learning` bucket and reads it back to check it; until then it streams lesson media through
 `app-media` as before ([central learning](CENTRAL_LEARNING.md)).
 
-`20261117150100_work_recovery_contract.sql` declares `platform.agents.work-recovery.v1` once the creative review, ads, address check,
+`20261117160100_work_recovery_contract.sql` declares `platform.agents.work-recovery.v1` once the creative review, ads, address check,
 people finder, app growth, watchdog and hand-over features are declared, `private.creative_render_requeue`,
 `private.ads_platform_refusals`, the three-argument `private.creative_data_counties` and `private.agent_watchdog_facts` are executable by
 `hub_app_server` alone and require its connection, `private.creative_brief_pictured`, `private.growth_internal_address` and

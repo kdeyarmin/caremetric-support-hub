@@ -7,7 +7,7 @@
  * - an agent with three or more failed tasks in the last seven days, or a task waiting more than an hour past its time;
  * - a stage of the funnel that stopped while the one before it moved (prospects found but none emailed, emails out but no reply);
  * - an autonomy step that is automatic although the owner's decisions behind it fall short of today's evidence rule (flagged, never undone);
- * - what the team lost (20261117150000_work_recovery.sql, review 2026-11-17, when every county snapshot was blocked by the team's own
+ * - what the team lost (20261117160000_work_recovery.sql, review 2026-11-17, when every county snapshot was blocked by the team's own
  *   check, the month's ad flight failed on LinkedIn and nothing said so): most of a week's images blocked, a campaign a platform refused
  *   with nothing created since, qualified prospects waiting more than a day with nothing drafted, cold email bouncing, the daily cap
  *   reached with a queue, most strong fits with no address, and an ad budget with nothing running.

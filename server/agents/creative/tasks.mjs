@@ -400,7 +400,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     const counts = { rendered: 0, proposed: 0, blocked: 0, failed: 0, submitted: 0 };
     const cap = capNow();
     // Images blocked only by checks this release corrects (the first image review, a snapshot's figure read as a number) go back to the
-    // queue once (20261117150000_work_recovery.sql); the vision-blocked ones only while the review is on, so none passes unseen.
+    // queue once (20261117160000_work_recovery.sql); the vision-blocked ones only while the review is on, so none passes unseen.
     if (typeof store.creativeRenderRequeue === 'function') {
       const requeued = Number(await store.creativeRenderRequeue(visionNow())) || 0;
       if (requeued) counts.requeued = requeued;

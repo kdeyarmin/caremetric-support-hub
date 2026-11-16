@@ -349,7 +349,7 @@ only once the database declares it. `server/agents-growth-roster-match-integrati
 
 ## Interest and our own trials (2026-11-17)
 
-- **Intent follows what the business did** (`20261117150000_work_recovery.sql`, trigger `growth_event_intent`). It was set only by the
+- **Intent follows what the business did** (`20261117160000_work_recovery.sql`, trigger `growth_event_intent`). It was set only by the
   fit assessment, which stops once a business is researched, so it was empty on all 235 Intel opportunities, the three trials included.
   Each recorded event now sets it: a trial, a sign-up, first value, a payment or a meeting 100, a positive reply 75, a reply 60, an
   opened report 50 (at least); "not now" sets it to 25 and "no" to 0, the business's latest word standing over its earlier interest.
