@@ -251,6 +251,10 @@ describe('each check that rejects a draft', () => {
     for (const [text, pair] of [['5 staff members', '5:staff'], ['1 customer account needs attention', '1:customer'], ['33,000 ZIP codes', '33000:zip'],
       ['30 day trials', '30:day'], ['120 bed homes', '120:bed'], ['6 month reviews', '6:month'], ['a 3-county region', '3:county'], ['3 marketer seats', '3:staff']])
       expect(numbersIn(text), text).toEqual([pair]);
+    // A plural unit is the subject, whatever follows it, and so is the unit after "1": the count is read, and refused when no source states it.
+    for (const [text, pair] of [['500 homes use CareBase workflows.', '500:facility'], ['500 customers receive updates', '500:customer'],
+      ['40 staff complete annual trainings', '40:staff'], ['1 resident needs help', '1:resident']]) expect(numbersIn(text), text).toEqual([pair]);
+    expect(textProblems('500 homes use CareBase workflows.', { numbers: allowedNumbers([]) })).toEqual(['unlisted_number']);
     // A count no source states is refused; one the catalog states may be written with a describing word.
     expect(reasons(withSentence('CareBase is used in 500 Pennsylvania homes.'))).toEqual(['unlisted_number']);
     expect(reasons(withSentence('CareBase is used in 500 rural and urban homes.'))).toEqual(['unlisted_number']);
