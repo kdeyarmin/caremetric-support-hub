@@ -1,4 +1,5 @@
 import { AdminApiError } from "../admin/transport";
+import { sendInParts } from "../lib/uploadParts";
 import { parseHubMediaOperation, projectMediaContextView, projectMediaIntent, projectMediaReceipt, projectMediaStage,
   type HubMediaOperation, type MediaContextView, type MediaIntent, type MediaReceipt, type MediaStage } from "./mediaProtocol";
 async function responseJson(response: Response) {
@@ -27,9 +28,10 @@ export async function uploadMedia(input: HubMediaOperation, file: File, signal: 
   if (op.operation !== "media.upload" || file.size !== op.sourceBytes || file.type !== op.mimeType) throw new AdminApiError("invalid_request");
   const encoded = btoa(Array.from(new TextEncoder().encode(JSON.stringify(op)), byte => String.fromCharCode(byte)).join(""))
     .replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-  const response = await fetch("/api/course-media/upload", { method: "POST", credentials: "same-origin", cache: "no-store", redirect: "error",
-    headers: { "Content-Type": op.mimeType, "x-caremetric-media-request": encoded }, body: file,
-    signal: AbortSignal.any([signal, AbortSignal.timeout(120000)]) });
+  // In parts (src/lib/uploadParts.ts): one request could not carry a large video over a slow connection.
+  let response: Response;
+  try { response = await sendInParts(fetch, "/api/course-media/upload", file, { "Content-Type": op.mimeType, "x-caremetric-media-request": encoded }, { signal }); }
+  catch (cause) { if (signal.aborted) throw cause; throw new AdminApiError("upstream"); }
   return projectMediaStage(await responseJson(response), op);
 }
 export function courseMediaPath(courseId: string, versionId: string, blockId: string, assetId: string): string {

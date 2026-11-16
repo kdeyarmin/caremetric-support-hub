@@ -5,10 +5,12 @@ import {
   publicationPartRules, publicationParts, publicationReceiptSchema,
 } from '../src/imports/publicationProtocol.ts';
 import { previewPublicationImportWithVerifier } from '../src/imports/publicationImportPreview.ts';
-import { spoolPublicationAsset, publicationRange } from './publication-assets.mjs';
+import { spoolPublicationAsset, checkedPublicationAsset, publicationRange } from './publication-assets.mjs';
+import { partKey, partUploads } from './upload-parts.mjs';
 
 const codes={P4040:404,P4090:409,P4130:413,P4290:429,'22023':400,'23505':409,'28000':401,'42501':403};
-export function publications({pool,delegations,storageUrl,fetchImpl=fetch}) {
+// Two 512 MiB videos at once, as with whole-file uploads.
+export function publications({pool,delegations,storageUrl,fetchImpl=fetch,parts=partUploads({budget:2*536870912})}) {
   async function dbCall(session,name,args=[],required=true) {
     // Names are constants in this module, never caller-selected RPC names.
     try {
@@ -44,6 +46,20 @@ export function publications({pool,delegations,storageUrl,fetchImpl=fetch}) {
   }
   const get=(session,id)=>dbCall(session,'get_publication_import',[publicationId.parse(id)]).then(parsePublicationStage);
   let uploads=0;
+  // Stores a checked asset through the immutable Storage function, then records it once Storage confirms the same bytes.
+  const store=(session,id,part)=>async asset=>{
+    let response;
+    try { response=await delegations.publication(session,id,part,'upload',asset.stream(),asset.contentType); }
+    catch(error) {
+      if(error instanceof HttpError) throw error;
+      throw new HttpError(503,'Publication transfer confirmation was unavailable. Retry the same file.');
+    }
+    if(!response.ok) throw new HttpError(response.status===409?409:503,'Publication storage did not accept the asset.');
+    const stored=await response.json();
+    if(!stored || Object.keys(stored).sort().join(',')!=='byteLength,sha256,uploaded' || stored.uploaded!==true || stored.sha256!==asset.sha256 || stored.byteLength!==asset.byteLength) throw new HttpError(503,'Publication storage verification failed.');
+    await dbCall(session,'verify_publication_asset',[id,part,asset.sha256,asset.byteLength,asset.bodyText]);
+    return get(session,id);
+  };
   return {
     access: session=>dbCall(session,'publication_import_access'),
     async stage(session,input) {
@@ -64,21 +80,22 @@ export function publications({pool,delegations,storageUrl,fetchImpl=fetch}) {
       // At most two local spools are live per server, regardless of slow clients.
       if(uploads>=2) throw new HttpError(429,'Publication transfer capacity reached.');
       uploads++;
-      try {
-        return await spoolPublicationAsset(stage.manifest,part,source,async asset=>{
-          let response;
-          try { response=await delegations.publication(session,id,part,'upload',asset.stream(),asset.contentType); }
-          catch(error) {
-            if(error instanceof HttpError) throw error;
-            throw new HttpError(503,'Publication transfer confirmation was unavailable. Retry the same file.');
-          }
-          if(!response.ok) throw new HttpError(response.status===409?409:503,'Publication storage did not accept the asset.');
-          const stored=await response.json();
-          if(!stored || Object.keys(stored).sort().join(',')!=='byteLength,sha256,uploaded' || stored.uploaded!==true || stored.sha256!==asset.sha256 || stored.byteLength!==asset.byteLength) throw new HttpError(503,'Publication storage verification failed.');
-          await dbCall(session,'verify_publication_asset',[id,part,asset.sha256,asset.byteLength,asset.bodyText]);
-          return get(session,id);
-        });
-      } finally { uploads--; }
+      try { return await spoolPublicationAsset(stage.manifest,part,source,store(session,id,part)); }
+      finally { uploads--; }
+    },
+    /**
+     * One part of an asset (server/upload-parts.mjs), so a large video does not have to arrive in one request. Every part is
+     * authorized again for this session and import; the last part runs the same checks and storage as upload() over the whole file.
+     * The answer is {received} while bytes remain and {result: stage} once the asset is stored.
+     */
+    async uploadPart(session,id,part,upload,body,contentType) {
+      try { publicationPart.parse(part); publicationId.parse(id); } catch { throw new HttpError(400,'Invalid publication asset.'); }
+      const stage=await get(session,id);
+      if(stage.uploadedParts.includes(part)) return {result:stage};
+      const expected=publicationPartRules(stage.manifest,part);
+      if(contentType?.split(';')[0]!==expected.contentType) throw new HttpError(415,'Invalid publication asset media type.');
+      if(upload.total>expected.maxBytes || (expected.byteLength!==null && upload.total!==expected.byteLength)) throw new HttpError(413,'Publication file exceeds its declared limit.');
+      return parts.receive(partKey(session,`publication:${id}:${part}`),upload,body,file=>checkedPublicationAsset(stage.manifest,part,file,store(session,id,part)));
     },
     async preview(session,id) {
       publicationId.parse(id);

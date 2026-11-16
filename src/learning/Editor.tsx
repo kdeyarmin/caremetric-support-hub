@@ -127,7 +127,10 @@ function MediaUpload({ onUploaded }: { onUploaded: () => Promise<void> }) {
   async function upload(event: FormEvent) {
     event.preventDefault(); if (!files.video || !files.captions || !files.transcript) return;
     setBusy(true); setError(""); setStatus("");
-    try { await learningApi.uploadMedia(title, files.video, files.captions, files.transcript, reviewed); await onUploaded(); setReviewed(false); setStatus("Video uploaded. Select it in a video lesson above."); }
+    try {
+      await learningApi.uploadMedia(title, files.video, files.captions, files.transcript, reviewed, (received, total) => setStatus(`Uploading the video: ${Math.floor(received * 100 / total)}%`));
+      await onUploaded(); setReviewed(false); setStatus("Video uploaded. Select it in a video lesson above.");
+    }
     catch (caught) { setError(message(caught)); }
     finally { setBusy(false); }
   }
