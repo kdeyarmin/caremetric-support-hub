@@ -1,7 +1,11 @@
 begin;
-select plan(12);
+select plan(13);
 
 select ok(hub.get_backend_contract() -> 'features' ? 'platform.agents.work-recovery.v1', 'The work recovery feature is declared');
+select ok(position('tls_required' in (select pg_get_constraintdef(c.oid) from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
+  where c.conrelid = 'private.growth_contacts'::regclass and c.contype = 'c' and a.attname = 'mailbox_reason')) > 0
+  and position('''tls_failed''' in pg_get_functiondef('private.growth_mailbox_record(uuid,text,text)'::regprocedure)) > 0,
+  'Why a check got no answer may be one of the STARTTLS reasons');
 select ok(has_function_privilege('hub_app_server', 'private.creative_render_requeue(boolean)', 'execute')
   and not has_function_privilege('authenticated', 'private.creative_render_requeue(boolean)', 'execute')
   and not has_function_privilege('service_role', 'private.creative_render_requeue(boolean)', 'execute'), 'Only the server renders blocked images again');

@@ -4,7 +4,9 @@
 // email is cancelled, its business's opportunity is free for another contact and the people finder looks there again; a server that
 // never answers lets the email go after three tries, or sends the address to the owner's review in strict mode; the bounce guard holds
 // cold email (never a reply to someone who wrote in) above the owner's rate or after a complaint, the owner sees it and resumes it;
-// and the gate refuses drift. Disposable loopback database only; no mail server is asked and no email is sent.
+// why a server gave no answer is kept, and the reader's review of a first email is recorded once and closed to every role
+// (20261117160000_growth_diagnostics.sql); and both gates refuse drift. Disposable loopback database only; no mail server is asked and no
+// email is sent.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -12,7 +14,7 @@ import pg from 'pg';
 import { digest, withSession } from './sms-auth.mjs';
 import { growthStore } from './growth/store.mjs';
 import { sqlAgentStore } from './agents/store.mjs';
-import { verifyHandlers, growthAddressCheckFeature } from './growth/verify.mjs';
+import { verifyHandlers, growthAddressCheckFeature, growthDiagnosticsFeature } from './growth/verify.mjs';
 import { testPhones } from './test-phones.mjs';
 const phones = testPhones(import.meta.url);
 
@@ -28,6 +30,7 @@ const run = randomUUID().slice(0, 8), owner = randomUUID(), token = `growth-addr
 const row = async (sql, values = []) => (await admin.query(sql, values)).rows[0];
 const refused = code => error => error?.code === code;
 const gate = await readFile(new URL('../supabase/migrations/20261116100100_growth_address_check_contract.sql', import.meta.url), 'utf8');
+const diagnosticsGate = await readFile(new URL('../supabase/migrations/20261117160100_growth_diagnostics_contract.sql', import.meta.url), 'utf8');
 const seedAgents = (await admin.query("select key,status,autonomy,config from private.agents where key='marketing_manager'")).rows;
 const seedPolicies = (await admin.query('select * from private.growth_policies')).rows;
 const seedSettings = (await admin.query("select key,value,changed_at from private.hub_settings where key in ('growth.presend_check','growth.bounce_guard_percent','growth.cold_email_daily_cap')")).rows;
@@ -75,14 +78,15 @@ async function claim(message) {
 }
 // The verify task with a stand-in mail server, for this run's addresses only (the database may hold other tests' rows).
 const notices = [];
-async function verify(answers, { available = () => true } = {}) {
+async function verify(answers, { available = () => true, diagnostics = false } = {}) {
   const asked = [];
   const mailbox = { configured: true, available, check: async (domain, addresses) => {
     asked.push(addresses[0]); assert.equal(domain, addresses[0].split('@')[1]);
     const answer = answers[addresses[0]] ?? 'unknown'; return typeof answer === 'string' ? { result: answer } : answer;
   } };
   const scoped = { ...store, mailboxCandidates: async limit => (await store.mailboxCandidates(50)).filter(c => domains.includes(c.email.split('@')[1])).slice(0, limit) };
-  const handler = verifyHandlers({ growth: { store: scoped, people: { mailbox } }, features, notifier: { send: async n => { notices.push(n); } } })['growth.verify'];
+  const declared = diagnostics ? new Set([...features, growthDiagnosticsFeature]) : features;
+  const handler = verifyHandlers({ growth: { store: scoped, people: { mailbox } }, features: declared, notifier: { send: async n => { notices.push(n); } } })['growth.verify'];
   const outcome = await handler({ id: await task('growth.verify'), agentKey: 'marketing_manager', agent: { autonomy: 'act' }, kind: 'growth.verify' });
   return { result: outcome.result, asked };
 }
@@ -123,7 +127,8 @@ try {
 
   // ---- 3. The mail server answers --------------------------------------------------------------------------------------------------
   const first = await verify({ [dead.email]: 'rejected', [live.email]: 'verified', [quiet.email]: 'catch_all', [silent.email]: { result: 'unknown', reason: 'temporary' } });
-  assert.deepEqual(first.result, { checked: 4, verified: 1, rejected: 1, catch_all: 1, unknown: 1, undeliverable: 1, cancelled: 1, reasons: { temporary: 1 } });
+  assert.deepEqual(first.result, { checked: 4, verified: 1, rejected: 1, catch_all: 1, unknown: 1, undeliverable: 1, cancelled: 1, why: { temporary: 1 } });
+  assert.equal((await contactOf(silent.email)).mailbox_reason, null, 'before the diagnostics feature is used, no reason is recorded');
   assert.deepEqual(new Set(first.asked.slice(0, 2)), new Set([quiet.email, dead.email]));
   const deadContact = await contactOf(dead.email);
   assert.deepEqual([deadContact.eligibility, deadContact.mailbox_result, deadContact.mailbox_checks], ['undeliverable', 'rejected', 1], 'a mailbox that does not exist is never written to');
@@ -145,7 +150,7 @@ try {
   // ---- 4. A server that never answers ----------------------------------------------------------------------------------------------
   assert.deepEqual((await verify({})).asked, [], 'not asked again within 16 hours');
   await admin.query("update private.growth_contacts set mailbox_checked_at=now()-interval '17 hours' where email=$1", [silent.email]);
-  assert.deepEqual((await verify({ [silent.email]: 'unreachable' })).result, { checked: 1, unreachable: 1 });
+  assert.deepEqual((await verify({ [silent.email]: 'unreachable' })).result, { checked: 1, unreachable: 1, why: { unreachable: 1 } });
   await admin.query("update private.growth_contacts set mailbox_checked_at=now()-interval '17 hours' where email=$1", [silent.email]);
   await verify({ [silent.email]: 'unknown' });
   assert.equal((await contactOf(silent.email)).mailbox_checks, 3);
@@ -220,7 +225,43 @@ try {
   await assert.rejects(pool.query('select hub.growth_send_guard_resume()'), refused('42501'), 'the server cannot resume cold email');
   await assert.rejects(pool.query('select private.growth_bounce_guard()'), refused('42501'), 'the guard\'s helper is closed');
 
-  // ---- 6. The gate refuses drift --------------------------------------------------------------------------------------------------
+  // ---- 6. Why a server gave no answer, and the reader's review (20261117160000_growth_diagnostics.sql) ----------------------------
+  await setting('growth.presend_check', 'check');
+  const greylisted = await prospect('address-greylisted');
+  const told = await verify({ [greylisted.email]: { result: 'unknown', reason: 'temporary' } }, { diagnostics: true });
+  assert.deepEqual([told.result.checked, told.result.unknown, told.result.why], [1, 1, { temporary: 1 }]);
+  let greyContact = await contactOf(greylisted.email);
+  assert.deepEqual([greyContact.mailbox_result, greyContact.mailbox_reason, greyContact.mailbox_checks], ['unknown', 'temporary', 1], 'why the server gave no answer is kept');
+  await admin.query("update private.growth_contacts set mailbox_checked_at=now()-interval '17 hours' where email=$1", [greylisted.email]);
+  await verify({ [greylisted.email]: 'verified' }, { diagnostics: true });
+  greyContact = await contactOf(greylisted.email);
+  assert.deepEqual([greyContact.mailbox_result, greyContact.mailbox_reason, greyContact.mailbox_checks, greyContact.eligibility], ['verified', 'temporary', 2, 'permitted'],
+    'an answer on a retry keeps what the retry overcame');
+  await assert.rejects(store.mailboxRecord(greyContact.id, 'unknown', 'mailbox full'), refused('22023'), 'only a known reason is recorded');
+  assert.equal((await contactOf(greylisted.email)).mailbox_checks, 2, 'a refused reason records nothing');
+  const blocked = await prospect('address-blocked');
+  assert.equal((await store.mailboxRecord((await contactOf(blocked.email)).id, 'unknown', null)).reason, 'error', 'an unknown with no reason is an error');
+  const reviewed = await touch(greylisted);
+  const notes = { promptVersion: 'critic.1', outcome: 'scored_lower', first: { specific: 2, relevant: 3, clearAsk: 4, wouldReply: 3, weakest: 'The approved words.' },
+    rewrite: { specific: 2, relevant: 2, clearAsk: 3, wouldReply: 2, weakest: 'The approved words.' } };
+  for (const bad of [{ ...notes, rewrite: null }, { ...notes, outcome: 'kept', rewrite: null }, { ...notes, first: { ...notes.first, wouldReply: 9 } },
+    { ...notes, first: { ...notes.first, email: 'someone@example.org' } }, { ...notes, outcome: 'failed_checks', rewrite: null },
+    { ...notes, outcome: 'failed_checks', rewrite: null, problem: 'Not A Code' }, { ...notes, promptVersion: 'Critic 1' }, { ...notes, outcome: 'maybe' }]) {
+    await assert.rejects(store.reviewRecord(reviewed.id, bad), refused('22023'), JSON.stringify(bad));
+  }
+  await assert.rejects(store.reviewRecord(randomUUID(), notes), refused('22023'), 'a review needs its message');
+  assert.equal(await store.reviewRecord(reviewed.id, notes), true);
+  assert.equal(await store.reviewRecord(reviewed.id, { ...notes, outcome: 'kept' }), false, 'a review is recorded once');
+  const stored = await row('select * from private.growth_message_reviews where message_id=$1', [reviewed.id]);
+  assert.deepEqual([stored.prompt_version, stored.rewrite, stored.rewrite_problem, stored.first_read.wouldReply, stored.rewrite_read.wouldReply, stored.first_read.weakest],
+    ['critic.1', 'scored_lower', null, 3, 2, 'The approved words.']);
+  const failedTouch = await touch(blocked);
+  assert.equal(await store.reviewRecord(failedTouch.id, { promptVersion: 'critic.1', outcome: 'failed_checks', problem: 'unsupported_claim', first: notes.first, rewrite: null }), true);
+  await assert.rejects(pool.query('select * from private.growth_message_reviews'), refused('42501'), 'the server cannot read the reviews directly');
+  await admin.query('delete from private.growth_messages where id=$1', [failedTouch.id]);
+  assert.equal((await row('select count(*)::int as n from private.growth_message_reviews where message_id=$1', [failedTouch.id])).n, 0, 'a review goes with its message');
+
+  // ---- 7. The gates refuse drift ----------------------------------------------------------------------------------------------------
   const client = await admin.connect();
   const rewrite = (signature, from, to) => `do $$ declare d text := pg_get_functiondef('${signature}'::regprocedure); begin
     if position($q$${from}$q$ in d) = 0 then raise exception 'fixture text missing'; end if; execute replace(d, $q$${from}$q$, $q$${to}$q$); end $$`;
@@ -242,9 +283,26 @@ try {
       try { await client.query(drift); await assert.rejects(client.query(gate), refused('55000'), drift); }
       finally { await client.query('rollback'); }
     }
+    await client.query('begin'); await client.query(diagnosticsGate); await client.query(diagnosticsGate); await client.query('rollback');
+    for (const drift of [
+      'alter table private.growth_contacts drop column mailbox_reason',
+      'grant execute on function private.growth_mailbox_record(uuid,text,text) to authenticated',
+      'grant execute on function private.growth_review_record(uuid,jsonb) to service_role',
+      'revoke execute on function private.growth_mailbox_record(uuid,text) from hub_app_server',
+      'grant select on private.growth_message_reviews to hub_app_server',
+      'alter table private.growth_message_reviews disable row level security',
+      'grant execute on function private.growth_review_read_ok(jsonb) to hub_app_server',
+      rewrite('private.growth_review_record(uuid,jsonb)', 'perform private.require_hub_app_server();', ' '),
+      rewrite('private.growth_mailbox_record(uuid,text,text)', 'v_saved := private.growth_mailbox_record(p_contact, p_result);', "v_saved := '{}'::jsonb;"),
+      rewrite('private.growth_review_record(uuid,jsonb)', 'private.growth_review_read_ok(', 'pg_catalog.jsonb_typeof('),
+    ]) {
+      await client.query('begin');
+      try { await client.query(drift); await assert.rejects(client.query(diagnosticsGate), refused('55000'), drift); }
+      finally { await client.query('rollback'); }
+    }
   } finally { client.release(); }
 
-  console.log('Address check integration passed: off changes nothing; on, a first cold email waits before drafting and before the claim until the business\'s mail server answers; a mailbox that does not exist is undeliverable, its email cancelled, its business free for another contact and back on the people finder\'s list; an unanswered address goes after three tries, or to the owner in strict mode; the bounce guard holds cold email (never a reply) above the owner\'s rate or after a complaint, alerts once a day and resumes on the owner\'s word; and gate drift. No mail server was asked and no email was sent.');
+  console.log('Address check integration passed: off changes nothing; on, a first cold email waits before drafting and before the claim until the business\'s mail server answers; a mailbox that does not exist is undeliverable, its email cancelled, its business free for another contact and back on the people finder\'s list; an unanswered address goes after three tries, or to the owner in strict mode; the bounce guard holds cold email (never a reply) above the owner\'s rate or after a complaint, alerts once a day and resumes on the owner\'s word; why a server gave no answer is kept past a later answer, and a first email\'s review is recorded once, checked and closed to every role; and gate drift. No mail server was asked and no email was sent.');
 } finally {
   for (const domain of domains) {
     const org = (await row('select id from private.growth_organizations where domain=$1', [domain]))?.id;

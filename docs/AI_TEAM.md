@@ -332,7 +332,7 @@ screen says the brief was written but not delivered.
 
 **What the team lost (2026-11-17).** The watchdog (`server/agents/tasks/watchdog.mjs`, read by the morning brief and the Monday
 scorecard) also names, each with its likely cause, what the team made and lost in the last seven days
-(`private.agent_watchdog_facts().losses`, `20261117160000_work_recovery.sql`): most of a week's images blocked by its own checks (by
+(`private.agent_watchdog_facts().losses`, `20261117180000_work_recovery.sql`): most of a week's images blocked by its own checks (by
 rule), a campaign an ad platform refused with none created since, qualified prospects waiting more than a day with nothing drafted (by
 why: an address check, a draft you turned down, the bounce guard), cold email bouncing over 5% in 30 days (and whether the guard is
 on), the daily cap reached with approved emails waiting, most strong fits with no address, and an ad budget with nothing running. It
