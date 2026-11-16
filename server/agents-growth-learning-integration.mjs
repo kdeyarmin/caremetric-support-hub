@@ -79,6 +79,37 @@ try {
   const memo = composeMemo(product, facts);
   assert.ok(memo.text.includes(`Too long, itest ${run}`), 'The owner\'s note is in the memo');
 
+  // Report-led first touches used ordinary length labels in growth.11. The read-time filter
+  // drops only that dimension, including an old draft sent after the new code rolls out.
+  const lengthCase = async (label, extraArms = {}, created = '2026-11-15T12:00:00Z', productName = product) => {
+    const item = await sent(`report-${label}`, 0);
+    await admin.query('update private.growth_messages set arms=$2,created_at=$3 where id=$1',
+      [item.message, JSON.stringify({ length: run, subject: run, angle: run, trigger: 'cms_record', ...extraArms }), created]);
+    if (productName !== product) await admin.query('update private.growth_opportunities set product=$2 where id=$1', [item.opp, productName]);
+    return item;
+  };
+  await lengthCase('legacy');
+  await lengthCase('unknown-trigger', { trigger: '' });
+  await lengthCase('new-ordinary', { length_basis: 'applied_v1' });
+  const report = await lengthCase('new-report', { length: 'report', length_basis: 'applied_v1' });
+  await admin.query("update private.growth_messages set variant='report' where id=$1", [report.message]);
+  await lengthCase('inbound', { trigger: 'inbound' });
+  await lengthCase('reask', { trigger: 'reask_later' });
+  await lengthCase('before', {}, '2026-11-14T12:00:00Z');
+  const later = await lengthCase('later');
+  // An earlier primary attempt establishes a later touch, even outside the learning window.
+  await admin.query(`insert into private.growth_messages(opportunity_id,work_id,contact_id,purpose,subject,body,citations,
+    opportunity_version,contact_version,policy_version,unsubscribe_hash,status,attempted_at,created_at)
+    select opportunity_id,work_id,contact_id,purpose,subject,body,citations,opportunity_version+1,contact_version,policy_version,
+      unsubscribe_hash,'delivered','2026-11-14T10:00:00Z','2026-11-14T09:00:00Z' from private.growth_messages where id=$1`, [later.message]);
+  await lengthCase('carebase', {}, '2026-11-15T12:00:00Z', 'carebase');
+  const filtered = await store.learningFacts(product, 90);
+  const count = (f, dimension) => f.arms.find(x => x.arm === dimension && x.value === run)?.sent ?? 0;
+  assert.equal(count(filtered, 'length'), 5, 'Only legacy cold first-touch lengths are excluded');
+  assert.equal(count(filtered, 'angle'), 8, 'All legitimate angle experiments remain');
+  assert.equal(count(filtered, 'subject'), 8, 'All legitimate subject experiments remain');
+  assert.equal(count(await store.learningFacts('carebase', 90), 'length'), 1, 'CareBase length is unchanged');
+
   // ---- 4. Proposed once, replacing an undecided proposal; only the owner decides -------------------------------------------------
   await admin.query("update private.growth_learning_memos set status='retired' where product=$1 and status in ('proposed','active')", [product]);
   const first = await store.learningPropose(product, `First memo ${run}.`, { sent: 4 });
