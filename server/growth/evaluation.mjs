@@ -64,7 +64,7 @@ export async function evaluateGrowth(now = new Date()) {
     const reviewPage = 'https://www.caremetricintel.com/market-review';
     const inside = 'It shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county\'s residents use most and the highest-ranked physicians for outreach.';
     const close = 'I run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nDoes it match what your team sees in the field?';
-    const firstBody = `I put together a free market report for your agency from public Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\n${inside}\n\n${close}`;
+    const firstBody = `I put together a free market report for your agency from Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\n${inside}\n\n${close}`;
     const seen = [];
     const capture = output => ({ configured: true, run: async (_task, request) => { seen.push(JSON.parse(request.user)); return { outcome: 'completed', output }; } });
     const firstDraft = { subject: 'Your county market report', body: firstBody, citations: ['source-a'], needsHuman: false };
@@ -76,12 +76,13 @@ export async function evaluateGrowth(now = new Date()) {
       check('first email over its length rejected', await first(`${firstBody}${' The report also lists the county\'s largest agencies and the hospitals its residents use.'.repeat(6)}`) === null);
       check('first email with a second question rejected', await first(`${firstBody} Which county matters most to you?`) === null);
       check('first email without its report link rejected', await first(firstBody.replace(`\n${report.url}`, '')) === null);
-      const review = await first(`A free market report for your agency, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\n${reviewPage}\n\n${inside}\n\n${close}`, {});
+      const review = await first(`A free market report for your agency, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\n${reviewPage}\n\n${inside}\n\n${close}`, {});
       check('first email without a roster report points to the market report page', review?.modelGenerated === true && review.arms?.form === 'short' && seen.at(-1)?.touchPlan === reviewTouchAngle);
       const second = body => draftMessage({ opportunity: { ...base, touches: 1 }, work, task: {}, model: capture({ ...firstDraft, subject: 'The hospitals your county uses', body }), report });
       const trial = `You can try it free for 30 days on one county:\n${playbookFor(product).nextStep.url}`;
       check('second email offers the trial', (await second(`One page of the report lists the hospitals your county's residents use. Does your team plan its week around them?\n${report.url}\n\n${trial}`))?.modelGenerated === true
         && seen.at(-1)?.touchPlan === unviewedTouchAngle && /free trial/.test(unviewedTouchAngle));
+      check('prospect email calling the data public rejected', await second(`One page of the report, built from public Medicare data, lists the hospitals your county's residents use. Does your team plan its week around them?\n${report.url}\n\n${trial}`) === null);
       check('prospect email naming the card rejected', await second(`Does your team plan its week around the hospitals your county's residents use?\n\nA credit card is required to start the trial. ${trial}`) === null);
     } else {
       check('report-only first email never written for this product', (await draftMessage({ opportunity: base, work, task: {}, model: capture(draft), report }))?.arms?.form === undefined);

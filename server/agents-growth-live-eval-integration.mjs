@@ -32,7 +32,7 @@ const stand = score => ({ configured: true, run: async (_task, request) => {
   const input = JSON.parse(request.user);
   const report = (input.links.find(link => link.url.includes('/report/')) ?? input.links.find(link => link.url.endsWith('/market-review'))).url;
   return { outcome: 'completed', output: { subject: 'A market report for your agency', citations: [input.sources.find(source => source.id !== 'county').id], needsHuman: false,
-    body: `I put together a free market report for your agency from public Medicare data.\n${report}\n\nDoes it match what your team sees in the field?` } };
+    body: `I put together a free market report for your agency from Medicare data.\n${report}\n\nDoes it match what your team sees in the field?` } };
 } });
 // A clock a minute on at each reading: a try writes one batch and then finds its time for starting new batches spent, as a real run
 // with a slow model would, so the twelve cases take several tries without the test waiting minutes.
@@ -61,7 +61,7 @@ try {
 
   // ---- 2. Twelve cases over several tries, recorded as growth.live.1 ----------------------------------------------------------------------
   await admin.query("update private.growth_policies set approved_claim = $1 where product = 'caremetric-intel'",
-    ['CareMetric Intel shows home health and hospice agencies where their referrals come from, from public Medicare data.']);
+    ['CareMetric Intel shows home health and hospice agencies where their referrals come from, from Medicare data.']);
   const gateBefore = (await row("select count(*)::int as n from private.agent_evaluations where version = 'growth.1'")).n;
   const quiet = { send: async () => { throw new Error('a passing run tells nobody'); } };
   const passing = await finish(evaluateWith(4, quiet));

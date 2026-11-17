@@ -162,7 +162,7 @@ export const salesPlaybook = deepFreeze({
         'It is hiring marketers, community liaisons or business development staff.',
         'It is opening a branch, entering a new county or expanding service lines.',
         'It mentions referral partners such as physicians, hospitals or facilities.',
-        'A public CMS record shows it was newly certified or changed ownership in the last year: new agencies and new owners build referral sources from scratch.',
+        'A CMS record shows it was newly certified or changed ownership in the last year: new agencies and new owners build referral sources from scratch.',
       ],
       disqualifiers: [
         'A directory, listing or referral site, an association, a news article, a government page or a job board, rather than the provider itself.',
@@ -179,11 +179,11 @@ export const salesPlaybook = deepFreeze({
       'Deciding which counties and referral sources deserve a small team\'s time.',
       'Outreach, follow-up and recorded referrals kept in spreadsheets or several tools.',
       'Little visibility for a manager into what marketers did and what came of it.',
-      'Building target lists by hand from public data.',
+      'Building target lists by hand.',
     ],
     triggers: ['Hiring a marketer or liaison', 'Opening a branch or entering a county', 'A census goal or a slow quarter', 'A new director of business development', 'Annual planning'],
     valuePoints: [
-      'Targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data.',
+      'Targeted marketing, marketing analysis and territory analysis from healthcare and demographic data.',
       'A marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place.',
       'One workspace for the whole marketing job: territory research, focused referral lists, account relationships, planned visits, expenses and recorded results. Email campaigns are one part of it, never the point (fact sheet, "How to present it").',
       'Plans from Starter (3 marketer seats + 1 manager) to Pro, with annual billing saving about 17%.',
@@ -202,7 +202,7 @@ export const salesPlaybook = deepFreeze({
       { key: 'price', when: 'Cost or budget.', answer: 'Quote only the fact sheet: Starter, Growth and Pro with seats and counties, annual billing saving about 17%, and the Founders Sale (50% off eligible subscription charges for the first 12 months of paid service). Never promise more referrals or revenue.' },
       { key: 'timing', when: 'Not now or busy.', answer: `Acknowledge it, say the ${facts.intel.trialDays}-day free trial can start whenever suits them, and ask when to check back. Record a dated follow-up.` },
       { key: 'current_system', when: 'They already use a CRM, a spreadsheet or another data tool.', answer: 'Ask what it leaves out (territory analysis, focused lists, recorded referrals in one place). Never name or criticize another product.' },
-      { key: 'data_trust', when: 'They ask whether the data shows real referrals.', answer: 'Be precise: public Medicare and Census figures are research signals; referrals are what the organization records in Intel.' },
+      { key: 'data_trust', when: 'They ask whether the data shows real referrals.', answer: 'Be precise: Medicare and Census figures are research signals; referrals are what the organization records in Intel. Name the source (Medicare, CMS, the Census Bureau) without calling it public. If they ask whether the data is public or where it comes from, say plainly that it is CMS, NPPES and Census Bureau data that CareMetric Intel analyzes; never call it proprietary, exclusive or licensed.' },
       { key: 'authority', when: 'They must ask an owner or a corporate office.', answer: 'Offer a short summary they can forward and ask who else should see it.' },
       { key: 'demo', when: 'They ask for a demo, a call or a meeting.', answer: `CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the resource or guide that shows what they want to see, the ${facts.intel.trialDays}-day free trial on one county, and answers to any question by email.` },
       { key: 'results', when: 'They ask for proof of results or case studies.', answer: 'There are no approved customer results to share. Suggest the free trial on one county so they can judge it on their own market.' },
@@ -241,8 +241,8 @@ const reportInside = 'Then say what is inside, in two short sentences: where the
 const reportWriter = 'Then one sentence on who you are: you run a home health and hospice agency, and you built CareMetric Intel to see your own market this way. Do not retell the founder\'s story beyond that sentence.';
 const reportQuestion = 'End with exactly one short question the reader can answer by reply once they have looked, such as whether the report matches what their team sees in the field; when "brief" gives a pain, ask about that instead. Never claim to know the answer.';
 const reportOnly = `No other link, no free trial and no price: those come in the next email. The body holds exactly one question and exactly one link, in about one hundred words and never more than ${shortFormLimits.words}.`;
-export const reportTouchAngle = `First email, built around the agency's own free market report and nothing else. Write it in this order. First sentence: you put together a free market report for this agency, by name, from public Medicare data. That sentence is what the reader sees in their inbox beside the subject, so it holds the offer and nothing else. Then say in a few words that it opens as a PDF with nothing to sign up for, and put the report link on its own line. ${reportInside} ${reportWriter} ${reportQuestion} ${reportOnly}`;
-export const reviewTouchAngle = `First email, built around a free market report the agency can get for itself, and nothing else. Write it in this order. First sentence: a free market report for this agency, by name, built from public Medicare data, is one step away. That sentence is what the reader sees in their inbox beside the subject, so it holds the offer and nothing else. Then say that entering its CMS certification number on the market report page emails the report as a PDF, and put that page's link on its own line. ${reportInside} ${reportWriter} ${reportQuestion} ${reportOnly}`;
+export const reportTouchAngle = `First email, built around the agency's own free market report and nothing else. Write it in this order. First sentence: you put together a free market report for this agency, by name, from Medicare data. That sentence is what the reader sees in their inbox beside the subject, so it holds the offer and nothing else. Then say in a few words that it opens as a PDF with nothing to sign up for, and put the report link on its own line. ${reportInside} ${reportWriter} ${reportQuestion} ${reportOnly}`;
+export const reviewTouchAngle = `First email, built around a free market report the agency can get for itself, and nothing else. Write it in this order. First sentence: a free market report for this agency, by name, built from Medicare data, is one step away. That sentence is what the reader sees in their inbox beside the subject, so it holds the offer and nothing else. Then say that entering its CMS certification number on the market report page emails the report as a PDF, and put that page's link on its own line. ${reportInside} ${reportWriter} ${reportQuestion} ${reportOnly}`;
 
 /**
  * The second email to a CareMetric Intel agency, four days after its report. It is the one that offers the trial: the first email

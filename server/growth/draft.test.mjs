@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,namesCard,outdatedWords,shortFormProblem,weaknessMeanings} from './draft.mjs';
+import {callsDataPublic,criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,namesCard,outdatedWords,problemHints,shortFormProblem,weaknessMeanings} from './draft.mjs';
 import {playbookFor,quietPlays,reportCloseAngle,reportTouchAngle,reviewFollowupAngle,reviewTouchAngle,shortFormLimits,touchAngle,unviewedTouchAngle,viewedTouchAngle} from './playbook.mjs';
 import {assessProspect} from './assessment.mjs';
 const now=new Date().toISOString();
@@ -162,15 +162,18 @@ it('lets a message state the numbers its own product\'s catalog states, and give
  const intel=body=>draftProblem(answer(body),{product:'caremetric-intel',sources,outreach:true,organization:'Valley Hospice'});
  const carebase=body=>draftProblem(answer(body),{product:'carebase',sources,outreach:true,organization:'Valley Home'});
  // Intel: the site's own figures about its data ("By the numbers") and a feature's number, in a sentence about Intel or in the first person.
- expect(intel('Intel draws on 150+ public healthcare datasets, linked by county and ZIP.')).toBeNull();
- expect(intel('I built Intel on more than 150 public healthcare datasets.')).toBeNull();
+ // The catalog's figure, without the catalog's word "public": a prospect email names the data's source, never calls it public
+ // (owner direction 2026-11-17).
+ expect(intel('Intel draws on 150+ healthcare datasets, linked by county and ZIP.')).toBeNull();
+ expect(intel('I built Intel on more than 150 healthcare datasets.')).toBeNull();
+ expect(intel('Intel draws on 150+ public healthcare datasets, linked by county and ZIP.')).toBe('public_data');
  expect(intel('Our data covers 33,000+ ZIP areas and 3,200+ counties.')).toBeNull();
  expect(intel('Intel lists the accounts that go 45 days without a visit.')).toBeNull();
  // CareBase: the requirements its own site states, such as a personal care home's 12 annual training hours and an ALF's 16.
  expect(carebase('CareBase tracks the 12 hours of training a year each direct care worker needs.')).toBeNull();
  expect(carebase('In an ALF, CareBase tracks 16 annual hours per direct care worker.')).toBeNull();
  // A figure the catalog does not state is refused, and so is the organization's own figure in a sentence about the product.
- expect(intel('Intel draws on 200+ public healthcare datasets.')).toBe('claim');
+ expect(intel('Intel draws on 200+ healthcare datasets.')).toBe('claim');
  expect(intel('Intel covers your 12 counties.')).toBe('claim');
  expect(carebase('CareBase tracks 20 hours of training a year.')).toBe('claim');
  // Each product's catalog is its own: neither message may state the other product's numbers.
@@ -274,9 +277,9 @@ const trial=playbookFor('caremetric-intel').nextStep.url;
 const reviewPage='https://www.caremetricintel.com/market-review';
 const inside='It shows where your agency stands among the agencies located in Allegheny County, which agencies lead the county and the hospitals its residents use most. It also lists the highest-ranked physicians for home health outreach.';
 const signed='I run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.';
-const firstBody=`I put together a free market report for Valley Home Health from public Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\n${inside}\n\n${signed}\n\nDoes it match what your team sees in the field?`;
+const firstBody=`I put together a free market report for Valley Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\n${inside}\n\n${signed}\n\nDoes it match what your team sees in the field?`;
 const firstDraft={subject:'Valley Home Health\'s Allegheny County market report',body:firstBody,citations:['e1'],needsHuman:false};
-const reviewDraft={...firstDraft,body:`A free market report for Valley Home Health, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\n${reviewPage}\n\n${inside}\n\n${signed}\n\nDoes it match what your team sees in the field?`};
+const reviewDraft={...firstDraft,body:`A free market report for Valley Home Health, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\n${reviewPage}\n\n${inside}\n\n${signed}\n\nDoes it match what your team sees in the field?`};
 const general={subject:'Referral sources in your county',body:'Which referral sources does your team visit each week?',citations:['e1'],needsHuman:false};
 const firstEmail=async(o,{offered=report,output=firstDraft,critic=false,views=false,run=null}={})=>{
  const model={configured:true,run:run??vi.fn(async()=>({outcome:'completed',output}))};
@@ -303,7 +306,7 @@ it('gives the reader the brief\'s writer part and the writer\'s rules, keeps all
   pains:[{question:'Do you know which physicians certify the most home health patients in Allegheny County?'}],angle:'referral_sources',
   hook:{sentence:'Valley Home Health serves Allegheny County.',sourceUrl:'https://valleyhh.org/about'}};
  // No roster report here, so the first email points to the market report page.
- const draft={subject:'Referral sources in Allegheny County',body:`A free market report for Valley Home Health, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\n${reviewPage}\n\nValley Home Health serves Allegheny County.\n\nDo you know which physicians certify the most home health patients there?`,citations:['e1'],needsHuman:false};
+ const draft={subject:'Referral sources in Allegheny County',body:`A free market report for Valley Home Health, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\n${reviewPage}\n\nValley Home Health serves Allegheny County.\n\nDo you know which physicians certify the most home health patients there?`,citations:['e1'],needsHuman:false};
  const better={...draft,subject:'Your Allegheny County referral map'};
  const run=vi.fn(async(_task,request)=>{
   if(request.promptVersion===criticPromptVersion)return {outcome:'completed',output:JSON.parse(request.user).email.subject===better.subject
@@ -382,7 +385,7 @@ it('tells the first email\'s writer its plan and holds it to about one hundred w
  expect(input.style).toBe('Keep the body to about one hundred words, never more than 120.');
  // The plan: the report in the first sentence, which is the line an inbox shows, then the link, what is inside, who is writing, one question.
  expect(reportTouchAngle).toMatch(/^First email, built around the agency's own free market report and nothing else\./);
- expect(reportTouchAngle).toMatch(/First sentence: you put together a free market report for this agency, by name, from public Medicare data\./);
+ expect(reportTouchAngle).toMatch(/First sentence: you put together a free market report for this agency, by name, from Medicare data\./);
  expect(reportTouchAngle).toMatch(/opens as a PDF with nothing to sign up for/);
  expect(reviewTouchAngle).toMatch(/entering its CMS certification number on the market report page emails the report as a PDF/);
  expect(reviewTouchAngle).not.toMatch(/nothing to sign up for/);
@@ -399,7 +402,7 @@ it('tells the first email\'s writer its plan and holds it to about one hundred w
  const filler=' The report also lists the county\'s largest agencies and the hospitals its residents use.'.repeat(6);
  expect(wordsIn(`${firstBody}${filler}`)).toBeGreaterThan(shortFormLimits.words);
  for(const body of [`${firstBody}${filler}`,`${firstBody} Which county matters most to you?`,`${firstBody}\n\n${trial}`,
-   firstBody.replace('from public Medicare data.','from public Medicare data, and the free trial shows the rest.'),firstBody.replace(`\n${report.url}`,'')]) {
+   firstBody.replace('from Medicare data.','from Medicare data, and the free trial shows the rest.'),firstBody.replace(`\n${report.url}`,'')]) {
   const reasons=[];
   const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{...firstDraft,body}}))};
   expect(await draftMessage({opportunity:intel,work,task:{},model,report,onReject:code=>reasons.push(code)})).toBeNull();
@@ -421,7 +424,7 @@ it('accepts the email review\'s example first email, and refuses it with the tri
  const sources=[{id:'e1',claim:'Valley Home Health is a Medicare-certified home health agency in Erie, Pennsylvania (CMS Provider of Services file).',source_url:'https://data.cms.gov/',observed_at:now},
   {id:'county',claim:'Erie County has 48 home health agencies, by CMS\'s count.',source_url:'https://data.cms.gov/',observed_at:now}];
  const example={subject:'Valley Home Health\'s Erie County market report',citations:['e1','county'],needsHuman:false,
-  body:`I put together a free market report for Valley Home Health from public Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\nCMS counts 48 home health agencies in Erie County. The report shows where yours stands among them, which agencies lead the county, the hospitals Erie County residents use most and the highest-ranked physicians for home health outreach. It ends with up to three moves to consider.\n\nI run a home health and hospice agency myself, and I built CareMetric Intel to see my own market this way.\n\nAfter you look, tell me: does it match what your team sees in the field?`};
+  body:`I put together a free market report for Valley Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\nCMS counts 48 home health agencies in Erie County. The report shows where yours stands among them, which agencies lead the county, the hospitals Erie County residents use most and the highest-ranked physicians for home health outreach. It ends with up to three moves to consider.\n\nI run a home health and hospice agency myself, and I built CareMetric Intel to see my own market this way.\n\nAfter you look, tell me: does it match what your team sees in the field?`};
  const check=(body,over={})=>draftProblem({...example,body},{product:'caremetric-intel',sources,outreach:true,organization:'Valley Home Health',extraLinks:[report.url],form:'short',formLinks:[report.url],...over});
  expect(check(example.body)).toBeNull();
  expect(example.subject.length).toBeLessThan(60);
@@ -448,8 +451,8 @@ it('keeps the report-first shape without a model, in an email that passes the ch
   const link=offered?.url??reviewPage;
   const draft=await draftMessage({opportunity:intel,work,task:{},report:offered});
   expect(draft).toMatchObject({modelGenerated:false,subject:'A market report for Valley Home Health',citations:['e1'],arms:{form:'short',length:'report'}});
-  expect(draft.body.split('\n')[0]).toBe(offered?'I put together a free market report for Valley Home Health from public Medicare data. It opens as a PDF, with nothing to sign up for:'
-   :'A free market report for Valley Home Health, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:');
+  expect(draft.body.split('\n')[0]).toBe(offered?'I put together a free market report for Valley Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:'
+   :'A free market report for Valley Home Health, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:');
   expect(draft.body.split('\n')[1].startsWith(link)).toBe(true);
   expect(draft.body).toContain('the highest-ranked physicians for outreach');
   expect(draft.body).toMatch(/Does it match what your team sees in the field\?$/);
@@ -458,7 +461,7 @@ it('keeps the report-first shape without a model, in an email that passes the ch
    {product:'caremetric-intel',sources:intel.evidence,outreach:true,organization:intel.name,extraLinks:offered?[offered.url]:[],form:'short',formLinks:[link]})).toBeNull();
  }
  // An agency with no name on record is "your agency"; a later touch and CareBase keep the general template.
- expect((await draftMessage({opportunity:{...intel,name:null},work,task:{},report})).body).toMatch(/^I put together a free market report for your agency from public Medicare data\./);
+ expect((await draftMessage({opportunity:{...intel,name:null},work,task:{},report})).body).toMatch(/^I put together a free market report for your agency from Medicare data\./);
  expect((await draftMessage({opportunity:{...intel,touches:1},work,task:{},report})).body).toMatch(/^Intel shows every referral source in your county\./);
  expect((await draftMessage({opportunity,work,task:{}})).body).toMatch(/^CareBase supports facility training\./);
 });
@@ -516,6 +519,34 @@ it('offers the trial in an agency\'s second email and leaves the report with it 
   expect((await later({...home,touches},{offered:null})).touchPlan).toBe(touchAngle(touches+1));
   expect((await later({...intel,product:'carebase',touches})).touchPlan).toBe(touchAngle(touches+1));
  }
+});
+
+it('names where Intel\'s data comes from without calling it public, in every prospect email and every plan for one (owner direction 2026-11-17)',()=>{
+ const answer=body=>({subject:'Referral sources in your county',body,citations:['s'],needsHuman:false});
+ const about=(product,body,outreach=true,organization=null)=>draftProblem(answer(body),{product,sources:[{id:'s'}],outreach,organization});
+ const ask=' Which county comes first for your team?';
+ expect(about('caremetric-intel',`The report is built from Medicare data.${ask}`)).toBeNull();
+ for(const words of ['The report is built from public Medicare data.','It uses public CMS and Census data.','It is built on publicly available data.','It shows your county\'s public CMS ratings.',
+   'It lists the public ratings of every agency in your county.','It is all free data.','It reads public records for you.'])
+  expect(about('caremetric-intel',`${words}${ask}`),words).toBe('public_data');
+ // Other uses of the word are not about the data, and the prospect's own name is theirs.
+ expect(about('caremetric-intel',`The county health department refers patients to agencies like yours.${ask}`)).toBeNull();
+ expect(callsDataPublic('caremetric-intel','Members of the public ask about hospice every week.')).toBe(false);
+ expect(callsDataPublic('caremetric-intel','It is published by CMS each year.')).toBe(false);
+ expect(about('caremetric-intel',`Erie Public Data Home Health serves Erie County.${ask}`,true,'Erie Public Data Home Health')).toBeNull();
+ // CareBase email and messages to customers are not read for it.
+ expect(callsDataPublic('carebase','public data')).toBe(false);
+ expect(about('caremetric-intel','County Intelligence draws on public Medicare data. Where are you in setup?',false)).toBeNull();
+ // The writer is told the rule, and never to call the data proprietary; no plan or fallback for a prospect email uses the word.
+ expect(growthSystem).toContain('leave out the word "public"');
+ expect(growthSystem).toContain('Never call the data proprietary, exclusive or licensed either.');
+ for(const plan of [reportTouchAngle,reviewTouchAngle,viewedTouchAngle,unviewedTouchAngle,reviewFollowupAngle,reportCloseAngle]) expect(plan).not.toMatch(/\bpublic/i);
+ expect(problemHints.public_data).toContain('"Medicare data", not "public Medicare data"');
+ // An email written under the old instructions is withdrawn when its turn to send comes: prospect email only.
+ const waiting={product:'caremetric-intel',subject:'Your county market report',body:'I put together a free market report for your agency from public Medicare data.'};
+ expect(outdatedWords({...waiting,purpose:'marketing'})).toBe('public_data');
+ expect(outdatedWords({...waiting,purpose:'success'})).toBeNull();
+ expect(outdatedWords({...waiting,product:'carebase',purpose:'marketing'})).toBeNull();
 });
 
 it('never brings up the card an Intel trial needs in a prospect email, and never tells a writer to (owner direction 2026-11-17)',()=>{

@@ -8,14 +8,14 @@ import { scorecardFeature, scorecardHandlers } from '../agents/scorecard/index.m
 
 // Monday 16 November 2026, 06:50 Eastern (EST): the scheduled run is due.
 const monday = new Date('2026-11-16T11:50:00Z');
-const policy = { enabled: true, approvedClaim: 'CareMetric Intel shows home health and hospice agencies where their referrals come from, from public Medicare data.', maxTouches: 3, experiment: false, version: 4 };
+const policy = { enabled: true, approvedClaim: 'CareMetric Intel shows home health and hospice agencies where their referrals come from, from Medicare data.', maxTouches: 3, experiment: false, version: 4 };
 const scheduled = (over = {}) => ({ id: '00000000-0000-4000-8000-0000000000aa', agentKey: 'marketing_manager', kind: 'growth.evaluate_live', sourceKind: 'schedule', attempts: 1,
   requestKey: 'schedule:00000000-0000-4000-8000-000000000001:20261116T115000Z', agent: { autonomy: 'act' }, ...over });
 
 // A reader-and-writer model stand-in: writes a first email in the form every agency gets (its market report and one question, linking
 // the case's own report, or the market report page for a case without one), and scores it as told.
 const reviewPage = 'https://www.caremetricintel.com/market-review';
-const email = (link, source) => ({ subject: 'A market report for your agency', body: `I put together a free market report for your agency from public Medicare data.\n${link}\n\nDoes it match what your team sees in the field?`,
+const email = (link, source) => ({ subject: 'A market report for your agency', body: `I put together a free market report for your agency from Medicare data.\n${link}\n\nDoes it match what your team sees in the field?`,
   citations: [source], needsHuman: false });
 function stubModel({ score = 4, weakness = 'none', outcome = 'completed', failOn = null } = {}) {
   const calls = [];

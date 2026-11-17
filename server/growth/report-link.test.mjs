@@ -84,7 +84,7 @@ describe('agency report links', () => {
     const opportunity = { id: 'o1', product: 'caremetric-intel', name: 'Riverbend Home Health', version: 1, contact_id: 'c', touches: 0,
       policy: { approved_claim: 'CareMetric Intel helps home health agencies focus their marketing.' }, evidence: [roster()], events: [] };
     const work = { kind: 'outreach', action: 'First touch', success: 'Reply' };
-    const body = `I put together a free market report for Riverbend Home Health from public Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nI run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nDoes it match what your team sees in the field?`;
+    const body = `I put together a free market report for Riverbend Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nI run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nDoes it match what your team sees in the field?`;
     const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: { subject: 'Your county market', body, citations: ['roster-1'], needsHuman: false } })) };
     const draft = await draftMessage({ opportunity, work, task: {}, model, report: link });
     expect(draft).toMatchObject({ modelGenerated: true });
@@ -110,13 +110,13 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
 
   it('offers the agency its own market report and nothing else, and leaves the trial to the second email (owner decision 2026-11-17)', async () => {
     const link = reportLinks({ key }).linkFor(opportunity);
-    const body = `I put together a free market report for Riverbend Home Health from public Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nIt shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county's residents use most and the highest-ranked physicians for outreach.\n\nI run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nDoes it match what your team sees in the field?`;
+    const body = `I put together a free market report for Riverbend Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nIt shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county's residents use most and the highest-ranked physicians for outreach.\n\nI run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nDoes it match what your team sees in the field?`;
     const model = reply(body);
     const draft = await draftMessage({ opportunity, work, task: {}, model, report: link });
     expect(draft).toMatchObject({ modelGenerated: true });
     const input = JSON.parse(model.run.mock.calls[0][1].user);
     expect(input.touchPlan).toBe(reportTouchAngle);
-    expect(input.touchPlan).toMatch(/First sentence: you put together a free market report for this agency, by name, from public Medicare data/);
+    expect(input.touchPlan).toMatch(/First sentence: you put together a free market report for this agency, by name, from Medicare data/);
     expect(input.touchPlan).toMatch(/exactly one short question the reader can answer by reply once they have looked/);
     expect(input.touchPlan).toMatch(/No other link, no free trial and no price: those come in the next email/);
     // The longer email it replaces asked three questions, offered the trial and stated its card terms.
@@ -144,7 +144,7 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
 
   it('sends an agency with no roster record to the page where it gets its own report', async () => {
     const web = { ...opportunity, evidence: [{ id: 'web-1', source_url: 'https://riverbend.example', observed_at: new Date().toISOString(), confidence: 'medium', claim: 'Riverbend Home Health serves Riverton County.' }] };
-    const model = reply('A free market report for Riverbend Home Health, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nDoes your team know which agencies lead Riverton County?', ['web-1']);
+    const model = reply('A free market report for Riverbend Home Health, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nDoes your team know which agencies lead Riverton County?', ['web-1']);
     const draft = await draftMessage({ opportunity: web, work, task: {}, model });
     expect(draft).toMatchObject({ modelGenerated: true, arms: { form: 'short' } });
     const input = JSON.parse(model.run.mock.calls[0][1].user);

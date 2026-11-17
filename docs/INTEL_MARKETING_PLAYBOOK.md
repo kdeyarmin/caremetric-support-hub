@@ -353,6 +353,8 @@ Most items are already enforced in code; the rest depend on judgment.
 - Quote prices, the trial and the Founders Sale exactly as the fact sheet words them.
 - Offer the trial in plain words. Do not bring up the credit card unless the reader asks what the trial needs or what happens when
   it ends (owner direction 2026-11-17); never say that no card is needed.
+- In email, name the data by its source ("Medicare data", "CMS and Census data") without the word "public" (owner direction
+  2026-11-17). Never call it proprietary, exclusive or licensed, and answer plainly when a reader asks where it comes from.
 - Label public figures as research signals, and say referrals come from the agency's own records.
 - Carry the plan condition when a feature needs one (Growth and Pro, Pro, agency admins and managers).
 - Point to the trial, the walkthrough, the free county report or a written answer as the next step.

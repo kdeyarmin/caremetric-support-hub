@@ -247,6 +247,14 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   - Nothing may say that no card is needed (refused in code, `trial_terms`), and nothing calls the trial risk-free.
   - A prospect email that names the card is refused when it is written and withdrawn when it would be sent (`card_terms` in
     `server/growth/draft.mjs`).
+- **How email names Intel's data** (owner direction 2026-11-17): by its source, without the word "public".
+  - A prospect email and a sales reply say "Medicare data" or "CMS and Census data", never "public Medicare data", "publicly
+    available data" or "free data". A prospect email that does is refused and, if already queued, withdrawn (`public_data`).
+  - This sheet, the catalog, the website, ads, posts and articles still use the word; only email and the reports it delivers changed.
+  - Nothing calls the data proprietary, exclusive or licensed. What is CareMetric's own is the analysis: the report, the rankings
+    and the plan built from them.
+  - When a reader asks whether the data is public or where it comes from, the answer is plain: CMS, NPPES and Census Bureau data
+    that CareMetric Intel analyzes.
 
 Plans (Intel's `src/lib/planCatalog.ts`). Annual billing saves about 17%. **Onboarding is free on every plan.**
 Intel publishes these figures at `https://www.caremetricintel.com/api/billing/catalog`; once the Hub has read it, the AI team

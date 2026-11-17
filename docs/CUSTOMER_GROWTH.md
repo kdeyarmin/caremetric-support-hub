@@ -300,7 +300,7 @@ first email instead, as Intel's reports serve home health and hospice agencies o
 named owner, administrator or marketing leader when the team found one, else the role address, and, as separate emails, the other
 decision-makers there (see [Several decision-makers at one organization](#several-decision-makers-at-one-organization)).
 
-1. **The first sentence is the offer**: a free market report made for this agency, by name, from public Medicare data. It is also
+1. **The first sentence is the offer**: a free market report made for this agency, by name, from Medicare data. It is also
    the line the inbox shows beside the subject.
 2. **The report link**, with a few words saying it opens as a PDF with nothing to sign up for.
 3. **What is inside**, in two sentences: where the agency stands among the county's agencies, which agencies lead, the hospitals
@@ -321,6 +321,11 @@ a test for half of the agencies.
   sends it to the right person.
 - **No prospect email brings up the credit card** (owner direction 2026-11-17). One that does is refused when written and withdrawn
   when it would be sent (`card_terms`). "Risk-free" is refused (`guarantee`), as is "no credit card" (`trial_terms`).
+- **No prospect email calls Intel's data public** (owner direction 2026-11-17). It names the source instead: "Medicare data",
+  "CMS and Census data". One that says "public Medicare data", "publicly available data" or "free data" is refused when written and
+  withdrawn when it would be sent (`public_data`, `callsDataPublic` in `draft.mjs`). The writer is also told never to call the data
+  proprietary, exclusive or licensed, and the Sales Executive answers plainly when a prospect asks where it comes from. If your
+  approved pitch on the Growth page says "public", edit it there: the writer is given that pitch as written.
 - **The rank check no longer refuses the writer's own words.** Until 2026-11-17 the instructions said "the physicians Intel ranks
   highest as referral sources" and the check for an agency's own rank (`emailStatesStanding`) refused "ranks highest", so a draft
   that followed its instructions failed. A rank that is plainly about physicians or referral sources now passes, and the

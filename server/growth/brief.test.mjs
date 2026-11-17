@@ -187,7 +187,7 @@ describe('a first email written from the brief', () => {
     countyFact: { key: 'home_health_agencies_in_county', claim: '48 home health agencies located in Allegheny County (CMS Post-Acute Care Utilization, 2023).', source: 'CMS' }, briefVersion: 2 };
   // The first email to an agency is its market report and nothing else (draft.mjs, 2026-11-17): the report first, then its one link, the
   // brief's hook and county figure, and one question. This agency has no roster report, so the link is the market report page.
-  const body = 'A free market report for Valley Home Health, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nI saw Valley Home Health is hiring a community liaison. Allegheny County has 48 home health agencies, by CMS\'s count.\n\nDo you know which physicians certify the most home health patients in Butler County?';
+  const body = 'A free market report for Valley Home Health, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nI saw Valley Home Health is hiring a community liaison. Allegheny County has 48 home health agencies, by CMS\'s count.\n\nDo you know which physicians certify the most home health patients in Butler County?';
   const draft = { subject: 'Your new liaison\'s first map', body, citations: ['e2', 'county'], needsHuman: false };
   const work = { kind: 'outreach', action: 'Write.', success: 'A reply.' };
 
@@ -306,7 +306,7 @@ describe('the sweep and the brief', () => {
       briefWriter: vi.fn(async () => brief), reviewRecord };
     // A first email in the form every Intel agency gets: its market report (here the page where it can get one), and one question.
     const email = { subject: 'A market report for your hospice in Erie', citations: ['source'], needsHuman: false,
-      body: 'A free market report for your hospice, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nWhich hospitals send you the most patients?' };
+      body: 'A free market report for your hospice, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nWhich hospitals send you the most patients?' };
     const model = { configured: true, run: vi.fn(async (_task, request) => ({ outcome: 'completed', output: request.promptVersion === 'critic.3'
       ? { specific: 3, relevant: 4, clearAsk: 4, wouldReply: 4, weakestSentence: 'Which hospitals send you the most patients?' } : email })) };
     const growth = { store, model, signingReady: true, hash: x => x, unsubscribeToken: () => 'token', briefs: { enabled, qualityWriter, critic } };

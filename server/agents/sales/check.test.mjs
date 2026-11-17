@@ -106,6 +106,10 @@ describe('the Sales Executive prompt', () => {
     expect(systemPrompt).toContain('trial_terms (They ask what the trial needs, whether it needs a card, or what happens when it ends.)');
     expect(systemPrompt).toContain('How to offer the trial: Offer the free trial in plain words');
     expect(systemPrompt).not.toMatch(/free trial \(credit card required|free trial \(a credit card is required/);
+    // A reply names where Intel's data comes from without calling it public, and answers plainly when asked (owner direction 2026-11-17).
+    expect(systemPrompt).toContain('leave out the word "public"');
+    expect(systemPrompt).toContain('When the prospect asks whether the data is public, or where it comes from, answer plainly and truthfully');
+    expect(systemPrompt).toContain('Never call the data proprietary, exclusive or licensed.');
     expect(systemPrompt).toContain('CareMetric fact sheet');
     expect(systemPrompt).toContain('sales playbook');
     expect(systemPrompt).toContain('Founders Sale applies automatically');

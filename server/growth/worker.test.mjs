@@ -438,7 +438,7 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
    learningActive:vi.fn(async()=>({version:5,memo:'- Shorter emails drew more replies.'}))};
   // A first email to an Intel agency is its market report and one question (here the page where it gets one: it has no roster report).
   const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'A market report for your hospice',citations:['source'],needsHuman:false,
-   body:'A free market report for your hospice, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nWhich hospitals send your agency the most patients?'}}))};
+   body:'A free market report for your hospice, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nWhich hospitals send your agency the most patients?'}}))};
   const growth={store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token',learning:{enabled}};
   const outcome=await growthHandlers({growth,model,features:new Set([growthLearningFeature])})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
   expect(outcome.result.rejected).toBeUndefined();
@@ -631,7 +631,7 @@ it('labels a product page written without campaign tags too',async()=>{
 });
 it('takes the inbox preview from the first real sentence, past an abbreviation in an agency\'s name (email review 2026-11-17)',async()=>{
  const {firstSentence}=await import('./worker.mjs');
- expect(firstSentence('I put together a free market report for St. Luke\'s Home Health from public Medicare data. It opens as a PDF.')).toBe('I put together a free market report for St. Luke\'s Home Health from public Medicare data.');
+ expect(firstSentence('I put together a free market report for St. Luke\'s Home Health from Medicare data. It opens as a PDF.')).toBe('I put together a free market report for St. Luke\'s Home Health from Medicare data.');
  expect(firstSentence('I wrote to Dr. Phillips Home Care, Inc. about its county. Second sentence.')).toBe('I wrote to Dr. Phillips Home Care, Inc. about its county.');
  expect(firstSentence('Mt. Carmel Hospice serves Erie County. Next.')).toBe('Mt. Carmel Hospice serves Erie County.');
  expect(firstSentence('A. J. Smith Home Health serves two counties. Next.')).toBe('A. J. Smith Home Health serves two counties.');
@@ -640,9 +640,9 @@ it('takes the inbox preview from the first real sentence, past an abbreviation i
  expect(firstSentence('It opens as a PDF, with nothing to sign up for:')).toBe('');
  for(const nothing of ['',null,undefined])expect(firstSentence(nothing)).toBe('');
  // In the email: the first email's opening sentence, whole, is the line an inbox shows beside the subject.
- const body='I put together a free market report for St. Luke\'s Home Health, Inc. from public Medicare data. It opens as a PDF, with nothing to sign up for:\nhttps://www.caremetricintel.com/market-review\n\nDoes it match what your team sees in the field?';
+ const body='I put together a free market report for St. Luke\'s Home Health, Inc. from Medicare data. It opens as a PDF, with nothing to sign up for:\nhttps://www.caremetricintel.com/market-review\n\nDoes it match what your team sees in the field?';
  const email=growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'St. Luke\'s market report',body,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'});
- expect(email.html).toContain('>I put together a free market report for St. Luke&#39;s Home Health, Inc. from public Medicare data.&#847;');
+ expect(email.html).toContain('>I put together a free market report for St. Luke&#39;s Home Health, Inc. from Medicare data.&#847;');
  expect(email.html).not.toContain('>I put together a free market report for St.&#847;');
 });
 it('signs a quiet follow-up to a prospect as the founder, like the rest of the prospect\'s emails, and a customer email as the team',async()=>{
