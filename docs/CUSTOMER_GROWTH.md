@@ -278,14 +278,14 @@ with its status ("In use", "Replaced").
 
 ## Each agency's own market report
 
-Owner decision 2026-11-15: every agency the team writes to gets a free market report of its own. Intel draws the report from public CMS
+Owner decision 2026-11-15: every agency the team writes to gets a free market report of its own. Intel draws the report from CMS
 and Census data, with nothing about any patient:
 
 - the agency's Medicare patients, and its share and rank among the agencies located in its county and its state;
 - the county's largest agencies, with the agency highlighted among them;
 - the county's demand: beneficiaries, residents aged 65 and over and their growth since 2020, and home health or hospice use;
 - the hospitals the county's residents use, and the highest-ranked physicians for outreach;
-- the agency's public CMS ratings;
+- the agency's CMS ratings;
 - up to three moves the figures point to, and the 30-day free trial. Since 2026-11-17 the report's trial box does not bring up the
   card (owner direction; Intel's sign-up page states the terms where the card is entered).
 
@@ -358,9 +358,11 @@ industry").
 - **Without a model** the email keeps its shape: a fixed opening, then the same sections.
 - **No prospect email brings up the credit card** (owner direction 2026-11-17). One that does is refused when written and withdrawn
   when it would be sent (`card_terms`). "Risk-free" is refused (`guarantee`), as is "no credit card" (`trial_terms`).
-- **No prospect email calls Intel's data public** (owner direction 2026-11-17). It names the source instead: "Medicare data",
-  "CMS and Census data". One that says "public Medicare data", "publicly available data" or "free data" is refused when written and
-  withdrawn when it would be sent (`public_data`, `callsDataPublic` in `draft.mjs`). The writer is also told never to call the data
+- **Nothing about Intel calls its data public** (owner direction 2026-11-17, first for email, then for everything the same day).
+  It names the source instead: "Medicare data", "CMS and Census data", "CMS ratings". One rule in code, `public_data`
+  (`publicDataWords` and `callsDataPublic` in `server/agents/content/validate.mjs`), refuses it in prospect and customer email,
+  sales replies, social posts and replies, ads and articles; a queued prospect email that has it is withdrawn when it would be sent.
+  Every writer reads the rule on the fact sheet (`dataMention`). The writer is also told never to call the data
   proprietary, exclusive or licensed, and the Sales Executive answers plainly when a prospect asks where it comes from. If your
   approved pitch on the Growth page says "public", edit it there: the writer is given that pitch as written.
 - **Every email is easy to read** (owner direction 2026-11-17: "I don't need full file names, years cited, or super formal
@@ -528,8 +530,8 @@ whatever their numbers (`server/growth/standing.mjs`), and an Intel email that s
 (`own_standing`); asking where the agency stands is fine.
 
 1. **Code gathers** the agency's market report as data from Intel's feed (`agency_brief`: its Medicare share and rank and how they have
-   moved, the county's leaders, the hospitals its residents use, its public ratings and three moves; never physician names or the
-   SSVI), the county's public figures for the agency's own setting (home health figures to a home health agency, hospice figures to a
+   moved, the county's leaders, the hospitals its residents use, its CMS ratings and three moves; never physician names or the
+   SSVI), the county's figures for the agency's own setting (home health figures to a home health agency, hospice figures to a
    hospice; never a dollar figure), the evidence the Hub holds and the leaders already found. A nursing home found on the web (one
    `intelSetting` reads as a nursing home, with no roster agency) is briefed as a nursing home: no market report is asked for, the
    writer is told it is not an agency, and only nursing home figures are its own. Intel's shares are rounded to four places first: JSON writes every digit
@@ -537,13 +539,13 @@ whatever their numbers (`server/growth/standing.mjs`), and an Intel email that s
    (`skipped: identifier`) until 2026-11-16.
 2. **Web research** on the draft tier looks for dated triggers: a job listing for a liaison or marketer, a new location or service
    line, a leadership change, an award, news (`research.2`, shared with `growth.research`). What it keeps becomes evidence.
-3. **The top model** (Opus, high effort, `brief.2`) writes the brief: what the agency is, where, what kind of owner it has, its triggers, two or
+3. **The top model** (Opus, high effort, `brief.3`) writes the brief: what the agency is, where, what kind of owner it has, its triggers, two or
    three questions about problems Intel answers, the angle to lead with, one cited opening sentence and the county figure most worth
    stating, plus its own fit and what is still unknown.
 4. **Code checks it.** A brief has two parts (`private.growth_briefs`). The writer part may state only what a citable source states:
    a sentence with any other number is dropped, so the agency's own share, rank, ratings and patient counts never reach an email (the
    owner's rule); a source address it was not given is dropped. A sentence that names someone on the agency's people list (its
-   president, an owner from CMS's ownership file) is dropped too, since an email addresses the agency, never a person (`brief.2`,
+   president, an owner from CMS's ownership file) is dropped too, since an email addresses the agency, never a person (`brief.2` and later,
    2026-11-16). The research part keeps those for you. Growth shows both on the opportunity. The writer reads only the writer part
    (`private.growth_brief_writer`). A county figure reads with the county's name in its place: "billing for Dallas County's Medicare
    FFS beneficiaries" (before 2026-11-16 the name was added at the end, "...located in other counties in Dallas County").

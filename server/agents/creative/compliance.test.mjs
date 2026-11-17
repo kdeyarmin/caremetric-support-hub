@@ -3,7 +3,7 @@ import { badgeText, checkCopy, checkPlatform, checkText, checkVideo, checkVisual
 
 // Copy that passes every rule, for both products: the fact sheet's own words.
 const clean = {
-  headline: 'Territory plans from public data',
+  headline: 'Territory plans from Medicare data',
   primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place. Start a free trial.',
   description: 'Free trial', cta: 'Start free trial', altText: 'A headline on a light background',
   overlay: { checklist: ['Territory analysis', 'A marketing CRM', 'Referrals in one place'] },

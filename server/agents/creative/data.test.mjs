@@ -132,8 +132,8 @@ describe('figure checks', () => {
       const setting = key.startsWith('hospice') ? 'hospice' : 'home_health';
       const facts = countySnapshot(county([figure(key, valueOf(key), { setting: key.startsWith('home_health') || key.startsWith('hospice') ? setting : 'general', data_year: '2024' })]), 0, setting);
       expect(facts?.figure, key).toBe(key);
-      const drafted = withFacts({ layout: 'headline', headline: 'Know where your agency stands', primaryText: 'See how your county\'s market looks from public Medicare data.',
-        description: 'Free market report', cta: 'Get the report', altText: `A tile showing ${facts.stat}`, overlay: { kicker: 'Public Medicare data' } }, facts);
+      const drafted = withFacts({ layout: 'headline', headline: 'Know where your agency stands', primaryText: 'See how your county\'s market looks from Medicare data.',
+        description: 'Free market report', cta: 'Get the report', altText: `A tile showing ${facts.stat}`, overlay: { kicker: 'Medicare data' } }, facts);
       for (const platform of ['meta', 'linkedin']) {
         const findings = copyFindings({ product: 'caremetric-intel', platform, copy: drafted, facts });
         expect(findings.filter(item => item.level === 'block'), `${key} on ${platform}`).toEqual([]);

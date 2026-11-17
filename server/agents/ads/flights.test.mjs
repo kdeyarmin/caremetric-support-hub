@@ -12,7 +12,7 @@ const googlePlan = { headlines: ['Referral sources in one place', 'Plan visits b
 const token = 'e'.repeat(64);
 const metaAsset = '33333333-3333-4333-8333-333333333333';
 const asset = platform => ({ id: metaAsset, token, product: 'caremetric-intel', platform, placement: platform === 'meta' ? 'meta.feed_square' : 'linkedin.single_image', kind: 'static',
-  headline: 'Where does your agency rank?', primaryText: 'CareMetric Intel shows your county\'s home health market from public data, free for your agency.', description: 'Free market report',
+  headline: 'Where does your agency rank?', primaryText: 'CareMetric Intel shows your county\'s home health market from Medicare data, free for your agency.', description: 'Free market report',
   cta: 'Get your report', landingUrl: `https://www.caremetricintel.com/market-review?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}` });
 const trusted = { autonomy: 'act', config: { auto_approve_kinds: ['social.campaign_create', 'social.google_campaign'] } };
 

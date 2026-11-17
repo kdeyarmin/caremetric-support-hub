@@ -13,7 +13,7 @@ const now = () => new Date('2026-11-09T14:30:00Z'); // Monday 09:30 Eastern
 const task = (kind, over = {}) => ({ id: 't1', agentKey: 'creative_director', kind, attempts: 1, sourceKind: 'schedule', requestKey: 'x', agent: { autonomy: 'propose', config: {} }, payload: {}, ...over });
 const brief = { id: briefId, product: 'caremetric-intel', goal: 'Drive trials', audience: 'Marketing leaders at hospitals', offerCode: null, platforms: ['meta'], formats: ['static'], videoLengths: [], angle: '', source: 'owner', status: 'open', revisionNote: '' };
 const fullKit = { product: 'caremetric-intel', ...kit, logoFileId: null, screenshots: [], requiredDisclaimers: [], bannedPhrases: [], captionsDefault: true };
-const copyOf = (hook, layout = 'checklist') => ({ hook, layout, headline: 'Territory plans from public data', primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place.',
+const copyOf = (hook, layout = 'checklist') => ({ hook, layout, headline: 'Territory plans from Medicare data', primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place.',
   description: 'Free trial', cta: 'Start free trial', altText: 'A checklist on a light background',
   overlay: { kicker: '', stat: '', statLabel: '', statSource: '', quote: '', quoteSource: '', offerLine: '', checklist: ['Territory analysis', 'A marketing CRM', 'Referrals in one place'], screenshotId: '', beats: [] } });
 
@@ -398,7 +398,7 @@ describe('county snapshots', () => {
     const facts = { stat: '72%', statLabel: 'of the Medicare patients of Erie County, PA hospices went to the 3 largest', statSource: 'CMS post-acute utilization, 2024',
       dataYear: '2024', place: 'Erie County, PA', setting: 'hospice', landing: 'intel-market-review' };
     const asset = { id: assetId, briefId, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static', layout: 'stat', width: 1080, height: 1080,
-      variantLabel: 'A', hookType: 'curiosity', headline: 'How crowded is your county?', primaryText: 'See where your hospice stands in its county, from public Medicare data.',
+      variantLabel: 'A', hookType: 'curiosity', headline: 'How crowded is your county?', primaryText: 'See where your hospice stands in its county, from Medicare data.',
       description: 'Free market report', cta: 'Get the report', altText: `County snapshot: ${facts.stat} ${facts.statLabel}. Source: ${facts.statSource}.`,
       overlay: { kicker: '', stat: facts.stat, statLabel: facts.statLabel, statSource: facts.statSource, quote: '', quoteSource: '', offerLine: '', checklist: [], screenshotId: '', beats: [] },
       offerCode: null, brandKit: fullKit, landingUrl: 'https://www.caremetricintel.com/market-review?utm_content=x' };

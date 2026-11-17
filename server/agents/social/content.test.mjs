@@ -51,7 +51,7 @@ describe('checking social text', () => {
   it('keeps lengths, hashtags and emoji in bounds and markup out', () => {
     expect(checkSocialText('A'.repeat(41), { surface: 'ad_headline', product: 'carebase' })).toMatchObject({ ok: false, reason: 'too_long' });
     // LinkedIn shows a longer headline and description, and the Creative Director writes to them; every other ad rule still applies.
-    const longer = 'Plan referral outreach by county with public healthcare data';
+    const longer = 'Plan referral outreach by county with Medicare and Census data';
     expect(longer.length).toBeGreaterThan(40);
     expect(checkSocialText(longer, { surface: 'ad_headline', product: 'caremetric-intel' })).toMatchObject({ ok: false, reason: 'too_long' });
     expect(checkSocialText(longer, { surface: 'ad_linkedin_headline', product: 'caremetric-intel' })).toMatchObject({ ok: true });

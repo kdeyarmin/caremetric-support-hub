@@ -569,9 +569,11 @@ it('names where Intel\'s data comes from without calling it public, in every pro
  expect(callsDataPublic('caremetric-intel','Members of the public ask about hospice every week.')).toBe(false);
  expect(callsDataPublic('caremetric-intel','It is published by CMS each year.')).toBe(false);
  expect(about('caremetric-intel',`Erie Public Data Home Health serves Erie County.${ask}`,true,'Erie Public Data Home Health')).toBeNull();
- // CareBase email and messages to customers are not read for it.
+ // CareBase email is not read for it. A message to an Intel customer is, since the owner asked for it everywhere the same day: every
+ // surface reads it through the shared checks (content/validate.mjs `public_data`), so here it is a claim the fact sheet does not make.
  expect(callsDataPublic('carebase','public data')).toBe(false);
- expect(about('caremetric-intel','County Intelligence draws on public Medicare data. Where are you in setup?',false)).toBeNull();
+ expect(about('caremetric-intel','County Intelligence draws on public Medicare data. Where are you in setup?',false)).toBe('claim');
+ expect(about('caremetric-intel','County Intelligence draws on Medicare data. Where are you in setup?',false)).toBeNull();
  // The writer is told the rule, and never to call the data proprietary; no plan or fallback for a prospect email uses the word.
  expect(growthSystem).toContain('leave out the word "public"');
  expect(growthSystem).toContain('Never call the data proprietary, exclusive or licensed either.');

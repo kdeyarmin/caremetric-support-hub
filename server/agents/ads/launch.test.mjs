@@ -13,7 +13,7 @@ const token = 'e'.repeat(64);
 const metaAsset = '33333333-3333-4333-8333-333333333333';
 const linkedinAsset = '44444444-4444-4444-8444-444444444444';
 const asset = (platform, over = {}) => ({ id: platform === 'meta' ? metaAsset : linkedinAsset, token, product: 'caremetric-intel', platform,
-  placement: platform === 'meta' ? 'meta.feed_square' : 'linkedin.single_image', kind: 'static', headline: 'Territory plans from public data',
+  placement: platform === 'meta' ? 'meta.feed_square' : 'linkedin.single_image', kind: 'static', headline: 'Territory plans from Medicare data',
   primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', description: 'Free trial', cta: 'Start free trial',
   landingUrl: `https://www.caremetricintel.com/?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`, ...over });
 const trusted = { autonomy: 'act', config: { auto_approve_kinds: ['social.campaign_create', 'social.google_campaign'] } };
@@ -87,7 +87,7 @@ describe('the monthly plan with ad campaign launch handed over', () => {
 
 describe('launching a campaign approved under the hand-over', () => {
   const metaInput = { platform: 'meta', product: 'caremetric-intel', name: 'CareMetric Intel retargeting 2026-11', dailyBudgetCents: 1500, audienceId: '1234567',
-    firstAd: { name: 'Intel retargeting · creative 33333333', message: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans from public data',
+    firstAd: { name: 'Intel retargeting · creative 33333333', message: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans from Medicare data',
       description: 'Free trial', link: `https://www.caremetricintel.com/?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`,
       callToAction: 'SIGN_UP', imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, creativeAssetId: metaAsset } };
   const auto = (input, over = {}) => ({ id: 'a9', kind: 'social.campaign_create', agentKey: 'social_manager', taskId: 't1', targetId: 'meta:caremetric-intel:2026-11', input, autoApproved: true, execution: 2, ...over });

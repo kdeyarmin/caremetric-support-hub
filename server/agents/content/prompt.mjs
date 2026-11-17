@@ -11,7 +11,7 @@ import { factSheetText, legalDisclaimer, officialSources, productPage, productPa
 import { catalogGuidance } from './features.mjs';
 import { limits } from './validate.mjs';
 
-export const promptVersion = 'content.4';
+export const promptVersion = 'content.5';
 
 const range = ([min, max]) => `${min} to ${max}`;
 
@@ -24,6 +24,7 @@ The user message describes one topic: the product it serves, the reader, the ang
 Facts:
 - State facts about a regulation only from the topic's facts, and cite the section they give. Never add a requirement, a deadline, a number or an exception that the facts do not state. When the facts do not cover something, say the reader should check the regulation, or leave it out.
 - State facts about CareMetric only from the fact sheet below. Prices, trials and plan details must match it exactly.
+- Name where CareMetric Intel's data comes from: "Medicare data", "CMS and Census data", "CMS ratings". Never call it public, publicly available or free data, and never proprietary, exclusive or licensed.
 - Every number with a unit (hours, days, months, years, residents, staff, seats, counties and so on), every price and every percentage you write must appear in the topic's facts or the fact sheet. Write other quantities in words ("a few", "every month").
 - Never promise or guarantee an outcome, and never say a product ensures compliance, keeps a facility compliant, passes an inspection or prevents citations. Say what it helps a team do.
 - Never give legal advice. Articles about regulations end with a fixed disclaimer that is added for you; do not write your own.

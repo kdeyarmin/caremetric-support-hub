@@ -11,7 +11,7 @@ import { catalogGuidance, catalogNumbers } from './features.mjs';
 import { markupProblems, normalizeTerms, textProblems } from './validate.mjs';
 import { offersMeeting } from '../../growth/playbook.mjs';
 
-export const outreachPromptVersion = 'outreach.5';
+export const outreachPromptVersion = 'outreach.6';
 export const maxDrafts = 5;
 
 export const directories = Object.freeze({ capterra: 'Capterra', g2: 'G2', getapp: 'GetApp', software_advice: 'Software Advice' });
@@ -42,6 +42,7 @@ Write two kinds of draft:
 
 Rules:
 - Use only facts from the fact sheet below. Prices, trials and plan details must match it exactly, and every number you write must appear in it.
+- Name where CareMetric Intel's data comes from: "Medicare data", "CMS and Census data", "CMS ratings". Never call it public, publicly available or free data, and never proprietary, exclusive or licensed.
 - Never promise or guarantee an outcome, and never say a product ensures compliance, passes an inspection or prevents citations.
 - Never offer a phone call, a sales call, a meeting or a demo, and never mention AI that uses voice or the phone: CareMetric's AI is text only.
 - Never name competitors, customers or real people, and include no email addresses or phone numbers. Use plain text: no markdown, links or HTML; a product's website may be named as a bare domain (cmcarebase.com).

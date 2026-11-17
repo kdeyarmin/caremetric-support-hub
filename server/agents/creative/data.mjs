@@ -111,7 +111,7 @@ export function countyBrief(snapshot, week) {
   const words = settingWords[snapshot.setting] ?? settingWords.home_health;
   return {
     product: 'caremetric-intel', source: 'data.county', requestKey: `data:county:${snapshot.countyFips}:${week}`,
-    goal: `Show ${words.who} serving ${snapshot.place} one public number about their market, and send them to the free market report for their own agency`,
+    goal: `Show ${words.who} serving ${snapshot.place} one Medicare or Census number about their market, and send them to the free market report for their own agency`,
     audience: `Owners, administrators and marketers at ${words.agencies} serving ${snapshot.place}`,
     platforms: ['meta', 'linkedin'], formats: ['static'], videoLengths: [],
     angle: `County snapshot, ${words.name} only: ${snapshot.stat} ${snapshot.statLabel} (${snapshot.statSource}). Say nothing about any other care setting. The free market report shows where the reader's own agency stands in its county.`.slice(0, 500),

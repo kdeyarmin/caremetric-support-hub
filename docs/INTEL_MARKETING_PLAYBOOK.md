@@ -45,9 +45,10 @@ picture, even when it leads with one part.
 
 Expenses and mileage are logged along the way, as part of the field work. They are a small part of the workspace and never the point.
 
-**What it is built on:** public data from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General
-and state licensing files, linked by NPI, CCN, county and ZIP. Every view shows which release it uses. Public figures are research
-signals; referrals are only what the agency records.
+**What it is built on:** data from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General
+and state licensing files, linked by NPI, CCN, county and ZIP. Every view shows which release it uses. These figures are research
+signals; referrals are only what the agency records. Name the data by its source ("Medicare data", "CMS and Census data", "CMS
+ratings"), never as public or free data, and never as proprietary, exclusive or licensed (owner direction 2026-11-17).
 
 **Approved one-line pitch** (Intel's home page): "Know who to visit next. Make every follow-up count."
 
@@ -151,7 +152,7 @@ each theme and how prominently:
 | 10 | Easy to evaluate and buy | Few: most say "request a demo" and quote privately | Prices on the website, a 30-day trial (card required, cancel any time before it ends), free onboarding, the Founders Sale | **Support** in every message as the next step. |
 
 **Two things Intel cannot match and must not imply:** licensed claims data that infers which physician sent which patient to which
-agency, and dozens of live EHR connections. Intel's honest counter is clearly sourced public data, the agency's own recorded referrals,
+agency, and dozens of live EHR connections. Intel's honest counter is clearly sourced CMS and Census data, the agency's own recorded referrals,
 and a price anyone can see.
 
 ## 6. Patterns we borrow, and how we adapt them
@@ -163,7 +164,7 @@ honestly offer today.
 | --- | --- | --- |
 | A headline that names an outcome | Short outcome lines, often strings of three fragments | Complete, plain lines that open on the reader's moment or question, never on the brand or a feature. Our checks refuse fragment strings. |
 | Data-scale numbers as proof | Users, claims analyzed, provider counts | Name the publishers (CMS, NPPES, Census Bureau and the rest). Use counts only after they are added to the fact sheet (section 15). |
-| Customer results and logos | Percent lifts, hours saved, named customers | None are approved. Show the product instead: a real screenshot, a county snapshot printed from public data, the free county report, the trial in the reader's own county. |
+| Customer results and logos | Percent lifts, hours saved, named customers | None are approved. Show the product instead: a real screenshot, a county snapshot printed from Medicare or Census data, the free county report, the trial in the reader's own county. |
 | "Request a demo" everywhere | A sales meeting is the next step | The 30-day free trial, the walkthrough at `/#how-it-works`, the free county report at `/county-report`, and written answers by email. Never a call, demo or meeting. |
 | A free personalized market review | A custom report that leads into a sales meeting | The free market report for the reader's own agency at `/market-review` (share and rank in its county, the county's largest agencies, three moves) and the free county report: both instant, self-serve and by email, never a meeting. New paid campaigns and county snapshot images send home health agencies and hospices to the market report (2026-11-16). Follow with the trial in that same county. |
 | A flagship annual report | Gated, interactive, announced by press release | Recurring posts on new CMS data Intel just loaded and on observances, plus county snapshot images. Section 15 suggests a quarterly public-data article. |
@@ -199,7 +200,7 @@ Email campaigns and expenses are never a pillar. When either comes up, show it a
 | **Lead** | Referral-source finding and rankings; competitor share and alerts; one workspace from research to results; pre-visit card and visit debrief; outcomes packet with TEAM flags | Headlines, ad hooks, first-touch emails, post openers |
 | **Support** | Drop-off alerts and accounts going quiet; goals, leaderboard and coaching; response time and availability; county intelligence and demographics; Site finder (framed as where to send marketing time while new enrollments are frozen); market briefs; the free county report; prices, trial and Founders Sale | Second touches, article bodies, ad body copy, written answers |
 | **Mention only** | Expenses, mileage and the Stark limit; email campaigns (Growth and Pro); EMR report imports; calendar sync; materials library; custom report builder; white-label reports and admissions forecast (Pro); browser alerts; Ctrl+K search; home-screen install | One clause inside a sentence about the whole workspace. Never the subject of a message, post or ad. |
-| **Never claim** | A live connection to any EHR; an app in the app stores; physician-to-agency referral flows or shared-patient data; Medicare Advantage claims volumes; that public data confirms a referral; customer counts, results, hours saved or return on investment; security or privacy certifications; AI that talks, listens or makes calls; offline use (until section 15 settles it); "lowest price"; a score where Intel shows "Unscored"; that Intel is a compliance tool | Nowhere. If a reader asks, answer the truth in writing (section 11). |
+| **Never claim** | A live connection to any EHR; an app in the app stores; physician-to-agency referral flows or shared-patient data; Medicare Advantage claims volumes; that Medicare data confirms a referral; customer counts, results, hours saved or return on investment; security or privacy certifications; AI that talks, listens or makes calls; offline use (until section 15 settles it); "lowest price"; a score where Intel shows "Unscored"; that Intel is a compliance tool | Nowhere. If a reader asks, answer the truth in writing (section 11). |
 
 ## 9. Messaging by role and by care setting
 
@@ -265,7 +266,7 @@ answer lives in Intel. Rotate through these:
 2. What the hospice SSVI measures, and what it does not
 3. How to read your agency's home health value-based purchasing score
 4. What hospitals in the TEAM model look for in post-acute partners
-5. What public Medicare data can and cannot tell you about referral sources
+5. What Medicare data can and cannot tell you about referral sources
 6. A monthly check for referral sources that are slipping
 7. Planning a marketer's week around the accounts that need a visit
 8. What to know before you walk into a discharge planner's office
@@ -307,7 +308,7 @@ product or a feature. The feature is the reason to believe in the primary text. 
 
 - **The founder's story** goes in the primary text, never the headline: "CareMetric Intel was custom built by someone who uses it every
   day."
-- **County snapshots:** one public Medicare or Census figure for a county where prospects are, printed by code with its source. The words
+- **County snapshots:** one Medicare or Census figure for a county where prospects are, printed by code with its source. The words
   around it name the decision it helps with.
 - **Targeting:** home health and hospice owners, administrators, and directors of business development or marketing. Google search should
   start with high-intent terms such as "home health CRM" and "hospice marketing software".
@@ -332,7 +333,7 @@ Answer in writing, plainly, and end with one next step. `integration` and `secur
 
 | They say | Answer with | Next step |
 | --- | --- | --- |
-| "Is this real referral data?" | Public Medicare and Census figures are research signals. They show which physicians certify home health patients and which agencies serve a county, not who referred whom. Referrals in Intel are the ones the agency records or imports. | Free county report |
+| "Is this real referral data?" | Medicare and Census figures are research signals. They show which physicians certify home health patients and which agencies serve a county, not who referred whom. Referrals in Intel are the ones the agency records or imports. | Free county report |
 | "We already pay for a data subscription." | Ask what happens after the list: who owns each account, where visits and follow-ups live, and how referrals get counted. Intel keeps research, field work and results in one place. Never name or describe the other product. | Trial in their county |
 | "Our EHR has a referral module." | Intel covers the marketing side: territory research, the visit plan and the referrals each source sends. Referral and admission reports can be imported from the EHR as files. | Walkthrough |
 | "Does it connect to our EHR?" | Intel imports referral and admission reports as files, by upload, SFTP folder or email, with saved layouts for common EHR reports. It is not a live connection. Name no EHR vendor, even when they do. | Referral measurement guide |
@@ -358,9 +359,10 @@ Most items are already enforced in code; the rest depend on judgment.
 - Quote prices, the trial and the Founders Sale exactly as the fact sheet words them.
 - Offer the trial in plain words. Do not bring up the credit card unless the reader asks what the trial needs or what happens when
   it ends (owner direction 2026-11-17); never say that no card is needed.
-- In email, name the data by its source ("Medicare data", "CMS and Census data") without the word "public" (owner direction
-  2026-11-17). Never call it proprietary, exclusive or licensed, and answer plainly when a reader asks where it comes from.
-- Label public figures as research signals, and say referrals come from the agency's own records.
+- Everywhere (email, replies, posts, ads, articles), name the data by its source ("Medicare data", "CMS and Census data", "CMS
+  ratings") without the word "public" (owner direction 2026-11-17); code refuses it (`public_data`). Never call it proprietary,
+  exclusive or licensed, and answer plainly when a reader asks where it comes from.
+- Label Medicare and Census figures as research signals, and say referrals come from the agency's own records.
 - Carry the plan condition when a feature needs one (Growth and Pro, Pro, agency admins and managers).
 - Point to the trial, the walkthrough, the free county report or a written answer as the next step.
 - Tag every product link with campaign tags; never tag citations or unsubscribe links.

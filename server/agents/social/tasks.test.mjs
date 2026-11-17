@@ -61,7 +61,7 @@ describe('the weekly social plan', () => {
     const h = harness({ model });
     const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('social-plan.8');
+    expect(request.promptVersion).toBe('social-plan.9');
     // Each marketed product's published catalog follows the prompt (content/features.mjs).
     expect(request.system.slice(1)).toEqual(catalogBlocks(JSON.parse(request.user).products));
     expect(request.system.length).toBeGreaterThan(1);
@@ -403,7 +403,7 @@ describe('registration', () => {
 describe('approved creative from the Creative Director', () => {
   const token = 'f'.repeat(64);
   const approvedAsset = (over = {}) => ({ id: '22222222-2222-4222-8222-222222222222', token, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static',
-    headline: 'Territory plans from public data', primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.',
+    headline: 'Territory plans from Medicare data', primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.',
     description: 'Free trial', cta: 'Start free trial', landingUrl: 'https://www.caremetricintel.com/?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=22222222-2222-4222-8222-222222222222', ...over });
   const planModel = () => modelReturning({ posts: [{ platform: 'instagram', product: 'caremetric-intel', pillar: 'tip', day: 2, text: 'Which county sends your agency the most referrals? Map it before you plan the week.', linkId: '', hashtags: ['homehealth'] }] });
 

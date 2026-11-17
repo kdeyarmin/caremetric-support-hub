@@ -40,7 +40,7 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
   const feed = growth?.roster?.feed?.readiness?.() ?? {};
   const rosterStates = live(growth?.roster?.states);
   add('prospect_roster', 'Prospects from the Medicare roster', ['marketing_manager'],
-    'Reads every Medicare-certified home health agency and hospice in your states from Intel\'s marketing feed, ranks them, confirms each one\'s own website and adds it to Growth with its public CMS record as evidence.', [
+    'Reads every Medicare-certified home health agency and hospice in your states from Intel\'s marketing feed, ranks them, confirms each one\'s own website and adds it to Growth with its CMS record as evidence.', [
       [feed.declared === true, schemaStep('Medicare roster')],
       [feed.enabled === true, 'Turn on Settings → Customer growth → Find prospects from the Medicare roster.'],
       [Array.isArray(rosterStates) && rosterStates.length > 0, 'Choose Settings → Customer growth → States to prospect in.'],
@@ -169,7 +169,7 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [li.member === true, 'Save your personal LinkedIn access token on the LinkedIn connection card (Settings → Social media), or copy the posts from the weekly plan email.'],
     ]);
   add('county_snapshots', 'County snapshot images', ['creative_director'],
-    'Images that each show one public Medicare or Census number for a county where your roster prospects are. Code prints the number and its source; you approve each image.', [
+    'Images that each show one Medicare or Census number for a county where your roster prospects are. Code prints the number and its source; you approve each image.', [
       [has(features, 'platform.agents.creative-data.v1'), schemaStep('county snapshots')],
       [creativeWork?.enabled?.() === true, 'Turn on Settings → Creative → Turn on the Creative Director.'],
       [(creativeWork?.config?.().countySnapshotsPerWeek ?? 0) > 0, 'Set Settings → Creative → County snapshots a week above 0.'],

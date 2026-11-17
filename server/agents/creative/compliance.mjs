@@ -22,6 +22,8 @@
  *   testimonials, voice AI, a call or demo as a step, "prove" about CareBase, the fixed vocabulary, contact details, mentions of AI (block).
  * - plain_language: copy a busy owner could not understand on the first read (owner direction 2026-11-12): an empty buzzword, a string of
  *   one- or two-word fragments, or an overlong sentence (content/validate.mjs `unclearCopy`; block).
+ * - public_data: copy about CareMetric Intel that calls its data public, publicly available or free ("public Medicare data"); it names
+ *   the source instead, "Medicare data" or "CMS ratings" (owner direction 2026-11-17; content/validate.mjs `publicDataWords`; block).
  *
  * Visual rules (`checkVisual`): brand_colors (every color the asset paints is one of the product's brand colors: its theme's, from the app's
  * own code, or the owner's brand kit; block); contrast (WCAG AA for every text run, block); text_heavy (more than a fifth of the picture is
@@ -44,9 +46,10 @@ import { liveOffers, offerFor } from './offers.mjs';
 import { textLimits, validateAsset } from './specs.mjs';
 
 // .3 (2026-11-17): a county snapshot is checked the same way when it is drafted and when it is rendered, and its alt text is the data's.
-export const complianceVersion = 'creative-compliance.3';
+// .4 (2026-11-17, later): copy about Intel never calls its data public (`public_data`).
+export const complianceVersion = 'creative-compliance.4';
 export const rules = Object.freeze(['phi', 'personal_attributes', 'unsubstantiated_claim', 'government_endorsement', 'offer_mismatch', 'brand_name',
-  'banned_phrase', 'required_disclaimer', 'fact_sheet', 'plain_language', 'brand_colors', 'logo_ground', 'contrast', 'text_heavy', 'images', 'brand_deviation', 'captions', 'platform']);
+  'banned_phrase', 'required_disclaimer', 'fact_sheet', 'plain_language', 'public_data', 'brand_colors', 'logo_ground', 'contrast', 'text_heavy', 'images', 'brand_deviation', 'captions', 'platform']);
 
 const block = (rule, message) => ({ rule, level: 'block', message });
 const warn = (rule, message) => ({ rule, level: 'warn', message });
@@ -114,6 +117,7 @@ const factSheetCodes = {
   prove_word: 'uses "prove", "proof" or "evidence" about CareBase', vocabulary: 'uses words outside the fixed vocabulary (ALR, auditor)',
   contact_detail: 'carries an email address or phone number', personal_information: 'appears to carry personal information',
   trial_terms: 'says the Intel trial needs no credit card (it needs one, and bills automatically unless canceled)',
+  public_data: 'calls Intel\'s data public (name the source instead: Medicare data, CMS ratings)',
 };
 
 /**
@@ -243,6 +247,7 @@ export function checkCopy({ product, platform, copy = {}, offerCode = null, bran
   for (const code of textProblems(text, { product: book?.factsKey ?? null, numbers: numbersFor(product) })) {
     if (handled.has(code)) continue;
     if (code === 'personal_information') { if (!findings.some(item => item.rule === 'phi')) findings.push(block('phi', 'It appears to carry personal information.')); continue; }
+    if (code === 'public_data') { findings.push(block('public_data', 'It calls Intel\'s data public. Name the source instead: "Medicare data", "CMS and Census data" or "CMS ratings".')); continue; }
     findings.push(block('fact_sheet', `It ${factSheetCodes[code] ?? code.replaceAll('_', ' ')}.`));
   }
   // Easy to read and makes sense on the first pass: the same check the Social Media Manager runs on every post and ad.

@@ -193,18 +193,21 @@ describe('each check that rejects a draft', () => {
   });
 
   it('treats "150+" and "more than 150" as the same count: either one on the fact sheet or a catalog allows both, and no other count', () => {
-    for (const source of ['150+ public healthcare datasets', 'More than 150 public healthcare datasets']) {
+    // Intel's site wrote "150+ public healthcare datasets" until 2026-11-17; either wording allows the count, and copy states it without
+    // "public" (`public_data`).
+    for (const source of ['150+ public healthcare datasets', 'More than 150 healthcare datasets']) {
       const numbers = allowedNumbers([source]);
-      for (const sentence of ['Intel draws on 150+ public healthcare datasets.', 'Intel draws on more than 150 public healthcare datasets.', 'Intel draws on 150 + datasets.'])
+      for (const sentence of ['Intel draws on 150+ healthcare datasets.', 'Intel draws on more than 150 healthcare datasets.', 'Intel draws on 150 + datasets.'])
         expect(textProblems(sentence, { product: 'intel', numbers }), `${source}: ${sentence}`).toEqual([]);
-      expect(textProblems('Intel draws on 200+ public healthcare datasets.', { product: 'intel', numbers }), source).toEqual(['unlisted_number']);
+      expect(textProblems('Intel draws on 200+ healthcare datasets.', { product: 'intel', numbers }), source).toEqual(['unlisted_number']);
+      expect(textProblems('Intel draws on 150+ public healthcare datasets.', { product: 'intel', numbers }), source).toEqual(['public_data']);
     }
     // The owner approved the figures Intel's site publishes about its data on 2026-11-16 ("By the numbers" in its catalog): copy about
     // Intel may state them as the site words them, or as "more than", and no other count.
     const intel = catalogNumbers('intel');
-    for (const sentence of ['Intel draws on 150+ public healthcare datasets.', 'Intel draws on more than 150 public healthcare datasets.', 'Intel covers 33,000+ ZIP areas and 3,200+ counties.'])
+    for (const sentence of ['Intel draws on 150+ healthcare datasets.', 'Intel draws on more than 150 healthcare datasets.', 'Intel covers 33,000+ ZIP areas and 3,200+ counties.'])
       expect(textProblems(sentence, { product: 'intel', numbers: intel }), sentence).toEqual([]);
-    for (const sentence of ['Intel draws on 200+ public healthcare datasets.', 'Intel covers 40,000+ ZIP areas.', 'Intel covers 3,300+ counties.'])
+    for (const sentence of ['Intel draws on 200+ healthcare datasets.', 'Intel covers 40,000+ ZIP areas.', 'Intel covers 3,300+ counties.'])
       expect(textProblems(sentence, { product: 'intel', numbers: intel }), sentence).toEqual(['unlisted_number']);
     // They are Intel's figures: copy about CareBase may state none of them.
     expect(textProblems('CareBase draws on 150+ public healthcare datasets.', { product: 'carebase', numbers: catalogNumbers('carebase') })).toEqual(['unlisted_number']);
@@ -375,5 +378,55 @@ describe('Intel trial terms', () => {
     expect(textProblems('A 30-day free trial. A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.', { product: 'intel' })).not.toContain('trial_terms');
     // CareBase trials are unchanged.
     expect(textProblems('Try it free with no credit card.', { product: 'carebase' })).not.toContain('trial_terms');
+  });
+});
+
+// The owner, 2026-11-17: no word about CareMetric Intel calls its data public, first in email, then "fix everywhere" the same day.
+describe('naming Intel\'s data by its source on every surface', () => {
+  it('refuses "public" data about Intel in an article, a post, an ad and a sales reply, and passes the plain version', async () => {
+    const { checkSocialText } = await import('../social/content.mjs');
+    const { checkCopy } = await import('../creative/compliance.mjs');
+    const { checkSalesReply } = await import('../sales/check.mjs');
+    const said = ['CareMetric Intel builds the plan from public Medicare data.', 'Intel shows publicly available CMS ratings.', 'Intel turns free data into a plan.',
+      'Intel reads public CMS data for your county.', 'Its county research draws on public sources.'];
+    const plain = 'CareMetric Intel builds the plan from Medicare data.';
+    for (const text of said) {
+      expect(textProblems(text, { product: 'intel' }), text).toContain('public_data');
+      expect(checkSocialText(text, { surface: 'facebook', product: 'caremetric-intel' }), text).toMatchObject({ ok: false, reason: 'public_data' });
+      expect(checkCopy({ product: 'caremetric-intel', platform: 'meta', copy: { headline: 'Know your county', primaryText: text, description: 'Free market report', cta: 'Get the report' } })
+        .filter(item => item.level === 'block').map(item => item.rule), text).toContain('public_data');
+      expect(checkSalesReply({ reply: text, product: 'caremetric-intel', route: 'email', text: 'Where does the data come from?' }), text).toMatchObject({ ok: false, reason: 'public_data' });
+    }
+    expect(textProblems(plain, { product: 'intel' })).not.toContain('public_data');
+    expect(checkSocialText(plain, { surface: 'facebook', product: 'caremetric-intel' })).toMatchObject({ ok: true });
+    expect(checkCopy({ product: 'caremetric-intel', platform: 'meta', copy: { headline: 'Know your county', primaryText: plain, description: 'Free market report', cta: 'Get the report' } })
+      .filter(item => item.level === 'block')).toEqual([]);
+    expect(checkSalesReply({ reply: plain, product: 'caremetric-intel', route: 'email', text: 'Where does the data come from?' })).toMatchObject({ ok: true });
+    // An article: the topic's draft with one sentence changed is refused when it is drafted and again before it is published.
+    const draft = { ...referralDraft, body: referralDraft.body.replace('Medicare data can show where to look.', 'Public Medicare data can show where to look.') };
+    expect(draft.body).not.toBe(referralDraft.body);
+    expect(checkDraft(draft, { topic: referral, promptVersion: 'content.5', features: featuresText(referral.product) }).reasons).toContain('public_data');
+    const ok = checkDraft(referralDraft, { topic: referral, promptVersion: 'content.5', features: featuresText(referral.product) });
+    expect(ok.ok).toBe(true);
+    expect(checkArticle({ ...ok.article, body: ok.article.body.replace('Medicare data can show where to look.', 'Public Medicare data can show where to look.') })).toContain('public_data');
+  });
+
+  it('reads only text about Intel: CareBase, the public, public health and a business\'s own name pass', () => {
+    expect(textProblems('CareBase keeps public records of training in one place.', { product: 'carebase' })).not.toContain('public_data');
+    expect(textProblems('Members of the public ask about hospice every week.', { product: 'intel' })).not.toContain('public_data');
+    expect(textProblems('The county public health department publishes its plan each year.', { product: 'intel' })).not.toContain('public_data');
+    // Text about no product reads it only when it is about Intel.
+    expect(textProblems('Plan outreach from public Medicare data.', { product: null })).not.toContain('public_data');
+    expect(textProblems('Intel plans outreach from public Medicare data.', { product: null })).toContain('public_data');
+  });
+
+  it('tells every writer the rule on the fact sheet they read', async () => {
+    const { factSheetText, dataMention } = await import('./facts.mjs');
+    expect(factSheetText()).toContain(`How to name the data: ${dataMention}`);
+    expect(dataMention).toContain('Never call it public, publicly available or free data, and never proprietary, exclusive or licensed.');
+    // Nothing on the sheet a writer may copy calls the data public.
+    const intel = (await import('./facts.mjs')).products.intel;
+    for (const line of [intel.does, ...intel.capabilities, ...(intel.whyChoose ?? []), ...(intel.leadWith ?? []), ...(intel.whyNow ?? []), ...(intel.boundaries ?? [])])
+      expect(textProblems(line, { product: 'intel' }), line).not.toContain('public_data');
   });
 });

@@ -1345,11 +1345,11 @@ own published pages, kept in `server/agents/content/features.mjs` (`intel-featur
 Every request about a product carries that product's catalog as its own cached block after the prompt: the Creative Director's concept
 and variants, the Content Marketer's articles and monthly outreach, the Sales Executive's answers, and the Social Media Manager's weekly
 plan, ad copy and replies (a request about both products carries both). Each prompt says how to use it: name the feature that answers the
-reader and why it matters, stay inside what the catalog says (plan and module labels), never present public data as confirmed referrals,
+reader and why it matters, stay inside what the catalog says (plan and module labels), never present Medicare data as confirmed referrals or call Intel's data public (the fact sheet's `dataMention`, refused in code as `public_data` on every surface),
 a tool as making anyone compliant or survey-ready, or a readiness score as a prediction, never promise savings, and quote none of its
 percentages. Each agent's checks allow the numbers a catalog states for text about its own product only; a catalog vouches for no claim.
-Prompt versions: `content.4`, `outreach.5`, `sales.5`, `social-plan.7`, `social-ads.5`, `social-reply.4`, `creative-concept.9`,
-`creative-variants.9`, `creative-vision.1`, `google-search.1`, `research.1`, the growth writer's `growth.8` (`growth.8-r` for its one repair pass and
+Prompt versions: `content.5`, `outreach.6`, `sales.8`, `social-plan.9`, `social-ads.6`, `social-reply.6`, `creative-concept.10`,
+`creative-variants.10`, `creative-vision.1`, `google-search.2`, `research.1`, the growth writer's `growth.8` (`growth.8-r` for its one repair pass and
 `growth.8-mN` when it writes with the owner-approved memo N), `growth-fit.3` and `sales-playbook.3`.
 
 **The bigger picture, the founder and plain words (owner direction 2026-11-12).** Every writer on the team reads the fact sheet, so the

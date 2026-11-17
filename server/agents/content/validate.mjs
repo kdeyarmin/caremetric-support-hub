@@ -277,6 +277,18 @@ const companyEmail = /^(?:hello|support)@caremetric\.ai$/i;
 const noCardTrial = /\b(?:no|without(?: a| any)?)\s+(?:credit\s+)?card\b|\bcard\s+(?:is\s+)?not\s+(?:required|needed)\b|\bno\s+payment\s+(?:details|information|method)\b/i;
 const aboutIntel = /\b(?:caremetric\s+)?intel\b/i;
 
+/**
+ * Whether words about CareMetric Intel call its data public, publicly available, free or open (owner direction 2026-11-17: everything
+ * written about Intel names where the data comes from, Medicare, CMS or the Census Bureau, without that word, so it reads as
+ * CareMetric's own analysis and not as free data anyone could assemble). One rule for every surface: prospect email (growth/draft.mjs),
+ * sales replies, social posts and replies, ads and articles all read it through `textProblems` (`public_data`). Nothing here lets
+ * anything call the data proprietary, exclusive or licensed, and a person who asks where it comes from gets a plain answer.
+ * "The public" and "public health" are not read.
+ */
+export const publicDataWords = /\bpublic(?:ly)?\s+(?:(?:available|published|reported|released)\s+)?(?:[a-z'-]+\s+){0,2}?(?:data|datasets?|records?|files?|figures?|sources?|ratings?|scores?|information|numbers?|statistics|billing|filings?)\b|\bpublic\s+(?:medicare|cms|census|government|federal)\b|\bpublicly\s+(?:available|published|reported|released)\b|\b(?:free|open)\s+(?:public\s+|government\s+)?data\b/i;
+/** `product` is the growth product slug ('caremetric-intel') or the fact sheet's key ('intel'). CareBase and the advisors are not read. */
+export const callsDataPublic = (product, words) => (product === 'caremetric-intel' || product === 'intel') && publicDataWords.test(String(words ?? ''));
+
 export function textProblems(value, { product = null, numbers = null, percents = null } = {}) {
   const text = String(value ?? '');
   const reasons = new Set();
@@ -288,6 +300,7 @@ export function textProblems(value, { product = null, numbers = null, percents =
   if ((product === 'carebase' || /\bcarebase\b/i.test(text)) && proveWords.test(text)) reasons.add('prove_word');
   if (forbiddenTerms.test(text)) reasons.add('vocabulary');
   if ((product === 'intel' || (product !== 'carebase' && aboutIntel.test(text))) && noCardTrial.test(text)) reasons.add('trial_terms');
+  if ((product === 'intel' || (product !== 'carebase' && aboutIntel.test(text))) && publicDataWords.test(text)) reasons.add('public_data');
   if (screenIdentifiers(text).flagged || namedPerson.test(text)) reasons.add('personal_information');
   if ([...text.matchAll(honorificName)].some(match => match[0].split(/[\s.]+/).slice(1).filter(Boolean).some(word => !sheet().words.has(word)))) reasons.add('personal_information');
   if ((text.match(emailPattern) ?? []).some(address => !companyEmail.test(address)) || new RegExp(phoneNumber.source).test(text)) reasons.add('contact_detail');
