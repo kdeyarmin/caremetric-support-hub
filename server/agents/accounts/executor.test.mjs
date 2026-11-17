@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { lifecycleExecutor, lifecycleExecutors } from './executor.mjs';
-import { lifecycleFeature, lifecycleInput, lifecycleWording, unsubscribeLabel } from './lifecycle.mjs';
+import { lifecycleFeature, lifecycleInput, lifecycleWording, trialPathFeature, unsubscribeLabel } from './lifecycle.mjs';
 
 const canary = 'canary.billing@example.test';
 const postal = 'CareMetric, 100 Example Street, Altoona, PA 16601';
@@ -17,7 +17,7 @@ const execution = (over = {}) => ({
   targetKind: 'billing_account', targetId: 'maple-grove', input: input(), requestKey: '44444444-4444-4444-8444-444444444444', autoApproved: false, execution: 1, ...over,
 });
 
-const fixture = ({ facts = [fact()], earlier = { state: 'unrecorded' }, begun = { state: 'ready', to: canary }, delivery = { delivery: 'sent', id: 'msg-1' }, lifecycle = {} } = {}) => {
+const fixture = ({ facts = [fact()], earlier = { state: 'unrecorded' }, begun = { state: 'ready', to: canary }, delivery = { delivery: 'sent', id: 'msg-1' }, lifecycle = {}, trialPath = false } = {}) => {
   const logs = [];
   const sent = [];
   const mail = { configured: true, send: vi.fn(async message => { sent.push(message); return typeof delivery === 'function' ? delivery() : delivery; }) };
@@ -26,7 +26,7 @@ const fixture = ({ facts = [fact()], earlier = { state: 'unrecorded' }, begun = 
     lifecycleBeginSend: vi.fn(async ({ unsubscribeHash }) => (unsubscribeHash === null ? earlier : begun)),
     lifecycleFinishSend: vi.fn(async () => true),
   };
-  const send = lifecycleExecutor({ store, lifecycle: { mail, postalAddress: postal, publicOrigin: origin, ...lifecycle }, log: line => logs.push(line) });
+  const send = lifecycleExecutor({ store, lifecycle: { mail, postalAddress: postal, publicOrigin: origin, ...lifecycle }, trialPath, log: line => logs.push(line) });
   return { store, mail, sent, logs, send };
 };
 const refusal = code => error => { expect(error.code).toBe(code); return true; };
@@ -195,5 +195,34 @@ describe('registering the customer email action', () => {
       // It reads nothing but the Hub's own mirror, so it never needs (or gets) the owner's session.
       expect(executors['email.send'].requiresSession).toBeUndefined();
     }
+  });
+});
+
+describe('the trial path (team review 2026-11-17, stage 4)', () => {
+  it('lets an email refused for the day\'s cap or the growth contact gap wait, and still ends one refused for anything else', async () => {
+    for (const state of ['daily_limit', 'frequency_limited']) {
+      const { send, mail } = fixture({ begun: { state }, trialPath: true });
+      await expect(send(execution())).rejects.toSatisfy(error => error.code === 'action_deferred' && error.reason === state);
+      expect(mail.send).not.toHaveBeenCalled();
+    }
+    for (const state of ['no_address', 'suppressed', 'auto_send_off']) {
+      await expect(fixture({ begun: { state }, trialPath: true }).send(execution())).rejects.toSatisfy(refusal(state));
+    }
+  });
+
+  it('holds an Intel trial\'s welcome until its card is confirmed, and refuses the card reminder once it is', async () => {
+    const intel = over => fact({ product: 'caremetric-intel', productName: 'CareMetric Intel', cardConfirmedAt: null, ...over });
+    const welcome = execution({ input: lifecycleInput(intel(), 'welcome') });
+    await expect(fixture({ facts: [intel()], trialPath: true }).send(welcome)).rejects.toSatisfy(refusal('no_longer_applies'));
+    expect(await fixture({ facts: [intel({ cardConfirmedAt: '2026-11-02T13:00:00Z' })], trialPath: true }).send(welcome)).toEqual({ outcome: 'sent', template: 'welcome' });
+    const reminder = execution({ input: lifecycleInput(intel(), 'card_reminder') });
+    expect(await fixture({ facts: [intel()], trialPath: true }).send(reminder)).toEqual({ outcome: 'sent', template: 'card_reminder' });
+    await expect(fixture({ facts: [intel({ cardConfirmedAt: '2026-11-02T13:00:00Z' })], trialPath: true }).send(reminder)).rejects.toSatisfy(refusal('no_longer_applies'));
+    // Without the trial path the reminder is never sent.
+    await expect(fixture({ facts: [intel()] }).send(reminder)).rejects.toSatisfy(refusal('no_longer_applies'));
+  });
+
+  it('is turned on by the database\'s feature', () => {
+    expect(Object.keys(lifecycleExecutors({ store: {}, features: new Set([lifecycleFeature, trialPathFeature]) }))).toEqual(['email.send']);
   });
 });

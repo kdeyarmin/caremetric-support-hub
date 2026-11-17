@@ -151,6 +151,8 @@ try {
     await admin.query('insert into private.billing_customers (tenant_id, stripe_customer_id, email, livemode, seen_at) values ($1, $2, $3, true, now())', [id, stripe, email]);
     await admin.query(`insert into private.billing_subscriptions (stripe_subscription_id, tenant_id, stripe_customer_id, product_id, status, collection_method, livemode, stripe_created, seen_at, trial_start, trial_end)
       values ($1, $2, $3, $4, 'trialing', 'charge_automatically', true, clock_timestamp(), clock_timestamp(), clock_timestamp(), clock_timestamp() + interval '14 days')`, [`sub_workrecovery${tag}${label}`, id, stripe, product]);
+    // An Intel trial starts once Stripe confirms its card (20261117230000_trial_path.sql).
+    await admin.query('insert into private.billing_trial_cards (stripe_subscription_id, tenant_id) values ($1, $2)', [`sub_workrecovery${tag}${label}`, id]);
     return id;
   };
   const ours = await trialFrom('ours', `trial-${tag}@caremetric.ai`);

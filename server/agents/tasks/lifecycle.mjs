@@ -19,7 +19,7 @@
  * The run finishes once it has proposed: the proposals wait on the Team screen, and the next morning's run is not held back by them.
  * The task result and the run summary carry counts and template names only, never an account name.
  */
-import { lifecycleFeature, lifecycleInput, lifecyclePreview, lifecycleReadiness, lifecycleSaveFeature, lifecycleTemplates, planEmails, proposalLimit, saveTemplates, templateWords } from '../accounts/lifecycle.mjs';
+import { lifecycleFeature, lifecycleInput, lifecyclePreview, lifecycleReadiness, lifecycleSaveFeature, lifecycleTemplates, planEmails, proposalLimit, saveTemplates, templateWords, trialPathFeature, trialPathTemplates } from '../accounts/lifecycle.mjs';
 import { live } from '../../live.mjs';
 import { plural, recordRun } from './shared.mjs';
 
@@ -32,8 +32,8 @@ const missingWords = { mail: 'no SendGrid sender', postal_address: 'no postal ad
 const has = (features, feature) => (features instanceof Set ? features.has(feature) : Array.isArray(features) && features.includes(feature));
 const declared = features => has(features, lifecycleFeature);
 // The templates a run may plan: the cancellation and win-back emails only with their feature and the owner's switch on.
-const planned = save => lifecycleTemplates.filter(template => save || !saveTemplates.includes(template));
-const counted = (list, save) => Object.fromEntries(planned(save).map(template => [template, list.filter(entry => entry.template === template).length]));
+const planned = (save, trialPath = false) => lifecycleTemplates.filter(template => (save || !saveTemplates.includes(template)) && (trialPath || !trialPathTemplates.includes(template)));
+const counted = (list, save, trialPath = false) => Object.fromEntries(planned(save, trialPath).map(template => [template, list.filter(entry => entry.template === template).length]));
 const listed = byTemplate => lifecycleTemplates.filter(template => byTemplate[template] > 0).map(template => `${byTemplate[template]} ${templateWords[template]}`).join(', ');
 
 /** Registered only when the database declares the feature, so a Hub whose database lacks the migration still starts and the schedule stays due. */
@@ -65,11 +65,14 @@ export function lifecycleHandlers({ store, features = null, lifecycle = {}, log 
   async function emails(task, { now = () => new Date(), signal } = {}) {
     const moment = now();
     const save = has(features, lifecycleSaveFeature) && live(lifecycle.saveEmails) === true;
+    // The trial path (team review 2026-11-17, stage 4): a trial that needs a card counts from it, use is read from activity events, and
+    // the card reminder and the two mid-trial emails exist.
+    const trialPath = has(features, trialPathFeature);
     const facts = await readFacts(signal);
-    const { candidates, skipped } = planEmails(facts.accounts, moment, { save });
+    const { candidates, skipped } = planEmails(facts.accounts, moment, { save, trialPath });
     const chosen = candidates.slice(0, proposalLimit);
     const base = {
-      mode: facts.mode, read: facts.accounts.length, due: candidates.length, byTemplate: counted(chosen, save), deferred: candidates.length - chosen.length + skipped.sameAccount,
+      mode: facts.mode, read: facts.accounts.length, due: candidates.length, byTemplate: counted(chosen, save, trialPath), deferred: candidates.length - chosen.length + skipped.sameAccount,
       noAddress: skipped.noAddress, suppressed: skipped.suppressed, truncated: facts.truncated,
     };
     const finish = async (result, summary, { outcome = 'completed', errorCode = null } = {}) => {
@@ -122,7 +125,7 @@ export function lifecycleHandlers({ store, features = null, lifecycle = {}, log 
       made.push({ template });
       if (proposal?.status === 'auto_approved') autoApproved += 1;
     }
-    const result = { ...base, outcome: 'proposed', proposed, autoApproved, alreadyProposed, byTemplate: counted(made, save) };
+    const result = { ...base, outcome: 'proposed', proposed, autoApproved, alreadyProposed, byTemplate: counted(made, save, trialPath) };
     return finish(result, proposed === 0
       ? `No new customer email was proposed: ${plural(alreadyProposed, 'email')} had been proposed already.${tail}`
       : `Proposed ${plural(proposed, 'customer email')} (${listed(result.byTemplate)})${autoApproved ? `; ${autoApproved} approved on ${autoApproved === 1 ? 'its' : 'their'} own, by the templates you listed` : ' for your approval'}.${tail}`);

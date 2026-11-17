@@ -37,6 +37,8 @@ const invoice = async (buyer, suffix, sub, {paid=true,old=false,live=true,unreso
  values($1,$2,$3,$4,$5,$6,'usd',100,100,100,$7,$8,$9,case when $10 then now()-interval '40 days' else clock_timestamp() end,clock_timestamp())`,
  [invoiceId(suffix),buyer.id,buyer.stripe,subId(sub),unresolved?null:product,paid?'paid':'open',paid?100:0,paid?0:100,live,old]);
 };
+// An Intel trial starts once Stripe confirms its card (20261117230000_trial_path.sql), recorded as billing.mjs records it.
+const card = (buyer, suffix) => admin.query('insert into private.billing_trial_cards(stripe_subscription_id,tenant_id) values($1,$2)',[subId(suffix),buyer.id]);
 const queued = async (buyer, kind) => Number((await row('select count(*) as n from private.growth_billing_outbox where tenant_id=$1 and kind=$2',[buyer.id,kind])).n);
 try {
  await admin.query('insert into private.billing_app_keys(product_id,key_hash,key_hint) values($1,$2,$3)',[product,keyHash,run.slice(0,4)]);
@@ -60,7 +62,9 @@ try {
  await admin.query('update private.billing_app_keys set revoked_at=null where key_hash=$1',[keyHash]);
 
  const fresh=await customer('fresh');await subscription(fresh,'fresh',{trial:true});
- assert.equal(await queued(fresh,'trial_started'),1,'authoritative trial is captured');
+ assert.equal(await queued(fresh,'trial_started'),0,'an Intel trial with no card confirmed is not a trial yet');
+ await card(fresh,'fresh');
+ assert.equal(await queued(fresh,'trial_started'),1,'authoritative trial is captured once its card is confirmed');
  await invoice(fresh,'fresh','fresh',{paid:false});assert.equal(await queued(fresh,'paid'),0,'open invoice is not a purchase');
  await admin.query("update private.billing_invoices set status='paid',amount_paid=100,amount_remaining=0,seen_at=clock_timestamp() where stripe_invoice_id=$1",[invoiceId('fresh')]);
  assert.equal(await queued(fresh,'paid'),1,'failed/open payment recovery creates a verified purchase');
@@ -78,7 +82,7 @@ try {
  assert.equal(await queued(reordered,'paid'),1,'invoice before subscription is reconciled when subscription arrives');
  const reorderedPair=await customer('reorderedPair');await invoice(reorderedPair,'reorderedPair1','reorderedPair',{unresolved:true});await invoice(reorderedPair,'reorderedPair2','reorderedPair',{unresolved:true});
  await subscription(reorderedPair,'reorderedPair');assert.equal(await queued(reorderedPair,'paid'),1,'initial payment plus proration before subscription still counts one conversion');
- const test=await customer('test');await subscription(test,'test',{trial:true,live:false});await invoice(test,'test','test',{live:false});
+ const test=await customer('test');await subscription(test,'test',{trial:true,live:false});await card(test,'test');await invoice(test,'test','test',{live:false});
  assert.equal(await queued(test,'paid'),0);assert.equal(await queued(test,'trial_started'),0,'test mode does not report conversions');
 
  // A prospect who starts a trial keeps the prospect's organization: the trial lands on its opportunity and queued cold email stops.
@@ -88,7 +92,7 @@ try {
  const prospectOpportunity=(await row("insert into private.growth_opportunities(organization_id,product,contact_id,stage) values($1,'caremetric-intel',$2,'contacted') returning id",[prospectOrg,prospectContact])).id;
  const coldDraft=(await row(`insert into private.growth_messages(opportunity_id,contact_id,purpose,subject,body,opportunity_version,contact_version,policy_version,unsubscribe_hash,status)
   values($1,$2,'marketing','A question','Which counties do you cover?',1,1,1,$3,'proposed') returning id`,[prospectOpportunity,prospectContact,'u'.repeat(64)])).id;
- const converted=await customer('converted',`Owner@${prospectDomain}`);await subscription(converted,'converted',{trial:true});
+ const converted=await customer('converted',`Owner@${prospectDomain}`);await subscription(converted,'converted',{trial:true});await card(converted,'converted');
  assert.equal(await queued(converted,'trial_started'),1);
 
  // Held checkouts ahead of valid rows must not consume the entire batch. Expired rows must not poison retries.

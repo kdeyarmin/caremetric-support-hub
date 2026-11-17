@@ -22,12 +22,19 @@
  * sent, delivery_failed (refused: it did not reach the customer) or email_unconfirmed (no answer: it may have, so it is never sent
  * again). Nothing is retried. The address and the email's text are never logged, stored or returned: the result is the outcome and
  * the template.
+ *
+ * Once the database declares the trial path (platform.agents.trial-path.v1), a refusal for the day's cap or the growth contact gap
+ * is not the end: the email waits (private.agent_lifecycle_defer: the next morning, or a day) and is checked again when it is tried,
+ * and the account's facts are read with the trial path's rules (a trial that needs a card waits for it).
  */
 import { randomBytes } from 'node:crypto';
 import { digest } from '../../sms-auth.mjs';
-import { httpsOrigin, lifecycleFeature, lifecycleReadiness, parseLifecycleInput, renderLifecycleEmail, stillApplies, wordingHash } from './lifecycle.mjs';
+import { httpsOrigin, lifecycleFeature, lifecycleReadiness, parseLifecycleInput, renderLifecycleEmail, stillApplies, trialPathFeature, wordingHash } from './lifecycle.mjs';
 
 const failure = code => Object.assign(new Error('The customer email was not sent.'), { code });
+// The action runtime hands a deferral to the store (private.agent_lifecycle_defer), which says when it is tried again.
+const waiting = reason => Object.assign(new Error('The customer email waits to be tried again.'), { code: 'action_deferred', reason });
+const waits = ['daily_limit', 'frequency_limited'];
 const refusals = { no_address: 'no_address', suppressed: 'suppressed', daily_limit: 'daily_limit', auto_send_off: 'auto_send_off', frequency_limited: 'frequency_limited' };
 const providerId = value => (typeof value === 'string' && /^[A-Za-z0-9._-]{1,200}$/.test(value) ? value : null);
 // What an earlier attempt recorded: sent stays sent; refused stays refused; anything else may have gone and is never sent again.
@@ -36,7 +43,7 @@ const settle = (status, template) => {
   throw failure(status === 'failed' ? 'delivery_failed' : 'email_unconfirmed');
 };
 
-export function lifecycleExecutor({ store, lifecycle = {}, log = line => console.warn(line) }) {
+export function lifecycleExecutor({ store, lifecycle = {}, trialPath = false, log = line => console.warn(line) }) {
   return async function sendCustomerEmail(execution) {
     const input = parseLifecycleInput(execution?.input);
     if (!input) throw failure('invalid_email');
@@ -48,12 +55,13 @@ export function lifecycleExecutor({ store, lifecycle = {}, log = line => console
 
     const snapshot = await store.lifecycleSnapshot({ limit: 1, tenant: input.tenant, product: input.product });
     const fact = (snapshot?.accounts ?? []).find(entry => entry.tenant === input.tenant && entry.product === input.product) ?? null;
-    if (!stillApplies(input.template, fact)) throw failure('no_longer_applies');
+    if (!stillApplies(input.template, fact, { trialPath })) throw failure('no_longer_applies');
 
     // The personal unsubscribe link: its token lives only in the email; the database keeps its hash beside the address's hash.
     const token = randomBytes(32).toString('hex');
     const begun = await store.lifecycleBeginSend({ actionId: execution.id, execution: executionNumber, unsubscribeHash: digest(token) });
     if (begun?.state === 'recorded') return settle(begun.status, input.template);
+    if (trialPath && waits.includes(begun?.state)) throw waiting(begun.state);
     if (begun?.state !== 'ready' || typeof begun.to !== 'string') throw failure(refusals[begun?.state] ?? 'executor_error');
 
     // Built on the parsed origin alone (readiness refused anything but a bare https origin), so nothing can come after the path.
@@ -83,5 +91,6 @@ const declared = features => (features instanceof Set ? features.has(lifecycleFe
 /** The Account Manager's one action, registered only when the database declares the feature (its operations exist only then). */
 export function lifecycleExecutors({ store, features = null, lifecycle = {}, log }) {
   if (!declared(features)) return {};
-  return { 'email.send': lifecycleExecutor({ store, lifecycle, log }) };
+  const trialPath = features instanceof Set ? features.has(trialPathFeature) : Array.isArray(features) && features.includes(trialPathFeature);
+  return { 'email.send': lifecycleExecutor({ store, lifecycle, trialPath, log }) };
 }

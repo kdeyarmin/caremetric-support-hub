@@ -6,6 +6,15 @@ const local=new URL(process.env.HUB_TEST_DATABASE_URL);assert.equal(local.hostna
 const db=new pg.Client({connectionString:local.href});await db.connect();
 const gate=await readFile(new URL('../supabase/migrations/20260911234549_governed_course_distribution_contract.sql',import.meta.url),'utf8');
 const read=async()=>(await db.query('select hub.get_backend_contract() as value')).rows[0].value;
+const declare=async contract=>{
+  const sql=(await db.query("select format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal($1::text)||'::jsonb') as value",[JSON.stringify(contract)])).rows[0].value;
+  await db.query(sql);
+};
+// The distribution gate (2026-09-11) also bounds the list at 100 features, a sanity bound of its day that production never runs again;
+// it predates every AI team feature (platform.agents.*, declared from 2026-11-02 on), so it is replayed against a contract without them,
+// as it could have seen it (as creation-contract-integration.mjs and credit-policy-contract-integration.mjs do). Nothing it checks is
+// left out.
+const historical=contract=>({...contract,features:contract.features.filter(feature=>!feature.startsWith('platform.agents.'))});
 try{
   assertBackendContract(await read());
   const omissions=[
@@ -23,9 +32,9 @@ try{
     "create or replace function private.course_distribution_available(p_item_id uuid,p_revision_id uuid) returns boolean language sql security definer set search_path='' as $$select true$$",
     "create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='' as $$select null::jsonb$$",
   ];
-  for(const sql of omissions){await db.query('begin');try{await db.query(sql);await assert.rejects(db.query(gate),error=>error.code==='55000');}finally{await db.query('rollback');}}
+  for(const sql of omissions){await db.query('begin');try{await declare(historical(await read()));await db.query(sql);await assert.rejects(db.query(gate),error=>error.code==='55000');}finally{await db.query('rollback');}}
   await db.query('begin');try{
-    const before=await read();await db.query(gate);assert.deepEqual(await read(),before);
+    const before=historical(await read());await declare(before);await db.query(gate);assert.deepEqual(await read(),before);
     const future={...before,features:[...before.features,'fixture.independent-distribution.v1']};
     const sql=(await db.query("select format('create or replace function hub.get_backend_contract() returns jsonb language sql stable security invoker set search_path='''' as %L','select '||quote_literal($1::text)||'::jsonb') as sql",[JSON.stringify(future)])).rows[0].sql;
     await db.query(sql);await db.query(gate);assert.deepEqual(await read(),future);assertBackendContract(await read());
