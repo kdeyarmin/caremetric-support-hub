@@ -84,7 +84,43 @@ export function rosterClosed(item, now = new Date()) {
 /** Agencies CareMetric's own people run, by CCN: never prospects (the founder's agency, owner direction 2026-11-15). */
 export const ownAgencies = new Set(['398009']);
 
-export function rankTarget(item, now = new Date()) {
+/**
+ * The owner's decision of 2026-11-17 (stage 3 of the AI workforce review, docs/AI_WORKFORCE_REVIEW_2026-11-17.md): reach first the
+ * agencies under pressure to win referrals now, and last the agencies that already lead their county. Each weight is small beside a new
+ * certification (+25) or a new owner (+20), so the long-standing reasons still lead; these break ties among the rest. The figures behind
+ * them are research only: they never reach the claim, an email or the agency (researchOnlyPrefix, draft.mjs's own-standing check).
+ */
+export const pressureWeights = Object.freeze({
+  // A small share (under 5%) of a county with ten or more agencies: it has to win referrals from larger neighbours.
+  smallShare: 8, smallShareBelow: 0.05, crowdedCounty: 10,
+  // First by patients among three or more agencies in its county: it already has the referral sources, and is the hardest to move.
+  countyLeader: -10, leaderAmongAtLeast: 3,
+  // A negative HHVBP payment adjustment (Medicare pays it less for its quality scores); a cut of 2% or more counts more.
+  hhvbpCut: 8, hhvbpDeepCut: 10, hhvbpDeepCutAtMost: -2,
+  // Home health quality of patient care stars: low stars mean pressure from hospitals' referral lists; the top rating, little.
+  lowStars: 5, lowStarsAtMost: 2.5, topStars: -3, topStarsAtLeast: 4.5,
+  // A Hospice Care Index of 7 or less (of 10): hospitals and physicians can see it, and it is under pressure to show quality.
+  lowCareIndex: 5, lowCareIndexAtMost: 7,
+});
+
+/**
+ * The research-only figures `agency_facts` adds for one agency (its HHVBP payment adjustment and Hospice Care Index), as plain numbers,
+ * or an empty object. `facts` is one entry of the feed's `agencies` list.
+ */
+export function pressureFacts(facts) {
+  const hhvbp = facts?.hhvbp && typeof facts.hhvbp === 'object' ? facts.hhvbp : null;
+  const index = facts?.hospice_care_index && typeof facts.hospice_care_index === 'object' ? facts.hospice_care_index : null;
+  const adjustment = finite(hhvbp?.paymentAdjustmentPct);
+  const score = finite(index?.score);
+  const year = hhvbp?.paymentYear;
+  return {
+    ...(adjustment !== null && adjustment >= -100 && adjustment <= 100 ? { hhvbpAdjustmentPct: adjustment } : {}),
+    ...(adjustment !== null && (typeof year === 'string' || typeof year === 'number') && /^\d{4}$/.test(String(year)) ? { hhvbpPaymentYear: String(year) } : {}),
+    ...(score !== null && score >= 0 && score <= 10 ? { hospiceCareIndex: score } : {}),
+  };
+}
+
+export function rankTarget(item, now = new Date(), extra = {}) {
   if (ownAgencies.has(String(item?.ccn ?? ''))) return { rank: 0, reasons: ["CareMetric's own agency"], excluded: true };
   if (rosterClosed(item, now)) return { rank: 0, reasons: ['Closed in the CMS roster'], excluded: true };
   let rank = 40;
@@ -102,7 +138,23 @@ export function rankTarget(item, now = new Date()) {
   }
   const providers = finite(item.volume?.county_providers);
   if (providers !== null && providers >= 10) { rank += 5; reasons.push('Competitive county'); }
-  return { rank: Math.max(0, Math.min(100, Math.round(rank))), reasons, excluded: false };
+  // Under pressure first (owner decision 2026-11-17, pressureWeights).
+  const w = pressureWeights;
+  const share = finite(item.volume?.county_share);
+  const countyRank = finite(item.volume?.county_rank);
+  if (share !== null && providers !== null && share < w.smallShareBelow && providers >= w.crowdedCounty) { rank += w.smallShare; reasons.push('Small share of a crowded county'); }
+  if (countyRank === 1 && providers !== null && providers >= w.leaderAmongAtLeast) { rank += w.countyLeader; reasons.push('Leads its county'); }
+  const adjustment = finite(extra?.hhvbpAdjustmentPct);
+  if (adjustment !== null && adjustment < 0) {
+    if (adjustment <= w.hhvbpDeepCutAtMost) { rank += w.hhvbpDeepCut; reasons.push('Medicare pay cut of 2% or more (HHVBP)'); }
+    else { rank += w.hhvbpCut; reasons.push('Medicare pay cut (HHVBP)'); }
+  }
+  const stars = finite(item.quality?.care_star_rating);
+  if (stars !== null && stars <= w.lowStarsAtMost) { rank += w.lowStars; reasons.push('Low quality star rating'); }
+  else if (stars !== null && stars >= w.topStarsAtLeast) { rank += w.topStars; reasons.push('Top quality star rating'); }
+  const careIndex = finite(extra?.hospiceCareIndex);
+  if (careIndex !== null && careIndex <= w.lowCareIndexAtMost) { rank += w.lowCareIndex; reasons.push('Low Hospice Care Index'); }
+  return { rank: Math.max(0, Math.min(100, Math.round(rank))), reasons: reasons.slice(0, 12), excluded: false };
 }
 
 /** The agency's public record, as the team may cite it. */
@@ -130,9 +182,13 @@ export function researchClaim(item) {
   return parts.length ? `${researchOnlyPrefix} ${parts.join('; ')}.`.slice(0, 1000) : null;
 }
 
-/** One feed item as the row private.growth_roster_upsert saves. */
-export function rosterRow(item, period, now = new Date()) {
-  const { rank, reasons, excluded } = rankTarget(item, now);
+/**
+ * One feed item as the row private.growth_roster_upsert saves. `agencyFacts` is the agency's entry from the feed's `agency_facts` answer
+ * (HHVBP and Hospice Care Index), when it was read: research and ranking only.
+ */
+export function rosterRow(item, period, now = new Date(), agencyFacts = null) {
+  const extra = pressureFacts(agencyFacts);
+  const { rank, reasons, excluded } = rankTarget(item, now, extra);
   const facts = {
     ...(item.contact?.phone ? { phone: item.contact.phone } : {}),
     ...(item.contact?.address ? { address: String(item.contact.address).slice(0, 200) } : {}),
@@ -143,6 +199,12 @@ export function rosterRow(item, period, now = new Date()) {
     ...(finite(item.volume?.medicare_patients) !== null ? { patients: item.volume.medicare_patients } : {}),
     ...(finite(item.volume?.county_rank) !== null ? { countyRank: item.volume.county_rank } : {}),
     ...(finite(item.volume?.county_providers) !== null ? { countyProviders: item.volume.county_providers } : {}),
+    // Research only (stage 3, 2026-11-17): what ranks an agency under pressure, kept so the Growth screen and the memo can read it.
+    ...(finite(item.volume?.county_share) !== null ? { countyShare: item.volume.county_share } : {}),
+    ...(finite(item.volume?.state_share) !== null ? { stateShare: item.volume.state_share } : {}),
+    ...(finite(item.volume?.state_rank) !== null ? { stateRank: item.volume.state_rank } : {}),
+    ...(finite(item.volume?.state_providers) !== null ? { stateProviders: item.volume.state_providers } : {}),
+    ...extra,
   };
   return {
     ccn: item.ccn, name: displayName(item.name).slice(0, 200) || `CCN ${item.ccn}`, setting: item.setting, city: item.city ?? null,
