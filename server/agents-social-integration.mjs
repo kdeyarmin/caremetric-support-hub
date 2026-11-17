@@ -133,10 +133,11 @@ try {
   await campaign('linkedin', 'executed', { dailyBudgetCents: 1000, flightDays: 5 });
   await campaign('meta', 'rejected', { dailyBudgetCents: 167 });
   await campaign('google', 'failed', { dailyBudgetCents: 500, flightDays: 10 });
+  // Stage 6 (20261117250000_reach.sql) adds `empty`: whether a launch fell back to a paused campaign with no ad. None of these did.
   assert.deepEqual(await adsStore.adsMonthCampaigns(month), [
-    { kind: 'social.campaign_create', targetId: `linkedin:caremetric-intel:${month}`, status: 'executed', flight: true },
-    { kind: 'social.campaign_create', targetId: `meta:caremetric-intel:${month}`, status: 'rejected', flight: false },
-    { kind: 'social.google_campaign', targetId: `google:caremetric-intel:${month}`, status: 'failed', flight: true },
+    { kind: 'social.campaign_create', targetId: `linkedin:caremetric-intel:${month}`, status: 'executed', flight: true, empty: false },
+    { kind: 'social.campaign_create', targetId: `meta:caremetric-intel:${month}`, status: 'rejected', flight: false, empty: false },
+    { kind: 'social.google_campaign', targetId: `google:caremetric-intel:${month}`, status: 'failed', flight: true, empty: false },
   ], 'Every platform\'s campaign of the month, connected or not, with its status and whether it is a flight');
   assert.deepEqual(await adsStore.adsMonthCampaigns('2098-01'), [], 'Another month has none');
   for (const bad of ['2099-13', '2099-1', 'month', null]) await assert.rejects(adsStore.adsMonthCampaigns(bad), error => error.code === '22023', String(bad));

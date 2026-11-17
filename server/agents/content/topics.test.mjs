@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { allowedHost, officialSources, products } from './facts.mjs';
-import { backlogProblems, chooseTopic, topics } from './topics.mjs';
+import { backlogProblems, chooseTopic, countyTopic, queryMatches, quarterTag, rewriteAfterDays, topics } from './topics.mjs';
 import { numbersIn } from './validate.mjs';
 
 const now = new Date('2026-11-03T13:00:00Z');
@@ -96,5 +96,50 @@ describe('choosing the next topic', () => {
   it('answers null when every topic is taken', () => {
     expect(chooseTopic({ articles: topics.map(topic => article(topic.key, 'executed')), now })).toBeNull();
     expect(chooseTopic({ backlog: [], now })).toBeNull();
+  });
+});
+
+describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
+  it('puts Intel\'s free market report first in every Intel article\'s suggested pages', () => {
+    for (const item of topics.filter(entry => entry.product === 'intel')) expect(item.links[0], item.key).toBe('intel-market-review');
+    for (const item of topics.filter(entry => entry.product !== 'intel')) expect(item.links, item.key).not.toContain('intel-market-review');
+  });
+
+  it('makes a county topic from a roster county, with no figure, pointing to the county and market reports', () => {
+    const lancaster = countyTopic({ countyFips: '42071', state: 'PA', name: 'Lancaster County' });
+    expect(lancaster).toMatchObject({ key: 'county-42071', product: 'intel', slug: 'home-health-hospice-lancaster-county-pa',
+      title: 'Home health and hospice in Lancaster County, PA: what to look at in the market', links: ['intel-county-report', 'intel-market-review', 'intel-home'] });
+    expect(backlogProblems([lancaster])).toEqual([]);
+    expect(lancaster.facts.flatMap(numbersIn)).toEqual([]);
+    expect(countyTopic({ countyFips: '22071', state: 'LA', name: 'Orleans Parish' })).toMatchObject({ slug: 'home-health-hospice-orleans-parish-la', title: 'Home health and hospice in Orleans Parish, LA: what to look at in the market' });
+    expect(countyTopic({ countyFips: '02290', state: 'AK', name: 'Yukon-Koyukuk census area' }).title).toContain('Yukon-Koyukuk Census Area, AK');
+    for (const bad of [{ countyFips: '4207', state: 'PA', name: 'Lancaster' }, { countyFips: '42071', state: 'pa', name: 'Lancaster' }, { countyFips: '42071', state: 'PA', name: '' }]) {
+      expect(countyTopic(bad), JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it('nudges a topic up when people search for its keywords, by at most one', () => {
+    const intel = topics.filter(entry => entry.product === 'intel');
+    const target = intel.find(entry => entry.keywords.length > 0 && entry.priority === Math.min(...intel.map(item => item.priority)));
+    const queries = target.keywords.map(keyword => `best ${keyword.toLowerCase()} near me`);
+    expect(queryMatches(target, queries)).toBe(target.keywords.filter(keyword => keyword.split(/\s+/).some(word => word.length > 3)).length);
+    expect(queryMatches(target, ['nothing to see'])).toBe(0);
+    const plain = chooseTopic({ backlog: [topics[0], target], now });
+    const searched = chooseTopic({ backlog: [{ ...topics[0], priority: target.priority + 0.5 }, target], queries, now });
+    expect(plain.key).toBe(topics[0].key);
+    expect(searched.key).toBe(target.key);
+  });
+
+  it('writes a topic again a quarter after it was published, under the quarter\'s own address, and only when asked', () => {
+    const item = topics[0];
+    const old = [article(item.key, 'executed', daysAgo(rewriteAfterDays + 1))];
+    expect(chooseTopic({ backlog: [item], articles: old, now })).toBeNull();
+    const again = chooseTopic({ backlog: [item], articles: old, now, rewrite: true });
+    expect(again).toMatchObject({ key: item.key, rewrite: true, slug: `${item.slug.slice(0, 72)}-2026-q4` });
+    expect(again.angle).toContain('write it afresh');
+    expect(quarterTag(new Date('2027-02-01T00:00:00Z'))).toBe('2027-q1');
+    // Published within the quarter, or the quarter's article already written or waiting: not again.
+    expect(chooseTopic({ backlog: [item], articles: [article(item.key, 'executed', daysAgo(30))], now, rewrite: true })).toBeNull();
+    expect(chooseTopic({ backlog: [item], articles: old, takenSlugs: [`${item.slug.slice(0, 72)}-2026-q4`], now, rewrite: true })).toBeNull();
   });
 });

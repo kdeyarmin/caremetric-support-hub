@@ -26,6 +26,7 @@ import { seoHandlers } from './seo.mjs';
 export function builtInHandlers({ store, notifier, model = null }, {
   publicOrigin, fetchImpl = fetch, log, services = {}, communications = null, features = null, guides = null, customerTextToAi = false, autoAcknowledge = false, leadSecrets = {}, lifecycle = {},
   marketed = null, searchConsoleSites = undefined, inboundFollowup = false, toolkit = null, watchdogIdleDays = 3,
+  feed = null, rosterStates = null, contentCountyTopics = false,
 } = {}) {
   const targets = probeTargets({ publicOrigin });
   return {
@@ -38,7 +39,7 @@ export function builtInHandlers({ store, notifier, model = null }, {
     ...growthHandlers({ store, notifier, publicOrigin, features, leadSecrets, fetchImpl, log, inboundFollowup }),
     ...importHandlers({ communications }),
     ...conciergeHandlers({ store, notifier, features, log, model, guides, customerTextToAi, autoAcknowledge }),
-    ...contentHandlers({ store, notifier, model, features, marketed, log }),
+    ...contentHandlers({ store, notifier, model, features, marketed, log, feed, rosterStates, countyTopics: contentCountyTopics, searchConsoleSites, fetchImpl }),
     ...autonomyHandlers({ store, notifier, publicOrigin, features, log }),
   };
 }

@@ -17,6 +17,7 @@ import { metaClient } from './meta.mjs';
 import { socialHandlers } from './tasks.mjs';
 import { live, rebuilt } from '../../live.mjs';
 import { handoverDeclared } from '../handover.mjs';
+import { reachFeature } from '../store.mjs';
 
 export const socialFeature = 'platform.agents.social.v1';
 export const socialDeclared = features => (features instanceof Set ? features.has(socialFeature) : Array.isArray(features) && features.includes(socialFeature));
@@ -50,6 +51,8 @@ export function socialConfig(env = {}, setting = null) {
     imageUrls,
     settings: { maxDailyBudgetCents: cents(value('social.max_daily_budget_cents', 'HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS')) ?? 0, targetCostCents: cents(value('social.target_cost_cents', 'HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS')) || null,
       eventPosts: setting ? setting('social.event_posts') === true : false,
+      // Settings → Social media → "Read and answer comments on ads" (20261117250000_reach.sql), off until the owner turns it on.
+      adComments: setting ? setting('social.ad_comments') === true : false,
       founderPosts: setting ? setting('social.founder_posts') === true : false,
       founderPostsPerWeek: (n => (Number.isInteger(n) && n >= 0 && n <= 5 ? n : 3))(setting ? setting('social.founder_posts_per_week') : null) },
   };
@@ -64,6 +67,9 @@ export function socialTeam({ social = null, features = null, fetchImpl = fetch, 
   const linkedin = givenLinkedin ?? rebuilt(() => config().linkedin ?? {}, input => linkedinClient({ ...input, fetchImpl }));
   const settings = { get maxDailyBudgetCents() { return config().settings?.maxDailyBudgetCents ?? 0; }, get targetCostCents() { return config().settings?.targetCostCents ?? null; },
     get eventPosts() { return config().settings?.eventPosts === true; },
+    get adComments() { return config().settings?.adComments === true; },
+    // Reach outside cold email (team review 2026-11-17, stage 6), used only once the database declares it.
+    reach: features instanceof Set ? features.has(reachFeature) : Array.isArray(features) && features.includes(reachFeature),
     get founderPosts() { return config().settings?.founderPosts === true; }, get founderPostsPerWeek() { return config().settings?.founderPostsPerWeek ?? 3; } };
   const imageUrls = () => config().imageUrls ?? [];
   return {

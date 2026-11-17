@@ -481,3 +481,57 @@ describe('new campaigns and lead reports on LinkedIn', () => {
     expect(calls).toHaveLength(4);
   });
 });
+
+describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
+  it('reads the ad account once an Eastern day, and reads it again after the team changes the account', async () => {
+    const fetchImpl = route([
+      [/^GET \/rest\/adAccounts\/5080001\/adCampaigns$/, { elements: [{ id: 610001, name: 'PA operators', status: 'ACTIVE', dailyBudget: { amount: '25.00', currencyCode: 'USD' } }] }],
+      [/^GET \/rest\/adAccounts\/5080001\/creatives$/, { elements: [] }],
+      [/^GET \/rest\/adAnalytics$/, { elements: [] }],
+      [/^POST \/rest\/adAccounts\/5080001\/adCampaigns\/610001$/, new Response(null, { status: 204 })],
+    ]);
+    const li = client(fetchImpl);
+    const reads = () => fetchImpl.mock.calls.filter(([url]) => new URL(url).pathname.endsWith('/adCampaigns')).length;
+    const first = await li.adsOverview({ now: new Date('2026-11-09T13:00:00Z') });
+    expect(await li.adsOverview({ now: new Date('2026-11-10T04:00:00Z') })).toBe(first); // 11 PM Eastern, the same day
+    expect(reads()).toBe(1);
+    await li.adsOverview({ now: new Date('2026-11-10T13:00:00Z') });
+    expect(reads()).toBe(2);
+    await li.setDailyBudget('610001', 3000).catch(() => {});
+    await li.adsOverview({ now: new Date('2026-11-10T14:00:00Z') });
+    expect(reads()).toBe(3);
+    // A read that fails is not kept.
+    const failing = client(route([[/^GET /, json({ message: 'down' }, 500)]]));
+    await expect(failing.adsOverview({ now: new Date('2026-11-09T13:00:00Z') })).rejects.toBeTruthy();
+  });
+
+  it('limits a new campaign to the roster\'s states through LinkedIn\'s own location lookup, and creates nothing when a state is not found', async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (url, init = {}) => {
+      calls.push([url, init]);
+      const parsed = new URL(url);
+      if (parsed.pathname.endsWith('/adTargetingEntities')) {
+        const query = decodeURIComponent(parsed.search).match(/query=([^&]+)/)[1];
+        if (query === 'Atlantis') return json({ elements: [] });
+        return json({ elements: [{ urn: 'urn:li:geo:999', name: `${query} County, United States` }, { urn: query === 'Pennsylvania' ? 'urn:li:geo:101689' : 'urn:li:geo:101651', name: `${query}, United States` }] });
+      }
+      const id = url.endsWith('/adCampaignGroups') ? 'urn:li:sponsoredCampaignGroup:701' : url.endsWith('/adCampaigns') ? 'urn:li:sponsoredCampaign:702' : null;
+      return new Response('{}', { status: 201, headers: id ? { 'x-restli-id': id } : {} });
+    });
+    const li = linkedinClient({ adsToken: 'AQV-ads-token-0123456789abc', adAccountId: '5080001', fetchImpl });
+    const states = [{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }];
+    expect(await li.createCampaign({ name: 'Intel prospecting', dailyBudgetCents: 3000, startAt: '2026-11-17T00:00:00Z', states })).toEqual({ campaignGroupId: '701', campaignId: '702' });
+    const lookup = decodeURIComponent(new URL(calls[0][0]).search);
+    expect(lookup).toContain('q=typeahead');
+    expect(lookup).toContain('facet=urn:li:adTargetingFacet:locations');
+    const campaign = JSON.parse(calls.find(([url]) => url.endsWith('/adCampaigns'))[1].body);
+    expect(campaign.targetingCriteria.include.and[0]).toEqual({ or: { 'urn:li:adTargetingFacet:locations': ['urn:li:geo:101689', 'urn:li:geo:101651'] } });
+    expect(JSON.stringify(campaign.targetingCriteria)).not.toContain('urn:li:geo:103644278');
+    calls.length = 0;
+    await li.createCampaign({ name: 'Again', dailyBudgetCents: 3000, startAt: '2026-11-17T00:00:00Z', states });
+    expect(calls.some(([url]) => url.includes('adTargetingEntities'))).toBe(false);
+    calls.length = 0;
+    await expect(li.createCampaign({ name: 'Nowhere', dailyBudgetCents: 3000, states: [{ code: 'ZZ', name: 'Atlantis' }] })).rejects.toMatchObject({ code: 'linkedin_geo_unresolved' });
+    expect(calls.some(([, init]) => init.method === 'POST')).toBe(false);
+  });
+});

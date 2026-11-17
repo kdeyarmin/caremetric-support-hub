@@ -114,6 +114,33 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
     if (!response.ok || typeof data?.access_token !== 'string') throw failure(response.status === 400 || response.status === 401 ? 'google_token_invalid' : 'google_unavailable', response.status >= 500);
     return data.access_token;
   }
+  // Google's location for each US state, from its location suggestions (geoTargetConstants:suggest), never written by hand; kept for the
+  // process. `states` is [{ code, name }]. A state without an exact enabled US State match fails as google_geo_unresolved.
+  const stateCache = new Map();
+  async function stateTargets(states, signal) {
+    const missing = states.filter(state => !stateCache.has(state?.code));
+    if (states.some(state => !/^[A-Z]{2}$/.test(String(state?.code ?? '')) || !state?.name)) throw failure('google_geo_unresolved');
+    if (missing.length) {
+      const token = await accessToken(signal);
+      let response;
+      try {
+        response = await fetchImpl(`https://googleads.googleapis.com/${apiVersion}/geoTargetConstants:suggest`, { method: 'POST', redirect: 'error',
+          signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(timeoutMs)]),
+          headers: { Authorization: `Bearer ${token}`, ...(devToken ? { 'developer-token': devToken } : {}), 'Content-Type': 'application/json', ...(login ? { 'login-customer-id': login } : {}) },
+          body: JSON.stringify({ locale: 'en', countryCode: 'US', locationNames: { names: missing.map(state => state.name) } }) });
+      } catch (error) { if (signal?.aborted) throw error; throw failure('google_unavailable', true); }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw failure(response.status === 401 || response.status === 403 ? 'google_permission' : 'google_geo_unresolved');
+      for (const state of missing) {
+        const match = (data?.geoTargetConstantSuggestions ?? []).map(item => item?.geoTargetConstant ?? {})
+          .find(item => item.targetType === 'State' && item.countryCode === 'US' && item.status === 'ENABLED' && String(item.name ?? '').toLowerCase() === state.name.toLowerCase()
+            && /^geoTargetConstants\/[0-9]{1,12}$/.test(String(item.resourceName ?? '')));
+        if (!match) throw failure('google_geo_unresolved');
+        stateCache.set(state.code, match.resourceName);
+      }
+    }
+    return states.map(state => stateCache.get(state.code));
+  }
   return {
     configured, auth,
     /**
@@ -121,9 +148,14 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
      * its last day `endDate` (YYYY-MM-DD, the account's time zone), so it can never spend past its month; the mutate is atomic, so a
      * refusal creates nothing. A paused campaign may carry its last day too (a flight, which ends on its own).
      */
-    async createSearchCampaign({ name, dailyBudgetCents, finalUrl, plan, live = false, endDate = null }, { signal } = {}) {
+    stateTargets,
+
+    async createSearchCampaign({ name, dailyBudgetCents, finalUrl, plan, live = false, endDate = null, states = [] }, { signal } = {}) {
       if (!configured) throw failure('google_not_configured');
       if ((live || endDate !== null) && !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(endDate ?? '')) throw failure('google_invalid_request');
+      // Limited to the roster's states (team review 2026-11-17, stage 6), each found through Google's own location suggestions before
+      // anything is created: a state it cannot name stops the campaign rather than letting it run nationwide.
+      const places = states.length ? await stateTargets(states, signal) : ['geoTargetConstants/2840'];
       const base = `customers/${customer}`;
       const budget = `${base}/campaignBudgets/-1`, campaign = `${base}/campaigns/-2`, adGroup = `${base}/adGroups/-3`;
       const mutateOperations = [
@@ -132,7 +164,7 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
           ...(endDate !== null ? { endDateTime: `${endDate} 23:59:59` } : {}),
           networkSettings: { targetGoogleSearch: true, targetSearchNetwork: false, targetContentNetwork: false, targetPartnerSearchNetwork: false },
           containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING' } } },
-        { campaignCriterionOperation: { create: { campaign, location: { geoTargetConstant: 'geoTargetConstants/2840' } } } },
+        ...places.map(geoTargetConstant => ({ campaignCriterionOperation: { create: { campaign, location: { geoTargetConstant } } } })),
         ...plan.negatives.map(text => ({ campaignCriterionOperation: { create: { campaign, negative: true, keyword: { text, matchType: 'BROAD' } } } })),
         { adGroupOperation: { create: { resourceName: adGroup, name: `${name} - search`.slice(0, 250), campaign, status: 'ENABLED', type: 'SEARCH_STANDARD' } } },
         ...plan.keywords.map(keyword => ({ adGroupCriterionOperation: { create: { adGroup, status: 'ENABLED', keyword: { text: keyword.text, matchType: keyword.match } } } })),

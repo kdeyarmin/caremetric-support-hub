@@ -61,7 +61,7 @@ describe('the weekly social plan', () => {
     const h = harness({ model });
     const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('social-plan.7');
+    expect(request.promptVersion).toBe('social-plan.8');
     // Each marketed product's published catalog follows the prompt (content/features.mjs).
     expect(request.system.slice(1)).toEqual(catalogBlocks(JSON.parse(request.user).products));
     expect(request.system.length).toBeGreaterThan(1);
@@ -388,7 +388,7 @@ describe('registration', () => {
     const config = socialConfig({ HUB_META_ACCESS_TOKEN: 'EAAG-system-user-token-0123456789', HUB_META_PAGE_ID: '1111', HUB_SOCIAL_IMAGE_URLS: 'https://cdn.example.com/a.jpg, http://insecure.example.com/b.jpg,nope',
       HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS: '5000', HUB_SOCIAL_TARGET_COST_PER_RESULT_CENTS: 'abc' });
     expect(config.imageUrls).toEqual(['https://cdn.example.com/a.jpg']);
-    expect(config.settings).toEqual({ maxDailyBudgetCents: 5000, targetCostCents: null, eventPosts: false, founderPosts: false, founderPostsPerWeek: 3 });
+    expect(config.settings).toEqual({ maxDailyBudgetCents: 5000, targetCostCents: null, eventPosts: false, adComments: false, founderPosts: false, founderPostsPerWeek: 3 });
     const team = socialTeam({ social: config, features: new Set(['platform.agents.social.v1']) });
     expect(team.meta.configured).toEqual({ pages: true, instagram: false, ads: false });
     expect(Object.keys(team.handlers({ store: {}, notifier: {} })).sort()).toEqual(['social.ads', 'social.inbox', 'social.interaction', 'social.plan', 'social.report']);
@@ -611,5 +611,103 @@ describe('posts for the founder\'s own profile', () => {
     await off.handlers['social.plan'](task('social.plan'), { now });
     expect(JSON.parse(off.model.run.mock.calls[0][1].user).postsToWrite.founder).toBeUndefined();
     expect(off.store.proposeAction.mock.calls.some(([item]) => item.kind === 'social.founder_post')).toBe(false);
+  });
+});
+
+describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
+  const posts = [
+    { platform: 'facebook', product: 'carebase', pillar: 'tip', day: 2, text: 'Annual training hours piling up? Keep each staff member\'s training in one place.', linkId: 'carebase-training-requirements', hashtags: ['PersonalCareHome'] },
+    { platform: 'linkedin', product: 'caremetric-intel', pillar: 'capability', day: 2, text: 'CareMetric Intel keeps outreach, follow-up and recorded referrals in one place.', linkId: 'intel-home', hashtags: ['HomeHealth'] },
+  ];
+  const reachHarness = ({ refusals = null, leads = null, settings = {}, ...over } = {}) => {
+    const h = harness({ settings: { reach: true, ...settings }, ...over });
+    if (refusals) h.store.adsPlatformRefusals = vi.fn(async () => refusals);
+    h.store.socialPostLeads = vi.fn(async () => leads ?? { posts: [], interested: 0, interestedOnAds: 0 });
+    h.store.socialInterestRecord = vi.fn(async () => true);
+    return h;
+  };
+
+  it('gives each post its own utm_content, and posts on Facebook as a photo with the link in its text', async () => {
+    const h = reachHarness({ model: modelReturning({ posts: [posts[0]] }) });
+    await h.handlers['social.plan'](task('social.plan'), { now });
+    const facebook = h.store.proposeAction.mock.calls[0][0];
+    const link = 'https://cmcarebase.com/pa-training-requirements?utm_source=facebook&utm_medium=social&utm_campaign=social-carebase&utm_content=post-20261109-facebook-1';
+    expect(facebook.input).toMatchObject({ platform: 'facebook', link, imageUrl: 'https://cdn.example.com/brand-1.jpg', utmContent: 'post-20261109-facebook-1' });
+    expect(facebook.input.message).toContain(link);
+  });
+
+  it('without the feature, every post keeps utm_content=post and Facebook keeps its link card', async () => {
+    const h = harness({ model: modelReturning({ posts: [posts[0]] }) });
+    await h.handlers['social.plan'](task('social.plan'), { now });
+    const facebook = h.store.proposeAction.mock.calls[0][0];
+    expect(facebook.input).toMatchObject({ imageUrl: null });
+    expect(facebook.input.link).toMatch(/utm_content=post$/);
+    expect(facebook.input).not.toHaveProperty('utmContent');
+  });
+
+  it('uses an approved creative\'s id as the post\'s utm_content, so its leads count for the creative', async () => {
+    const asset = { id: '0f8a5b1c-1111-4111-8111-111111111111', kind: 'static', placement: 'meta.feed_square', token: 'a'.repeat(64) };
+    const creative = { approved: vi.fn(async ({ platform }) => (platform === 'meta' ? [asset] : [])) };
+    const h = reachHarness({ model: modelReturning({ posts: [posts[0]] }), creative });
+    await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(h.store.proposeAction.mock.calls[0][0].input).toMatchObject({ creativeAssetId: asset.id, utmContent: asset.id, imageUrl: `https://help.caremetric.ai/api/creative/a/${'a'.repeat(64)}.png` });
+  });
+
+  it('emails LinkedIn posts to paste while LinkedIn refuses the team, instead of queueing them to fail', async () => {
+    const refusals = { refusals: [{ platform: 'linkedin', code: 'linkedin_permission', at: '2026-11-08T12:00:00Z' }], reconnected: {} };
+    const h = reachHarness({ model: modelReturning({ posts }), linkedin: linkedinOf(), refusals });
+    const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(h.store.proposeAction.mock.calls.map(call => call[0].input.platform)).toEqual(['facebook']);
+    expect(outcome.result).toMatchObject({ linkedin: 1, linkedinRefused: true });
+    const blocks = JSON.stringify(h.sent[0].blocks);
+    expect(blocks).toContain('LinkedIn is refusing the team');
+    expect(blocks).toContain('utm_content=post-20261109-linkedin-1');
+    // Reconnected since: proposed as before.
+    const back = reachHarness({ model: modelReturning({ posts }), linkedin: linkedinOf(), refusals: { ...refusals, reconnected: { linkedin: '2026-11-09T00:00:00Z' } } });
+    await back.handlers['social.plan'](task('social.plan'), { now });
+    expect(back.store.proposeAction.mock.calls.map(call => call[0].input.platform)).toEqual(['facebook', 'linkedin']);
+  });
+
+  it('tells the plan which recent posts brought leads', async () => {
+    const model = modelReturning({ posts: [posts[0]] });
+    const leads = { posts: [{ content: 'post-20261102-facebook-1', leads: 2, platform: 'facebook', pillar: 'tip', firstLine: 'Training hours piling up?' }, { content: 'post-x', leads: 1 }], interested: 0 };
+    const h = reachHarness({ model, leads });
+    await h.handlers['social.plan'](task('social.plan'), { now });
+    expect(h.store.socialPostLeads).toHaveBeenCalledWith('2026-10-12T13:15:00.000Z');
+    expect(JSON.parse(model.run.mock.calls[0][1].user).postsThatBroughtLeads).toEqual([{ platform: 'facebook', pillar: 'tip', leads: 2, text: 'Training hours piling up?' }]);
+  });
+
+  it('records an interested or pricing comment once and tells the owner with its link, never its words', async () => {
+    const reply = { intent: 'pricing', possiblePhi: false, needsOwner: true, hide: false, product: 'carebase', reply: '' };
+    const h = reachHarness({ model: modelReturning(reply), customerTextToAi: true });
+    const payload = { platform: 'facebook', kind: 'comment', id: '1_10', parentId: '1111_1', url: 'https://facebook.com/c/10', ad: true };
+    await h.handlers['social.interaction'](task('social.interaction', { payload }), { now });
+    expect(h.store.socialInterestRecord).toHaveBeenCalledWith({ platform: 'facebook', itemId: '1_10', url: 'https://facebook.com/c/10', product: 'carebase', intent: 'pricing', ad: true });
+    const alert = h.sent.find(item => item.dedupeKey === 'social:interest:facebook:1_10');
+    expect(alert.subject).toBe('A price question on Facebook (on an ad)');
+    expect(alert.body).toContain('https://facebook.com/c/10');
+    expect(alert.body).not.toContain(canary);
+    // Already recorded: no second alert.
+    h.store.socialInterestRecord.mockResolvedValue(false);
+    await h.handlers['social.interaction'](task('social.interaction', { payload }), { now });
+    expect(h.sent.filter(item => item.dedupeKey === 'social:interest:facebook:1_10')).toHaveLength(1);
+  });
+
+  it('reads comments on Meta ads only with the switch, and carries the ad mark to the comment\'s task', async () => {
+    const meta = metaOf({ recentInbox: vi.fn(async () => [{ platform: 'facebook', kind: 'comment', id: '1_77', parentId: '1111_9', url: null, ad: true }]) });
+    const h = reachHarness({ meta, settings: { adComments: true } });
+    await h.handlers['social.inbox'](task('social.inbox'), { now });
+    expect(meta.recentInbox).toHaveBeenCalledWith(expect.objectContaining({ adComments: true }));
+    expect(h.store.enqueue.mock.calls[0][3].payload).toMatchObject({ id: '1_77', ad: true });
+    const off = reachHarness({ meta: metaOf() });
+    await off.handlers['social.inbox'](task('social.inbox'), { now });
+    expect(off.meta.recentInbox.mock.calls[0][0]).not.toHaveProperty('adComments');
+  });
+
+  it('counts what the week\'s posts brought in the weekly report', async () => {
+    const h = reachHarness({ leads: { posts: [{ content: 'post-a', leads: 2 }, { content: 'post-b', leads: 1 }], interested: 4, interestedOnAds: 1 } });
+    const outcome = await h.handlers['social.report'](task('social.report', { sourceKind: 'owner' }), { now });
+    expect(outcome.result).toMatchObject({ postLeads: 3, interested: 4 });
+    expect(h.sent[0].body).toContain('They brought 3 website leads, and 4 comments or messages read as interest or a price question.');
   });
 });

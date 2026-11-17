@@ -180,3 +180,78 @@ describe('new campaigns and lead reports', () => {
     expect(seen).toHaveLength(4);
   });
 });
+
+describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
+  it('posts a Facebook post with an approved image as a Page photo whose caption carries the link', async () => {
+    const fetchImpl = route([
+      [/^GET \/v23\.0\/1111$/, { access_token: 'EAAG-page-token-abcdefghijklmnop' }],
+      [/^POST \/v23\.0\/1111\/photos$/, (url, params) => {
+        expect(params.get('url')).toBe('https://help.caremetric.ai/api/creative/a/x.png');
+        expect(params.get('message')).toContain('https://cmcarebase.com/?utm_content=post-1');
+        expect(params.get('published')).toBe('true');
+        return json({ id: '77', post_id: '1111_77' });
+      }],
+    ]);
+    const posted = await client(fetchImpl).publishPost({ platform: 'facebook', message: 'Training hours. https://cmcarebase.com/?utm_content=post-1', link: 'https://cmcarebase.com/?utm_content=post-1', imageUrl: 'https://help.caremetric.ai/api/creative/a/x.png' });
+    expect(posted).toEqual({ id: '1111_77' });
+    expect(fetchImpl.mock.calls.some(([url]) => new URL(url).pathname.endsWith('/feed'))).toBe(false);
+    await expect(client(fetchImpl).publishPost({ platform: 'facebook', message: 'x', imageUrl: 'http://example.org/x.png' })).rejects.toMatchObject({ code: 'meta_invalid_request' });
+  });
+
+  it('reads comments on running ads only when asked, marked as on an ad, and lists a comment once', async () => {
+    const now = new Date('2026-11-08T15:00:00Z');
+    const handlers = [
+      [/^GET \/v23\.0\/1111$/, { access_token: 'EAAG-page-token-abcdefghijklmnop' }],
+      [/^GET \/v23\.0\/act_3333\/ads$/, { data: [{ id: 'a1', creative: { effective_object_story_id: '1111_9' } }, { id: 'a2', creative: { effective_object_story_id: '1111_9' } }, { id: 'a3', creative: {} }] }],
+      [/^GET \/v23\.0\/1111_9\/comments$/, { data: [
+        { id: '9_1', created_time: '2026-11-08T14:00:00Z', from: { id: '5555' }, permalink_url: 'https://facebook.com/c/91', message: 'NOT REQUESTED' },
+        { id: '9_2', created_time: '2026-11-08T14:05:00Z', from: { id: '1111' } },
+      ] }],
+      [/^GET \/v23\.0\/1111\/feed$/, { data: [{ id: '1111_9', comments: { data: [{ id: '9_1', created_time: '2026-11-08T14:00:00Z', from: { id: '5555' } }] } }] }],
+      [/^GET \/v23\.0\/1111\/conversations$/, { data: [] }],
+      [/^GET \/v23\.0\/2222\/media$/, { data: [] }],
+    ];
+    const fetchImpl = route(handlers);
+    const items = await client(fetchImpl).recentInbox({ now, adComments: true });
+    expect(items).toEqual([{ platform: 'facebook', kind: 'comment', id: '9_1', parentId: '1111_9', url: 'https://facebook.com/c/91', at: '2026-11-08T14:00:00.000Z', ad: true }]);
+    expect(fetchImpl.mock.calls.filter(([url]) => new URL(url).pathname.endsWith('/1111_9/comments'))).toHaveLength(1);
+    expect(JSON.stringify(items)).not.toContain('NOT REQUESTED');
+    const off = route(handlers);
+    expect(await client(off).recentInbox({ now })).toEqual([{ platform: 'facebook', kind: 'comment', id: '9_1', parentId: '1111_9', url: null, at: '2026-11-08T14:00:00.000Z' }]);
+    expect(off.mock.calls.some(([url]) => new URL(url).pathname.endsWith('/ads'))).toBe(false);
+  });
+
+  it('limits a new campaign to the roster\'s states through Meta\'s own location search, and launches nothing when a state is not found', async () => {
+    const seen = [];
+    const fetchImpl = vi.fn(async (url, init = {}) => {
+      const parsed = new URL(url);
+      const params = init.body ? new URLSearchParams(init.body) : parsed.searchParams;
+      seen.push([`${init.method ?? 'GET'} ${parsed.pathname}`, params]);
+      if (parsed.pathname.endsWith('/search')) {
+        const q = params.get('q');
+        if (q === 'Atlantis') return json({ data: [] });
+        return json({ data: [{ key: q === 'Pennsylvania' ? '3881' : '3875', name: q, type: 'region', country_code: 'US' }, { key: '999', name: `${q} County`, type: 'region', country_code: 'US' }] });
+      }
+      return json(parsed.pathname.endsWith('/campaigns') ? { id: '601' } : { id: '602' });
+    });
+    const meta = client(fetchImpl);
+    const states = [{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }];
+    expect(await meta.createCampaign({ name: 'Intel retargeting', dailyBudgetCents: 3000, audienceId: '1234567', states })).toEqual({ campaignId: '601', adsetId: '602' });
+    const search = seen.find(([what]) => what === 'GET /v23.0/search')[1];
+    expect(Object.fromEntries(search)).toMatchObject({ type: 'adgeolocation', location_types: '["region"]', country_code: 'US' });
+    const adset = seen.find(([what]) => what === 'POST /v23.0/act_3333/adsets')[1];
+    expect(JSON.parse(adset.get('targeting')).geo_locations).toEqual({ regions: [{ key: '3881' }, { key: '3875' }] });
+    // Looked up once a process.
+    seen.length = 0;
+    await meta.createCampaign({ name: 'Again', dailyBudgetCents: 3000, audienceId: '1234567', states });
+    expect(seen.some(([what]) => what === 'GET /v23.0/search')).toBe(false);
+    // Without states: the whole country, as before.
+    seen.length = 0;
+    await meta.createCampaign({ name: 'Country', dailyBudgetCents: 3000, audienceId: '1234567' });
+    expect(JSON.parse(seen.find(([what]) => what === 'POST /v23.0/act_3333/adsets')[1].get('targeting')).geo_locations).toEqual({ countries: ['US'] });
+    // A state Meta does not find: nothing is created.
+    seen.length = 0;
+    await expect(meta.createCampaign({ name: 'Nowhere', dailyBudgetCents: 3000, audienceId: '1234567', states: [{ code: 'ZZ', name: 'Atlantis' }] })).rejects.toMatchObject({ code: 'meta_geo_unresolved' });
+    expect(seen.some(([what]) => what.startsWith('POST'))).toBe(false);
+  });
+});

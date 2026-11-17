@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { adsConfig, adsFeature, adsTeam, campaignWindow, failingPlatforms, flightAttempts, flightBudget, leastFlightDays } from './index.mjs';
+import { adsConfig, adsFeature, adsTeam, campaignWindow, failingPlatforms, flightAttempts, flightBudget, leastFlightDays, reachFeature, rosterTargets, takesFlight } from './index.mjs';
 import { handoverFeature } from '../handover.mjs';
 
 // Ad budget flights (Settings → Paid ads → "Run each month's campaign as a short flight", 2026-11-16): the month's number spent in one
@@ -233,5 +233,55 @@ describe('a platform that refuses the team', () => {
     quiet.meta.createCampaign.mockRejectedValueOnce(Object.assign(new Error('later'), { code: 'meta_unavailable', transient: true }));
     await expect(quiet.executors['social.campaign_create']({ id: 'a2', kind: 'social.campaign_create', input: metaFlight })).rejects.toMatchObject({ code: 'meta_unavailable' });
     expect(quiet.notifier.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
+  const reachSetup = (options = {}) => {
+    const h = setup({ ...options, values: { 'growth.roster_states': ['PA', 'NJ'], ...options.values } });
+    const team = adsTeam({ ads: () => adsConfig({}, settingsOf({ 'growth.roster_states': ['PA', 'NJ'], ...options.values })), features: new Set([adsFeature, reachFeature, ...(options.handover ? [handoverFeature] : [])]), googleClient: h.googleClient });
+    h.handlers = team.handlers({ store: h.store, notifier: h.notifier, model: h.model, meta: h.meta, linkedin: h.linkedin, social: { maxDailyBudgetCents: 0 }, marketed: ['caremetric-intel'], creative: h.creative, publicOrigin: 'https://help.caremetric.ai', log: () => {} });
+    h.executors = team.executors({ meta: h.meta, linkedin: h.linkedin, social: { maxDailyBudgetCents: 0 }, notifier: h.notifier, store: h.store, creative: h.creative, publicOrigin: 'https://help.caremetric.ai', log: () => {}, now: monday });
+    return h;
+  };
+  const metaFlight = { platform: 'meta', product: 'caremetric-intel', name: 'CareMetric Intel retargeting 2026-11', dailyBudgetCents: 500, audienceId: '1234567', flightDays: 10 };
+
+  it('names the roster\'s states, not a hard-coded place, for each platform\'s own lookup', () => {
+    expect(rosterTargets(['pa', 'NJ', 'PA', 'XX'])).toEqual([{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }]);
+    expect(rosterTargets(null)).toEqual([]);
+  });
+
+  it('limits every new campaign to the roster\'s states, and says so in the proposal', async () => {
+    const h = reachSetup();
+    await h.handlers['ads.plan'](task(), { now: monday });
+    expect(h.store.proposeAction.mock.calls[0][0].preview).toContain('in Pennsylvania, New Jersey in Hospitals and Health Care');
+    await h.executors['social.campaign_create']({ id: 'a1', kind: 'social.campaign_create', input: metaFlight });
+    expect(h.meta.createCampaign.mock.calls[0][0].states).toEqual([{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }]);
+    // Without the feature in the database, or with no states chosen: the whole country, asked for exactly as before.
+    const before = setup({ values: { 'growth.roster_states': ['PA'] } });
+    await before.executors['social.campaign_create']({ id: 'a1', kind: 'social.campaign_create', input: metaFlight });
+    expect(before.meta.createCampaign.mock.calls[0][0]).not.toHaveProperty('states');
+    const none = reachSetup({ values: { 'growth.roster_states': [] } });
+    await none.executors['social.campaign_create']({ id: 'a1', kind: 'social.campaign_create', input: metaFlight });
+    expect(none.meta.createCampaign.mock.calls[0][0]).not.toHaveProperty('states');
+  });
+
+  it('tells the owner when a platform cannot name a roster state, and launches nothing nationwide instead', async () => {
+    const h = reachSetup();
+    h.meta.createCampaign.mockRejectedValueOnce(Object.assign(new Error('no'), { code: 'meta_geo_unresolved' }));
+    await expect(h.executors['social.campaign_create']({ id: 'a1', kind: 'social.campaign_create', input: metaFlight })).rejects.toMatchObject({ code: 'meta_geo_unresolved' });
+    expect(h.meta.createCampaign).toHaveBeenCalledTimes(1);
+    const told = h.notifier.send.mock.calls.at(-1)[0];
+    expect(told.body).toContain('Meta could not name one of the roster\'s states (Pennsylvania, New Jersey)');
+    expect(told.body).toContain('Settings → Customer growth → States to prospect in');
+  });
+
+  it('does not count a paused campaign with no ad as the month\'s flight', async () => {
+    expect(takesFlight({ status: 'executed', flight: true, empty: true })).toBe(false);
+    expect(takesFlight({ status: 'executed', flight: true, empty: false })).toBe(true);
+    expect(takesFlight({ status: 'executed', flight: true })).toBe(true);
+    const h = setup({ linkedinConnected: false, history: [{ kind: 'social.campaign_create', targetId: 'meta:caremetric-intel:2026-11', status: 'executed', flight: true, empty: true }] });
+    await h.handlers['ads.plan'](task(), { now: monday });
+    expect(h.store.proposeAction.mock.calls.map(([item]) => [item.targetId, item.input.flightDays])).toEqual([['meta:caremetric-intel:2026-11', 10]]);
   });
 });

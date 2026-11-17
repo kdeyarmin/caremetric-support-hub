@@ -1154,6 +1154,20 @@ Comments and messages reach the model only while "Let agents send customer messa
 and no other person's words are stored. Setup,
 the ad rules, the checks and the Meta and LinkedIn permissions are in [Social media](SOCIAL_MEDIA.md).
 
+**Reach** (`platform.agents.reach.v1`, [team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 6):
+- Each post carries its own `utm_content` (an approved creative's id, or `post-<week>-<platform>-<n>`), and the weekly plan is told
+  which recent posts brought website leads. The weekly report counts those leads and the comments read as interest.
+- Intel's call to action in posts and replies is the free market report (or the county report), never the trial first.
+- A Facebook post with an approved image goes out as a photo whose caption carries the tagged link.
+- While LinkedIn refuses the team, its posts are emailed to paste instead of queued to fail, and a LinkedIn post refused at
+  publishing is emailed to paste, link included.
+- An interested or pricing comment or message is recorded once (no words) and the owner is told with its link. It is not a lead: a
+  comment carries no email address. With **Settings → Social media → Read and answer comments on ads** on, comments on running Meta
+  ads are read too (at most five ads' posts); LinkedIn ad comments are not read.
+- New paid campaigns on Meta, LinkedIn and Google are limited to the roster's states (Settings → Customer growth → States to prospect
+  in), each found through the platform's own location lookup; a state it cannot name stops the launch and the owner is told. A launch
+  that fell back to a paused campaign with no ad no longer takes the month's flight. LinkedIn's ad account is read once a day.
+
 ## The Creative Director
 
 Turns marketing plans (the Social Media Manager's weekly plan, the Marketing Manager's approved content briefs and the owner's own briefs on
@@ -1176,6 +1190,9 @@ run, so a change applies within a minute).
   `creative.retire`. Approving hands the asset to the Social Media Manager, whose posts and new ads use approved creative before anything
   else; a rejection note becomes a revision brief. Two autonomy steps, both off: **Creative approvals** and **Retiring tired creative**.
 - The morning brief carries a Creative line (counts and the strongest learning).
+- With `platform.agents.reach.v1`, `creative.plan` first emails the owner, once a day, the images waiting with a warning whose proposal
+  expires within two days, so none lapses unseen. A social post that uses an approved image carries its id as `utm_content`, so the
+  image's lead learning counts the post's leads.
 
 Formats, rules, rendering, learning and setup: [Creative Director](CREATIVE_DIRECTOR.md).
 
@@ -1199,6 +1216,13 @@ state; every regulation fact was read from the cited section of the Pennsylvania
 twice: not while an article for it is published or waiting for the owner, and not for 90 days after the owner rejects one (an
 expired or failed proposal may be tried again). Among the rest, priority leads; products whose inbox conversations were busiest
 in the last 90 days (counted by product and inquiry type, never read) come next; the product of the last article steps back.
+
+With `platform.agents.reach.v1` ([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 6): every Intel
+article's suggested pages start with the free market report; Search Console's recent queries (the SEO Analyst's properties) nudge a
+topic whose keywords people search; a topic published more than a quarter ago is written again, afresh, under the quarter's own
+address (`<address>-2027-q1`). With **Settings → AI team → Write articles about the roster's counties** on, the twelve counties with
+the most roster agencies are topics too, named from Intel's county list: what an agency there should look at in its market, with no
+figure, linking to the county report and the market report.
 
 **What the model is asked for** (`prompt.mjs`, prompt version `content.1`, draft tier): one object with a title, an address
 (slug), a meta description, a summary, an outline, the body in Markdown, questions and answers, internal links (ids of the

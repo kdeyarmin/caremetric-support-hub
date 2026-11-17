@@ -24,9 +24,11 @@ import { marketedNow, markets } from '../marketing.mjs';
 import { buildUserMessage, promptVersion, responseSchema, systemPrompt } from '../content/prompt.mjs';
 import { catalogBlocks, featuresText } from '../content/features.mjs';
 import { checkOutreach, composeOutreachEmail, outreachProducts, outreachPromptVersion, outreachSchema, outreachSystemPrompt, outreachUserMessage } from '../content/outreach.mjs';
-import { chooseTopic, topics as backlog } from '../content/topics.mjs';
+import { chooseTopic, countyTopic, topics as backlog } from '../content/topics.mjs';
 import { checkDraft } from '../content/validate.mjs';
 import { delivered } from '../notify.mjs';
+import { searchConsoleReader } from '../seo/search-console.mjs';
+import { live, rebuilt } from '../../live.mjs';
 import { dueMoment, plural } from './shared.mjs';
 
 const easternParts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' });
@@ -58,9 +60,55 @@ const aborted = () => Object.assign(new Error('The agent task is no longer runni
 /** The Eastern weekdays a scheduled article is written on: Tuesday and Friday. */
 export const writingDays = Object.freeze([2, 5]);
 
-export function contentHandlers({ store, notifier, model = null, features = null, topics: allTopics = backlog, marketed = null, log = line => console.warn(line) }) {
+/** How many of the roster's counties the Content Marketer considers for county topics. */
+export const countyTopicLimit = 12;
+
+/**
+ * Reach (team review 2026-11-17, stage 6; the database's platform.agents.reach.v1, seen as the store's `contentRosterCounties`):
+ * - topics whose article was published more than a quarter ago are written again (topics.mjs `rewrite`);
+ * - Search Console's recent queries (the SEO Analyst's properties, Settings → Search, and its key in Railway) nudge topics people search;
+ * - with Settings → AI team → "Write articles about the roster's counties" on, the counties with the most roster agencies are topics too,
+ *   named from Intel's county list (a county the list does not name is left out).
+ */
+export function contentHandlers({ store, notifier, model = null, features = null, topics: allTopics = backlog, marketed = null, log = line => console.warn(line),
+  feed = null, rosterStates = null, countyTopics = false, searchConsoleSites = undefined, fetchImpl = fetch, searchConsole = undefined, env = process.env }) {
   // Articles and outreach only for the products the team markets (marketing.mjs: the owner's switches, read when each task starts).
   if (!contentDeclared(features) || model?.configured !== true) return {};
+  const reader = searchConsole === undefined
+    ? rebuilt(() => ({ credentials: env.HUB_SEARCH_CONSOLE_CREDENTIALS, sites: (value => (Array.isArray(value) ? value.join(',') : value))(searchConsoleSites === undefined ? env.HUB_SEARCH_CONSOLE_SITES : live(searchConsoleSites)) }),
+      input => searchConsoleReader({ ...input, fetchImpl, log }))
+    : searchConsole;
+
+  // The recent queries people searched, lowercased; none when Search Console is not set up or cannot be read.
+  async function recentQueries(signal, moment) {
+    const current = typeof reader === 'function' ? reader() : reader;
+    if (!current?.configured) return [];
+    try {
+      const answer = await current.read({ signal, now: moment });
+      return [...new Set((answer?.properties ?? []).filter(item => item.ok).flatMap(item => (item.queries ?? []).map(row => String(row.keys?.[0] ?? '').toLowerCase().slice(0, 200))).filter(Boolean))].slice(0, 500);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      log(JSON.stringify({ event: 'hub_content_search_console_unread', code: /^[a-z_]{1,40}$/.test(error?.code ?? '') ? error.code : 'search_console_error' }));
+      return [];
+    }
+  }
+
+  // County topics: the roster's counties with the most agencies, named from Intel's county list for the roster's states.
+  async function rosterCountyTopics() {
+    if (live(countyTopics) !== true || typeof store.contentRosterCounties !== 'function' || !feed?.configured || typeof feed.counties !== 'function') return [];
+    const states = (Array.isArray(live(rosterStates)) ? live(rosterStates) : []).filter(state => /^[A-Z]{2}$/.test(state));
+    if (!states.length) return [];
+    try {
+      const counties = (await store.contentRosterCounties(countyTopicLimit)) ?? [];
+      if (!counties.length) return [];
+      const names = new Map(((await feed.counties({ states }))?.counties ?? []).map(county => [county.county_fips, county.county_name]));
+      return counties.map(county => countyTopic({ countyFips: county.countyFips, state: county.state, name: names.get(county.countyFips) })).filter(Boolean);
+    } catch (error) {
+      if (error?.transient) throw error;
+      log(JSON.stringify({ event: 'hub_content_counties_unread', code: /^[a-z_]{1,40}$/.test(error?.code ?? '') ? error.code : 'county_error' }));
+      return [];
+    }
+  }
 
   async function weekly(task, { signal, now = () => new Date() } = {}) {
     const moment = now();
@@ -70,10 +118,12 @@ export function contentHandlers({ store, notifier, model = null, features = null
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
 
     const marketedList = await marketedNow(marketed);
-    const topics = allTopics.filter(item => markets(marketedList, item.product));
+    const reach = typeof store.contentRosterCounties === 'function';
+    const topics = [...allTopics, ...(reach ? await rosterCountyTopics() : [])].filter(item => markets(marketedList, item.product));
     if (!topics.length) return { result: { skipped: 'no_marketed_product' } };
     const state = await store.contentState(topics.map(item => item.slug));
-    const topic = chooseTopic({ backlog: topics, articles: state?.articles ?? [], takenSlugs: state?.takenSlugs ?? [], questions: state?.questions ?? [], now: moment });
+    const queries = reach ? await recentQueries(signal, moment) : [];
+    const topic = chooseTopic({ backlog: topics, articles: state?.articles ?? [], takenSlugs: state?.takenSlugs ?? [], questions: state?.questions ?? [], queries, now: moment, rewrite: reach });
     if (!topic) return { result: { skipped: 'no_topic' } };
 
     let verdict = null;

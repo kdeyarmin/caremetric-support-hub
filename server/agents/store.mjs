@@ -16,8 +16,10 @@ import { transaction } from '../sms-auth.mjs';
  */
 /** Work recovery (20261117180000_work_recovery.sql, review 2026-11-17): blocked images rendered again, and why an ad platform refused. */
 export const workRecoveryFeature = 'platform.agents.work-recovery.v1';
+/** Reach outside cold email (20261117250000_reach.sql, team review 2026-11-17, stage 6). */
+export const reachFeature = 'platform.agents.reach.v1';
 
-export function sqlAgentStore(pool, { fenced = false, growthPriority = false, trialPath = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, creativeReview = false, ads = false, watchdog = false, handover = false, workRecovery = false, strategist = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growthPriority = false, trialPath = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, creativeReview = false, ads = false, watchdog = false, handover = false, workRecovery = false, strategist = false, reach = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -67,6 +69,14 @@ export function sqlAgentStore(pool, { fenced = false, growthPriority = false, tr
         adsMonthCampaigns: month => call('private.ads_month_campaigns', [month]),
         // Which platform last refused the team, and when it was last reconnected (20261117180000_work_recovery.sql).
         ...(workRecovery ? { adsPlatformRefusals: () => call('private.ads_platform_refusals') } : {}),
+      } : {}),
+      // Reach outside cold email (20261117250000_reach.sql, team review 2026-11-17, stage 6): interest read in a comment, leads per social
+      // post, images with a warning about to lapse, and the roster's counties.
+      ...(reach ? {
+        socialInterestRecord: ({ platform, itemId, url = null, product = null, intent, ad = false }) => call('private.social_interest_record', [platform, itemId, url, product, intent, ad === true]),
+        socialPostLeads: since => call('private.social_post_leads', [since]),
+        creativeExpiringWarnings: hours => call('private.creative_expiring_warnings', [hours]),
+        contentRosterCounties: limit => call('private.content_roster_counties', [limit]),
       } : {}),
       // Images blocked only by checks the 2026-11-17 release corrects, rendered once more (20261117180000_work_recovery.sql).
       ...(workRecovery ? { creativeRenderRequeue: visionOn => call('private.creative_render_requeue', [visionOn === true]) } : {}),
