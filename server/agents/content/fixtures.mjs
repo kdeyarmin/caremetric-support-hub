@@ -45,7 +45,7 @@ const referralBody = `Home health referrals grow from relationships, and relatio
 
 ## Research the territory first
 
-Public data can show where to look. CMS publishes provider data about home health services at data.cms.gov, and comparing the practices and facilities around your service area points to the accounts worth a closer look. Treat those patterns as research signals: they do not confirm a referral.
+Medicare data can show where to look. CMS publishes provider data about home health services at data.cms.gov, and comparing the practices and facilities around your service area points to the accounts worth a closer look. Treat those patterns as research signals: they do not confirm a referral.
 
 ## Build a focused account list
 
@@ -64,11 +64,11 @@ export const referralDraft = Object.freeze({
   title: 'Home health referral marketing: building a focused outreach plan',
   slug: 'home-health-referral-marketing-focused-outreach-plan',
   metaDescription: 'A practical sequence for home health referral marketing: research the territory, focus the account list, follow up and review recorded referrals.',
-  summary: 'Research the territory with public data, build a short account list with an owner and a next step for each, record every visit and follow-up, and review the referrals your agency records to decide what to change.',
+  summary: 'Research the territory with Medicare data, build a short account list with an owner and a next step for each, record every visit and follow-up, and review the referrals your agency records to decide what to change.',
   outline: ['Research the territory first', 'Build a focused account list', 'Prepare, visit and record', 'Review the referrals you record'],
   body: referralBody,
   faq: [
-    { question: 'Does public Medicare data show which physicians refer to my agency?', answer: 'No. Public data patterns are research signals that show where to look; the referrals your agency records are the confirmed ones.' },
+    { question: 'Does Medicare data show which physicians refer to my agency?', answer: 'No. Medicare data patterns are research signals that show where to look; the referrals your agency records are the confirmed ones.' },
     { question: 'How long should a home health target list be?', answer: 'Short enough that every account has an owner and a next step the team will actually work, and reviewed against the referrals you record.' },
   ],
   internalLinks: ['intel-home', 'intel-targeted-marketing'],
@@ -81,7 +81,7 @@ export const outreachDraft = Object.freeze({
     { directory: 'capterra', product: 'carebase', tagline: 'Staff training, resident records and survey documentation for PA personal care homes',
       description: 'CareMetric CareBase keeps staff training, resident records, daily tasks and survey documentation in one place for Pennsylvania personal care homes and Assisted Living Facilities. Teams see what needs attention and keep records ready for a surveyor. CareBase Core is $199 per facility per month with unlimited residents and staff, and optional eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments modules. Start with a 30-day free trial at cmcarebase.com.' },
     { directory: 'g2', product: 'intel', tagline: 'Targeted marketing and territory analysis for home health and hospice teams',
-      description: 'CareMetric Intel helps home health agencies, hospice agencies, hospitals, nursing homes and personal care homes focus their marketing. Research a territory with public healthcare and demographic data, build a focused account list, organize outreach and follow-up, and review the referrals your organization records. Plans start at $349 per month, and a 30-day free trial covers one county (credit card required).' },
+      description: 'CareMetric Intel helps home health agencies, hospice agencies, hospitals, nursing homes and personal care homes focus their marketing. Research a territory with Medicare, Census and other healthcare data, build a focused account list, organize outreach and follow-up, and review the referrals your organization records. Plans start at $349 per month, and a 30-day free trial covers one county (credit card required).' },
   ],
   pitches: [
     { audience: 'provider_association', product: 'carebase', subject: 'A resource for your personal care home and ALF members',

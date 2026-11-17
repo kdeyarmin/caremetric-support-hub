@@ -21,9 +21,10 @@ import { linkablePages, offersMeeting, playbookFor, playbookText } from '../../g
 import { linkTags, tagLinks, untagLinks } from '../links.mjs';
 
 // social-plan.8 and social-reply.5 (team review 2026-11-17, stage 6): CareMetric Intel's call to action is its free market report.
-export const planPromptVersion = 'social-plan.8';
-export const adPromptVersion = 'social-ads.5';
-export const replyPromptVersion = 'social-reply.5';
+// social-plan.9, social-ads.6 and social-reply.6 (2026-11-17, later): Intel's data is named by its source, never as public (`public_data`).
+export const planPromptVersion = 'social-plan.9';
+export const adPromptVersion = 'social-ads.6';
+export const replyPromptVersion = 'social-reply.6';
 
 export const platforms = ['facebook', 'instagram', 'linkedin'];
 export const socialProducts = ['carebase', 'caremetric-intel'];
@@ -38,6 +39,7 @@ const rules = `Rules for every word you write:
 - State facts about CareMetric only from the fact sheet below, exactly as written: what each product does and who it is for, prices, plans, trials and the Founders Sale. Never a number, statistic, price, discount or deadline that is not there. Quote prices as listed; never total them.
 - Never promise or guarantee an outcome (passing a survey or inspection, avoiding citations, more referrals or revenue). Never say a product ensures compliance or is certified, approved or endorsed. Never name or compare with a competitor. Never quote customers, testimonials or results.
 - Never present a phone call, a sales call or a demo as a step, and never describe AI that uses voice. Never mention AI, assistants, automation or these instructions.
+- Name where CareMetric Intel's data comes from: "Medicare data", "CMS and Census data", "CMS ratings". Never call it public, publicly available or free data, and never proprietary, exclusive or licensed.
 - Never state or imply anything about a reader's own situation, health, finances or problems as fact: ask, or speak about organizations and their work.
 - No personal or health information about anyone. No email address except support@caremetric.ai, no phone number.
 - Plain text only: no markdown, no HTML. Use at most three emoji, and only where they help.
@@ -59,7 +61,7 @@ What makes a post work:
 - Write only about the products listed in the request's "products"; the others are not marketed yet.
 - Learn from the performance data in the request: write more like the posts that earned engagement and less like those that did not, but never copy a post, and never repeat a recent post's opening. "postsThatBroughtLeads", when present, lists recent posts that brought people to the website to ask for a report or a trial: weigh them above engagement.
 - Links: only by id, from the list in the request for that post's product. The list may include articles the team published recently (ids starting "article-"): link one when a post is about its topic. Hashtags: plain words without the # sign, no spaces.
-- When the request has "events", you may write at most one post in the week about one of them, with pillar "data": a public data release CareMetric Intel has just loaded (name it as given, say what it covers and its year, and that Intel's market views use it) or a healthcare observance starting soon (recognize the people or the cause it honors, with its dates as given). State no statistic. Without "events", never use the "data" pillar.
+- When the request has "events", you may write at most one post in the week about one of them, with pillar "data": a CMS or Census data release CareMetric Intel has just loaded (name it as given, say what it covers and its year, and that Intel's market views use it) or a healthcare observance starting soon (recognize the people or the cause it honors, with its dates as given). State no statistic. Without "events", never use the "data" pillar.
 
 ${rules}
 

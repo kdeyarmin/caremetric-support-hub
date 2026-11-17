@@ -47,7 +47,7 @@ A brief names the product, a goal, an audience (organizations and roles, never a
 platforms, images and/or videos with their lengths, an optional angle and an optional offer code. The model is given the brief, the
 product's own pages (by id), the brand kit's voice, banned phrases and required disclaimers, the owner's screenshots (by id and label), the
 product's learnings and its recent headlines (not to repeat), and, for a revision, the asset it replaces and the owner's note. Its system
-prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.9` and `creative-variants.9`) carry the fact sheet and the sales
+prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.10` and `creative-variants.10`) carry the fact sheet and the sales
 playbook (the Sales Executive's fact source) and are cached. The answers are closed JSON schemas.
 
 **What each product does** (`server/agents/content/features.mjs`, data in `intel-features.json` and `carebase-features.json`). Each brief's
@@ -55,7 +55,7 @@ model calls carry its product's published catalog as a second cached block after
 
 - **CareMetric Intel**, from https://www.caremetricintel.com/features and its home page: every feature (128 in 12 areas: the healthcare
   marketing CRM, daily field work, expenses, mileage and Stark-limit tracking, referral and admission tracking with EMR report imports,
-  prospecting, market and territory research, the public data library, competitor intelligence, manager tools, email campaigns, reports,
+  prospecting, market and territory research, the healthcare data library, competitor intelligence, manager tools, email campaigns, reports,
   and administration) with the plan or role it needs; why each part matters (the site's twelve pillars; email campaigns, expenses and the
   pre-visit card and spoken debrief never lead a brief); the data behind it (providers, facilities, Medicare use and share, demographics,
   payers and Medicare Advantage, community need, competitors, and the organization's own results), each with what is included, its
@@ -71,7 +71,7 @@ model calls carry its product's published catalog as a second cached block after
   approval and a documented switch).
 
 The model is told to sell one feature per asset by the decision it helps make or the work it saves, to vary features across variants, to
-respect plan and module labels, and never to imply that public data confirms referrals, that a tool makes anyone compliant or survey-ready,
+respect plan and module labels, and never to imply that Medicare data confirms referrals, that a tool makes anyone compliant or survey-ready,
 or that a readiness score predicts a survey. Planned briefs each lead with a different pillar (the one the plan post is about, else the
 next in turn), except Intel's email campaigns and expenses pillars, which never lead a brief: on 2026-11-12 the owner directed that
 sending emails to referral sources is not the point of Intel and never the whole focus, and on 2026-11-14 that Intel is a marketing
@@ -189,11 +189,12 @@ be approved automatically (the database refuses one).
 | `phi` | No identifier (record, member or Medicare number, date of birth), no named patient, resident or person, nothing about a person's health or care | block |
 | `personal_attributes` | No assertion or implication of the reader's health, finances, age or other personal attributes (Meta's personal-attributes policy) | block on Meta, warn elsewhere |
 | `unsubstantiated_claim` | No guarantee, compliance assurance ("100% compliant", "ensures compliance", "pass your survey"), certification, superlative (#1, best, leading, only) or outcome promise, unless the exact claim is in the Sales Executive's fact source (fact sheet and sales playbook) ; also any promise of compliance however phrased ("stay Stark-compliant", "never exceed the Stark limit", "avoid violations") | block |
-| `government_endorsement` | Nothing that says or implies CMS, Medicare, Medicaid, a state or another government body approves, endorses, certifies or partners with CareMetric. Public data is fine | block |
+| `government_endorsement` | Nothing that says or implies CMS, Medicare, Medicaid, a state or another government body approves, endorses, certifies or partners with CareMetric. Naming CMS or Census as the source is fine | block |
 | `offer_mismatch` | Only billing's live offers (`offers.mjs`, read from the Founders Sale coupon: FOUNDERS50, 50% for the first 12 months, CareBase and Intel only), with their own percentage and length; no code to type (the Founders Sale applies itself); no invented deadline or scarcity; only this product's listed prices | block |
 | `brand_name` | "CareMetric" is one word, exactly so; CareBase, CareMetric Intel, Intel exactly | block |
 | `banned_phrase`, `required_disclaimer` | The brand kit's lists | block |
 | `plain_language` | Easy to read and makes sense on the first pass (owner direction 2026-11-12): no empty buzzword (unlock, empower, leverage, seamless, solution and the like), no string of one- or two-word fragments ("Territory. Clarity. Growth."), no sentence over 30 words (`unclearCopy` in `server/agents/content/validate.mjs`; `creative-compliance.2`) | block |
+| `public_data` | Copy about CareMetric Intel never calls its data public, publicly available or free ("public Medicare data"); it names the source: "Medicare data", "CMS and Census data", "CMS ratings" (owner direction 2026-11-17; `creative-compliance.4`) | block |
 | `fact_sheet` | Every other fact-sheet rule the Content Marketer and Sales Executive follow: unlisted numbers, competitors, testimonials, voice AI, a call or demo as a step, "prove" about CareBase, the fixed vocabulary, contact details, mentions of AI, and any offer of a call, meeting, demo or time to talk (`offersMeeting`, the check the Social Media Manager runs on every post and ad: CareMetric does no personal demos) | block |
 | `brand_colors` | Every color the asset paints (text, fills, borders, in every video frame) is one of the product's brand colors: its theme's or one the owner set in the brand kit. A render that does not report its colors is blocked | block |
 | `contrast` | WCAG AA for every text run (4.5:1, or 3:1 for large text, judged at the size a feed shows it). The layouts keep a color only where it passes and otherwise use the theme's own darkest or lightest color | block |
@@ -375,7 +376,7 @@ from the same budget. HeyGen renders are billed by HeyGen and logged in the AI u
 ## County snapshots (2026-11-13)
 
 With Settings → Creative → County snapshots a week above 0 (default 3), the daily plan opens briefs for counties, none pictured in the last
-eight weeks, each about one public figure from Intel's county figures. Code fixes the figure, its label and its short source
+eight weeks, each about one Medicare or Census figure from Intel's county figures. Code fixes the figure, its label and its short source
 (`server/agents/creative/data.mjs`) and every variant is drawn with the stat layout; the model writes only the words around it. A draft
 that changes the figure, or writes a number of its own (the data's year aside), is blocked (`data_figure`, `data_number`), and any stat
 image now needs its source (`stat_source`). The figures are Medicare fee-for-service unless their label says otherwise.

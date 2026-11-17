@@ -5,7 +5,7 @@ import { experimentAngles, inboundAngle, intelSetting, kindLabels, lifecyclePlay
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import { factSheetText, products as factProducts } from '../agents/content/facts.mjs';
 import { catalogBlocks, catalogGuidance, catalogNumbers } from '../agents/content/features.mjs';
-import { allowedNumbers, normalizeTerms, percentsOf, textProblems, unclearCopy } from '../agents/content/validate.mjs';
+import { allowedNumbers, callsDataPublic, normalizeTerms, percentsOf, textProblems, unclearCopy } from '../agents/content/validate.mjs';
 import { linkTags, tagLinks, untagLinks } from '../agents/links.mjs';
 import { researchOnlyPrefix } from './roster.mjs';
 import { mentionsOpen } from './opens.mjs';
@@ -191,14 +191,8 @@ export const internalWords=/\b(?:the|your|their|our|a|whole|marketing)\s+book\b|
 const cardWords=/\b(?:credit|debit|payment)\s+cards?\b|\bcard\s+(?:is\s+|will\s+be\s+|is\s+not\s+|will\s+not\s+be\s+|on\s+)?(?:required|needed|file|charged)\b|\bcard\s+terms\b|\b(?:needs?|add|enter|requires?)\s+(?:a|your)\s+card\b|\bbill(?:s|ed)?\s+automatically\b/i;
 export const namesCard=(product,words)=>product==='caremetric-intel'&&cardWords.test(String(words??''));
 
-/**
- * Whether words about CareMetric Intel call its data public, publicly available, free or open (owner direction 2026-11-17: a prospect
- * email names where the data comes from, Medicare, CMS or the Census Bureau, without that word, so the report reads as CareMetric's own
- * analysis and not as free data anyone could assemble). Nothing here lets an email call the data proprietary: the writer is told never
- * to, and the Sales Executive answers plainly when a prospect asks where it comes from. "The public" and "public health" are not read.
- */
-const publicData=/\bpublic(?:ly)?\s+(?:(?:available|published|reported|released)\s+)?(?:[a-z'-]+\s+){0,2}?(?:data|datasets?|records?|files?|figures?|sources?|ratings?|scores?|information|numbers?|statistics|billing|filings?)\b|\bpublic\s+(?:medicare|cms|census|government|federal)\b|\bpublicly\s+(?:available|published|reported|released)\b|\b(?:free|open)\s+(?:public\s+|government\s+)?data\b/i;
-export const callsDataPublic=(product,words)=>product==='caremetric-intel'&&publicData.test(String(words??''));
+// Whether words about CareMetric Intel call its data public: one rule for every surface, kept in content/validate.mjs.
+export { callsDataPublic };
 
 /**
  * Whether words cite where a figure comes from the way a report does (owner direction 2026-11-17, on the emails: "easy to read", with

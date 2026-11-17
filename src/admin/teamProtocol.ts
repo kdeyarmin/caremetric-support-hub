@@ -344,6 +344,7 @@ export const writingCheckReasons: Record<string, string> = {
   competitor_named: "it names a competitor",
   prove_word: "it uses \"prove\", \"proof\" or \"evidence\" about CareBase",
   trial_terms: "it says the Intel trial needs no credit card (it needs one, and bills automatically unless canceled)",
+  public_data: "it calls Intel's data public; it names the source instead (Medicare data, CMS ratings)",
   personal_attribute: "it refers to the reader's personal attributes, which ads may not",
   ai_mention: "it mentions AI or how it was written",
   name_echo: "it repeats the person's name back to them",

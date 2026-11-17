@@ -96,7 +96,7 @@ describe('checking a sales reply', () => {
 
 describe('the Sales Executive prompt', () => {
   it('is a constant that carries the fact sheet and the playbook and nothing per request', () => {
-    expect(salesPromptVersion).toBe('sales.7');
+    expect(salesPromptVersion).toBe('sales.8');
     // How to use the product catalog that follows as its own block (content/features.mjs).
     expect(systemPrompt).toContain('when a product\'s own published catalog follows these instructions');
     expect(systemPrompt).toContain('never offer or suggest a demo, a call or a meeting');

@@ -51,7 +51,7 @@ const goals = {
   tip: 'Earn attention with a practical tip and send people to the product page', capability: 'Show one capability and drive free-trial starts',
   engagement: 'Build familiarity with the product among the people it is for', offer: 'Drive paid activations with the Founders Sale',
   resource: 'Send people to a useful resource page',
-  data: 'Share one piece of public Medicare data news and send people to the free market report for their agency',
+  data: 'Share one piece of Medicare data news and send people to the free market report for their agency',
 };
 const socialPlatform = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' };
 // A used-up budget waits for the next Eastern day, which is when the budget starts again.

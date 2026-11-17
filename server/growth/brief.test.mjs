@@ -125,7 +125,7 @@ describe('growth.brief', () => {
     expect(feed.agencyBrief).toHaveBeenCalledWith(expect.objectContaining({ ccn: '397001' }));
     expect(feed.countyFigures).toHaveBeenCalledWith(expect.objectContaining({ countyFips: ['42003'] }));
     expect(store.discover).toHaveBeenCalledWith('caremetric-intel', [expect.objectContaining({ url: 'https://www.indeed.com/viewjob?jk=1' })]);
-    const synthesis = model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.2')[1];
+    const synthesis = model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.3')[1];
     expect(synthesis).toMatchObject({ tier: 'quality', effort: 'high', timeoutMs: 120_000 });
     // The write-up holds what is left of the brief's 60 cents after the research (9 cents of search here).
     expect(synthesis.ceilingCents).toBeGreaterThan(0);
@@ -136,7 +136,7 @@ describe('growth.brief', () => {
     expect(sent.evidence.find(item => item.claim.startsWith(researchOnlyPrefix)).teamOnly).toBe(true);
     const [opportunity, saved] = store.briefSave.mock.calls[0];
     expect(opportunity).toBe('o1');
-    expect(saved).toMatchObject({ model: 'claude-opus-5-5', promptVersion: 'brief.2', costCents: 23, research: { fit: 88, intel: { position: { county_rank: 9 } } } });
+    expect(saved).toMatchObject({ model: 'claude-opus-5-5', promptVersion: 'brief.3', costCents: 23, research: { fit: 88, intel: { position: { county_rank: 9 } } } });
     expect(JSON.stringify(saved.writer)).not.toMatch(/312|county_rank/);
     expect(result).toEqual({ briefed: 1, version: 1, facts: 1, triggers: 1, hook: true, countyFact: true, intel: true, cents: 23 });
   });
@@ -146,7 +146,7 @@ describe('growth.brief', () => {
       name: 'Maple Ridge Nursing and Rehabilitation Center', domain: 'mapleridge.example.org', agencies: [], evidence, people: [] } });
     await run();
     expect(feed.agencyBrief).not.toHaveBeenCalled();
-    const sent = JSON.parse(model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.2')[1].user);
+    const sent = JSON.parse(model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.3')[1].user);
     expect(sent.agency.setting).toBe('nursing home');
     expect(sent.countyFigures).toEqual([]);
     expect(store.briefSave.mock.calls[0][1].writer.setting).toBe('nursing_home');
@@ -160,7 +160,7 @@ describe('growth.brief', () => {
       competitors: [{ name: 'Another agency', patients: 120, share: 120 / 912, is_agency: false }], figures: [], hospitals: [], ratings: [], moves: [] } });
     const { result } = await h.run();
     expect(result).toMatchObject({ briefed: 1, intel: true });
-    const sent = JSON.parse(h.model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.2')[1].user);
+    const sent = JSON.parse(h.model.run.mock.calls.find(([, request]) => request.promptVersion === 'brief.3')[1].user);
     expect(sent.intel.position).toEqual({ patients: 12, county_share: 0.0132, county_rank: 30, county_providers: 48 });
     expect(sent.intel.history[0].county_share).toBe(0.0164);
     expect(sent.intel.competitors[0].share).toBe(0.1316);

@@ -10,7 +10,7 @@ import { readCredentials, signAssertion, tokenUrl } from '../seo/search-console.
 import { factSheetText } from '../content/facts.mjs';
 import { playbookText } from '../../growth/playbook.mjs';
 
-export const googlePromptVersion = 'google-search.1';
+export const googlePromptVersion = 'google-search.2';
 export const matchTypes = Object.freeze(['EXACT', 'PHRASE', 'BROAD']);
 const limits = { headline: 30, description: 90, keyword: 80, headlines: 15, descriptions: 4, keywords: 40, negatives: 40 };
 
@@ -19,6 +19,7 @@ export const googleSystem = `You write one Google search campaign for a CareMetr
 Rules:
 - Headlines: 10 to 15, each at most 30 characters, each able to stand alone. Descriptions: 4, each at most 90 characters, complete sentences.
 - State facts about CareMetric only from the fact sheet below, exactly as written. No number, price, discount or claim that is not there; no promise of referrals, revenue or compliance; never a competitor's name in a headline or description.
+- Name where CareMetric Intel's data comes from: "Medicare data", "CMS and Census data", "CMS ratings". Never call it public, publicly available or free data, and never proprietary, exclusive or licensed.
 - Keywords: 15 to 40 short phrases a home health or hospice owner, administrator or marketer would search for (for CareBase: a Pennsylvania personal care home or assisted living owner), with a match type: EXACT, PHRASE or BROAD. Prefer PHRASE and EXACT.
 - Negative keywords: 10 to 40 words or phrases for searches the product cannot help: jobs and careers, patient care at home, free software lists, logins of other products, and similar.
 - When the request says competitors are allowed, you may add up to five competitor product names as EXACT keywords; otherwise none.

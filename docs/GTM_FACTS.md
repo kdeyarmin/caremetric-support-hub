@@ -227,7 +227,7 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   written for a nursing home instead (its hospital sources, the homes around it, its county, the free trial), and is never offered those
   report pages (`intelSetting`, `nursingHomeAngles` and `campaign.mjs`). Hospitals and personal care homes are not searched yet: widening discovery to them
   is a separate owner decision.
-- **What it does:** targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data,
+- **What it does:** targeted marketing, marketing analysis and territory analysis from Medicare, Census and other healthcare data,
   plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place. Its AI features
   (briefs, supported reporting questions, drafted outreach) are text.
 - **The bigger picture** (owner direction 2026-11-12; `bigPicture`, `capabilities`, `whoUses` and `present` in `facts.mjs`, written
@@ -248,10 +248,12 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   - Nothing may say that no card is needed (refused in code, `trial_terms`), and nothing calls the trial risk-free.
   - A prospect email that names the card is refused when it is written and withdrawn when it would be sent (`card_terms` in
     `server/growth/draft.mjs`).
-- **How email names Intel's data** (owner direction 2026-11-17): by its source, without the word "public".
-  - A prospect email and a sales reply say "Medicare data" or "CMS and Census data", never "public Medicare data", "publicly
-    available data" or "free data". A prospect email that does is refused and, if already queued, withdrawn (`public_data`).
-  - This sheet, the catalog, the website, ads, posts and articles still use the word; only email and the reports it delivers changed.
+- **How everything names Intel's data** (owner direction 2026-11-17, first for email, then for everything the same day; `dataMention`
+  in `facts.mjs`): by its source, without the word "public".
+  - Everything about Intel says "Medicare data", "CMS and Census data" or "CMS ratings", never "public Medicare data", "publicly
+    available data" or "free data": prospect email, sales replies, social posts and replies, ads, articles, this sheet, Intel's
+    website, app, Help and reports. Code refuses the word on every surface the AI team writes (`public_data` in
+    `server/agents/content/validate.mjs`), and a queued prospect email that has it is withdrawn when it would be sent.
   - Nothing calls the data proprietary, exclusive or licensed. What is CareMetric's own is the analysis: the report, the rankings
     and the plan built from them.
   - When a reader asks whether the data is public or where it comes from, the answer is plain: CMS, NPPES and Census Bureau data
@@ -275,10 +277,10 @@ Extra locations are $99 per month each ($990 per year on annual billing) and ext
 ### Top reasons a company would choose Intel
 
 - Put the whole marketing program in one workspace. Research, account relationships, visits, follow-ups, expenses and recorded results share the same working context.
-- Direct time and budget toward a reasoned target list. Territory demographics, provider profiles, public utilization signals and account coverage help teams decide where to focus.
+- Direct time and budget toward a reasoned target list. Territory demographics, provider profiles, Medicare utilization signals and account coverage help teams decide where to focus.
 - Keep relationships from depending on one person. Named account owners, healthcare contacts, stages, shared history and book hand-offs preserve context when responsibilities change.
 - Give field work a purpose and a next step. Pre-visit cards, call plans, routes, mobile visit logs and dated follow-ups connect preparation with the work after a visit.
-- See what recorded activity led to. Referral funnels, admissions, response times and lost reasons let managers review results alongside visits and outreach without treating public data as confirmed referrals.
+- See what recorded activity led to. Referral funnels, admissions, response times and lost reasons let managers review results alongside visits and outreach without treating Medicare figures as confirmed referrals.
 - Review marketing spend with the supporting records. Account-linked expenses, receipts, per-person values, policy flags, approvals and reimbursement records help managers examine spending. These tools are not legal advice.
 - Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and locations, subject to plan and role.
 - Reduce repeated research and report assembly. Saved lists, account history, supported reporting questions, file imports and reusable reports bring the work together. Any time or cost benefit depends on use.
@@ -288,7 +290,7 @@ Prepare a visit, plan the route, log what happened and set the next step. Attach
 outcomes. Review the results with the team and adjust priorities. This describes a workflow, not a promise of new referrals.
 
 **Fit and boundaries:** research coverage varies by care setting, geography, dataset and plan. Data releases and loading dates are
-shown in the product; public signals and opportunity scores do not establish a referral relationship or individual demand.
+shown in the product; Medicare signals and opportunity scores do not establish a referral relationship or individual demand.
 Company results come from records the team enters or imports. CSV, SFTP and email-delivered reports are file-based imports, not live
 EMR connections. Patient-identifying import columns are dropped; keep patient details out of free-text notes and support requests.
 Mileage uses straight-line distance between check-ins. Reimbursement tracking records payment status; it does not send payment.
@@ -301,18 +303,18 @@ CareMetric Intel runs a healthcare organization's whole marketing program in one
 
 **Everything it does, by area** (from its own published features page; a plan in brackets is needed for that part):
 
-- Market and territory research: a territory map of providers ranked by lead score; county intelligence on the older-adult population, income and adults living alone, the hospitals residents use and where post-discharge spending goes, the post-acute providers located there and the county's top referral sources; demographics for each county and ZIP area, with the change since the last census; each county's Medicare Advantage plans and ratings, Medicaid managed care where it is published, chronic disease, social vulnerability and shortage areas; county Medicare enrollment and Medicare Advantage share, home health, hospice and skilled nursing use and supply, spending, readmissions and each agency's market share; a Site finder that ranks counties or ZIP areas for a new office or facility by demand, growth, need and the gap in supply; facility profiles with ownership, cost-report figures, star ratings and public quality scores; ready-made market briefs for expansion, acquisition, hospital relationships and referral development; and the data release behind every figure.
-- Public data library: public healthcare datasets from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by provider, facility, county and ZIP area: every provider in the national NPI registry, with Medicare services, certifications and prescribing; facility quality, inspections, staffing, ownership and cost reports; Medicare use, spending and enrollment; demographics and growth; Medicare Advantage and other payers; community health and need; a provider's standing, such as an exclusion, an opt-out or the next revalidation, and payments from drug and device makers; state-licensed homes where a state's file is loaded; and daily checks for new releases, with outdated data retired rather than shown as current.
-- Prospecting and targeting: a directory of providers, practices and facilities by name, NPI, specialty and place; Target Builder and saved lead lists worked by status; referral-source rankings for a county built on public Medicare data; physicians newly listed in the area; referral discovery, which compares public volume with the referrals the team has logged to find under-worked hospitals and physicians and counties with high need and little local supply; physician share; and opportunity scores that show what went into them.
+- Market and territory research: a territory map of providers ranked by lead score; county intelligence on the older-adult population, income and adults living alone, the hospitals residents use and where post-discharge spending goes, the post-acute providers located there and the county's top referral sources; demographics for each county and ZIP area, with the change since the last census; each county's Medicare Advantage plans and ratings, Medicaid managed care where it is published, chronic disease, social vulnerability and shortage areas; county Medicare enrollment and Medicare Advantage share, home health, hospice and skilled nursing use and supply, spending, readmissions and each agency's market share; a Site finder that ranks counties or ZIP areas for a new office or facility by demand, growth, need and the gap in supply; facility profiles with ownership, cost-report figures, star ratings and CMS quality scores; ready-made market briefs for expansion, acquisition, hospital relationships and referral development; and the data release behind every figure.
+- Healthcare data library: healthcare datasets from CMS, NPPES, the U.S. Census Bureau, HRSA, CDC, AHRQ, BLS, the HHS Office of Inspector General and state licensing agencies, linked by provider, facility, county and ZIP area: every provider in the national NPI registry, with Medicare services, certifications and prescribing; facility quality, inspections, staffing, ownership and cost reports; Medicare use, spending and enrollment; demographics and growth; Medicare Advantage and other payers; community health and need; a provider's standing, such as an exclusion, an opt-out or the next revalidation, and payments from drug and device makers; state-licensed homes where a state's file is loaded; and daily checks for new releases, with outdated data retired rather than shown as current.
+- Prospecting and targeting: a directory of providers, practices and facilities by name, NPI, specialty and place; Target Builder and saved lead lists worked by status; referral-source rankings for a county built on Medicare data; physicians newly listed in the area; referral discovery, which compares Medicare volume with the referrals the team has logged to find under-worked hospitals and physicians and counties with high need and little local supply; physician share; and opportunity scores that show what went into them.
 - Healthcare marketing CRM: a marketing book of hospitals, nursing homes, personal care and assisted living homes, physician practices, agencies and other referral sources; separate lines of business, with its own stage and history for an account on each; relationship stages from Target to Active source and Preferred, with the reason when an account is At risk or Lost; contacts by healthcare role, from discharge planner and case manager to director of nursing; each account's full history beside its market position; which members of a physician group certify home health or oversee hospice care, and what the book admitted from them; account tiers with a visit cadence for each, and who is behind on it; calls and texts from an account through the phone's own dialer and messages, logged in a tap, with nothing placed or sent from Intel; a month-end view; duplicate merging and book hygiene; accounts going quiet; side-by-side comparison; handing a whole book to a teammate; and parent organizations.
 - Daily field work: a Today page with tasks, progress on goals and the accounts to visit this week, each with a reason; a weekly schedule and call plan; a suggested route built from due follow-ups, slipping sources and key accounts not visited lately; a visit log built for a phone, with check-in, visit templates and a dated next step; a pre-visit card; directions to each account; business card scanning; county call sheets; follow-up emails that book the next visit; calendar sync; and a weekly digest for each marketer.
 - Expenses, mileage and reimbursement: spend logged against the referral source it was for, receipt capture, per-person value for shared meals, each physician's running total against the Stark nonmonetary-compensation limit, policy totals for discharge planners and other non-physician sources, policy checks and flags, an approval workflow, reimbursement tracking, budgets, register, compliance and payroll exports, and a mileage log built from visit check-ins. These tools support the organization's compliance program; they are not legal advice. A small part of the workspace, never the point of it.
-- Referral and admission tracking: referrals logged on the account they came from, with the service, payer and outcome; response time from arrival to first answer and decision; referral and admission reports imported from EMR exports as CSV files, with patient-identifying columns dropped; a referral funnel by account and marketer; drop-off alerts when a top source slips, and what the book shows about why, with the next step as a task; a quarterly outcomes packet to share with a hospital or facility; a shareable profile page for referral sources with intake details, current availability and public ratings; lost reasons; an admissions forecast [Pro]; and dated confirmations of what new referrals the organization can take.
+- Referral and admission tracking: referrals logged on the account they came from, with the service, payer and outcome; response time from arrival to first answer and decision; referral and admission reports imported from EMR exports as CSV files, with patient-identifying columns dropped; a referral funnel by account and marketer; drop-off alerts when a top source slips, and what the book shows about why, with the next step as a task; a quarterly outcomes packet to share with a hospital or facility; a shareable profile page for referral sources with intake details, current availability and CMS ratings; lost reasons; an admissions forecast [Pro]; and dated confirmations of what new referrals the organization can take.
 - Competitor intelligence: the home health agencies, hospices and nursing homes in the territory ranked by Medicare share, with star ratings; a watchlist with alerts when a rating, owner or service area changes or a new provider opens nearby; side-by-side comparison and trends; a county roll-up and a scheduled leadership brief; a plain-language card on how the agency compares with the largest in its county; and a free agency market review anyone can request on Intel's site.
 - Manager and team tools: monthly visit and referral goals with a leaderboard [setting targets: Growth and Pro]; a review of each marketer's week; activity reports and a weekly email; ride-along notes and coaching; locations [Growth and Pro]; book balance across marketers [Pro]; account briefs and decision briefs; Ask the book for supported questions about the book; an AI Assistant that answers typed questions about the market, the book and the day and proposes lists, visits, tasks and drafts that are saved only when someone confirms [Growth and Pro]; an AI playbook of pitch pillars, service lines and words to avoid; connecting an AI app that supports MCP to read Intel [Growth and Pro]; friendly activity challenges and a monthly report card, never on referrals or admissions; a calendar of healthcare observances; and a materials library that shows who opened each file.
 - Reports and analytics: results reports (performance scorecard, field activity, follow-up, mileage, referrals and admissions, top sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment), filtered and grouped by person, location, line of business, county, payer or period, each person seeing their own scope, downloaded as PDF, Excel or CSV; source quality after admission, by referral source, marketer or location (how long patients stay, short stays, hospice live discharges and revocations, home health returns to the hospital, and average daily census against each location's budget) [loading reports: owners]; and a custom report builder with scheduled email.
 - Email campaigns [Growth and Pro]: campaigns to a lead list or the contacts on the book, with delivery tracking, sender settings and automatic unsubscribe handling. Nurture sequences of calls, visits, emails and tasks on an account, which stop on a referral, a contact leaving or a marked reply, are on every plan. One part of the workspace, never the point of it.
-- Administration, security and data: roles and seats, text-message sign-in codes for owners and location managers, a record of sign-ins, changes and exports, billing and territory, guided setup and user guides, a service-line menu and search across the app, a nightly export of the organization's own accounts, referrals and visit counts to its server or a supported CRM [setting it: owners], public data from CMS, NPPES, the U.S. Census Bureau and state licensing files with each release shown, and patient privacy by design: the research uses no patient-level data, and imports, briefs and exports carry no patient names.
+- Administration, security and data: roles and seats, text-message sign-in codes for owners and location managers, a record of sign-ins, changes and exports, billing and territory, guided setup and user guides, a service-line menu and search across the app, a nightly export of the organization's own accounts, referrals and visit counts to its server or a supported CRM [setting it: owners], data from CMS, NPPES, the U.S. Census Bureau and state licensing files with each release shown, and patient privacy by design: the research uses no patient-level data, and imports, briefs and exports carry no patient names.
 
 **Who uses it, and for what:**
 
@@ -336,9 +338,9 @@ plan's count of lines. It does not refresh the saved feature inventory or verify
 
 - These industries are ordered by fit with the current product. The feature priorities describe likely uses, not measured customer usage or proven demand.
 - Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans offer CRM workflows for every healthcare service line, within each plan's allowance of service lines the organization chooses; Enterprise covers every line.
-- Every care setting can use market and territory research within the subscribed territory. Public datasets and specialized analyses cover particular settings and geographies, so research depth varies by industry: specialized Medicare share rankings and competitor alerts cover home health agencies, hospices and nursing homes.
+- Every care setting can use market and territory research within the subscribed territory. Datasets and specialized analyses cover particular settings and geographies, so research depth varies by industry: specialized Medicare share rankings and competitor alerts cover home health agencies, hospices and nursing homes.
 - Research coverage varies by dataset, geography and reporting period. State-licensed residential coverage depends on which state files are loaded. Feature access also depends on the plan, role and configured services.
-- Public provider and market data supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.
+- Provider and market data from CMS and the Census Bureau supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.
 - For each audience, lead with its relevant features and main purpose below, within these conditions. This guidance does not change prospecting eligibility, campaign audiences or outreach permissions.
 - Secondary markets, by owner decision: physician practices, behavioral health, rehabilitation and therapy (inpatient rehabilitation included), diagnostics, dialysis and DME suppliers. Use their rows only to answer a reader from one of those settings, and never aim outreach, content or ads at them until home health agencies, hospice agencies, hospitals, nursing homes and personal care homes have been thoroughly marketed to.
 
@@ -366,7 +368,7 @@ The playbook keeps the vendor detail and figures for people, not for prompts.
 
 **What to lead with, one at a time** (rotate them across your work; email and expenses never lead):
 
-- Finding referral sources: which physicians, hospitals and facilities in the territory matter, from public Medicare data, with the release behind every figure.
+- Finding referral sources: which physicians, hospitals and facilities in the territory matter, from Medicare data, with the release behind every figure.
 - Knowing the competition: who serves each county, how they rank on Medicare share and star ratings, and an alert when a competitor's rating, owner or service area changes.
 - One workspace for the whole program: research, accounts, visits, follow-ups and recorded results in one shared record.
 - Walking into every visit prepared: a pre-visit card before each visit, and on Growth and Pro a written visit debrief, where the AI proposes the visit note and next step for the marketer to check.
@@ -375,7 +377,7 @@ The playbook keeps the vendor detail and figures for people, not for prompts.
 **Why now** (market context; check any rule, model or date on cms.gov before you state it):
 
 - CMS froze new home health and hospice Medicare enrollments nationwide in May, so most agencies grow by winning referral sources in the markets they already serve. Check cms.gov or the Federal Register for the freeze's current status before you mention it.
-- Hospitals in CMS's TEAM model answer for what happens to patients after discharge, so they look for post-acute partners who answer referrals quickly and can show public quality scores.
+- Hospitals in CMS's TEAM model answer for what happens to patients after discharge, so they look for post-acute partners who answer referrals quickly and can show their CMS quality scores.
 - CMS now publishes a Service and Spending Variation Index for each hospice. It is an outlier index, not a quality rating, and is always described that way.
 - Field marketers now expect software to help them prepare for visits and write up notes. Say in plain words what Intel's AI does for the marketer, and that a person checks every draft.
 - Medicare fee-for-service figures leave out people in Medicare Advantage plans. Say which population a figure covers.
@@ -384,8 +386,8 @@ The playbook keeps the vendor detail and figures for people, not for prompts.
 
 - Intel imports referral and admission reports from the EHR as files: an upload, an SFTP folder or email. It is not a live connection to any EHR, and no message names an EHR vendor.
 - Intel works in a phone's web browser and can be added to the home screen, where it opens like an app. It is not an app in the app stores.
-- Public Medicare data shows which physicians certify home health patients and which agencies serve a county. It does not show who referred which patient to whom.
-- Intel has no approved customer results: point to the free county report and the free trial instead. The only figures about its data the team may state are the ones Intel's own site publishes ("By the numbers" in its catalog: its public healthcare datasets, every NPI in the national registry, its ZIP areas and counties, and daily checks for new releases), worded as the site words them (owner approval); state no other count about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files).
+- Medicare data shows which physicians certify home health patients and which agencies serve a county. It does not show who referred which patient to whom.
+- Intel has no approved customer results: point to the free county report and the free trial instead. The only figures about its data the team may state are the ones Intel's own site publishes ("By the numbers" in its catalog: its healthcare datasets, every NPI in the national registry, its ZIP areas and counties, and daily checks for new releases), worded as the site words them (owner approval); state no other count about its data. Name the publishers behind its data (CMS, NPPES, the U.S. Census Bureau and state licensing files).
 - Intel is evaluated with a free trial, its prices are on its website, and questions get written answers. Describe what Intel does; never describe or compare what other products do.
 
 The sales playbook gained matching written answers for EHR connection and security questions (`integration` and `security` in
@@ -532,7 +534,7 @@ CareBase's shared records support an administrator transition; Intel can hand an
 Export availability does not replace the company's own record-retention process.
 
 **Data boundaries:** CareBase includes resident clinical and operational records within its configured access controls.
-Intel uses public provider/facility research and the organization's marketing activity; keep patient names, diagnoses and other patient information out of its notes.
+Intel uses provider and facility research from CMS and the Census Bureau and the organization's marketing activity; keep patient names, diagnoses and other patient information out of its notes.
 Do not send patient information through support or Advisors' consultation form. These product distinctions matter when deciding where a record belongs.
 The [claim rules](#claims) still govern security, privacy and certification statements.
 
@@ -588,7 +590,7 @@ The evaluation and rollout suggestions are planning guidance; they do not add co
 - Named competitors or comparisons with them (Intel's comparison page is dated and sourced; AI-written text makes none).
 - Anything about a real resident, patient, employee or facility, or any personal or health information.
 - Customer results, testimonials or case studies: none are approved yet (Intel's case studies are labeled illustrative).
-- That public data confirms a referral: Medicare and Census figures are research signals; referrals are what the organization
+- That Medicare data confirms a referral: Medicare and Census figures are research signals; referrals are what the organization
   records (Intel `docs/marketing-copy.md`).
 
 ## Vocabulary
@@ -895,6 +897,9 @@ Use the linked training-requirement guide and official sources for exact deadlin
 “All plans; subject to scope” means the saved source has no additional plan or role label. Territory, purchased capacity, data coverage and organization access rules still apply.
 An owner or location-manager label is required authority, not a feature available to every user. Configured-service conditions also apply where described.
 The source describes Pro feature access during the trial within its one-county footprint; the reviewed trial seats, location, service lines and duration above remain the limits.
+The rows below are Intel's own site, word for word, as `npm run refresh:features` last read it. Where a row still says "public", Intel's
+site is being changed the same day (owner direction 2026-11-17) and the next refresh brings the new wording; the AI team is held to
+`dataMention` and the `public_data` check whatever a row says.
 
 #### Healthcare marketing CRM
 
