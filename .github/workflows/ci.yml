@@ -262,6 +262,9 @@ jobs:
           node server/agents-trial-path-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-trial-path-integration.mjs
+          node server/agents-support-truth-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/agents-support-truth-integration.mjs
           node server/agents-growth-learning-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-growth-learning-integration.mjs

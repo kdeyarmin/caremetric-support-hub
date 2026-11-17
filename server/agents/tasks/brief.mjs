@@ -66,7 +66,7 @@ function growthSection(growth) {
 const creativePlatforms = { meta: 'Meta', linkedin: 'LinkedIn', google: 'Google display', youtube: 'YouTube' };
 const creativeProducts = { carebase: 'CareBase', 'caremetric-intel': 'Intel' };
 /** Turns the facts into { subject, body, blocks, needsYou }. Pure: the same facts always give the same email. */
-export function composeBrief(facts, { now = new Date(), publicOrigin, services = {}, labels = {}, growth = null, watchdog = [] } = {}) {
+export function composeBrief(facts, { now = new Date(), publicOrigin, services = {}, labels = {}, growth = null, watchdog = [], truth = false } = {}) {
   const generated = facts?.generatedAt ?? now;
   const approvals = count(facts?.approvals?.count);
   const incidents = Array.isArray(facts?.incidents) ? facts.incidents : [];
@@ -87,7 +87,12 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
 
   if (count(customerGrowth?.overdue)) needs.push(['Overdue customer follow-ups',String(customerGrowth.overdue)]);
   if (count(customerGrowth?.unmappedTenants)) needs.push(['Billing accounts needing a growth mapping',String(customerGrowth.unmappedTenants)]);
-  if (count(customerGrowth?.missingContact)) needs.push(['Opportunities missing a contact',String(customerGrowth.missingContact)]);
+  // Every opportunity ever found with no contact is never zero and nothing the owner can clear: with the support truth feature
+  // (team review 2026-11-17, stage 5) it leaves Needs you; the watchdog names strong fits with no address when most have none.
+  if (!truth && count(customerGrowth?.missingContact)) needs.push(['Opportunities missing a contact',String(customerGrowth.missingContact)]);
+  // What the team lost that the owner can fix today (a platform that refused a campaign for its access, the bounce guard's pause).
+  const findings = Array.isArray(watchdog) ? watchdog : [];
+  if (truth) for (const finding of findings.filter(item => item.needsYou === true)) needs.push(['Lost work', finding.text]);
 
   const yesterdayRows = [
     ['Runs recorded', String(count(yesterday.runs))],
@@ -114,7 +119,7 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   if (overBudget.length) watch.push(`Reached the daily budget yesterday: ${overBudget.join(', ')}.`);
   if (services.sms === false) watch.push('Text alerts are not set up, so urgent items reach you by email only.');
   // The watchdog (watchdog.mjs): parts of the team that went quiet, with the likely cause.
-  for (const finding of Array.isArray(watchdog) ? watchdog : []) watch.push(`Watchdog: ${finding.text}`);
+  for (const finding of findings.filter(item => !truth || item.needsYou !== true)) watch.push(`Watchdog: ${finding.text}`);
 
   const headline = headlineFor(needs.length);
   const link = /^https:\/\//i.test(publicOrigin ?? '') ? `${publicOrigin.replace(/\/+$/, '')}/admin/team` : null;
@@ -170,6 +175,7 @@ export function briefHandlers({ store, notifier, publicOrigin, services = {}, la
     }
   }
   const withGrowth = features instanceof Set ? features.has(growthFeature) : Array.isArray(features) && features.includes(growthFeature);
+  const truth = features instanceof Set ? features.has('platform.agents.support-truth.v1') : Array.isArray(features) && features.includes('platform.agents.support-truth.v1');
 
   // Yesterday's growth figures. A failure to read them never holds back the brief: the section says they could not be read.
   async function growthFacts(date) {
@@ -189,7 +195,7 @@ export function briefHandlers({ store, notifier, publicOrigin, services = {}, la
     // midnight keeps its key. A brief the owner asks for is sent once per request (its own task), whatever day a retry falls on.
     const owner = task.sourceKind === 'owner';
     const date = dayKey.format(owner ? moment : dueMoment(task) ?? moment);
-    const content = composeBrief(facts, { now: moment, publicOrigin, services, labels, growth: await growthFacts(date), watchdog: await watchdog(moment) });
+    const content = composeBrief(facts, { now: moment, publicOrigin, services, labels, growth: await growthFacts(date), watchdog: await watchdog(moment), truth });
     const dedupeKey = owner ? `brief:owner:${task.id}` : `brief:${date}`;
     const results = await notifier.send({
       severity: content.needsYou > 0 ? 'warning' : 'info', subject: content.subject, body: content.body, blocks: content.blocks,

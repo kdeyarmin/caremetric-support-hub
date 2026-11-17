@@ -105,6 +105,18 @@ is executable by `hub_app_server` alone and requires its connection, `private.sa
 trial's card and activity, and lets a refused customer email wait only when the feature is declared
 ([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 4).
 
+`20261117240100_support_truth_contract.sql` declares `platform.agents.support-truth.v1` once the support answers, trial path, watchdog,
+strategist and settings features are declared, `communication.acknowledge` is a checked action kind whose shape admits only the standard
+acknowledgment's exact text by email or chat, `private.agent_acknowledge_begin` is a security definer with a pinned empty search path
+executable by `hub_app_server` alone that re-checks the owner's switch (`agents.auto_acknowledge`, whose row exists), the Concierge's
+trust and the sender (`not_a_person`) and authors the message as the AI assistant, `private.agent_growth_acknowledgment` is executable
+by no role and `private.agent_growth_waiting` and `private.agent_growth_facts_json` use it, the Concierge's snapshot carries `account`,
+the watchdog facts carry `lastTaskAt` and `skipped14d`, the scorecard facts `marketingSpendCents`, the strategist's facts `noCard` and
+`trialsLost`, and the strategist's notes accept `paying` and `paid`. Each test fails closed. The Hub server proposes and sends the
+acknowledgment on its own, reads every product's guides for a conversation with no product, alerts inbound texts and applies the brief,
+watchdog, scorecard and strategist changes only when the feature is declared
+([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 5).
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a

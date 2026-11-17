@@ -9,11 +9,13 @@ import { conciergeSettings } from './settings.mjs';
 
 const batch = 10;
 
-export function sweepHandler({ store }) {
+export function sweepHandler({ store, alertTexts = false }) {
   return async function sweep(task, { signal } = {}) {
     const settings = conciergeSettings(task.agent?.config);
     const pending = await store.conciergePending({
-      limit: batch, settleSeconds: settings.settleSeconds, windowHours: settings.windowHours, channels: settings.channels,
+      // An inbound text is alerted even while texts are not triaged (platform.agents.support-truth.v1): nothing is sent back for it.
+      limit: batch, settleSeconds: settings.settleSeconds, windowHours: settings.windowHours,
+      channels: alertTexts && !settings.channels.includes('sms') ? [...settings.channels, 'sms'] : settings.channels,
     });
     let enqueued = 0;
     for (const item of pending) {

@@ -145,7 +145,8 @@ try {
   assert.equal(await snapshot(randomUUID()), null, 'a conversation that does not exist is null, not an error');
   const rich = await conversation({ messages: [{ ago: 30, body: 'First question', direction: 'inbound' }, { ago: 28, direction: 'note', body: secrets.note }, { ago: 25, direction: 'outbound', body: 'Our answer', requestKey: randomUUID() }, { ago: 5, body: `${secrets.body} ${'x'.repeat(300)}` }] });
   const full = await snapshot(rich.id, null, 10, 200);
-  assert.deepEqual(Object.keys(full).sort(), ['answered', 'canEmail', 'canText', 'channel', 'createdAt', 'headMessageId', 'id', 'inboundCount', 'inquiryType', 'latestInboundId', 'messages', 'outboundCount', 'ownReplyDelivery', 'productSlug', 'reference', 'sender', 'sourceSystem', 'status', 'subject', 'updatedAt']);
+  // `account` (20261117240000_support_truth.sql): whether the sender's billing account is trialing or paying, as flags only.
+  assert.deepEqual(Object.keys(full).sort(), ['account', 'answered', 'canEmail', 'canText', 'channel', 'createdAt', 'headMessageId', 'id', 'inboundCount', 'inquiryType', 'latestInboundId', 'messages', 'outboundCount', 'ownReplyDelivery', 'productSlug', 'reference', 'sender', 'sourceSystem', 'status', 'subject', 'updatedAt']);
   const serialized = JSON.stringify(full);
   for (const secret of [secrets.name, secrets.email, secrets.phone, secrets.organization, secrets.note]) assert.ok(!serialized.includes(secret), `the snapshot never carries ${secret.slice(0, 8)}…`);
   assert.deepEqual([full.canEmail, full.canText, full.productSlug, full.subject, full.answered], [true, true, 'carebase', 'A question', false]);

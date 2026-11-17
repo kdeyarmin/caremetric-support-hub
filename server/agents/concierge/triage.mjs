@@ -82,14 +82,15 @@ export function senderKind(snapshot) {
   return null;
 }
 
-function skipReason(snapshot, payload, settings) {
+function skipReason(snapshot, payload, settings, { alertTexts = false } = {}) {
   if (!snapshot) return 'not_found';
   if (snapshot.status === 'closed') return 'closed';
   if (senderKind(snapshot) === 'own_sender') return 'own_sender';
   // A newer message arrived: it gets its own task once it has settled.
   if (snapshot.latestInboundId !== payload.messageId) return 'superseded';
   if (snapshot.answered) return 'answered';
-  if (!settings.channels.includes(snapshot.channel)) return 'channel_off';
+  // A text is alerted even while texts are not triaged (platform.agents.support-truth.v1); nothing is offered back for it.
+  if (!settings.channels.includes(snapshot.channel) && !(alertTexts && snapshot.channel === 'sms')) return 'channel_off';
   return null;
 }
 
@@ -97,7 +98,7 @@ function skipReason(snapshot, payload, settings) {
  * `drafting` is `{ model, guides }` when customer text may go to the model (the owner's explicit switch, a model key
  * and the guide library), and null otherwise, which keeps the handler exactly as it is without a model.
  */
-export function triageHandler({ store, notifier, drafting: draftingOption = null, answers = false, sales = false, log = line => console.warn(line) }) {
+export function triageHandler({ store, notifier, drafting: draftingOption = null, answers = false, sales = false, truth = false, acknowledge = () => false, log = line => console.warn(line) }) {
   // `drafting` may be a function (the owner's switch in Settings), read once per message.
   // Whether this alert has been tried before in a channel: its key already has a row there. A refused try counts toward the caps like any
   // other, so a retry has to resume the alert under its own key and channels instead of being judged by the caps again, which would turn it
@@ -158,7 +159,8 @@ export function triageHandler({ store, notifier, drafting: draftingOption = null
     const subject = snapshot.channel === 'email' && snapshot.subject ? redact(snapshot.subject, { limit: 300 }).text : null;
     // The alert is already sent: whatever goes wrong here, the message still gets its acknowledgment.
     let guides = [];
-    try { guides = await drafting.guides.top(`${subject ?? ''} ${text.text}`, { productSlug: snapshot.productSlug }); } catch { return { state: 'no_guides' }; }
+    // With the support truth feature a conversation with no product reads every product's guides (knowledge.mjs).
+    try { guides = await drafting.guides.top(`${subject ?? ''} ${text.text}`, { productSlug: snapshot.productSlug, ...(truth ? { anyProduct: true } : {}) }); } catch { return { state: 'no_guides' }; }
     if (!Array.isArray(guides) || guides.length === 0) return { state: 'no_guides' };
     const effort = efforts.has(task.agent?.config?.effort) ? task.agent.config.effort : 'low';
     let result;
@@ -209,14 +211,22 @@ export function triageHandler({ store, notifier, drafting: draftingOption = null
       // A drafted answer that cites the guides, for a message with no identifier, going back by email or chat, is an answer: it can go
       // out without the owner's session (approved by them, or automatically once they hand answers over). Everything else is a reply.
       const answer = answers && Boolean(draft) && !phi && Array.isArray(draft.sources) && draft.sources.length >= 1 && draft.sources.length <= 5 && (route === 'email' || route === 'chat');
+      // The standard acknowledgment, by email or chat, to a person, while the owner's switch is on and the Concierge acts: it can go out
+      // without the owner's session (platform.agents.support-truth.v1). The database admits exactly that text and nothing else.
+      const acknowledgment = !answer && !draft && !phi && template === 'standard' && (route === 'email' || route === 'chat')
+        && task.agent?.autonomy === 'act' && truth && acknowledge() === true;
+      const kind = answer ? 'communication.answer' : acknowledgment ? 'communication.acknowledge' : 'communication.reply';
       const proposal = await store.proposeAction({
-        taskId: task.id, kind: answer ? 'communication.answer' : 'communication.reply', targetKind: 'communication', targetId: `CM-${snapshot.reference}`, preview: body,
+        taskId: task.id, kind, targetKind: 'communication', targetId: `CM-${snapshot.reference}`, preview: body,
         input: {
           communicationId: snapshot.id, reference: snapshot.reference, channel: snapshot.channel, route, basedOnMessageId: snapshot.headMessageId,
           body, classification: { category, phi, ...(draft ? { drafted: true } : {}) }, template, ...(draft ? { sources: draft.sources } : {}),
         },
       });
-      return { reply: proposal.created === false ? 'already_proposed' : answer ? (proposal.status === 'auto_approved' ? 'answer_approved' : 'answer_proposed') : 'proposed', template };
+      if (proposal.created === false) return { reply: 'already_proposed', template };
+      if (answer) return { reply: proposal.status === 'auto_approved' ? 'answer_approved' : 'answer_proposed', template };
+      if (acknowledgment) return { reply: proposal.status === 'auto_approved' ? 'acknowledgment_approved' : 'proposed', template };
+      return { reply: 'proposed', template };
     } catch (error) {
       if (error?.code === '42501') return { reply: 'observe_only', template };
       throw error;
@@ -237,14 +247,18 @@ export function triageHandler({ store, notifier, drafting: draftingOption = null
     if (!uuid.test(payload.communicationId ?? '') || !uuid.test(payload.messageId ?? '')) throw permanent('invalid_payload');
     const settings = conciergeSettings(task.agent?.config);
     const snapshot = await store.communicationSnapshot({ id: payload.communicationId, messages: drafting?.followups ? 3 : 1, chars: readChars });
-    const skip = skipReason(snapshot, payload, settings);
+    const skip = skipReason(snapshot, payload, settings, { alertTexts: truth });
     if (skip) return { result: { outcome: 'skipped', reason: skip, reference: snapshot?.reference ?? null } };
     const inbound = (snapshot.messages ?? []).find(message => message.id === snapshot.latestInboundId);
     if (!inbound) return { result: { outcome: 'skipped', reason: 'no_message', reference: snapshot.reference } };
 
     // Both checks read the original text; neither keeps any of it.
     const screen = screenIdentifiers(`${snapshot.subject ?? ''}\n${inbound.body}`);
-    const matched = categorize({ text: inbound.body, subject: snapshot.subject });
+    const read = categorize({ text: inbound.body, subject: snapshot.subject });
+    // A customer whose account is in a trial or paying (the snapshot's flags, platform.agents.support-truth.v1) asking about "the trial"
+    // or "signing up" is asking for help, not buying: their question stays support, so it can be answered.
+    const customer = truth && (snapshot.account?.trialing === true || snapshot.account?.paying === true);
+    const matched = customer && read.category === 'sales' ? { category: 'general', reasons: ['sales.customer_account'] } : read;
     // A prospect's message is a sales inquiry whatever its words say: a demo request may read only "Please contact me".
     const prospect = matched.category === 'general' && salesConversation({ sourceSystem: snapshot.sourceSystem ?? null, inquiryType: snapshot.inquiryType });
     const ruleCategory = prospect ? 'sales' : matched.category;
@@ -260,6 +274,16 @@ export function triageHandler({ store, notifier, drafting: draftingOption = null
     const minutes = minutesBetween(inbound.at, now());
     const alert = alertWords({ category: ruleCategory, phi: screen.flagged, severity, channel: snapshot.channel, productSlug: snapshot.productSlug, reference: snapshot.reference, minutes, unread });
     const delivery = await tellOwner({ task, snapshot, payload, words: alert, severity, now });
+
+    // A text while texts are not triaged: the owner has the alert, and nothing is offered back by text.
+    if (!settings.channels.includes(snapshot.channel)) {
+      await recordRun({ store, log }, task, {
+        promptVersion: 'rules.1',
+        summary: `Alerted CM-${snapshot.reference} (${channelWord(snapshot.channel)}): ${categoryWord(ruleCategory)}; ${severity} alert (${delivery.join(', ')}); texts are not answered automatically.`,
+      });
+      return { result: { outcome: 'alerted', reference: snapshot.reference, channel: snapshot.channel, product: snapshot.productSlug ?? null, category: ruleCategory,
+        phi: screen.flagged, severity, delivery, reply: 'text_alert_only', screen: screen.kinds, rules: reasons } };
+    }
 
     // A CareBase or Intel prospect's message (a website lead, a sales inquiry or a reply to the Marketing Manager's outreach) goes to the
     // Sales Executive when the owner has it working: it drafts the answer from the fact sheet, or offers the same acknowledgment. The
@@ -309,14 +333,15 @@ export function triageHandler({ store, notifier, drafting: draftingOption = null
     // A model that declined saw something its provider objected to: a person should read it, so nothing is offered automatically.
     const proposal = asked?.state === 'refused' ? { reply: 'model_refused' } : await proposeReply({ task, snapshot, category, phi, unread, draft: asked?.draft ?? null });
     // An answer waits like a reply: for the owner during the supervised week, or for the drain that sends it once approved on its own.
-    const proposed = ['proposed', 'already_proposed', 'answer_proposed', 'answer_approved'].includes(proposal.reply);
+    const proposed = ['proposed', 'already_proposed', 'answer_proposed', 'answer_approved', 'acknowledgment_approved'].includes(proposal.reply);
     const proposedWords = proposal.reply === 'answer_approved' ? 'drafted answer approved to send'
+      : proposal.reply === 'acknowledgment_approved' ? 'acknowledgment approved to send'
       : proposal.reply === 'answer_proposed' ? 'drafted answer'
       : { drafted: 'drafted reply', phi: 'identifier notice', sales: 'sales acknowledgment' }[proposal.template] ?? 'acknowledgment';
     const modelWords = asked && asked.state !== 'drafted' ? `; ${asked.state === 'rejected' ? `draft not used (${asked.reason.replaceAll('_', ' ')})` : asked.state === 'unavailable' ? `the model was unavailable (${asked.reason.replaceAll('_', ' ')})` : draftWords[asked.state]}` : '';
     await recordRun({ store, log }, task, {
       promptVersion: 'rules.1',
-      summary: `Triaged CM-${snapshot.reference} (${channelWord(snapshot.channel)}): ${categoryWord(category)}${phi ? ', identifiers found' : ''}; ${severity} alert (${delivery.join(', ')})${proposed ? `; ${proposedWords}${proposal.reply === 'answer_approved' ? '' : ' proposed'}` : ''}${modelWords}.`,
+      summary: `Triaged CM-${snapshot.reference} (${channelWord(snapshot.channel)}): ${categoryWord(category)}${phi ? ', identifiers found' : ''}; ${severity} alert (${delivery.join(', ')})${proposed ? `; ${proposedWords}${['answer_approved', 'acknowledgment_approved'].includes(proposal.reply) ? '' : ' proposed'}` : ''}${modelWords}.`,
     });
     return {
       // A proposed reply keeps the task open until the owner approves or rejects it.

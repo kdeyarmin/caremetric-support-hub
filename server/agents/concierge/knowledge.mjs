@@ -33,11 +33,16 @@ export function guideLibrary({ load, loadProducts = async () => [], ttlMs = 600_
     } finally { loading = null; }
   }
   return {
-    async top(text, { productSlug = null, audience = null } = {}) {
+    /**
+     * The three guides that best match `text`. A guide tagged to products matches only a conversation of one of them; with `anyProduct`
+     * (platform.agents.support-truth.v1, team review 2026-11-17), a conversation with no product reads every product's guides, since
+     * every published guide is tagged to a product and no conversation without one could otherwise be drafted for.
+     */
+    async top(text, { productSlug = null, audience = null, anyProduct = false } = {}) {
       if (now() >= expiresAt) { loading ??= refresh(); await loading; }
       if (now() - loadedAt > maxStaleMs) return [];
       const terms = termsOf(text);
-      return items.filter(item => (!item.products.length || item.products.includes(productSlug))
+      return items.filter(item => (!item.products.length || item.products.includes(productSlug) || (anyProduct && productSlug === null))
         && (!audience || !item.audience.length || item.audience.includes(audience)))
         .map(item => {
           // Score bounded overlapping sections, so an answer near the end of a long guide is retrievable.

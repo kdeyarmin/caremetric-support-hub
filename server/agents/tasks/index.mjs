@@ -24,7 +24,7 @@ import { seoHandlers } from './seo.mjs';
  * autonomy check only when the database declares autonomy steps, and the Account Manager's offers only when it declares offers.
  */
 export function builtInHandlers({ store, notifier, model = null }, {
-  publicOrigin, fetchImpl = fetch, log, services = {}, communications = null, features = null, guides = null, customerTextToAi = false, leadSecrets = {}, lifecycle = {},
+  publicOrigin, fetchImpl = fetch, log, services = {}, communications = null, features = null, guides = null, customerTextToAi = false, autoAcknowledge = false, leadSecrets = {}, lifecycle = {},
   marketed = null, searchConsoleSites = undefined, inboundFollowup = false, toolkit = null, watchdogIdleDays = 3,
 } = {}) {
   const targets = probeTargets({ publicOrigin });
@@ -37,7 +37,7 @@ export function builtInHandlers({ store, notifier, model = null }, {
     ...offerHandlers({ store, features, log }),
     ...growthHandlers({ store, notifier, publicOrigin, features, leadSecrets, fetchImpl, log, inboundFollowup }),
     ...importHandlers({ communications }),
-    ...conciergeHandlers({ store, notifier, features, log, model, guides, customerTextToAi }),
+    ...conciergeHandlers({ store, notifier, features, log, model, guides, customerTextToAi, autoAcknowledge }),
     ...contentHandlers({ store, notifier, model, features, marketed, log }),
     ...autonomyHandlers({ store, notifier, publicOrigin, features, log }),
   };

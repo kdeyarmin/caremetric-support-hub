@@ -84,7 +84,8 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Settings group | Setting | What it does |
 | --- | --- | --- |
 | AI team | Tasks at once | How many agent tasks run side by side (default 3) |
-| AI team | Days before an idle agent is flagged | When the morning brief names a quiet agent (default 3) |
+| AI team | Days before an idle agent is flagged | When the morning brief names a quiet agent (default 3; a weekly schedule waits 8 days) |
+| AI team | Send the support acknowledgment on its own | The Support Concierge sends its standard "we have your message" reply to a person who writes by email or chat without waiting for your approval, once support answers are handed over (off by default) |
 | AI team | Name the week's binding constraint | Each Monday the Chief of Staff names the one stage of the Intel funnel holding the rest back, with one move; the scorecard opens with it (off by default; added 2026-11-17) |
 | Customer growth | Find prospects from the Medicare roster; States to prospect in; Most roster agencies to look up a day | Prospecting from Intel's roster of home health agencies and hospices |
 | Customer growth | Most web prospects to match a day | Agencies found on the web matched to their Medicare record, so each gets its own market report (default 40; needs the roster switch) |

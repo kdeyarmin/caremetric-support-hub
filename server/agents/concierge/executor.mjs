@@ -13,7 +13,8 @@
  * reply as never sent.
  *
  * The email carries a fixed subject, never the customer's: a message that named a person or carried an
- * identifier in its subject would otherwise have it echoed back by an automated reply.
+ * identifier in its subject would otherwise have it echoed back by an automated reply. The one exception (`subjectFor`, below) is a
+ * Sales Executive reply to a prospect, which keeps an email thread's own subject once it is screened clean.
  *
  * Every failure is coded, never retried and never recorded as sent. A send the provider did not confirm, a
  * replay of one that was recorded but whose delivery was never settled, and a send the provider answered whose
@@ -21,14 +22,33 @@
  * customer may or may not have received it. A session that lapsed before anything was sent is `session_required`.
  */
 import { sessionExecutor } from '../actions.mjs';
+import { screenIdentifiers } from './screen.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** What every Concierge email is titled: the subject line becomes "Re: <this> [CM-n]". It is never taken from the conversation. */
 export const replySubject = 'Your message to CareMetric support';
+/**
+ * The subject a message goes out under. A Concierge email is titled with the fixed support subject, never the customer's, so a subject
+ * that named a person or carried an identifier is never echoed back. With `threadSubjects` (platform.agents.support-truth.v1, team review
+ * 2026-11-17), the Sales Executive answers a prospect under the conversation's own subject ("Re: <the outreach's subject>"), so a reply
+ * to the team's outreach stays in its thread: only when the subject is an email's, screened clean of identifiers and not too long.
+ * `null` means "the conversation's stored subject" (communications.mjs `supportReplyEmail`).
+ */
+export async function subjectFor(execution, { store = null, threadSubjects = false } = {}) {
+  if (!threadSubjects || execution?.agentKey !== 'sales_executive' || typeof store?.communicationSnapshot !== 'function') return replySubject;
+  try {
+    const snapshot = await store.communicationSnapshot({ id: execution.input?.communicationId, messages: 0, chars: 100 });
+    const subject = typeof snapshot?.subject === 'string' ? snapshot.subject.trim() : '';
+    if (snapshot?.channel !== 'email' || !subject || subject.length > 150 || screenIdentifiers(subject).flagged) return replySubject;
+    return null;
+  } catch {
+    return replySubject;
+  }
+}
 const failure = code => Object.assign(new Error('The reply could not be sent.'), { code });
 const httpCode = { 400: 'invalid_reply', 401: 'session_required', 403: 'not_permitted', 409: 'reply_refused' };
 
-export function replyExecutor({ communications, store, notifier, log = line => console.warn(line) }) {
+export function replyExecutor({ communications, store, notifier, threadSubjects = false, log = line => console.warn(line) }) {
   async function warn(execution, reference) {
     try {
       await notifier.send({
@@ -61,7 +81,7 @@ export function replyExecutor({ communications, store, notifier, log = line => c
 
     let outcome;
     try {
-      outcome = await communications.reply(sessionToken, { id: input.communicationId, body: input.body, requestKey: execution.requestKey }, { subject: replySubject });
+      outcome = await communications.reply(sessionToken, { id: input.communicationId, body: input.body, requestKey: execution.requestKey }, { subject: await subjectFor(execution, { store, threadSubjects }) });
     } catch (error) {
       if (error?.code === 'delivery_unsettled') {
         // The provider answered but the record was not settled: the customer may have the reply, so this is not a plain failure.
