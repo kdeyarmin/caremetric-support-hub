@@ -27,7 +27,7 @@ const equal=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));retu
 // A failure that must not opt the contact out (a transient or undetermined bounce, a reject) needs the five-argument delivery event
 // (20261113280000_growth_soft_bounce_reporting.sql). Until its contract declares this feature such an event is not recorded, as before.
 export const growthSoftBounceFeature='platform.agents.growth-soft-bounce.v1';
-export function growthService({store,research,contacts=null,roster=null,people=null,deepResearch=null,learning=null,briefs=null,views=null,reports=null,priority=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
+export function growthService({store,research,contacts=null,roster=null,people=null,deepResearch=null,learning=null,briefs=null,views=null,reports=null,priority=null,liveEvaluation=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
   // The sending switch and the footer's postal address are Hub settings; either may be a function, read on each use.
   const sending=()=>live(enabled)===true; const postal=()=>String(live(postalAddress)??'');
   // How far the people step goes for an address (Settings → Customer growth → Finding people's addresses), and whether the businesses'
@@ -39,7 +39,7 @@ export function growthService({store,research,contacts=null,roster=null,people=n
   const parse=(schema,input)=>{const parsed=schema.safeParse(input); if(!parsed.success)throw new HttpError(400,'Invalid growth request.');return parsed.data;};
   const unsubscribeToken=workId=>createHmac('sha256',signingKey).update(`growth:${workId}`).digest('hex');
   return {
-    ready, store, research, contacts, roster, people, deepResearch, learning, briefs, views, reports, priority, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
+    ready, store, research, contacts, roster, people, deepResearch, learning, briefs, views, reports, priority, liveEvaluation, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
     // Configuration only: no provider request and no credential value leaves this service.
     readiness() {
       let deliveryFeedback = false;
