@@ -37,6 +37,8 @@ export function growthStore(pool) {
     propose:(taskId,messageId)=>server('private.growth_propose',[taskId,messageId]),
     claim:(id,action)=>server('private.growth_claim_message',[id,action]),
     finish:(id,status,provider)=>server('private.growth_finish_message',[id,status,provider]),
+    // A claimed email the server will not send (its words broke a rule added after it was written): cancelled and freed to be redrafted.
+    withdraw:(id,reason)=>server('private.growth_withdraw_message',[id,reason]),
     delivery:(event,id,kind,at,suppress=true)=>server('private.growth_delivery_event',[event,id,kind,at,...(suppress === false ? [false] : [])]),
     unsubscribe:hash=>server('private.growth_unsubscribe',[hash]),
     inquiry:(messageId)=>server('private.growth_inquiry',[messageId]),

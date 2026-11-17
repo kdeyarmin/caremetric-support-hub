@@ -497,8 +497,12 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     }
     await store.creativePerformanceSave(rows.map(row => ({ id: row.id, performance: { week, impressions: row.impressions, clicks: row.clicks, ctr: row.ctr, cpmCents: row.cpmCents, frequency: Number(row.frequency.toFixed(2)), spendCents: row.spendCents, fatigued: row.fatigued, signals: row.signals } })));
     const body = `${plural(rows.length, 'live asset')} read: ${plural(retired, 'retirement')} proposed for tired creative and ${plural(refreshed, 'new brief')} for variants of the winners.${notes.length ? ` ${notes.join(' ')}` : ''}`;
-    await notifier.send({ severity: 'info', subject: `Creative refresh: ${plural(retired, 'asset')} to retire, ${plural(refreshed, 'winner')} to build on`, body,
-      dedupeKey: task.sourceKind === 'owner' ? `creative:refresh:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id });
+    // Nothing to retire, nothing to build on and nothing that could not be read: no email (email review 2026-11-17: "Creative refresh: 0
+    // assets to retire, 0 winners to build on" arrived every week). A refresh the owner asked for always answers.
+    if (retired || refreshed || notes.length || task.sourceKind === 'owner') {
+      await notifier.send({ severity: 'info', subject: `Creative refresh: ${plural(retired, 'asset')} to retire, ${plural(refreshed, 'winner')} to build on`, body,
+        dedupeKey: task.sourceKind === 'owner' ? `creative:refresh:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id });
+    }
     await recordRun({ store, log }, task, { promptVersion: 'creative-refresh.1', summary: body });
     return { result: { week, assets: rows.length, retired, refreshed } };
   }
@@ -532,6 +536,12 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       ...notes.map(text => ({ type: 'paragraph', text })),
       ...(origin ? [{ type: 'button', label: 'Open the Creative screen', url: `${origin}/admin/creative` }] : []),
     ];
+    // No live asset, nothing waiting for approval and nothing that could not be read: no email ("Creative weekly: 0 live assets, 0 leads",
+    // email review 2026-11-17). A report the owner asked for always answers.
+    if (!rows.length && !Number(facts.waiting ?? 0) && !notes.length && task.sourceKind !== 'owner') {
+      await recordRun({ store, log }, task, { promptVersion: 'creative-report.1', summary: 'Nothing to report this week: no live creative and nothing waiting for approval.' });
+      return { result: { skipped: 'nothing_to_report', week } };
+    }
     const sent = await notifier.send({ severity: 'info', subject: `Creative weekly: ${plural(rows.length, 'live asset')}, ${plural(totals.leads, 'lead')}`, body, blocks,
       dedupeKey: task.sourceKind === 'owner' ? `creative:report:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id });
     if (task.sourceKind !== 'owner' && sent.every(item => item.delivery === 'duplicate')) return { result: { skipped: sent.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week } };

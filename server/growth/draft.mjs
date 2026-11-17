@@ -8,6 +8,7 @@ import { catalogBlocks, catalogGuidance, catalogNumbers } from '../agents/conten
 import { allowedNumbers, normalizeTerms, percentsOf, textProblems, unclearCopy } from '../agents/content/validate.mjs';
 import { linkTags, tagLinks, untagLinks } from '../agents/links.mjs';
 import { researchOnlyPrefix } from './roster.mjs';
+import { mentionsOpen } from './opens.mjs';
 
 /**
  * Growth messages: the Marketing Manager's outreach and the Account Manager's customer-success emails.
@@ -28,7 +29,7 @@ import { researchOnlyPrefix } from './roster.mjs';
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.15';
+export const growthPromptVersion='growth.16';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric about one CareMetric product: outreach to a prospect, written as CareMetric's founder, or a message to a customer from its Account Manager. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -62,6 +63,8 @@ How to write so it gets read and answered:
 - When "brief" is set, it is CareMetric's own research about this organization: write from it. Open with its "hook" (and cite "hookSourceId") unless one of its "triggers" is fresher and cited in "sources"; use one of its "pains" as your question; lead with its "angle". Never mention the brief or research.
 - A source whose id is "county" is a public figure about the organization's county for its own kind of care. You may state it once, exactly as written, with its source in a few words, as a fact about the county ("Allegheny County has 48 home health agencies, by CMS's count."), never as a fact about the organization. Never state the organization's own share, rank, ratings, scores or patient counts.
 - When "previousDraft" and "fix" are set, rewrite the previous draft as "fix" asks, keeping what works.
+- Never say or imply that the reader opened, viewed or read anything CareMetric sent (a report, a link or an email), and never write as if they already have ("now that you have seen", "thanks for taking a look"). Invite them to open it instead.
+- Write in the reader's words, not the fact sheet's: Intel's list of referral sources and accounts is "the book" inside Intel, a word the reader does not know. Say "your referral sources" or "your accounts", never "the book".
 - Address the organization, never a person by name. Do not begin with a greeting or end with a signature: both are added for you.
 - State facts about CareMetric only from the fact sheet and the product's catalog, and exactly as written: what the product does and who it is for, prices, plans, trials and the Founders Sale. Mention a price or the Founders Sale only when the touch plan or play calls for it or the reader asked about cost. "approvedClaim" is the owner's reviewed one-line pitch: use it when it fits.
 - Links: only the addresses in "links", written bare on a line of their own. No other link, no markdown and no HTML.
@@ -127,6 +130,10 @@ export function draftProblem(answer, { product, sources, outreach, organization 
   if (form==='short'&&shortFormProblem(answer.body,{words,links,reportLinks:extraLinks})) return 'short_form';
   if (screenIdentifiers(words).flagged) return 'identifier';
   if (offersMeeting(words)) return 'meeting_offer';
+  // Never as if we saw the reader open what we sent (Intel tells the Hub which reports were opened), and never Intel's own jargon
+  // (email review 2026-11-17: "shows what the book says about why" went to an agency on November 16).
+  if (mentionsOpen(words)) return 'mentions_open';
+  if (internalWords.test(words)) return 'jargon';
   // An agency's own rating or rank, or another's, never goes in an email (owner rule); the county's own figures do.
   if (product==='caremetric-intel'&&emailStatesStanding(words)) return 'own_standing';
   // The prospect's own name is theirs, not our copy: "Valley Hospice Solutions" never reads as a buzzword or a competitor.
@@ -148,6 +155,27 @@ export function draftProblem(answer, { product, sources, outreach, organization 
   return null;
 }
 
+/**
+ * Intel's internal words for its own workspace, which a prospect does not know: the fact sheet calls the list of referral sources and
+ * accounts "the book" ("what the book shows about why", "book hygiene", "Ask the book"). Growth email never uses them.
+ */
+export const internalWords=/\b(?:the|your|their|our|a|whole|marketing)\s+book\b|\bbook\s+(?:hygiene|balance)\b|\bask\s+the\s+book\b/i;
+
+/**
+ * Why an email already written may not go out now, or null: the rules every draft passes today that an older draft may not have, read
+ * again when it is claimed for sending (worker.mjs), because an approved email can wait days for its turn under the caps and send hours.
+ * `trial_terms`: an Intel trial with "no credit card" (Intel's trial needs a card since 2026-11-14, content/validate.mjs);
+ * `mentions_open`: as if we saw the reader open what we sent; `jargon`: Intel's internal "the book". Nothing else is re-judged here:
+ * the numbers and claims were checked against the sources the draft was given, which the send step does not have.
+ */
+export function outdatedWords({ product, subject, body }) {
+  const words=`${subject??''}\n${body??''}`.replace(/https?:\/\/[^\s<>"]+/g,' ');
+  if (textProblems(words,{product:playbookFor(product)?.factsKey??null}).includes('trial_terms')) return 'trial_terms';
+  if (mentionsOpen(words)) return 'mentions_open';
+  if (internalWords.test(words)) return 'jargon';
+  return null;
+}
+
 /** What a problem code asks the writer to fix, for the one repair pass. */
 export const problemHints=Object.freeze({
   subject:'The subject must be one plain line under 60 characters, never starting with Re: or Fwd:.',
@@ -161,6 +189,8 @@ export const problemHints=Object.freeze({
   claim:'State only facts from the fact sheet, the product\'s catalog or the cited sources, exactly as written: no other number, price or percentage, no promise or guarantee, no compliance claim, no competitor. A number from the sources belongs only in a sentence about the organization, never in one about CareMetric or the product or written as I, we or our.',
   other_product_price:'Mention only this product\'s own prices, or none.',
   own_standing:'Do not state any agency\'s star rating, score or rank, or call one the largest or the first. A county figure from the sources may stay, stated about the county.',
+  mentions_open:'Do not say or imply that the reader opened, viewed or read anything we sent, or write as if they already have. Invite them to open the report instead.',
+  jargon:'Write in the reader\'s words: never call their referral sources or accounts "the book". Say "your referral sources" or "your accounts".',
   short_form:`This is the short first email: at most ${shortFormLimits.words} words, the agency\'s report link on its own line and exactly one question. No other link, no free trial, no price and no credit card.`,
 });
 /**
@@ -331,7 +361,7 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
       :`How is your progress with ${product.name}?\n\n${customerSteps[work.kind]??"Reply with the step you need help with."}`,
     citations:sources.map(s=>s.id),modelGenerated:false,variant,arms};
   if(variant==='concise' && work.kind==='outreach')fallback.body=`${approved}\n\nTry it free:${trialPage?` ${trialPage}`:' reply and we will send the link.'}`;
-  if(offered&&outreachTouch===1&&!reask)fallback.body=`${approved}\n\nAre you getting your share of the referrals in your county? I put together a free market report for your agency from public Medicare data: where you stand, who leads the county and the hospitals and physicians who refer the most.\n${offered.url}\n\nAny question, just reply to this email.`;
+  if(offered&&outreachTouch===1&&!reask)fallback.body=`${approved}\n\nAre you getting your share of the referrals in your county? I put together a free market report for your agency from public Medicare data: where you stand, who leads the county, the hospitals your county's residents use and the physicians ranked highest as referral sources.\n${offered.url}\n\nAny question, just reply to this email.`;
   fallback.body=tagLinks(fallback.body,tags);
   if (!model?.configured) return fallback;
   const book=playbookFor(o.product);

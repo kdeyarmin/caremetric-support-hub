@@ -315,13 +315,20 @@ it('assesses a bounded number of prospects per sweep and does not pay again for 
  expect((await growthHandlers({growth:{store:late,signingReady:true,hash:x=>x,unsubscribeToken:()=>'token'},model:idle,clock:()=>now})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'})).result).toMatchObject({inspected:2,planned:2,drafted:0});
  expect(idle.run).not.toHaveBeenCalled();
 });
-it('dedupes growth notices on the Eastern day, including after UTC midnight',async()=>{
+it('dedupes growth notices on the Eastern day, including after UTC midnight, and tells the owner only when an email was written',async()=>{
  expect(growthDay(new Date('2026-11-08T03:30:00Z'))).toBe('2026-11-07');
  expect(growthDay(new Date('2026-07-15T03:30:00Z'))).toBe('2026-07-14');
- const store={snapshot:vi.fn(async()=>({total:1,items:[base]})),plan:vi.fn(async()=>'work')};
+ const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
+ const store={snapshot:vi.fn(async()=>({total:1,items:[o]})),plan:vi.fn(async()=>'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn()};
  const notifier={send:vi.fn(async()=>[])};
- await growthHandlers({growth:{store},notifier})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'},{now:()=>new Date('2026-11-08T03:30:00Z')});
- expect(notifier.send.mock.calls[0][0].dedupeKey).toBe('growth:marketing_manager:2026-11-07');
+ await growthHandlers({growth:{store,signingReady:true,hash:x=>x,unsubscribeToken:()=>'token'},notifier})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'},{now:()=>new Date('2026-11-08T03:30:00Z')});
+ expect(notifier.send.mock.calls[0][0]).toMatchObject({dedupeKey:'growth:marketing_manager:2026-11-07',subject:'Prospect emails are ready on Growth',
+   body:'1 email written. Open Growth to approve it, unless you handed that kind of email over on the AI team page.'});
+ // Work items planned again with nothing written: no email (email review 2026-11-17).
+ const quiet={snapshot:vi.fn(async()=>({total:1,items:[base]})),plan:vi.fn(async()=>'work')};
+ const silent={send:vi.fn(async()=>[])};
+ expect((await growthHandlers({growth:{store:quiet},notifier:silent})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'})).result).toMatchObject({planned:1,drafted:0});
+ expect(silent.send).not.toHaveBeenCalled();
 });
 it('the daily evaluation records each product\'s guardrail check and warns the owner only when one fails',async()=>{
  const store={evaluate:vi.fn()},notifier={send:vi.fn(async()=>[])};
@@ -438,11 +445,11 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  const on=await sweep(true);
  expect(on.store.learningActive).toHaveBeenCalledTimes(1);
  expect(on.store.learningActive).toHaveBeenCalledWith('caremetric-intel');
- expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.15-m5');
+ expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.16-m5');
  expect(on.store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({memoVersion:5}));
  const off=await sweep(false);
  expect(off.store.learningActive).not.toHaveBeenCalled();
- expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.15');
+ expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.16');
  expect(off.store.draft.mock.calls[0][2].memoVersion).toBeUndefined();
 });
 
@@ -504,4 +511,34 @@ describe('each cold touch to the organization\'s other decision-makers (20261115
   await expect(exec({id:'a',input:{messageId:'m-owner'}})).rejects.toMatchObject({code:'unsubscribe_key_changed'});
   expect(mail.send).toHaveBeenCalledTimes(2);
  });
+});
+
+it('never sends an email whose words a newer rule refuses: it is withdrawn, so the work is written again (email review 2026-11-17)',async()=>{
+ const claimed={send:true,to:'info@operator.example',id:'m',workId:'w',product:'caremetric-intel',purpose:'marketing',subject:'Which referral sources are slipping?',body:'Try it free for 30 days, no credit card:\nhttps://www.caremetricintel.com/'};
+ const mail={configured:true,send:vi.fn(async()=>({delivery:'sent',id:'provider'}))};
+ const store={claim:vi.fn(async()=>claimed),finish:vi.fn(async()=>true),withdraw:vi.fn(async()=>true)};
+ const run=growth=>growthExecutors({growth:{configured:()=>true,unsubscribeToken:()=>'a'.repeat(64),...growth},mail,publicOrigin:'https://hub.example.org',postalAddress:'CareMetric, 1 Main St, Altoona, PA'})['growth.message']({id:'a',input:{messageId:'m'}});
+ await expect(run({store})).resolves.toEqual({delivery:'withdrawn',reason:'trial_terms'});
+ expect(store.withdraw).toHaveBeenCalledWith('m','trial_terms');
+ expect(store.finish).not.toHaveBeenCalled();
+ // A database without the withdrawal: the email is marked failed for the owner to see, and still never sent.
+ const older={claim:vi.fn(async()=>claimed),finish:vi.fn(async()=>true),withdraw:vi.fn(async()=>{throw Object.assign(new Error('missing'),{code:'42883'});})};
+ await expect(run({store:older})).rejects.toMatchObject({code:'outdated_words'});
+ expect(older.finish).toHaveBeenCalledWith('m','failed',null);
+ expect(mail.send).not.toHaveBeenCalled();
+ // Words that pass today go out as before.
+ const fine={claim:vi.fn(async()=>({...claimed,body:'Which counties does your team cover today?'})),finish:vi.fn(async()=>true),withdraw:vi.fn()};
+ await expect(run({store:fine})).resolves.toEqual({delivery:'accepted'});
+ expect(fine.withdraw).not.toHaveBeenCalled();
+ expect(mail.send).toHaveBeenCalledTimes(1);
+});
+it('signs a quiet follow-up to a prospect as the founder, like the rest of the prospect\'s emails, and a customer email as the team',async()=>{
+ const quiet=growthEmail({product:'caremetric-intel',purpose:'success',quiet:true,subject:'S',body:'Did our answer cover what you needed?',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'});
+ expect(quiet.text).toContain('Did our answer cover what you needed?\n\nDr. Kevin C. Deyarmin\nFounder, CareMetric\n');
+ expect(quiet.text).not.toContain('The CareMetric Intel team');
+ // The send claim says which email is a quiet follow-up (20261117220000_email_review.sql); without it, the team signs as before.
+ const store={claim:vi.fn(async()=>({send:true,to:'jane@operator.example',id:'m',workId:'w',product:'caremetric-intel',purpose:'success',quiet:true,subject:'S',body:'Did our answer cover what you needed?'})),finish:vi.fn(async()=>true)};
+ const mail={configured:true,send:vi.fn(async()=>({delivery:'sent',id:'provider'}))};
+ await growthExecutors({growth:{store,configured:()=>true,unsubscribeToken:()=>'a'.repeat(64)},mail,publicOrigin:'https://hub.example.org',postalAddress:'CareMetric, 1 Main St, Altoona, PA'})['growth.message']({id:'a',input:{messageId:'m'}});
+ expect(mail.send.mock.calls[0][0].text).toContain('Dr. Kevin C. Deyarmin');
 });

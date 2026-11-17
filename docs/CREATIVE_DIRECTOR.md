@@ -36,8 +36,8 @@ CareBase is off while it is in its pilot.
 | `creative.plan` | 08:30 every morning, and as soon as the Social Media Manager writes its weekly plan | Reads marketing plan output that has no creative yet (this week's proposed or published social posts, the Marketing Manager's approved content briefs), opens one brief per product and pillar, and queues a `creative.request` for each |
 | `creative.request` | Per brief: the plan's, the owner's **New brief**, a winner's refresh, a rejection note's revision | Writes the concept and the final copy on the **quality** tier (Opus), then two to four more variants on the **draft** tier (Sonnet), each on a different hook, so a brief yields three to five variants; checks every word; stores one draft per variant and placement |
 | `creative.render` | Every 10 minutes | Proposes rendered assets, collects finished HeyGen renders, renders drafts (at most Settings → Creative → "Most renders a day", default 40, across every server), checks each finished asset in full and proposes it, or blocks it |
-| `creative.refresh` | 09:30, once a week (Monday, after the Social Media Manager's report) | Reads the ad results, joined to assets by `utm_content`, proposes retiring tired creative and briefs new variants of the winners |
-| `creative.report` | 09:45, once a week | Emails the owner a scorecard per asset (ad results and website leads by `utm_content`) and saves the learnings it supports |
+| `creative.refresh` | 09:30, once a week (Monday, after the Social Media Manager's report) | Reads the ad results, joined to assets by `utm_content`, proposes retiring tired creative and briefs new variants of the winners. Emails the owner only when it proposed something or an ad platform could not be read (since 2026-11-17) |
+| `creative.report` | 09:45, once a week | Emails the owner a scorecard per asset (ad results and website leads by `utm_content`) and saves the learnings it supports. With no live asset, nothing waiting for approval and every ad platform read, it sends nothing (since 2026-11-17) |
 
 **Run now** on the AI team page runs any of them on any day.
 

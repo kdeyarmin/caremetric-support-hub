@@ -250,8 +250,17 @@ describe('the work', () => {
     expect(store.creativeRetire).not.toHaveBeenCalled();
   });
 
+  it('sends no weekly report or refresh email when there is nothing in it, unless the owner asks (email review 2026-11-17)', async () => {
+    const { notifier, handlers, task: make } = harness();
+    expect((await handlers['creative.report'](make('creative.report'), { now })).result).toMatchObject({ skipped: 'nothing_to_report' });
+    expect(notifier.send).not.toHaveBeenCalled();
+    await handlers['creative.report']({ ...make('creative.report'), sourceKind: 'owner' }, { now });
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+  });
+
   it('reports weekly with learnings, once per week unless the owner asks', async () => {
     const { store, notifier, handlers, task: make } = harness();
+    store.creativeBriefFacts.mockResolvedValue({ waiting: 2, learnings: [] });
     await handlers['creative.report'](make('creative.report'), { now });
     expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ dedupeKey: 'creative:report:2026-11-09' }));
     store.notificationCount.mockResolvedValue(1);
