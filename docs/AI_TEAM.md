@@ -513,6 +513,20 @@ Once the Sales Executive is resumed, a CareBase or Intel prospect's message (a w
 Marketing Manager's outreach) is handed to it right after the owner's alert, instead of getting the Concierge's fixed sales
 acknowledgment; see "The Sales Executive".
 
+**Who wrote it (2026-11-17).** Every address on caremetric.ai reaches Communications, so vendors' notices arrive there too. In
+November the fixed acknowledgment ("Thank you for contacting CareMetric Support…") went to G2's newsletter and to CMS answering the
+owner's own questions. The database now tells the Concierge who wrote, as flags only (the address still never leaves the database;
+`sender` in `private.agent_communication_snapshot`, `20261117220000_email_review.sql`):
+
+- the Hub's own support sender or Reply-To (its own email coming back, such as a lifecycle email to an account on our domain): no
+  alert and no reply, so an alert can never loop;
+- an address only machines write from (noreply, donotreply, mailer-daemon, notifications, alerts, digest, newsletter), someone
+  answering an email the owner sent from the AI team page (the sender was its recipient, or the subject carries its subject), or
+  another address on our own domain: the owner is alerted as before, but no acknowledgment, drafted answer or hand-over to the Sales
+  Executive is offered (`reply` is `machine_sender`, `answers_our_email` or `internal_sender`).
+
+Without the migration every message is handled as before.
+
 Every five minutes (task `concierge.sweep`, "Look for new messages") it asks the database which
 conversations have a newest inbound message that has **settled** (90 seconds old, so a burst of texts counts
 once), is **recent** (within 72 hours, so importing old history never triggers a backlog), has **no reply or

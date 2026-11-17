@@ -63,9 +63,29 @@ const exhausted = results => (results.some(item => item.delivery === 'duplicate'
   ? Object.assign(new Error('The owner alert could not be delivered.'), { code: 'alert_not_delivered' })
   : null);
 
+/**
+ * Who wrote an email, from the snapshot's flags (20261117220000_email_review.sql); the address itself never reaches the Concierge.
+ * `own_sender`: the Hub's own support sender or Reply-To, so the Hub's own email coming back (an alert, a lifecycle email to an account on
+ * our own domain): neither alerted nor answered, so it can never loop. The others are alerted as before but offered no canned
+ * acknowledgment, no drafted answer and no hand-over to the Sales Executive: `machine_sender` (noreply, donotreply, notifications...),
+ * `answers_our_email` (an answer to an email the owner sent from the AI team page, such as CMS answering a question about its data) and
+ * `internal_sender` (someone else on our own domain). In November G2's newsletter and CMS's answers were sent "Thank you for contacting
+ * CareMetric Support…". A database without the flags reads null: every message is handled as before.
+ */
+export function senderKind(snapshot) {
+  const sender = snapshot?.sender;
+  if (!sender || typeof sender !== 'object') return null;
+  if (sender.ours === true) return 'own_sender';
+  if (sender.machine === true) return 'machine_sender';
+  if (sender.answersOurEmail === true) return 'answers_our_email';
+  if (sender.internal === true) return 'internal_sender';
+  return null;
+}
+
 function skipReason(snapshot, payload, settings) {
   if (!snapshot) return 'not_found';
   if (snapshot.status === 'closed') return 'closed';
+  if (senderKind(snapshot) === 'own_sender') return 'own_sender';
   // A newer message arrived: it gets its own task once it has settled.
   if (snapshot.latestInboundId !== payload.messageId) return 'superseded';
   if (snapshot.answered) return 'answered';
@@ -175,6 +195,9 @@ export function triageHandler({ store, notifier, drafting: draftingOption = null
   async function proposeReply({ task, snapshot, category, phi, unread = false, draft = null }) {
     // A message too long to have been screened is the owner's to read and answer.
     if (unread) return { reply: 'owner_only' };
+    // A machine, a colleague or someone answering the owner's own email is not a customer to acknowledge (senderKind above).
+    const notCustomer = senderKind(snapshot);
+    if (notCustomer) return { reply: notCustomer };
     const template = draft ? 'drafted' : replyFor({ category, phi, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType, sourceSystem: snapshot.sourceSystem ?? null });
     if (!template) return { reply: 'owner_only' };
     if ((snapshot.outboundCount ?? 0) > 0 && !draft) return { reply: 'follow_up', template };
@@ -242,7 +265,8 @@ export function triageHandler({ store, notifier, drafting: draftingOption = null
     // Sales Executive when the owner has it working: it drafts the answer from the fact sheet, or offers the same acknowledgment. The
     // alert above has already gone out; a message with identifiers, one too long to have been read, or one about billing, a cancellation,
     // an outage, security or a legal matter stays here. The database decides whether the message is a prospect's (private.sales_handoff).
-    if (sales && !screen.flagged && !unread && ['general', 'sales'].includes(ruleCategory) && snapshot.inquiryType !== 'billing' && replyRoute(snapshot) !== null) {
+    const notCustomer = senderKind(snapshot);
+    if (sales && !notCustomer && !screen.flagged && !unread && ['general', 'sales'].includes(ruleCategory) && snapshot.inquiryType !== 'billing' && replyRoute(snapshot) !== null) {
       const handed = await store.salesHandoff({ communicationId: snapshot.id, messageId: inbound.id });
       if (handed?.handoff === true) {
         await recordRun({ store, log }, task, {
@@ -264,7 +288,7 @@ export function triageHandler({ store, notifier, drafting: draftingOption = null
     let phi = screen.flagged;
     let asked = null;
     const route = replyRoute(snapshot);
-    const eligible = drafting && !screen.flagged && !unread && route !== null && task.agent?.autonomy !== 'observe'
+    const eligible = drafting && !notCustomer && !screen.flagged && !unread && route !== null && task.agent?.autonomy !== 'observe'
       && (drafting.followups || ((snapshot.inboundCount ?? 1) === 1 && (snapshot.outboundCount ?? 0) === 0))
       && (replyFor({ category: ruleCategory, phi: false, productSlug: snapshot.productSlug, inquiryType: snapshot.inquiryType, sourceSystem: snapshot.sourceSystem ?? null }) === 'standard'
         || (drafting.followups && matched.category==='general' && ['carebase','caremetric-intel'].includes(snapshot.productSlug) && snapshot.inquiryType==='sales'));

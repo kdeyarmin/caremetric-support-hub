@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { triageHandler } from './triage.mjs';
+import { senderKind, triageHandler } from './triage.mjs';
 
 // Fake data only: 555-01xx numbers, example.test addresses, "Pat Example", "Resident A. Sample", a 000-prefix SSN, DOB 01/01/1900.
 const ids = { communication: '11111111-1111-4111-8111-111111111111', message: '22222222-2222-4222-8222-222222222222' };
@@ -896,5 +896,31 @@ describe('handing a prospect to the Sales Executive', () => {
     harness.store.salesHandoff = vi.fn();
     expect((await harness.run()).result).toMatchObject({ reply: 'proposed', template: 'sales' });
     expect(harness.store.salesHandoff).not.toHaveBeenCalled();
+  });
+});
+
+describe('who wrote (email review 2026-11-17)', () => {
+  const flags = (overrides = {}) => ({ machine: false, ours: false, internal: false, answersOurEmail: false, ...overrides });
+  it('never alerts or answers the Hub\'s own email coming back, so an alert can never loop', async () => {
+    const harness = fixture({ snapshot: snapshotOf('Welcome to CareMetric Intel. Thank you for starting a trial.', { sender: flags({ ours: true, internal: true }) }) });
+    const outcome = await harness.run();
+    expect(outcome).toEqual({ result: { outcome: 'skipped', reason: 'own_sender', reference: 1042 } });
+    expect(harness.sent).toEqual([]);
+    expect(harness.store.proposeAction).not.toHaveBeenCalled();
+  });
+  it('alerts the owner but offers no acknowledgment to a machine, a colleague or someone answering the owner\'s own email', async () => {
+    for (const [sender, reply] of [[flags({ machine: true }), 'machine_sender'], [flags({ answersOurEmail: true }), 'answers_our_email'], [flags({ internal: true }), 'internal_sender']]) {
+      const harness = fixture({ snapshot: snapshotOf('Thank you for contacting the Provider Data Catalog feedback inbox.', { sender }) });
+      const outcome = await harness.run();
+      expect(harness.sent).toHaveLength(1);
+      expect(harness.store.proposeAction).not.toHaveBeenCalled();
+      expect(outcome).toMatchObject({ status: 'done', result: { outcome: 'alerted', reply } });
+    }
+  });
+  it('handles every message as before when the database does not say who wrote', async () => {
+    expect(senderKind(snapshotOf('Hi'))).toBeNull();
+    expect(senderKind(snapshotOf('Hi', { sender: flags() }))).toBeNull();
+    const harness = fixture({ snapshot: snapshotOf('How do I export the staff roster by month?', { sender: flags() }) });
+    expect(await harness.run()).toMatchObject({ status: 'awaiting_approval', result: { reply: 'proposed', template: 'standard' } });
   });
 });

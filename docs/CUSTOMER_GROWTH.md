@@ -570,6 +570,40 @@ Stage 3 of the [November 17 review](AI_WORKFORCE_REVIEW_2026-11-17.md) (`2026111
 `server/agents-growth-sites-integration.mjs` and `server/agents-growth-live-eval-integration.mjs` run the database side through the real
 roles in CI, twice each.
 
+## The outgoing email review (2026-11-17)
+
+A review of every email the Hub sends, read against the real messages of the previous two weeks
+(`20261117220000_email_review.sql`; no new feature: the server reads the new keys as absent until the migration is applied, and
+behaves as before).
+
+- **What a draft may not say, now also checked when it is sent.** Between November 8 and 15, 23 cold emails promised an Intel trial
+  with "no credit card", after Intel's trial began to need one; the draft check added on November 15 (`trial_terms`) stopped new ones
+  but not an email already approved and waiting for its turn under the caps and send hours. Each growth email is now read again when it
+  is claimed for sending (`outdatedWords` in `server/growth/draft.mjs`): an Intel trial with no credit card, a sentence that implies we
+  saw the reader open something we sent, or Intel's internal word "the book". One that fails is never sent: it is withdrawn
+  (`private.growth_withdraw_message`: cancelled, its claim undone so it counts toward no cap, with `withdrawn_at`, so the next sweep
+  writes that work again under today's rules) and recorded as `growth.message_withdrawn` in the audit log. Before the migration is
+  applied it is marked failed instead.
+- **Two more draft checks** (`draftProblem`, writer `growth.16`). `mentions_open`: never say or imply the reader opened, viewed or read
+  what we sent ("thanks for taking a look at the report", "now that you have seen where your agency stands"); the Sales Executive's
+  check of the same name now reads the same patterns (`server/growth/opens.mjs`). `jargon`: never "the book", Intel's word for its
+  list of referral sources and accounts, which the writer had copied from the fact sheet ("shows what the book says about why" went
+  to an agency on November 16). The writer is told both, and each has a repair hint.
+- **The market report is described as Intel describes it.** The first email's instructions said the report shows "the hospitals and
+  physicians who refer the most"; public Medicare data does not show who referred whom (GTM facts). It now says "the hospitals its
+  county's residents use and the physicians Intel ranks highest as referral sources", and the trial is "the way to see the referral
+  sources in a county they serve" (the trial covers one county), not "every source in their territory".
+- **A quiet follow-up is signed by the founder.** It goes to a prospect, from the growth sender, like the rest of the prospect's
+  emails, but was signed "The CareMetric Intel team". The send claim now says which email is a quiet follow-up (`quiet`), and it is
+  signed as the founder. Customer emails keep the product team's sign-off (owner direction 2026-11-12).
+- **"Prospect emails are ready on Growth"** replaces "Customer growth work is ready", which came eleven times in one week, around
+  midnight, as "312 follow-up tasks reviewed; 0 message drafts prepared". It is sent once a day per agent, and only when an email was
+  written.
+- **A separate growth sender on a domain of its own** works as well as a subdomain, but the domain must be authenticated (DKIM) in the
+  same SendGrid account as the Hub's key. Otherwise SendGrid signs with its own domain, DMARC fails, and a domain with a quarantine
+  policy sends the email to spam while SendGrid reports it delivered. Send one email to a mailbox you own and check that it shows
+  DMARC: pass.
+
 ## Checking an address before the first email, and the bounce guard
 
 Owner decision 2026-11-16 ([review](AI_WORKFORCE_REVIEW_2026-11-16.md)). Of the first 22 cold emails, 3 bounced (14%), all to

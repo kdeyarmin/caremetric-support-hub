@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,shortFormProblem,weaknessMeanings} from './draft.mjs';
+import {criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,outdatedWords,shortFormProblem,weaknessMeanings} from './draft.mjs';
 import {playbookFor,quietPlays,shortFollowupClose,shortReportTouchAngle} from './playbook.mjs';
 import {assessProspect} from './assessment.mjs';
 const now=new Date().toISOString();
@@ -33,7 +33,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.15');
+ expect(request.promptVersion).toBe('growth.16');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -201,7 +201,7 @@ it('repairs a draft once, telling the writer what to fix, and reports why one wa
  const draft=await draftMessage({opportunity,work,task:{},model,onReject:code=>reasons.push(code)});
  expect(draft).toMatchObject({modelGenerated:true,body:'How do you track training hours today?'});
  const repair=model.run.mock.calls[1][1];
- expect(repair.promptVersion).toBe('growth.15-r');
+ expect(repair.promptVersion).toBe('growth.16-r');
  expect(repair.system[0].text).toBe(growthSystem);
  expect(JSON.parse(repair.user)).toMatchObject({previousDraft:{body:'A seamless way to train staff.'},fix:expect.stringMatching(/plain words/)});
  expect(reasons).toEqual([]);
@@ -237,7 +237,7 @@ it('writes outreach with the owner-approved memo as a last cached block, after t
  expect(request.system[1].text).toMatch(/^CareMetric CareBase capabilities/);
  expect(request.system[2].text).toContain('memo 3');
  expect(request.system[2].text).toContain('Too long');
- expect(request.promptVersion).toBe('growth.15-m3');
+ expect(request.promptVersion).toBe('growth.16-m3');
  expect(draft.memoVersion).toBe(3);
  // A customer's message and an unusable memo are written without it.
  model.run.mockClear();
@@ -247,7 +247,7 @@ it('writes outreach with the owner-approved memo as a last cached block, after t
  expect(customer?.memoVersion).toBeUndefined();
  model.run.mockClear();
  await draftMessage({opportunity,work,task:{},model,memo:{version:'3',memo:'x'}});
- expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.15');
+ expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.16');
 });
 
 it('records the applied report length without changing angle, subject or ordinary length treatments', async () => {
@@ -279,8 +279,8 @@ const shortFirst=async(o,{short=true,offered=report,output=shortDraft,critic=fal
 // An opportunity whose hash gives the wanted form.
 const withForm=form=>{for(let i=0;i<200;i+=1){const o={...intel,id:`o${i}`,organization_id:`g${i}`};if(messageArms(o,o.evidence,{reportLed:true,shortTest:true}).form===form)return o;}throw new Error('no such form');};
 
-it('bumps the writer to growth.15 and the reader to critic.2, with a weakness code from a fixed list and a scale a good email can reach',()=>{
- expect(growthPromptVersion).toBe('growth.15');
+it('bumps the writer to growth.16 and the reader to critic.2, with a weakness code from a fixed list and a scale a good email can reach',()=>{
+ expect(growthPromptVersion).toBe('growth.16');
  expect(criticPromptVersion).toBe('critic.2');
  expect(criticWeaknesses).toEqual(['none','generic_opening','about_sender','too_long','too_many_asks','unclear_ask','wrong_problem','no_reason_now','reads_as_template']);
  expect(criticSchema.required).toEqual(['specific','relevant','clearAsk','wouldReply','weakness','weakestSentence']);
@@ -413,4 +413,25 @@ it('offers the trial and its card terms in the second email after a short first 
  // After a standard first email, with the switch on or off, and on the third touch: unchanged.
  for(const o of [{...intel,touches:1,first_form:'standard'},{...intel,touches:1},{...intel,touches:2,first_form:'short'}])
   expect((await second(o)).touchPlan).not.toContain(shortFollowupClose);
+});
+
+it('refuses a draft that implies we saw the reader open what we sent, or that uses Intel\'s own word "the book" (email review 2026-11-17)',()=>{
+ const answer=body=>({subject:'Referral sources in your county',body,citations:['s'],needsHuman:false});
+ const check=body=>draftProblem(answer(body),{product:'caremetric-intel',sources:[{id:'s'}],outreach:true});
+ expect(growthSystem).toContain('never write as if they already have');
+ expect(growthSystem).toContain('never "the book"');
+ expect(check('Thanks for taking a look at the market report I sent last week. Which county matters most to your team?')).toBe('mentions_open');
+ expect(check('Now that you have seen where your agency stands, which county matters most to your team?')).toBe('mentions_open');
+ expect(check('When a top source sends fewer patients, Intel shows what the book says about why. Which counties does your team cover?')).toBe('jargon');
+ expect(check('When a top source sends fewer patients, Intel shows what your records say about why. Which counties does your team cover?')).toBeNull();
+ expect(check('You can open your market report any time. Which county matters most to your team?')).toBeNull();
+});
+it('reads an email written earlier against the rules added since, when it is about to be sent',()=>{
+ const email=body=>outdatedWords({product:'caremetric-intel',subject:'Which referral sources are slipping?',body});
+ // The Intel trial needs a card since 2026-11-14: 23 cold emails said otherwise before the rule existed.
+ expect(email('Try it free for 30 days, no credit card:\nhttps://www.caremetricintel.com/')).toBe('trial_terms');
+ expect(email('You can try Intel free for 30 days (a credit card is required, and canceling before it ends avoids any charge).')).toBeNull();
+ expect(email('Intel flags a top source when its recent referrals fall and shows what the book says about why.')).toBe('jargon');
+ expect(email('Thanks for opening the report I sent.')).toBe('mentions_open');
+ expect(email('Which counties does your team cover today?')).toBeNull();
 });

@@ -5,7 +5,7 @@ import { weekStart } from '../agents/accounts/week.mjs';
 import { assessProspect } from './assessment.mjs';
 import { planOpportunity, products } from './policy.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
-import { draftMessage } from './draft.mjs';
+import { draftMessage, outdatedWords } from './draft.mjs';
 import { growthBriefFeature } from './brief.mjs';
 import { growthReportViewsFeature } from './views.mjs';
 import { growthLearningFeature } from './learning.mjs';
@@ -314,7 +314,13 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     // page summary the same day. No search provider is called here: only the business's own site is read.
     let contacts=null;
     if(prospecting&&growth.contacts?.configured&&typeof growth.store.contactCandidates==='function'&&!spent())contacts=await findContacts(sweepContactLimit,productsByDomain,{signal,spent});
-    if(planned && notifier)await notifier.send({severity:'info',subject:'Customer growth work is ready',body:`${planned} follow-up tasks reviewed; ${drafted} message drafts prepared. Open Growth to review next actions.`,dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
+    // Told once a day, and only when an email was written: re-saving the open work items on every sweep is not news (email review
+    // 2026-11-17: this notice came eleven times in a week, at midnight, with "312 follow-up tasks reviewed; 0 message drafts prepared").
+    const written=drafted+quietFollowups+colleagueEmails;
+    const count=(n,one,many)=>`${n} ${n===1?one:many}`;
+    if(written && notifier)await notifier.send({severity:'info',subject:owner==='account_manager'?'Customer emails are ready on Growth':'Prospect emails are ready on Growth',
+      body:`${count(drafted+quietFollowups,'email','emails')} written${colleagueEmails?`, and ${count(colleagueEmails,'copy','copies')} for other people at the same organizations`:''}. Open Growth to approve ${written===1?'it':'them'}, unless you handed that kind of email over on the AI team page.`,
+      dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
     return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(Object.keys(held).length?{held}:{}),...(reengaged?{reengaged}:{}),...(unreviewed?{unreviewed}:{}),...(colleagueEmails?{colleagues:colleagueEmails}:{}),...(quietFollowups?{quietFollowups}:{}),...(contacts?.searched?{contacts}:{})}};
   }
   async function discover(task,{signal,now=()=>new Date()}={}) {
@@ -551,8 +557,10 @@ export function greetingName(name,sourceKind) {
   const first=String(name??'').trim().split(/\s+/)[0]??'';
   return /^[A-Za-z][A-Za-z'’-]{1,29}$/.test(first)?first[0].toUpperCase()+first.slice(1):null;
 }
-export function growthEmail({product,purpose=null,subject,body,postalAddress,unsubscribeUrl,greeting=null,reports=null}) {
-  const sender=senderFor(product,purpose);
+export function growthEmail({product,purpose=null,quiet=false,subject,body,postalAddress,unsubscribeUrl,greeting=null,reports=null}) {
+  // A quiet follow-up goes to a prospect, from the founder's sending address like the rest of their emails, so it is the founder's letter
+  // too, though it is drafted as a 'success' email for the Sales follow-ups hand-over (email review 2026-11-17).
+  const sender=senderFor(product,quiet?'marketing':purpose);
   const words=String(body??'').trim();
   const preheader=(words.split(/\n/).find(line=>line.trim()&&!/^https:\/\//.test(line.trim()))??'').match(/^.*?[.?!](?=\s|$)/)?.[0]??'';
   const address=String(postalAddress??'').trim();
@@ -578,11 +586,24 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress,features
       if(finalRefusals.has(claimed.status))throw Object.assign(new Error('The message was not sent.'),{code:claimed.status});
       return {delivery:claimed.status};
     }
+    // An email can wait days for its turn under the caps and send hours. Words a rule added since it was written no longer allows (an
+    // Intel trial with "no credit card", as if we saw a report opened, Intel's "the book") never go out: the email is withdrawn, and the
+    // next sweep writes that work again under today's rules (20261117220000_email_review.sql). A database without the withdrawal marks it
+    // failed instead, for the owner to see.
+    const outdated=outdatedWords({product:claimed.product,subject:claimed.subject,body:claimed.body});
+    if(outdated) {
+      let withdrawn=false;
+      try {withdrawn=typeof growth.store.withdraw==='function'&&await growth.store.withdraw(claimed.id,outdated)===true;}
+      catch(error) {if(error?.code!=='42883')throw error;}
+      if(withdrawn)return {delivery:'withdrawn',reason:outdated};
+      await growth.store.finish(claimed.id,'failed',null);
+      throw Object.assign(new Error('The message was not sent.'),{code:'outdated_words'});
+    }
     // The work ID (with a colleague's own person, `unsubscribeKey`) is read from the claim, so the exact link is stable across retries.
     const token=growth.unsubscribeToken(claimed.unsubscribeKey??claimed.workId);
     if(claimed.unsubscribeHash && growth.hash(token)!==claimed.unsubscribeHash){await growth.store.finish(claimed.id,'failed',null);throw Object.assign(new Error('Regenerate the message after signing configuration changed'),{code:'unsubscribe_key_changed'});}
     const link=`${publicOrigin.replace(/\/+$/,'')}${growthOptOutPath}${token}`;
-    const email=growthEmail({product:claimed.product,purpose:claimed.purpose,subject:claimed.subject,body:claimed.body,postalAddress:live(postalAddress),unsubscribeUrl:link,
+    const email=growthEmail({product:claimed.product,purpose:claimed.purpose,quiet:claimed.quiet===true,subject:claimed.subject,body:claimed.body,postalAddress:live(postalAddress),unsubscribeUrl:link,
       reports:growth.reports,greeting:greetingName(claimed.contactName,claimed.sourceKind)});
     let outcome;
     try {outcome=await mail.send({to:claimed.to,subject:claimed.subject,text:email.text,html:email.html,unsubscribeUrl:link,messageId:claimed.id});}

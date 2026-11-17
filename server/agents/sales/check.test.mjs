@@ -136,12 +136,13 @@ describe('the agency\'s standing and the report open (review 2026-11-17, row 2.9
   it('refuses words that say or imply CareMetric saw an open, and lets invitations to open pass', () => {
     for (const words of ['I saw you opened the report last week.', 'I noticed you viewed the market report.', 'Thanks for checking out the report.',
       'Thank you for taking a look at the report.', "You've been looking at the referral data, so here is more.", 'I see you have already opened the link.',
-      'Our records show the report was read.', 'Glad you opened the report.', 'You opened the report on Tuesday.', 'I can see your team looked at it.']) {
+      'Our records show the report was read.', 'Glad you opened the report.', 'You opened the report on Tuesday.', 'I can see your team looked at it.',
+      'Now that you have seen where your agency stands, which county comes first?', "Since you've had a chance to look, what stood out?"]) {
       expect(mentionsOpen(words), words).toBe(true);
     }
     for (const words of ['You can open the report here:', 'When you open the report, the first page shows the county.', "If you've looked at the report, the hospitals are on page two.",
       'I see you have a question about pricing.', "We know you're busy, so you can open the report here.", 'Once you have opened the report, start with the sources.',
-      'Did you get a chance to open it?', 'Thanks for checking out Intel.', 'Thanks for reaching out.',
+      'Did you get a chance to open it?', 'Thanks for checking out Intel.', 'Thanks for reaching out.', 'Since you asked about pricing, here it is.', 'Now that you have three locations, the county view helps.',
       'The data shows which hospitals send the most patients.', 'The Medicare data says the county grew.']) expect(mentionsOpen(words), words).toBe(false);
     expect(intel(`Thanks for taking a look at the report.${trial}`)).toMatchObject({ ok: false, reason: 'mentions_open' });
     expect(intel(`You can open the report again here, and the trial shows the rest.${trial}`).ok).toBe(true);
