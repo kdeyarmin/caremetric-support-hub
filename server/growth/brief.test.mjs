@@ -196,7 +196,7 @@ describe('a first email written from the brief', () => {
     const result = await draftMessage({ opportunity: o, work, task: { id: 't' }, model, brief, quality: true });
     expect(result).toBeTruthy();
     const [, request] = model.run.mock.calls[0];
-    expect(request).toMatchObject({ tier: 'quality', effort: 'high', maxTokens: 6000, timeoutMs: 120_000, promptVersion: 'growth.17' });
+    expect(request).toMatchObject({ tier: 'quality', effort: 'high', maxTokens: 6000, timeoutMs: 120_000, promptVersion: 'growth.18' });
     const input = JSON.parse(request.user);
     expect(input.brief).toMatchObject({ hook: brief.hook.sentence, hookSourceId: 'e2', angle: 'referral_sources' });
     expect(input.sources.find(source => source.id === 'county').claim).toBe(brief.countyFact.claim);
@@ -246,7 +246,7 @@ describe('a first email written from the brief', () => {
   it('has a reader score the first email and rewrites it once around its weakest sentence when the score is under 4', async () => {
     const better = { ...draft, subject: 'Your liaison\'s first referral map' };
     const run = vi.fn(async (_task, request) => {
-      if (request.promptVersion === 'critic.3') return { outcome: 'completed', output: JSON.parse(request.user).email.subject === better.subject
+      if (request.promptVersion === 'critic.4') return { outcome: 'completed', output: JSON.parse(request.user).email.subject === better.subject
         ? { specific: 4, relevant: 4, clearAsk: 5, wouldReply: 4, weakestSentence: '' }
         : { specific: 2, relevant: 3, clearAsk: 4, wouldReply: 2, weakestSentence: 'Do you know which physicians certify the most home health patients in Butler County?' } };
       return { outcome: 'completed', output: request.promptVersion.endsWith('-c') ? better : draft };
@@ -254,10 +254,10 @@ describe('a first email written from the brief', () => {
     const result = await draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run }, brief, critic: true });
     expect(result.subject).toBe(better.subject);
     expect(result.arms).toMatchObject({ critic: '4', rewritten: '1' });
-    const rewrite = run.mock.calls.find(([, request]) => request.promptVersion === 'growth.17-c')[1];
+    const rewrite = run.mock.calls.find(([, request]) => request.promptVersion === 'growth.18-c')[1];
     expect(JSON.parse(rewrite.user).fix).toMatch(/scored this email 2 of 5.*certify the most home health patients in Butler County/);
     // What the reader said on both reads travels with the draft, to be recorded beside it.
-    expect(result.review).toEqual({ promptVersion: 'critic.3', outcome: 'kept',
+    expect(result.review).toEqual({ promptVersion: 'critic.4', outcome: 'kept',
       first: { specific: 2, relevant: 3, clearAsk: 4, wouldReply: 2, weakest: 'Do you know which physicians certify the most home health patients in Butler County?' },
       rewrite: { specific: 4, relevant: 4, clearAsk: 5, wouldReply: 4, weakest: '' } });
   });
@@ -266,12 +266,12 @@ describe('a first email written from the brief', () => {
     const reader = scores => ({ outcome: 'completed', output: { specific: 3, relevant: 3, clearAsk: 3, weakestSentence: '  The last line.  ', ...scores } });
     const reviewOf = async (reads, rewritten = draft) => {
       let read = 0;
-      const run = vi.fn(async (_task, request) => (request.promptVersion === 'critic.3' ? reader(reads[read++])
+      const run = vi.fn(async (_task, request) => (request.promptVersion === 'critic.4' ? reader(reads[read++])
         : { outcome: 'completed', output: request.promptVersion.endsWith('-c') ? rewritten : draft }));
       return draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run }, brief, critic: true });
     };
     const good = await reviewOf([{ wouldReply: 4 }]);
-    expect(good.review).toEqual({ promptVersion: 'critic.3', outcome: 'not_needed', rewrite: null,
+    expect(good.review).toEqual({ promptVersion: 'critic.4', outcome: 'not_needed', rewrite: null,
       first: { specific: 3, relevant: 3, clearAsk: 3, wouldReply: 4, weakest: 'The last line.' } });
     const lower = await reviewOf([{ wouldReply: 3 }, { wouldReply: 2 }]);
     expect(lower.subject).toBe(draft.subject);
@@ -286,7 +286,7 @@ describe('a first email written from the brief', () => {
     expect(worded.review).toMatchObject({ outcome: 'failed_checks', problem: 'vocabulary', rewrite: null });
     expect(worded.subject).toBe(draft.subject);
     let read = 0;
-    const silent = vi.fn(async (_task, request) => (request.promptVersion === 'critic.3' ? reader([{ wouldReply: 2 }][read++])
+    const silent = vi.fn(async (_task, request) => (request.promptVersion === 'critic.4' ? reader([{ wouldReply: 2 }][read++])
       : request.promptVersion.endsWith('-c') ? { outcome: 'failed', output: null } : { outcome: 'completed', output: draft }));
     const unanswered = await draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run: silent }, brief, critic: true });
     expect(unanswered.review).toMatchObject({ outcome: 'no_answer', rewrite: null });
@@ -307,7 +307,7 @@ describe('the sweep and the brief', () => {
     // A first email in the form every Intel agency gets: its market report (here the page where it can get one), and one question.
     const email = { subject: 'A market report for your hospice in Erie', citations: ['source'], needsHuman: false,
       body: 'A free market report for your hospice, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nWhich hospitals send you the most patients?' };
-    const model = { configured: true, run: vi.fn(async (_task, request) => ({ outcome: 'completed', output: request.promptVersion === 'critic.3'
+    const model = { configured: true, run: vi.fn(async (_task, request) => ({ outcome: 'completed', output: request.promptVersion === 'critic.4'
       ? { specific: 3, relevant: 4, clearAsk: 4, wouldReply: 4, weakestSentence: 'Which hospitals send you the most patients?' } : email })) };
     const growth = { store, model, signingReady: true, hash: x => x, unsubscribeToken: () => 'token', briefs: { enabled, qualityWriter, critic } };
     const outcome = await growthHandlers({ growth, model, features: new Set([growthBriefFeature, ...extra]), marketed: ['caremetric-intel'] })['growth.pipeline']({ id: 'task', agent: { autonomy: 'propose' }, kind: 'growth.pipeline' });
@@ -336,7 +336,7 @@ describe('the sweep and the brief', () => {
     const after = await sweep({ brief, critic: true, extra: [growthDiagnosticsFeature] });
     expect(after.store.draft.mock.calls[0][2]).not.toHaveProperty('review');
     expect(after.store.propose).toHaveBeenCalledWith('task', 'message');
-    expect(after.store.reviewRecord).toHaveBeenCalledWith('message', { promptVersion: 'critic.3', outcome: 'not_needed', rewrite: null,
+    expect(after.store.reviewRecord).toHaveBeenCalledWith('message', { promptVersion: 'critic.4', outcome: 'not_needed', rewrite: null,
       first: { specific: 3, relevant: 4, clearAsk: 4, wouldReply: 4, weakest: 'Which hospitals send you the most patients?' } });
     // A review the database refuses never holds the email: it is counted.
     const refused = await sweep({ brief, critic: true, extra: [growthDiagnosticsFeature], reviewRecord: vi.fn(async () => { throw Object.assign(new Error('Invalid review'), { code: '22023' }); }) });

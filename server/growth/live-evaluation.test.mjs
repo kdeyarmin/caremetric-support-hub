@@ -117,7 +117,7 @@ describe('growth.evaluate_live', () => {
     expect(JSON.stringify(results)).not.toMatch(/free market report|what your team sees|report\/live-eval|market-review/);
     expect(JSON.stringify(results).length).toBeLessThan(12_000);
     expect(model.calls.filter(version => version === criticPromptVersion).length).toBeGreaterThanOrEqual(12);
-    expect(criticPromptVersion).toBe('critic.3');
+    expect(criticPromptVersion).toBe('critic.4');
     // Six were written around the agency's own report and six around the market report page, each in the one first-email form.
     const written = model.run.mock.calls.filter(([, request]) => request.promptVersion !== criticPromptVersion).map(([, request]) => JSON.parse(request.user));
     expect(written.filter(input => input.touchPlan === reportTouchAngle && input.report === true)).toHaveLength(6);

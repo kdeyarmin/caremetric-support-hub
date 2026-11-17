@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { reportLinkDays, reportLinks, reportMissingMs, reportOpensMs, reportToken, rosterAgency } from './report-link.mjs';
 import { growthEmail, growthExecutors } from './worker.mjs';
 import { draftMessage, draftProblem } from './draft.mjs';
+import { readCampaign } from './campaign.mjs';
 import { nursingHomeAngles, reportTouchAngle, reviewFollowupAngle, reviewTouchAngle } from './playbook.mjs';
 
 const key = 'k'.repeat(40);
@@ -65,6 +66,41 @@ describe('agency report links', () => {
     expect(rosterAgency([])).toBeNull();
   });
 
+  it('carries a declared web report from an untracked probe through all three branded emails', async () => {
+    const fetchImpl = vi.fn(async (url) => {
+      const path = new URL(url).pathname;
+      const claims = JSON.parse(Buffer.from(path.split('/report/')[1].split('.')[0], 'base64url').toString());
+      expect(claims.r).toBeUndefined();
+      return new Response('%PDF', { headers: { 'Content-Type': 'application/pdf', Link: `<${path}/view>; rel="alternate"; type="text/html"` } });
+    });
+    const reports = reportLinks({ key, fetchImpl });
+    const opportunity = {
+      id: 'o-hospice', contact_id: 'contact-fixture', product: 'caremetric-intel', name: 'Riverbend Hospice', evidence: [roster('391500', 'hospice')],
+      policy: { approved_claim: 'CareMetric Intel helps hospice teams plan their outreach.' },
+    };
+    const report = await reports.checkedLinkFor(opportunity);
+    expect(report.url).toBe(`${reports.linkFor(opportunity).url}/view`);
+    expect(reports.accepts(report.url)).toBe(true);
+    expect(reports.accepts(`${report.url}?view=1`)).toBe(false);
+    const work = { kind: 'outreach', action: 'Share the report', success: 'Reply' };
+    for (const touches of [0, 1, 2]) {
+      const draft = await draftMessage({ opportunity: { ...opportunity, touches }, work, task: {}, report });
+      expect(readCampaign(draft.body, { reports })).toMatchObject({ version: 2, touch: touches + 1, ownReport: true, reportUrl: report.url });
+      const { html, text } = growthEmail({ ...draft, product: opportunity.product, purpose: 'marketing', reports,
+        postalAddress: 'CareMetric, 100 Example Ave', unsubscribeUrl: 'https://example.com/preferences/fixture' });
+      expect(html).toContain('data-caremetric-email="branded"');
+      expect(html).toContain(`href="${report.url}"`);
+      expect(html).toContain('login?signup=true&amp;utm_source=caremetric');
+      expect(html).toContain('Opt out of these emails');
+      expect(text.split(report.url)).toHaveLength(2);
+      expect(text.match(/Start your 30-day free trial/g)).toHaveLength(1);
+      if (touches === 0) expect(text).toContain('For hospice teams');
+    }
+    const fallback = await draftMessage({ opportunity, work, task: {} });
+    expect(fallback.body).toContain('Search by agency name and state');
+    expect(readCampaign(fallback.body)).toMatchObject({ version: 2, ownReport: false });
+  });
+
   it('gives an Intel prospect with a roster record a link that lives about five months', () => {
     const now = Date.parse('2026-11-15T15:00:00Z');
     const links = reportLinks({ key, now: () => now });
@@ -124,25 +160,26 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     expect(input.style).toBe('Write two or three sentences, never more than 120 words.');
     // The stored email is the writer's opening, then the sections every agency gets: what the software does and the trial.
     expect(draft.body.startsWith(body)).toBe(true);
-    expect(draft.body).toContain('What CareMetric Intel does for your home health agency, every day');
-    expect(draft.body).toMatch(/Try CareMetric Intel free for 30 days on one county, with your own team\..*\nhttps:\/\/www\.caremetricintel\.com\/\?utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch1/);
+    expect(draft.body).toContain('For home health teams');
+    expect(draft.body).toMatch(/Start your 30-day free trial\nhttps:\/\/www\.caremetricintel\.com\/login\?signup=true&utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch1/);
     expect(draft.arms).toMatchObject({ length: 'report', form: 'short' });
     expect(draft.variant).toBe('report');
     // The trial is the email's to offer, not the writer's: in the opening it is refused, with or without its link.
     expect(await draftMessage({ opportunity, work, task: {}, model: reply(`${body}\n\nYou can try it free for 30 days:\nhttps://www.caremetricintel.com/`), report: link })).toBeNull();
     expect(await draftMessage({ opportunity, work, task: {}, model: reply(body.replace('Does it match what your team sees in the field?', 'Would a free trial on your county help?')), report: link })).toBeNull();
     // The second email offers it, in plain words: "risk-free", "no credit card" and the card terms themselves are refused there.
-    const second = async offer => {
-      const written = reply(`Does your team plan its week around the hospitals your county's residents use?\n${link.url}\n\n${offer}\nhttps://www.caremetricintel.com/`);
+    const second = async opening => {
+      const written = reply(opening);
       const sent = await draftMessage({ opportunity: { ...opportunity, touches: 1 }, work, task: {}, model: written, report: link });
       return { sent, plan: JSON.parse(written.run.mock.calls[0][1].user).touchPlan };
     };
-    const offered = await second('You can try it free for 30 days on one county:');
+    const offered = await second("Does your team plan the week around the hospitals your county's residents use?");
     expect(offered.sent).toMatchObject({ modelGenerated: true });
-    expect(offered.plan).toMatch(/the Founders Sale, the 30-day free trial with its link, and the market report's link again/);
-    expect(offered.sent.body).toContain('A week in CareMetric Intel');
-    expect(offered.sent.body).toContain('Founders Sale: 50% off your first 12 months');
+    expect(offered.plan).toMatch(/the Founders Sale, the 30-day free trial button, and a link back to the report/);
+    expect(offered.sent.body).toContain('A week of outreach');
+    expect(offered.sent.body).toContain('Founders Sale: 50% off the first 12 months');
     expect((await second('You can try it risk-free for 30 days on one county:')).sent).toBeNull();
+    expect((await second(`See the report.\n${link.url}`)).sent).toBeNull();
     expect((await second('You can try it free for 30 days, with no credit card needed:')).sent).toBeNull();
     expect((await second('You can try it free for 30 days. A credit card is required to start the trial:')).sent).toBeNull();
   });
@@ -159,7 +196,7 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     // Its one link is that page: the trial's page in its place, or beside it, is refused.
     expect(await draftMessage({ opportunity: web, work, task: {}, model: reply('A free market report for Riverbend Home Health is one step away:\nhttps://www.caremetricintel.com/\n\nDoes your team know which agencies lead Riverton County?', ['web-1']) })).toBeNull();
     // Its second email points to the page again and offers the trial.
-    const second = reply('A different angle.\n\nhttps://www.caremetricintel.com/', ['web-1']);
+    const second = reply('A different angle.', ['web-1']);
     await draftMessage({ opportunity: { ...web, touches: 1 }, work, task: {}, model: second });
     expect(JSON.parse(second.run.mock.calls[0][1].user).touchPlan).toBe(reviewFollowupAngle);
     expect(reviewFollowupAngle).toMatch(/different angle/);
