@@ -37,6 +37,8 @@ import { readAccountsSnapshot } from '../tasks/accounts.mjs';
 import { dueMoment, mustHaveReached, recordRun } from '../tasks/shared.mjs';
 import { billingFigures, composeScorecard, composeVersion, searchFigures, searchOpportunityBlocks } from './compose.mjs';
 import { live, rebuilt } from '../../live.mjs';
+import { liveEvaluationNote } from '../../growth/live-evaluation.mjs';
+import { hasGrowthReach } from '../../growth/reach.mjs';
 // The Settings page keeps the properties as a list; the reader takes them as one comma-separated text, as the old variable held them.
 const consoleSites = value => (Array.isArray(value) ? value.join(',') : value);
 
@@ -161,6 +163,10 @@ export function scorecardHandlers({
     ]);
     // The weekly strategist's note for the reported week (strategist/index.mjs), written at 07:35; none when it is missing or unread.
     const strategy = typeof store.strategyNote === 'function' ? await optional('strategy', () => store.strategyNote(week), signal) : null;
+    // The Monday live writing evaluation (growth/live-evaluation.mjs, 06:50) of the last eight days, as one note; none when it did not
+    // run or cannot be read (platform.agents.growth-reach.v1).
+    const evaluated = hasGrowthReach(features) && typeof growth?.store?.liveEvaluationLatest === 'function'
+      ? await optional('live_evaluation', () => growth.store.liveEvaluationLatest(new Date(moment.getTime() - 8 * 86_400_000)), signal) : null;
     // The watchdog's findings for the week (watchdog.mjs), as notes; none when they cannot be read.
     const watched = typeof store.watchdogFacts === 'function' ? watchdogFindings(await optional('watchdog', () => store.watchdogFacts(), signal), { now: moment }) : [];
     // The scheduler may have stopped waiting while the figures were read: the scorecard is not sent after that.
@@ -174,6 +180,7 @@ export function scorecardHandlers({
       growth?.store?.snapshot && !pipeline ? 'The pipeline could not be read this morning, so deals waiting on you are missing.' : null,
       urgent === null ? 'The websites could not be checked this morning.' : null,
       ...watched.map(finding => `Watchdog: ${finding.text}`),
+      liveEvaluationNote(evaluated),
     ].filter(Boolean);
     const card = composeScorecard({
       week, facts: { current, previous }, billing: billingFigures(snapshot, { now: moment }), search, ads: adFigures, visitors: seen, publicOrigin, notes, strategy,

@@ -6,6 +6,8 @@ import { verifyHandlers } from '../growth/verify.mjs';
 import { briefHandlers } from '../growth/brief.mjs';
 import { viewsHandlers } from '../growth/views.mjs';
 import { learningHandlers } from '../growth/learning.mjs';
+import { liveEvaluationHandlers } from '../growth/live-evaluation.mjs';
+import { siteSearchHandlers } from '../growth/site-search.mjs';
 import { adsTeam } from './ads/index.mjs';
 import { handoverFeature } from './handover.mjs';
 import { defaultMarketed, marketingFeature } from './marketing.mjs';
@@ -109,7 +111,7 @@ export function agentTeam({
     ...(typeof executors === 'function' ? executors(shared) : executors),
   }, log });
   // The handlers every server ships with, then any the caller adds (a caller's handler for the same kind wins).
-  const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}), ...peopleHandlers({growth,features,marketed:marketedSource}), ...matchHandlers({growth,features,marketed:marketedSource}), ...researchHandlers({growth,model:runtime,features,marketed:marketedSource}), ...verifyHandlers({growth,features,notifier}), ...briefHandlers({growth,model:runtime,features,marketed:marketedSource}), ...viewsHandlers({growth,features,notifier}), ...learningHandlers({growth,features,marketed:marketedSource,enabled:growth?.learning?.enabled??false}),
+  const registry = { ...growthHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}), ...peopleHandlers({growth,features,marketed:marketedSource}), ...matchHandlers({growth,features,marketed:marketedSource}), ...researchHandlers({growth,model:runtime,features,marketed:marketedSource}), ...siteSearchHandlers({growth,model:runtime,features,marketed:marketedSource}), ...verifyHandlers({growth,features,notifier}), ...briefHandlers({growth,model:runtime,features,marketed:marketedSource}), ...viewsHandlers({growth,features,notifier}), ...learningHandlers({growth,features,marketed:marketedSource,enabled:growth?.learning?.enabled??false}), ...liveEvaluationHandlers({growth,model:runtime,notifier,features,marketed:marketedSource}),
     ...salesHandlers({ store, notifier, model: runtime, growth, features, customerTextToAi, publicOrigin, guides, marketed: marketedSource, log,
       // A growth prospect's account brief, the email answered and whether the report was opened (Settings → Customer growth).
       salesContext, growthContext: pool && hasGrowthPriority(features) ? salesGrowthContextReader(pool) : null }),
