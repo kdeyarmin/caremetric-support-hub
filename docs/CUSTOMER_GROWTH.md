@@ -368,6 +368,13 @@ owner decision 2026-11-13, replacing Apollo). It needs no paid service and no ke
   feed), the authorized official on the agency's NPI record (the public NPI registry, matched by the agency's ZIP code and its CMS
   telephone number or name), and the leaders the agency's own website names with a title that decides (owner, administrator,
   executive director, business development). The person written to is the one whose title decides most.
+  - An agency found on the web and not matched to its Medicare record has no CMS owners and no CMS place. The registry is asked
+    where the agency's own website's postal address places it (its ZIP code, else its city), as home health and as hospice, and
+    a record is taken only when its telephone number is one the site publishes or its name is the agency's (since 2026-11-17).
+  - A business is searched once and then left for 60 days. One matched to its Medicare record after its search, with nobody
+    named, is searched again at once, so its CMS owners and NPI official are read. On 2026-11-17 every business searched with
+    nobody named and not matched was searched again once, with the registry at its website's address
+    (`20261117220000_growth_research_people.sql`).
 - **Their address**, as far as Settings → Customer growth → Finding people's addresses allows:
   - *Names only: never look for a person's own address*: no address is looked for; outreach goes to the business's public
     address (info@).

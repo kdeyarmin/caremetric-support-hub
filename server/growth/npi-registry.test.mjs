@@ -35,6 +35,14 @@ describe('NPI registry officials', () => {
     expect(JSON.stringify(officials)).not.toMatch(/555/);
   });
 
+  it('takes a record by any number the agency\'s own website publishes, for an agency placed by its site', () => {
+    const placed = { name: 'Valley Hospice LLC', city: 'Harrisburg', state: 'PA', zip: '17110', phones: ['7175550111', '717-555-0100'], setting: 'hospice' };
+    expect(agencyOfficials([record({ name: 'RIVER CARE INC', first: 'SAM', last: 'LEE' })], placed).map(person => person.name)).toEqual(['Sam A Lee']);
+    expect(agencyOfficials([record({ name: 'RIVER CARE INC', phone: '7175550999', first: 'SAM', last: 'LEE' })], placed)).toEqual([]);
+    expect(agencyOfficials([record({ phone: '7175550999' })], placed).map(person => person.name)).toEqual(['Jane A Doe']);
+    expect(agencyOfficials([record({ name: 'RIVER CARE INC' })], { ...placed, phones: [] })).toEqual([]);
+  });
+
   it('searches organizations at the agency\'s ZIP code for its kind of care, at one fixed address', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ result_count: 1, results: [record()] })));
     expect(await npiRegistry({ fetchImpl }).officials(agency)).toHaveLength(1);

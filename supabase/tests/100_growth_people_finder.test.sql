@@ -1,5 +1,5 @@
 begin;
-select plan(7);
+select plan(8);
 
 select ok(position('''website''' in (select pg_get_constraintdef(oid) from pg_constraint where conrelid = 'private.growth_people'::regclass and conname = 'growth_people_source_check')) > 0
   and position('''npi_registry''' in (select pg_get_constraintdef(oid) from pg_constraint where conrelid = 'private.growth_people'::regclass and conname = 'growth_people_source_check')) > 0
@@ -15,6 +15,8 @@ select ok(position('''agencies''' in pg_get_functiondef('private.growth_people_c
   and has_function_privilege('hub_app_server', 'private.growth_people_candidates(integer)', 'execute')
   and not has_function_privilege('authenticated', 'private.growth_people_candidates(integer)', 'execute'),
   'Candidates carry their roster agencies, for the server only');
+select ok(position('t.resolved_at > g.people_searched_at' in pg_get_functiondef('private.growth_people_candidates(integer)'::regprocedure)) > 0,
+  'A business matched to its Medicare record after its search, with nobody named, is searched again');
 select ok(position('address_found' in pg_get_functiondef('hub.growth_people(integer)'::regprocedure)) > 0
   and has_function_privilege('authenticated', 'hub.growth_people(integer)', 'execute') and not has_function_privilege('anon', 'hub.growth_people(integer)', 'execute'),
   'The owner sees how each waiting address was found');
