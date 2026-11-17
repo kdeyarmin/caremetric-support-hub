@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { Readable } from 'node:stream';
-import { communications, htmlToText, inquiryImportItem, parseMailbox, phoneImportItem, productFromAddresses, replySubject, senderAuthenticated, sendgridMail, sendgridSignatureValid, supportReplyEmail, twilioMessaging, twilioSignature } from './communications.mjs';
+import { PassThrough, Readable } from 'node:stream';
+import { communications, htmlToText, inboundEmailBytes, inboundEmailReads,inquiryImportItem, parseMailbox, phoneImportItem, productFromAddresses, replySubject, senderAuthenticated, sendgridMail, sendgridSignatureValid, supportReplyEmail, twilioMessaging, twilioSignature } from './communications.mjs';
 
 const origin = 'https://support-hub-web-production.up.railway.app';
 const request = (body, headers) => Object.assign(Readable.from([Buffer.from(body)]), { headers });
@@ -54,6 +54,37 @@ describe('message parsing', () => {
   it('reduces HTML mail to readable text without markup or scripts', () => {
     expect(htmlToText('<p>Hello &amp; welcome</p><script>alert(1)</script><div>Line two<br>Line three</div>')).toBe('Hello & welcome\n Line two\nLine three');
     expect(htmlToText('<html><head><title>Re: Login [CM-1]</title><style>p{color:red}</style></head><body><!--[if mso]><table><![endif]--><p>Thanks</p><header>Kept</header></body></html>')).toBe('Thanks\n Kept');
+  });
+  it('converts HTML exactly as the regular expressions it replaced did', () => {
+    // The previous conversion, kept here as the reference: it took time that grew with the square of the length on crafted mail.
+    const reference = html => String(html || '').replace(/<!--[\s\S]*?-->/g, ' ').replace(/<(script|style|head|title)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+      .replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+    const sent = supportReplyEmail({ subject: 'Login help', reference: 1042, body: 'Hi Pat,\n\nWe reset your access.' }).html;
+    const mail = [
+      '', null, 'plain text only', sent, `<html><head><style>p{margin:0}</style></head><body><p>That worked!</p><blockquote>${sent}</blockquote></body></html>`,
+      '<SCRIPT type="text/javascript">x()</Script>after', '<Head><TITLE>t</TITLE></HEAD><Body>Hi<BR/>there<BR>you</Body>', '<header>Top</header><headline>H</headline><p>Body</p>',
+      '<p>a</p><div>b</div><li>c</li><tr>d</tr><h1>e</h1><h6>f</h6>', 'Kept <!-- unclosed comment', 'Kept <script> unclosed', '<style>a</script>b</style>c', '<head><script>x</head>y</script>z',
+      '<!--a--><!--b-->c<!-- d', '<img alt="a<b" src="x">caption', '3 < 4 and 5 > 2', '<<p>>text<', 'A&amp;B &lt;tag&gt; &quot;q&quot; &#39;s&#39;&nbsp;end',
+      '<p>one</p>\n\n\n\n<p>two</p>', 'tab\t\tand   spaces', '<scripts>kept</scripts>', '<!---->x<!-->y-->z', '<title>İ dotted</title>after',
+    ];
+    for (const html of mail) expect(htmlToText(html), String(html)).toBe(reference(html));
+    let seed = 20261117;
+    const next = limit => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % limit; };
+    const pieces = ['<', '>', '/', '!--', '--', '-->', 'script', 'STYLE', 'head', 'title', 'p', 'br', ' ', '\n', 'a', '&amp;', '<br/>', '</p>', '</script>', '</head>', '</Style>', '<!--', 'header', '\t'];
+    for (let run = 0; run < 20000; run += 1) {
+      const html = Array.from({ length: next(14) }, () => pieces[next(pieces.length)]).join('');
+      expect(htmlToText(html), JSON.stringify(html)).toBe(reference(html));
+    }
+  });
+  it('converts a megabyte of unclosed comments, blocks or tags at once', () => {
+    // Anyone can email the support address and SendGrid signs what arrives: 1 MB of "<" used to hold the Hub's only thread for minutes.
+    for (const unit of ['<', '<!--', '<script ', '<style', '<head', '<title x', '<!-- <script', '<br ', '<a\n']) {
+      const html = unit.repeat(Math.ceil(1024 * 1024 / unit.length));
+      const started = performance.now();
+      htmlToText(html);
+      expect(performance.now() - started, JSON.stringify(unit)).toBeLessThan(2000);
+    }
   });
   it('maps Breathe phone messages and Advisors requests to import items with the reviewed eleven fields', () => {
     const phone = phoneImportItem({ id: '99000000-0000-4000-8000-000000000001', contactName: 'Caller', companyName: 'Agency', phone: '(202) 555-0111', email: null, message: 'Please call back.', status: 'new', createdAt: '2026-10-01T00:00:00.000Z', product: 'advisors', requestType: 'healthcare_advisors', sms: { status: 'delivered', resources: ['advisors'], errorCode: null } });
@@ -256,6 +287,33 @@ describe('inbound webhooks', () => {
       await expect(service.emailWebhook(Object.assign(body(), { headers }))).rejects.toMatchObject({ status: 403 });
     }
     expect(read).toBe(false);
+  });
+  it('refuses a body declared larger than SendGrid ever posts without reading it', async () => {
+    const service = communications({ pool: fakePool().pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
+    let read = false;
+    const body = Object.assign(Readable.from((function* () { read = true; yield Buffer.from('x'); })()), {
+      headers: { 'content-type': 'multipart/form-data; boundary=x', 'content-length': String(inboundEmailBytes + 1),
+        'x-twilio-email-event-webhook-signature': 'sig', 'x-twilio-email-event-webhook-timestamp': String(Math.floor(Date.now() / 1000)) },
+    });
+    await expect(service.emailWebhook(body)).rejects.toMatchObject({ status: 413 });
+    expect(read).toBe(false);
+  });
+  it('reads only a few bodies at once, so unsigned posts cannot fill the Hub\'s memory, and takes mail again once they end', async () => {
+    const { pool, calls } = fakePool();
+    const service = communications({ pool, delegations: {}, sendgridInboundPublicKey: publicKeyBase64 });
+    // Unsigned posts with a current timestamp (the sender's to choose) whose bodies are still arriving.
+    const unsigned = () => Object.assign(new PassThrough(), { headers: { 'content-type': 'multipart/form-data; boundary=x',
+      'x-twilio-email-event-webhook-signature': 'forged', 'x-twilio-email-event-webhook-timestamp': String(Math.floor(Date.now() / 1000)) } });
+    const open = Array.from({ length: inboundEmailReads }, unsigned);
+    const pending = open.map(post => service.emailWebhook(post));
+    const refused = unsigned();
+    await expect(service.emailWebhook(refused)).rejects.toMatchObject({ status: 429 });
+    expect(refused.readableFlowing).toBeNull();
+    for (const post of open) post.end(Buffer.alloc(1024, 1));
+    for (const result of pending) await expect(result).rejects.toMatchObject({ status: 403 });
+    const { payload, headers } = await signedEmail({ from: 'pat@agency.test', to: 'support@caremetric.ai', subject: 'Hello', text: 'Still here.' });
+    expect(await service.emailWebhook(request(payload, headers))).toEqual({ received: true, reference: 1001 });
+    expect(calls).toHaveLength(1);
   });
   it('threads an HTML-only customer reply that quotes the Hub reply and stores only readable text', async () => {
     const { pool, calls } = fakePool();

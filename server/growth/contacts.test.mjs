@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
-import { contactPaths, growthContactFinder, pinnedFetch, privateAddress, roleAddresses, roleLocalParts, robotsAllows } from './contacts.mjs';
+import { contactPaths, growthContactFinder, pinnedFetch, privateAddress, roleAddresses, roleLocalParts, robotsAllows, robotsPatternMatches } from './contacts.mjs';
 
 const publicLookup = vi.fn(async () => [{ address: '93.184.216.34', family: 4 }]);
 const page = (body, { status = 200, type = 'text/html; charset=utf-8', location = null } = {}) =>
@@ -64,6 +64,50 @@ describe('robots.txt', () => {
     expect(robotsAllows('User-agent: *\nDisallow: /\n\nUser-agent: CareMetricContactFinder\nDisallow:', '/contact')).toBe(true);
     expect(robotsAllows('User-agent: CareMetricContactFinder\nDisallow: /', '/')).toBe(false);
     expect(robotsAllows('', '/')).toBe(true);
+  });
+  it('reads a pattern as a prefix, with * for any run of characters and a final $ for the end of the path', () => {
+    expect(robotsPatternMatches('/team', '/team/contact')).toBe(true);
+    expect(robotsPatternMatches('/team', '/teams')).toBe(true);
+    expect(robotsPatternMatches('/team', '/our-team')).toBe(false);
+    expect(robotsPatternMatches('/', '/anything')).toBe(true);
+    expect(robotsPatternMatches('/team$', '/team')).toBe(true);
+    expect(robotsPatternMatches('/team$', '/team/')).toBe(false);
+    expect(robotsPatternMatches('/*.pdf$', '/files/a.pdf')).toBe(true);
+    expect(robotsPatternMatches('/*.pdf$', '/files/a.pdf.html')).toBe(false);
+    expect(robotsPatternMatches('/*.pdf', '/files/a.pdf.html')).toBe(true);
+    expect(robotsPatternMatches('/*a*a$', '/aa')).toBe(true);
+    expect(robotsPatternMatches('/*a*a$', '/a')).toBe(false);
+    expect(robotsPatternMatches('/*ab*ba$', '/aba')).toBe(false);
+    expect(robotsPatternMatches('/*ab*ba$', '/abba')).toBe(true);
+    expect(robotsPatternMatches('/**', '/x')).toBe(true);
+    expect(robotsPatternMatches('/a$b', '/a$b/c')).toBe(true);
+    expect(robotsPatternMatches('$', '')).toBe(true);
+    expect(robotsPatternMatches('$', '/')).toBe(false);
+  });
+  it('answers as the wildcard regular expression it replaced, for every pattern and path', () => {
+    const reference = (pattern, path) => {
+      const anchored = pattern.endsWith('$');
+      const source = (anchored ? pattern.slice(0, -1) : pattern).split('*').map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*');
+      return new RegExp(`^${source}${anchored ? '$' : ''}`).test(path);
+    };
+    // A fixed pseudo-random sequence, so a failure always shows the same case.
+    let seed = 20261117;
+    const next = limit => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % limit; };
+    const text = (length, alphabet) => Array.from({ length }, () => alphabet[next(alphabet.length)]).join('');
+    for (let run = 0; run < 20000; run += 1) {
+      const pattern = `/${text(next(7), ['a', 'b', '*', '.', '/', '$'])}${next(3) === 0 ? '$' : ''}`;
+      const path = `/${text(next(9), ['a', 'b', '.', '/', '$'])}`;
+      expect(robotsPatternMatches(pattern, path), `${pattern} ${path}`).toBe(reference(pattern, path));
+    }
+  });
+  it('answers a rule with a long run of wildcards at once, whatever the path', () => {
+    // As a regular expression this rule backtracked for hours on a path it does not match, and a site can also choose the path by redirect.
+    const robots = `User-agent: *\nDisallow: /${'*'.repeat(40)}z$\nDisallow: /${'*a'.repeat(40)}b`;
+    const started = performance.now();
+    expect(robotsAllows(robots, '/contact-us/our-team')).toBe(true);
+    expect(robotsAllows(robots, `/${'a'.repeat(5000)}`)).toBe(true);
+    expect(robotsAllows(robots, `/${'a'.repeat(5000)}z`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 });
 

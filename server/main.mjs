@@ -104,7 +104,9 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
   sms:textSender,email:mailSender,
   chatEnabled:setting('support.chat')});
 // The Medicare roster from Intel's signed marketing feed (Settings → Customer growth; the shared secret HUB_INTEL_FEED_SECRET in Railway).
-const roster={feed:intelFeedReader({features,enabled:setting('growth.roster'),key:process.env.HUB_INTEL_FEED_SECRET}),
+// Read trimmed, as Intel reads its HUB_MARKETING_FEED_SECRET, so a value saved with a trailing newline signs the same on both sides.
+const intelFeedSecret=process.env.HUB_INTEL_FEED_SECRET?.trim();
+const roster={feed:intelFeedReader({features,enabled:setting('growth.roster'),key:intelFeedSecret}),
   states:setting('growth.roster_states'),daily:setting('growth.roster_daily_resolutions'),
   // Web-found prospects matched to their Medicare record each day, so each gets its own market report (growth/agency-match.mjs).
   matchDaily:setting('growth.roster_match_daily'),
@@ -125,7 +127,7 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   learning:{enabled:setting('growth.learning_memo')},
   // An account brief per agency, and first emails written from it on the quality tier with a reader's review (Settings → Customer growth).
   // Which agencies opened their market report, read from Intel with the feed's secret (Settings → Customer growth).
-  views:{enabled:setting('growth.report_views'),feed:intelFeedReader({features,enabled:setting('growth.report_views'),key:process.env.HUB_INTEL_FEED_SECRET})},
+  views:{enabled:setting('growth.report_views'),feed:intelFeedReader({features,enabled:setting('growth.report_views'),key:intelFeedSecret})},
   briefs:{enabled:setting('growth.account_brief'),perDay:setting('growth.brief_per_day'),cents:setting('growth.brief_cents'),
     qualityWriter:setting('growth.quality_writer'),critic:setting('growth.draft_critic')},
   // Stage 2 of the 2026-11-17 review (Settings → Customer growth): the best prospects first, a short first email as a test, and a
@@ -134,7 +136,7 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   // The Monday live writing evaluation (Settings → Customer growth → Run a live writing evaluation each Monday; stage 3).
   liveEvaluation:{enabled:setting('growth.live_evaluation')},
   // Each Medicare roster agency's free market report on Intel, linked in its outreach (growth/report-link.mjs; the feed's shared secret).
-  reports:reportLinks({key:process.env.HUB_INTEL_FEED_SECRET}),importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
+  reports:reportLinks({key:intelFeedSecret}),importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
   sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});
 // Cold email and sales follow-ups may come from their own address (Settings → Email → Growth email sender, normally on a subdomain), so
 // prospecting can never hurt the support address's reputation. Replies still go to the support inbox. Unset: the support sender.
