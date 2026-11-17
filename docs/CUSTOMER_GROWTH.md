@@ -336,7 +336,7 @@ industry").
 | Hospice | Every hospice in its territory, ranked by Medicare share, with alerts; its "liaisons", not "marketers" | Physicians ranked for hospice outreach, plus hospitals and nursing homes | Yes |
 | Home health and hospice under one name | Both kinds | Physicians, hospitals and facilities | Yes |
 | An agency whose kind nothing states | "Every agency like yours": neither kind is named | Physicians, hospitals and facilities | Yes |
-| Nursing home | Every nursing home near it, with ratings, staffing, inspections and owner. No ranking and no alerts: Intel's share rankings and competitor alerts cover home health and hospice only | The hospitals its county's residents use, plus physicians and facilities; its county's use and supply of skilled nursing | No |
+| Nursing home | Every nursing home in its territory, ranked by Medicare share, with ratings, staffing, inspections and owner, and alerts when a rating or owner changes (Intel ranks nursing homes since 2026-11-17) | The hospitals its county's residents use, plus physicians and facilities; its county's use and supply of skilled nursing | No |
 
 - **How the kind is told** (`prospectKind` in `playbook.mjs`): the agency's Medicare record first, then a nursing home by its name
   or research (`intelSetting`), then the name ("hospice", "home health"), then a brief written for a hospice, then what its

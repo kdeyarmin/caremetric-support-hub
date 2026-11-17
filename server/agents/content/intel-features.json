@@ -1,11 +1,11 @@
 {
-  "reviewed": "2026-11-16",
+  "reviewed": "2026-11-17",
   "product": "caremetric-intel",
   "sources": {
     "home": "https://www.caremetricintel.com/",
     "features": "https://www.caremetricintel.com/features"
   },
-  "contentSha256": "a9b9dc8bb7011db6",
+  "contentSha256": "ebc536fb988f32c1",
   "edits": [
     "EMR vendors named on the page are written generically: \"(or have a supported EMR deliver it on a schedule)\"",
     "EMR vendors named on the page are written generically: \"Saved layouts cover common home health and hospice EMR reports.\"",
@@ -17,7 +17,7 @@
   ],
   "overview": "For home health agencies, hospice agencies, hospitals, nursing homes and personal care homes ready to earn a greater share of referrals. Find the right sources with 150+ public healthcare datasets, focus your outreach, and turn consistent follow-up into stronger relationships. Bring market research, daily activity, and referral tracking together in one healthcare CRM.",
   "legend": "Features without a label are available to every role on every plan, within the plan’s territory and service-line allowance. Labels name additional role or plan requirements. The 30-day trial includes Pro features in one county, with your choice of healthcare service lines.",
-  "publishedCount": 125,
+  "publishedCount": 128,
   "pillars": [
     {
       "title": "Understand the market",
@@ -220,7 +220,7 @@
         },
         {
           "name": "County call sheets",
-          "does": "A working list for a county: hospitals, home health agencies, hospices, nursing homes, clinicians, DME suppliers, licensed homes and dialysis facilities. Mark each Call, Visit or Account and it lands on the marketing book. Print the schedule or the chart of accounts.",
+          "does": "A working list for a county: hospitals, home health agencies, hospices, nursing homes, clinicians, DME suppliers, personal care and assisted living homes and dialysis facilities. Mark each Call, Visit or Account and it lands on the marketing book. Print the schedule or the chart of accounts.",
           "access": null
         },
         {
@@ -420,8 +420,8 @@
           "access": null
         },
         {
-          "name": "Referral discovery",
-          "does": "Compare public volume with the referrals you have logged to find under-worked hospitals and physicians, see hospice planning estimates, and spot counties with high need and little local supply.",
+          "name": "New referral sources",
+          "does": "For a home health agency, a hospice, a nursing home, a personal care home or a hospital: the hospitals, nursing homes, agencies, personal care and assisted living homes and clinicians that refer to an organization like yours, ranked by public volume, with which are already accounts and what each referred. Add a source to accounts in one click. Home health and hospice also get under-worked hospitals and physicians, hospice planning estimates, and counties with high need and little local supply.",
           "access": null
         },
         {
@@ -562,22 +562,22 @@
       "features": [
         {
           "name": "Competitor rankings",
-          "does": "Home health agencies and hospices in your territory ranked by Medicare share, with each one’s star rating and change. Download the rankings as CSV.",
+          "does": "Home health agencies, hospices and nursing homes in your territory ranked by Medicare share, and hospitals ranked by their share of each county’s residents’ Medicare inpatient cases, with each one’s star rating and change. Yours is marked. Download the rankings as CSV.",
           "access": null
         },
         {
           "name": "Watchlist and alerts",
-          "does": "Follow the competitors that matter and get alerts when a star rating, owner or service area changes, a change of ownership is filed, or a new provider opens nearby.",
+          "does": "Follow the agencies, nursing homes and hospitals that matter and get alerts when a star rating, owner or service area changes, a change of ownership is filed, or a new agency or nursing home opens nearby.",
           "access": null
         },
         {
           "name": "Compare and trends",
-          "does": "Put competitors side by side on market rank, Medicare patients, share and its change, star rating, locations and ZIP codes served, and follow their share over time.",
+          "does": "Put competitors side by side on market rank, volume, share and its change, star rating, locations and ZIP codes served, and follow their share over time.",
           "access": null
         },
         {
           "name": "County roll-up",
-          "does": "Every county in a state with its market leader, number of agencies and biggest mover, as CSV or a leadership-brief PDF.",
+          "does": "Every county in a state with its market leader, number of providers and biggest mover, as CSV or a leadership-brief PDF.",
           "access": null
         },
         {
@@ -587,7 +587,12 @@
         },
         {
           "name": "What to say",
-          "does": "On a home health agency or hospice, a card lines your organization up with the three largest in the county on star rating, patient survey and Medicare patient totals, in plain sentences.",
+          "does": "On a home health agency, hospice or nursing home, a card lines your organization up with the three largest in the county on star rating and Medicare patient totals (and patient survey for agencies), in plain sentences.",
+          "access": null
+        },
+        {
+          "name": "Personal care and assisted living ranking",
+          "does": "For personal care and assisted living organizations: the state-licensed homes in your territory, largest first by licensed beds, with each one’s share of the licensed beds and yours marked. Download it as CSV.",
           "access": null
         },
         {
@@ -712,13 +717,23 @@
       "intro": "Your book turned into reports that managers, owners and marketers can each trust for their own scope.",
       "features": [
         {
+          "name": "Reports library",
+          "does": "Every report on one page, grouped by the question it answers: your organization, your competitors, new referral sources, your market, and the data builders. The list opens on the reports built for your kind of organization, and search finds a report by what it is about.",
+          "access": null
+        },
+        {
+          "name": "My organization",
+          "does": "How your own providers stand in public data. A home health agency, hospice, nursing home or hospital shows its CMS star ratings and published measures, how its rating compares with the others in its county, and its share, rank and trend there. A personal care or assisted living home shows its licensed beds and its share of the county’s. Home health agencies and hospices can download their own market report as a PDF.",
+          "access": null
+        },
+        {
           "name": "Results reports",
           "does": "Performance scorecard, field activity, tasks and follow-up, mileage, referrals and admissions, top referral sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment.",
           "access": null
         },
         {
           "name": "Source quality after admission",
-          "does": "Load a stays report (or have a supported EMR deliver it on a schedule) and see, by referral source, marketer or location, how long patients stay, short stays, hospice live discharges and revocations, and home health returns to the hospital, plus average daily census against each location's budget. A group is rated only with 10 or more endings, a flag means 10 points above your own average, and patient columns are never read or stored.",
+          "does": "Load a stays report (or have a supported EMR deliver it on a schedule) and see, by referral source, marketer or location, how long patients stay, short stays, hospice live discharges and revocations, home health returns to the hospital, and a nursing home's returns to the hospital and discharges home, plus average daily census against each location's budget. A group is rated only with 10 or more endings, a flag means 10 points above your own average, and patient columns are never read or stored.",
           "access": "Loading and organization budgets: owners · by marketer and location: managers"
         },
         {
@@ -770,7 +785,7 @@
         },
         {
           "name": "Business menu and search",
-          "does": "Pick a healthcare service line to focus your CRM, referral tracking, and available research views. Use Other healthcare services for an unlisted specialty. Public datasets and specialized reports vary by setting. Press Ctrl+K anywhere to search accounts, providers, NPIs, lead lists and pages.",
+          "does": "Pick a healthcare service line to focus your CRM, referral tracking, and available research views. Use Other healthcare services for an unlisted specialty. Public datasets and specialized reports vary by setting. Press Ctrl+K anywhere to search accounts, providers, NPIs, lead lists, pages and individual reports.",
           "access": null
         },
         {

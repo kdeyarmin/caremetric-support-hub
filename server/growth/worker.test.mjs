@@ -727,7 +727,8 @@ it('lays a marketing email to an Intel agency out in Intel\'s look, with what th
  expect(nursing.html).toContain('>FOR YOUR ADMISSIONS AND MARKETING TEAM</p>');
  expect(nursing.html).toContain('What CareMetric Intel does for your nursing home, every day');
  expect(nursing.html).toContain('Finds your hospital sources');
- expect(nursing.html).not.toMatch(/market report|MARKET REPORT|ranked by Medicare share|hospices? in your territory|home health agenc/);
+ expect(nursing.html).toContain('Every nursing home in your territory, ranked by Medicare share');
+ expect(nursing.html).not.toMatch(/market report|MARKET REPORT|hospices? in your territory|home health agenc/);
  expect(anchorOf(nursing.html,trialOf(1))).toBe('Start your free trial \u2192');
 
  // Anything else stays the plain letter: sections someone edited, an email that is not marketing, another product, and a letter with no sections.

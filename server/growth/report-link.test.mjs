@@ -179,7 +179,9 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     expect(draft.body.startsWith(`${opening}\n\nWhat CareMetric Intel does for your nursing home, every day\n`)).toBe(true);
     expect(draft.body).toContain('1. Finds your hospital sources');
     expect(draft.body).toMatch(/Try CareMetric Intel free for 30 days on one county, with your own team\..*\nhttps:\/\/www\.caremetricintel\.com\/\?utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch1/);
-    expect(draft.body).not.toMatch(/market report|home health agenc|hospices? in your|ranked by Medicare share/i);
+    expect(draft.body).not.toMatch(/market report|home health agenc|hospices? in your/i);
+    // Intel ranks nursing homes too (since 2026-11-17), so a nursing home reads about its own competitors, ranked.
+    expect(draft.body).toContain('Every nursing home in your territory, ranked by Medicare share');
     expect(draft.arms.form).toBeUndefined();
     // An opening that carries a link, or offers the trial itself, is not the opening: the email adds both.
     expect(await draftMessage({ opportunity: home, work, task: {}, model: reply(`${opening}\n\nhttps://www.caremetricintel.com/`, ['web-1']) })).toBeNull();

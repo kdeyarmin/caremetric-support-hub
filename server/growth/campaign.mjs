@@ -13,7 +13,8 @@
  * recipient's business industry"; a hospice does not care how home health agencies rank). `campaignSettings` names the kinds:
  * a home health agency, a hospice, an organization that is both, an agency whose kind is not known, and a nursing home. Each reads
  * only about its own competitors and its own referral sources, from the fact sheet's row for that industry (facts.mjs
- * `industryUseCases`). A nursing home has no market report (Intel's reports cover home health and hospice), so its emails carry none.
+ * `industryUseCases`). A nursing home reads about the nursing homes it competes with, ranked the same way. It has no market report
+ * (Intel's free reports cover home health and hospice), so its emails carry none.
  *
  * Every line here keeps the rules a written email keeps (draft.mjs): nothing an organization could read as its own rank, share or
  * rating, no card terms, the data named by its source without the word "public", no data file or year cited, no demo or call offered,
@@ -103,9 +104,9 @@ function agencyCopy(setting) {
     closeTitle: 'See every referral source in your county',
   };
 }
-// A nursing home (facts.mjs `industryUseCases`): hospital-source research, the profiles of the homes around it, its county's use and
-// supply of skilled nursing, and the same field work. Intel's Medicare share rankings and competitor alerts cover home health and
-// hospice only, so none is offered here, and neither is a market report.
+// A nursing home (facts.mjs `industryUseCases`): hospital-source research, the nursing homes in its territory ranked by Medicare
+// share with alerts (Intel ranks nursing homes since 2026-11-17, and the owner asked for the email to say so), its county's use and
+// supply of skilled nursing, and the same field work. Intel's free market report covers home health and hospice only, so none is offered.
 const nursingHomeCopy = {
   eyebrows: ['For your admissions and marketing team', 'From a list to a week of visits', 'A last note'],
   heading: 'What CareMetric Intel does for your nursing home, every day',
@@ -114,7 +115,7 @@ const nursingHomeCopy = {
   reportTiles: [],
   featurePoints: [
     ['Finds your hospital sources', 'The hospitals your county\'s residents use, plus the physicians and facilities around you. Save the ones worth a visit.'],
-    ['Shows the homes you compete with', 'Every nursing home near you, with its ratings, staffing, inspections and owner.'],
+    ['Watches the homes you compete with', 'Every nursing home in your territory, ranked by Medicare share, with its ratings, staffing, inspections and owner. You get an alert when a rating or owner changes.'],
     ['Sizes up your county', 'How much skilled nursing care your county\'s residents use, and how many homes serve them.'],
     ['Plans each week\'s visits', prepCard],
     ['Keeps every relationship in one place', 'Accounts, contacts, visit notes and follow-ups, plus referrals and admissions by source.'],
@@ -125,7 +126,7 @@ const nursingHomeCopy = {
   ],
   shortPoints: [
     ['Finds your hospital sources', 'and the physicians and facilities around you.'],
-    ['Shows every nursing home near you,', 'with its ratings, staffing, inspections and owner.'],
+    ['Ranks every nursing home in your territory', 'by Medicare share, and alerts you when a rating or owner changes.'],
     ['Plans each week and tracks what it led to,', 'from the first visit to the admission.'],
   ],
   closeTitle: 'See every hospital source in your county',

@@ -239,8 +239,8 @@ Each agent keeps its existing controls and approval steps. This section only say
   with them. No price in any of them, and no card terms. [Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report) has
   the form and its checks.
 - **The three touches to a nursing home** are the same designed emails in a nursing home's words: its hospital sources, the homes
-  it competes with, its county, and the free trial. No market report (Intel's reports cover home health and hospice only), and no
-  rankings or competitor alerts, which Intel does not offer a nursing home.
+  it competes with (ranked by Medicare share, with alerts, since Intel began ranking nursing homes on 2026-11-17), its county, and
+  the free trial. No market report: Intel's free reports cover home health and hospice only.
 - **Touch 1 to a CareBase prospect** keeps the general plan (`touchAngle`): one likely problem as a question, one sentence on how
   the product helps, then the free trial. No price.
 - **Rotate the lead pillar** across prospects. The experiment angles are referral sources, territory, competitors, visit prep, hospital

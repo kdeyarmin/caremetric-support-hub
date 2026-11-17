@@ -504,7 +504,8 @@ it('gives the reader the whole email, and tells it which part the writer wrote',
  expect(nursingRead.rules.slice(0,-1)).toEqual([...criticRules]);
  expect(nursingRead.rules.at(-1)).toMatch(/^The writer wrote only this email's opening, on purpose/);
  expect(nursingRead.email.body).toContain('What CareMetric Intel does for your nursing home, every day');
- expect(nursingRead.email.body).not.toMatch(/market report|ranked by Medicare share/);
+ expect(nursingRead.email.body).not.toMatch(/market report|home health agenc|hospices? in your/);
+ expect(nursingRead.email.body).toContain('Every nursing home in your territory, ranked by Medicare share');
 });
 
 it('offers the trial in an agency\'s second email and leaves the report with it in the third, on every path',async()=>{
@@ -622,7 +623,7 @@ it('writes a hospice\'s email about hospices and a home health agency\'s about h
   const nursing=await draftMessage({opportunity:{...base,name:'Sunrise Nursing and Rehabilitation Center',touches},work:outreach,task:{}});
   expect(readCampaign(nursing.body),`touch ${touches+1}`).toMatchObject({touch:touches+1,setting:'nursing_home',reportUrl:null});
   // The founder's own words name his agency; nothing else in a nursing home's email is about home health or hospice.
-  expect(nursing.body.replace(founderQuote,''),`touch ${touches+1}`).not.toMatch(/market report|home health|hospice|ranked by Medicare share/i);
+  expect(nursing.body.replace(founderQuote,''),`touch ${touches+1}`).not.toMatch(/market report|home health|hospice/i);
   expect(outdatedWords({product:'caremetric-intel',subject:nursing.subject,body:nursing.body,purpose:'marketing'}),`touch ${touches+1}`).toBeNull();
  }
  // The model is told the reader's kind of business.

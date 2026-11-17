@@ -82,14 +82,16 @@ describe('the marketing sections of an email about CareMetric Intel (email revie
     const unknown = all('agency');
     expect(unknown).toContain('Every agency like yours in your territory, ranked by Medicare share.');
     expect(unknown.replace(founderQuote, '')).not.toMatch(/home health|hospice|nursing home/i);
-    // A nursing home reads about hospitals, the homes around it and its county: no ranking, no competitor alert and no market report,
-    // because Intel's share rankings, alerts and reports cover home health and hospice only.
+    // A nursing home reads about hospitals, its county and the nursing homes it competes with, ranked by Medicare share with alerts
+    // (Intel ranks nursing homes since 2026-11-17; the owner asked for the email to say it). No market report: Intel's free reports
+    // cover home health and hospice only.
     const nursing = all('nursing_home');
     expect(nursing).toMatch(/^What CareMetric Intel does for your nursing home, every day\n\n1\. Finds your hospital sources\n/);
-    expect(nursing).toContain('Every nursing home near you, with its ratings, staffing, inspections and owner.');
+    expect(nursing).toContain('2. Watches the homes you compete with\nEvery nursing home in your territory, ranked by Medicare share, with its ratings, staffing, inspections and owner. You get an alert when a rating or owner changes.');
+    expect(nursing).toContain('- Ranks every nursing home in your territory by Medicare share, and alerts you when a rating or owner changes.');
     expect(nursing).toContain('How much skilled nursing care your county\'s residents use, and how many homes serve them.');
     expect(nursing).toContain('from the first visit to the admission.');
-    expect(nursing.replace(founderQuote, '')).not.toMatch(/home health|hospice|ranked|Medicare share|alert when a rating|market report/i);
+    expect(nursing.replace(founderQuote, '')).not.toMatch(/home health|hospice|market report|service area/i);
     expect(hasReport('nursing_home')).toBe(false);
     expect(campaignCopy('nursing_home').reportTiles).toEqual([]);
     // The line above the headline fits the reader too, and an unknown kind is read as an agency.
