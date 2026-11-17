@@ -6,7 +6,12 @@
  *
  * 1. Who leads the business, from three free sources, recorded as people: who CMS lists as owning or managing the agency (Intel's
  *    agency_facts: the All Owners file), who the NPI registry lists as its authorized official (server/growth/npi-registry.mjs), and
- *    who the business's own pages name with a title that decides (the contact finder's `team`, server/growth/team.mjs).
+ *    who the business's own pages name with a title that decides (the contact finder's `team`, server/growth/team.mjs). An agency
+ *    matched to its Medicare record is looked up in the registry where CMS places it; one that is not (most agencies found on the web)
+ *    where its own website's postal address places it (`placedAgencies`), and a record is taken only when its telephone number is one
+ *    the site publishes or its name is the agency's (review 2026-11-17: 53 strong fits had no person named, the registry never asked).
+ *    A business matched to its Medicare record after it was searched, with nobody named, is searched again
+ *    (20261117220000_growth_research_people.sql).
  * 2. The one person most worth writing to: the title that decides most, then the person more sources name.
  * 3. That person's work address, as far as the owner allows (Settings → Customer growth → Finding people's addresses):
  *    - "Addresses the business publishes": an address on the business's own domain that its own pages publish and that is one of
@@ -54,6 +59,20 @@ export function ownerRank(role) {
 export function ownerPeople(facts) {
   return (facts?.owners ?? []).filter(owner => owner.kind === 'individual' && owner.name)
     .map(owner => ({ name: owner.name, title: owner.role || 'Owner', source: 'cms_owners', sourceUrl: dataUse })).slice(0, 8);
+}
+
+/**
+ * An agency not matched to its Medicare record, placed where its own website's postal address puts it, as the NPI registry is asked
+ * about it: with the telephone numbers the site publishes, once for home health and once for hospice (hospice first when its name says
+ * so). The site's own address only: a search snippet or a discovery market is not where the agency is. [] without one.
+ */
+export function placedAgencies(org, listing) {
+  const name = String(org?.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  const place = (Array.isArray(listing?.places) ? listing.places : []).find(item => /^[A-Z]{2}$/.test(String(item?.state ?? '')) && (/^\d{5}$/.test(String(item?.zip ?? '')) || item?.city));
+  if (!place || !/[a-z]/i.test(name)) return [];
+  const phones = (Array.isArray(listing?.phones) ? listing.phones : []).filter(phone => /^\d{10}$/.test(String(phone))).slice(0, 6);
+  const base = { name, state: place.state, city: place.city ?? null, zip: /^\d{5}$/.test(String(place.zip ?? '')) ? place.zip : null, phones };
+  return (/hospice/i.test(name) ? ['hospice', 'home_health'] : ['home_health', 'hospice']).map(setting => ({ ...base, setting }));
 }
 
 // How much one source's entry for a person decides: the NPI registry's authorized official signs for the agency, whatever the title.
@@ -125,6 +144,8 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
       catch (error) { if (signal?.aborted) throw error; }
     }
     const counts = { searched: 0, people: 0, found: 0, published: 0, verified: 0, permitted: 0, noCredit: 0, unreachable: 0 };
+    // Agencies not matched to a Medicare record whose authorized official the registry named, found by their site's address.
+    let byPlace = 0;
     // What the mail servers answered, so the run shows why an agency yielded no address (2026-11-16: 17 checks gave 3 addresses).
     const answers = {};
     // Why the mail server gave no answer, by the checker's reason (mailbox.mjs `unansweredReason`), named as the address check names it.
@@ -134,9 +155,17 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
       if (clock() - started > startBudgetMs) break;
       const owners = (org.ccns ?? []).flatMap(ccn => ownerPeople(factsByCcn.get(ccn)));
       const officials = [];
-      for (const agency of registry ? (org.agencies ?? []).slice(0, 2) : []) {
-        try { officials.push(...await registry.officials(agency, { signal })); } catch (error) { if (signal?.aborted) throw error; }
+      const matched = (org.agencies ?? []).length > 0;
+      let lookups = registry && matched ? org.agencies.slice(0, 2) : [];
+      if (registry && !matched && typeof site?.listing === 'function') {
+        try { lookups = placedAgencies(org, await site.listing(org.domain, { signal })); } catch (error) { if (signal?.aborted) throw error; }
       }
+      for (const agency of lookups) {
+        try { officials.push(...await registry.officials(agency, { signal })); } catch (error) { if (signal?.aborted) throw error; }
+        // One placed agency asked about as either kind of care: the first record that is surely its own is enough.
+        if (!matched && officials.length) break;
+      }
+      if (!matched && officials.length) byPlace++;
       let team = { people: [], addresses: [] };
       if (site) {
         try { team = await site.team(org.domain, { signal }); } catch (error) { if (signal?.aborted) throw error; }
@@ -191,7 +220,7 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
         }
       } catch (error) { if (error?.code !== '22023') throw error; }
     }
-    return { result: { ...counts, ...(Object.keys(answers).length ? { answers } : {}), ...(Object.keys(why).length ? { why } : {}) } };
+    return { result: { ...counts, ...(byPlace ? { byPlace } : {}), ...(Object.keys(answers).length ? { answers } : {}), ...(Object.keys(why).length ? { why } : {}) } };
   }
   return { 'growth.people': people };
 }

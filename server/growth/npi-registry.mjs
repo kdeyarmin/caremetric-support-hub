@@ -5,7 +5,8 @@
  *
  * - One search per agency: organizations (NPI-2) at the agency's ZIP code with its kind of care, or in its city when the roster has no
  *   ZIP. A record is the agency's only when its practice location is in the agency's state and either its telephone number is the
- *   one CMS lists for the agency, or its name (or a name it does business as) is the agency's name.
+ *   one CMS lists for the agency (or, for an agency not matched to its Medicare record, one its own website publishes), or its name
+ *   (or a name it does business as) is the agency's name.
  * - Only the official's name and title are kept, with the record's public page as the source. Never a telephone number.
  * - One fixed HTTPS address, no redirects, a bounded answer. Failures carry a code only.
  */
@@ -61,7 +62,8 @@ async function readJson(response) {
 /** The authorized officials of the records that are this agency's: [{ name, title, source, sourceUrl }], at most three. */
 export function agencyOfficials(results, agency) {
   const state = String(agency?.state ?? '').toUpperCase();
-  const phone = digits(agency?.phone);
+  // CMS's number for a roster agency; the numbers its own website publishes for one placed by its site (people.mjs placedAgencies).
+  const phones = new Set([agency?.phone, ...(Array.isArray(agency?.phones) ? agency.phones : [])].map(digits).filter(phone => phone.length === 10));
   const people = new Map();
   for (const record of Array.isArray(results) ? results : []) {
     const basic = record?.basic ?? {};
@@ -69,7 +71,7 @@ export function agencyOfficials(results, agency) {
     const location = (Array.isArray(record.addresses) ? record.addresses : []).find(address => address?.address_purpose === 'LOCATION');
     if (!location || String(location.state ?? '').toUpperCase() !== state) continue;
     const names = [basic.organization_name, ...(Array.isArray(record.other_names) ? record.other_names.map(other => other?.organization_name) : [])];
-    const byPhone = phone.length === 10 && digits(location.telephone_number) === phone;
+    const byPhone = phones.has(digits(location.telephone_number));
     if (!byPhone && !names.some(name => sameName(name, agency?.name))) continue;
     const name = [basic.authorized_official_first_name, basic.authorized_official_middle_name, basic.authorized_official_last_name]
       .map(part => personCase(part)).filter(part => part && part !== '--').join(' ');
@@ -88,8 +90,8 @@ export function npiRegistry({ fetchImpl = fetch, timeoutMs = 15_000 } = {}) {
   return {
     configured: true,
     /**
-     * The authorized officials the registry lists for one roster agency ({ name, city, state, zip, phone, setting }), or [] when the
-     * registry has no record that is surely the agency's.
+     * The authorized officials the registry lists for one agency ({ name, city, state, zip, phone or phones, setting }), or [] when
+     * the registry has no record that is surely the agency's.
      */
     async officials(agency, { signal } = {}) {
       const state = String(agency?.state ?? '').toUpperCase();

@@ -1,5 +1,5 @@
 // The Hub's own people finder through the real roles (20261113290000_growth_people_finder.sql): candidates carry their roster agencies
-// for the NPI registry, people are recorded from the website and the registry, a found address records how it was found (published
+// for the NPI registry, a business matched after it was searched with nobody named is a candidate again, people are recorded from the website and the registry, a found address records how it was found (published
 // with its page on the business's own site, or confirmed by its mail server with no page), waits for the owner, never on another
 // domain or after an unsubscribe, the owner sees how each was found, and the gate refuses drift. Disposable loopback database only.
 import assert from 'node:assert/strict';
@@ -43,6 +43,18 @@ try {
   const candidate = (await store.peopleCandidates(20)).find(item => item.id === org);
   assert.ok(candidate, 'A researched roster agency is a candidate');
   assert.deepEqual(candidate.agencies, [{ ccn, name: 'Synthetic Finder Hospice', city: 'Harrisburg', state: 'PA', zip: '17110', phone: '7175550100', setting: 'hospice' }]);
+  // Matched to its Medicare record after it was searched, with nobody named, it is searched again: its CMS owners and NPI official can
+  // be read now (20261117220000_growth_research_people.sql). Searched after the match, it waits its 60 days.
+  const isCandidate = async () => (await store.peopleCandidates(20)).some(item => item.id === org);
+  await admin.query("update private.growth_organizations set people_searched_at=now()-interval '1 hour' where id=$1", [org]);
+  await admin.query("update private.growth_roster_targets set resolved_at=now()-interval '2 hours' where ccn=$1", [ccn]);
+  assert.equal(await isCandidate(), false, 'Searched after it was matched: it waits');
+  await admin.query('update private.growth_roster_targets set resolved_at=now() where ccn=$1', [ccn]);
+  assert.equal(await isCandidate(), true, 'Matched after it was searched, nobody named: searched again');
+  await admin.query("insert into private.growth_people(organization_id,name,title,source) values($1,'Someone Named','Owner','cms_owners')", [org]);
+  assert.equal(await isCandidate(), false, 'Someone named: it waits');
+  await admin.query("delete from private.growth_people where organization_id=$1 and name='Someone Named'", [org]);
+  await admin.query('update private.growth_organizations set people_searched_at=null where id=$1', [org]);
 
   // ---- 2. People from the website and the NPI registry ----------------------------------------------------------------------------
   const recorded = await store.peopleRecord(org, [
@@ -107,7 +119,7 @@ try {
     }
   } finally { client.release(); }
 
-  console.log('People finder integration passed: candidates carry their roster agencies, people come from the website and the NPI registry, a found address records how it was found and its page on the business\'s own site, waits for the owner, never on another domain, taken or unsubscribed, the owner sees how each was found, and gate drift. Nothing was fetched or sent.');
+  console.log('People finder integration passed: candidates carry their roster agencies, one matched after its search with nobody named is searched again, people come from the website and the NPI registry, a found address records how it was found and its page on the business\'s own site, waits for the owner, never on another domain, taken or unsubscribed, the owner sees how each was found, and gate drift. Nothing was fetched or sent.');
 } finally {
   if (org) {
     await admin.query('delete from private.growth_people where organization_id=$1', [org]);
