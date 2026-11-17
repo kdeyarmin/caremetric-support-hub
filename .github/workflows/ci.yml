@@ -265,6 +265,9 @@ jobs:
           node server/agents-support-truth-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-support-truth-integration.mjs
+          node server/agents-reach-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/agents-reach-integration.mjs
           node server/agents-growth-learning-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-growth-learning-integration.mjs

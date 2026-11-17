@@ -118,3 +118,40 @@ describe('a new campaign\'s daily budget', () => {
     expect(campaignDailyBudget({ monthlyBudgetCents: 0 }, 'google')).toBeNull();
   });
 });
+
+describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
+  const states = [{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }];
+  const suggestion = (name, id, over = {}) => ({ geoTargetConstant: { resourceName: `geoTargetConstants/${id}`, name, countryCode: 'US', targetType: 'State', status: 'ENABLED', ...over } });
+  const googleFetch = (suggestions = [suggestion('Pennsylvania', 21167), suggestion('Pennsylvania', 9999, { targetType: 'City' }), suggestion('New Jersey', 21164)]) => vi.fn(async url => {
+    if (String(url).includes('oauth2')) return new Response(JSON.stringify({ access_token: 'ya29.token' }));
+    if (String(url).endsWith('geoTargetConstants:suggest')) return new Response(JSON.stringify({ geoTargetConstantSuggestions: suggestions }));
+    return new Response(JSON.stringify({ mutateOperationResponses: [{}, { campaignResult: { resourceName: 'customers/1234567890/campaigns/55' } }] }));
+  });
+  const make = fetchImpl => googleAdsClient({ developerToken: 'dev-token-123', clientId: 'client.apps', clientSecret: 'secret-0123456789', refreshToken: '1//refresh-token-0123456789',
+    customerId: '1234567890', version: 'v26', fetchImpl });
+
+  it('limits a new search campaign to the roster\'s states through Google\'s own location suggestions', async () => {
+    const fetchImpl = googleFetch();
+    const client = make(fetchImpl);
+    const checked = checkGooglePlan(plan(), { factsKey: 'intel' }).plan;
+    await client.createSearchCampaign({ name: 'Intel search', dailyBudgetCents: 1500, finalUrl: 'https://www.caremetricintel.com/county-report', plan: checked, states });
+    const suggest = fetchImpl.mock.calls.find(([url]) => String(url).endsWith('geoTargetConstants:suggest'));
+    expect(JSON.parse(suggest[1].body)).toEqual({ locale: 'en', countryCode: 'US', locationNames: { names: ['Pennsylvania', 'New Jersey'] } });
+    const mutate = fetchImpl.mock.calls.find(([url]) => String(url).endsWith('googleAds:mutate'));
+    const places = JSON.parse(mutate[1].body).mutateOperations.filter(op => op.campaignCriterionOperation?.create?.location).map(op => op.campaignCriterionOperation.create.location.geoTargetConstant);
+    expect(places).toEqual(['geoTargetConstants/21167', 'geoTargetConstants/21164']);
+    // Kept for the process: the next campaign asks Google only to create it.
+    fetchImpl.mockClear();
+    await client.createSearchCampaign({ name: 'Again', dailyBudgetCents: 1500, finalUrl: 'https://www.caremetricintel.com/county-report', plan: checked, states });
+    expect(fetchImpl.mock.calls.some(([url]) => String(url).endsWith('geoTargetConstants:suggest'))).toBe(false);
+  });
+
+  it('creates nothing when Google does not name a state exactly', async () => {
+    const fetchImpl = googleFetch([suggestion('Pennsylvania', 21167), suggestion('New Jersey', 21164, { status: 'REMOVAL_PLANNED' })]);
+    const checked = checkGooglePlan(plan(), { factsKey: 'intel' }).plan;
+    await expect(make(fetchImpl).createSearchCampaign({ name: 'Intel search', dailyBudgetCents: 1500, finalUrl: 'https://www.caremetricintel.com/county-report', plan: checked, states }))
+      .rejects.toMatchObject({ code: 'google_geo_unresolved' });
+    expect(fetchImpl.mock.calls.some(([url]) => String(url).endsWith('googleAds:mutate'))).toBe(false);
+    await expect(make(googleFetch()).stateTargets([{ code: 'pa', name: 'Pennsylvania' }])).rejects.toMatchObject({ code: 'google_geo_unresolved' });
+  });
+});

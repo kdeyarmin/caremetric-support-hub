@@ -306,3 +306,26 @@ describe('why a post or reply was refused just before it went out', () => {
     expect(errorLabel('invalid_post')).not.toBe('invalid_post');
   });
 });
+
+describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
+  const post = { platform: 'linkedin', product: 'carebase', message, link: 'https://cmcarebase.com/pa-training-requirements?utm_source=linkedin&utm_medium=social&utm_campaign=social-carebase&utm_content=post-20261109-linkedin-1', linkLabel: 'PA training requirements', scheduledFor: '2026-11-10T15:30:00.000Z' };
+  const refusing = code => linkedinOf({ publishPost: vi.fn(async () => { throw Object.assign(new Error('refused'), { code }); }) });
+
+  it('emails a LinkedIn post LinkedIn refused at publishing to paste, its link included, and still fails it', async () => {
+    const notifier = { send: vi.fn(async () => [{ channel: 'email', delivery: 'sent' }]) };
+    const { promise } = run('social.post', post, { linkedin: refusing('linkedin_permission'), settings: { reach: true }, notifier });
+    await expect(promise).rejects.toMatchObject({ code: 'linkedin_permission' });
+    const sent = notifier.send.mock.calls[0][0];
+    expect(sent).toMatchObject({ severity: 'warning', subject: 'A LinkedIn post to paste: LinkedIn refused the team', dedupeKey: 'social:linkedin:paste:a1' });
+    expect(sent.blocks[1]).toEqual({ type: 'message', text: `${message}\n\n${post.link}` });
+    expect(sent.body).toContain('Reconnect LinkedIn (Settings → Social media)');
+  });
+
+  it('says nothing for any other failure, or without the feature', async () => {
+    for (const [code, settings] of [['linkedin_unavailable', { reach: true }], ['linkedin_permission', {}]]) {
+      const notifier = { send: vi.fn(async () => []) };
+      await expect(run('social.post', post, { linkedin: refusing(code), settings, notifier }).promise).rejects.toMatchObject({ code });
+      expect(notifier.send).not.toHaveBeenCalled();
+    }
+  });
+});

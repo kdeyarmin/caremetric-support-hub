@@ -31,6 +31,12 @@ import { socialExecutors } from '../social/executor.mjs';
 import { handoverDeclared, trustedWith } from '../handover.mjs';
 import { delivered } from '../notify.mjs';
 import { checkGooglePlan, editorCsv, googleAdsClient, googlePromptVersion, googleSchema, googleSystem } from './google.mjs';
+import { rosterStates, stateNames } from '../../growth/roster.mjs';
+
+/** Reach outside cold email (20261117250000_reach.sql, team review 2026-11-17, stage 6). */
+export const reachFeature = 'platform.agents.reach.v1';
+/** The roster's states (Settings → Customer growth → States to prospect in) as [{ code, name }], for each platform's own location lookup. */
+export const rosterTargets = value => rosterStates(value).map(code => ({ code, name: stateNames[code] }));
 
 export const adsFeature = 'platform.agents.ads.v1';
 const productNames = { carebase: 'CareBase', 'caremetric-intel': 'CareMetric Intel' };
@@ -58,9 +64,11 @@ const fallbackWords = {
 
 /**
  * Whether a campaign action takes the month's flight: a campaign that was created (whatever its pacing), or a flight still proposed,
- * approved or turned down. A proposal that failed or expired, or one paced over the whole month that was never created, does not.
+ * approved or turned down. A proposal that failed or expired, or one paced over the whole month that was never created, does not; nor,
+ * with reach (team review 2026-11-17, stage 6), a launch that fell back to a paused campaign with no ad (`empty`): it spends nothing, and
+ * before it used up the month.
  */
-export const takesFlight = item => item.status === 'executed' || item.status === 'executing' || (item.flight === true && !['failed', 'expired'].includes(item.status));
+export const takesFlight = item => item.empty !== true && (item.status === 'executed' || item.status === 'executing' || (item.flight === true && !['failed', 'expired'].includes(item.status)));
 /** At most this many flights are tried in a month: one that fails is tried again the next day, on a platform that is not failing. */
 export const flightAttempts = 3;
 // A platform's answer that says the team's sign-in or permission is not good there: no campaign is planned on it until it is reconnected.
@@ -97,6 +105,8 @@ export function adsConfig(env = {}, setting = null) {
     serverConversions: value('ads.server_conversions') === true,
     metaAudienceId: text('ads.meta_audience_id'), metaPixelId: text('ads.meta_pixel_id'), linkedinConversionId: text('ads.linkedin_conversion_id'),
     competitorKeywords: value('ads.google_competitor_keywords') === true,
+    // Reach (team review 2026-11-17, stage 6): new campaigns are limited to the roster's states.
+    rosterStates: Array.isArray(value('growth.roster_states')) ? value('growth.roster_states') : [],
     google: { customerId: text('ads.google_customer_id'), loginCustomerId: text('ads.google_login_customer_id'), clientId: text('ads.google_client_id'),
       version: text('ads.google_api_version') || 'v26', developerToken: env.HUB_GOOGLE_ADS_DEVELOPER_TOKEN ?? '', clientSecret: env.HUB_GOOGLE_ADS_CLIENT_SECRET ?? '',
       refreshToken: env.HUB_GOOGLE_ADS_REFRESH_TOKEN ?? '', serviceAccount: env.HUB_SEARCH_CONSOLE_CREDENTIALS ?? '' },
@@ -162,6 +172,12 @@ export function monthLeft(moment) {
 
 export function adsTeam({ ads = null, features = null, fetchImpl = fetch, googleClient = null }) {
   const declared = features instanceof Set ? features.has(adsFeature) : Array.isArray(features) && features.includes(adsFeature);
+  const reach = features instanceof Set ? features.has(reachFeature) : Array.isArray(features) && features.includes(reachFeature);
+  // With reach, every new campaign is limited to the roster's states (none chosen: the whole country, as before).
+  const states = () => (reach ? rosterTargets(config().rosterStates) : []);
+  // Only a campaign limited to states carries them, so without reach a campaign is asked for exactly as before.
+  const located = () => { const list = states(); return list.length ? { states: list } : {}; };
+  const statesWords = () => { const list = states(); return list.length ? list.map(state => state.name).join(', ') : 'the United States'; };
   const config = () => live(ads) ?? adsConfig({});
   const google = () => googleClient ?? googleAdsClient({ ...config().google, fetchImpl });
   // The owner's "Ad campaign launch" step can be switched on only once the database declares it.
@@ -291,10 +307,11 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           let action;
           if (platform !== 'google') {
             const link = taggedUrl(page.url, { ...linkTags.social(platform === 'meta' ? 'facebook' : 'linkedin', product, 'ad', { paid: true }) });
-            const audience = platform === 'meta' ? `your website visitors (Custom Audience ${config().metaAudienceId}) in the United States`
+            const where = statesWords();
+            const audience = platform === 'meta' ? `your website visitors (Custom Audience ${config().metaAudienceId}) in ${where}`
               : product === 'caremetric-intel'
-                ? 'people in the United States in Hospitals and Health Care, manager level or above. The free market report is for home health agencies and hospices, so upload the Medicare roster company list (Growth → Medicare roster → Download) as the campaign\'s company list in Campaign Manager, or narrow it to your states'
-                : 'people in the United States in Hospitals and Health Care, manager level or above (narrow it to your states or upload the roster company list in Campaign Manager)';
+                ? `people in ${where} in Hospitals and Health Care, manager level or above. The free market report is for home health agencies and hospices, so upload the Medicare roster company list (Growth → Medicare roster → Download) as the campaign's company list in Campaign Manager`
+                : `people in ${where} in Hospitals and Health Care, manager level or above (upload the roster company list in Campaign Manager to narrow it further)`;
             const ad = slot.firstAd;
             const how = !onItsOwn(kind)
               ? `It is created ${pausedWords[platform]}: nothing runs or spends until you start it. It starts with no ads: add its first ad in ${managers[platform]} (your approved creative is on the Creative screen). Once an ad is running in it, the team's daily ad review can propose more.${flightNote(slot)}`
@@ -321,7 +338,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
                 ? `You handed ad campaign launch over, so it starts on its own with the ad above and runs until ${windowOf(slot).lastDay}, within your monthly number and your daily ad-set limit (created paused instead if too little of the month's number is left when it starts).`
                 : 'You handed ad campaign launch over, but the Google Ads API is not set up, so it is emailed to you as an import file, paused, as before.';
             action = await store.proposeAction({ taskId: task.id, kind, targetKind: 'social_item', targetId,
-              preview: `New Google search campaign for ${productNames[product]}: ${name}.\n\n${budgetLine(slot, daily)} Location: United States. Landing page: ${finalUrl}\n\nHeadlines:\n${checked.plan.headlines.join('\n')}\n\nDescriptions:\n${checked.plan.descriptions.join('\n')}\n\nKeywords: ${checked.plan.keywords.map(k => `${k.text} (${k.match.toLowerCase()})`).join(', ')}\n\nNegative keywords: ${checked.plan.negatives.join(', ')}\n\n${how}`.slice(0, 6000),
+              preview: `New Google search campaign for ${productNames[product]}: ${name}.\n\n${budgetLine(slot, daily)} Location: ${statesWords()}. Landing page: ${finalUrl}\n\nHeadlines:\n${checked.plan.headlines.join('\n')}\n\nDescriptions:\n${checked.plan.descriptions.join('\n')}\n\nKeywords: ${checked.plan.keywords.map(k => `${k.text} (${k.match.toLowerCase()})`).join(', ')}\n\nNegative keywords: ${checked.plan.negatives.join(', ')}\n\n${how}`.slice(0, 6000),
               input: { product, name, dailyBudgetCents: daily, finalUrl, plan: checked.plan, ...(slot.flight ? { flightDays: slot.flight.days } : {}) } }).catch(error => { if (error?.code === '42501') return null; throw error; });
           }
           if (action && action.created !== false) (action.status === 'auto_approved' ? automatic : waiting).push(targetId);
@@ -438,8 +455,8 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         let created;
         try {
           created = await (platform === 'meta'
-            ? meta.createCampaign({ name: input.name, dailyBudgetCents: daily, audienceId: input.audienceId, endAt: left.endsAt.toISOString() })
-            : linkedin.createCampaign({ name: input.name, dailyBudgetCents: daily, startAt: new Date(moment.getTime() + 3_600_000).toISOString(), endAt: left.endsAt.toISOString() }));
+            ? meta.createCampaign({ name: input.name, dailyBudgetCents: daily, audienceId: input.audienceId, endAt: left.endsAt.toISOString(), ...located() })
+            : linkedin.createCampaign({ name: input.name, dailyBudgetCents: daily, startAt: new Date(moment.getTime() + 3_600_000).toISOString(), endAt: left.endsAt.toISOString(), ...located() }));
         } catch (error) {
           // Paused, or not there at all: nothing can spend, so its share of the month is given back.
           await release(execution);
@@ -490,7 +507,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         const daily = reservation.dailyBudgetCents;
         let created;
         try {
-          created = await client.createSearchCampaign({ name: input.name, dailyBudgetCents: daily, finalUrl: input.finalUrl, plan, live: true, endDate: left.lastDay });
+          created = await client.createSearchCampaign({ name: input.name, dailyBudgetCents: daily, finalUrl: input.finalUrl, plan, live: true, endDate: left.lastDay, ...located() });
         } catch (error) {
           // Not confirmed: it may exist and run, bounded by its budget and end date, so its share stays reserved.
           if (error?.code === 'google_unconfirmed') throw error;
@@ -515,8 +532,12 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
             const name = platformNames[platform] ?? 'The ad platform';
             const code = codeOf(error);
             const access = accessRefusal.test(code);
+            // Reach (team review 2026-11-17, stage 6): a roster state the platform's own location lookup did not name. Nothing runs
+            // nationwide in its place.
+            const unnamed = /_geo_unresolved$/.test(code);
             await tell(execution, 'warning', `New ${platformNames[platform] ? `${platformNames[platform]} ` : ''}campaign not created${input.name ? `: ${input.name}` : ''}`,
-              `${name} refused it (${code.replaceAll('_', ' ')}), so nothing was created and nothing spends.${access
+              unnamed ? `${name} could not name one of the roster's states (${statesWords()}) as a place to show ads, so nothing was created and nothing spends, rather than run it nationwide. Check Settings → Customer growth → States to prospect in. The plan tries this month's campaign again the next day.`
+              : `${name} refused it (${code.replaceAll('_', ' ')}), so nothing was created and nothing spends.${access
                 ? ` Reconnect ${name} (${platform === 'google' ? 'Settings → Paid ads' : 'Settings → Social media'}). Until then the plan proposes this month's campaign on another platform the next day.`
                 : ' The plan tries this month\'s campaign again the next day.'}`);
           }
@@ -537,12 +558,12 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           const flightEnd = () => (input.flightDays === undefined ? {} : { endAt: campaignWindow(now(), input.flightDays).endsAt.toISOString() });
           if (input.platform === 'meta') {
             if (!meta?.configured?.ads) throw failure('meta_not_configured');
-            const createPaused = () => meta.createCampaign({ name: input.name, dailyBudgetCents: input.dailyBudgetCents, audienceId: input.audienceId, ...flightEnd() });
+            const createPaused = () => meta.createCampaign({ name: input.name, dailyBudgetCents: input.dailyBudgetCents, audienceId: input.audienceId, ...flightEnd(), ...located() });
             return automatic ? launchSocial(execution, input, meta, createPaused) : { created: true, ...(await createPaused()) };
           }
           if (input.platform === 'linkedin') {
             if (!linkedin?.configured?.ads) throw failure('linkedin_not_configured');
-            const createPaused = () => linkedin.createCampaign({ name: input.name, dailyBudgetCents: input.dailyBudgetCents,
+            const createPaused = () => linkedin.createCampaign({ name: input.name, dailyBudgetCents: input.dailyBudgetCents, ...located(),
               ...(input.flightDays === undefined ? {} : { startAt: new Date(now().getTime() + 3_600_000).toISOString(), ...flightEnd() }) });
             return automatic ? launchSocial(execution, input, linkedin, createPaused) : { created: true, ...(await createPaused()) };
           }
@@ -560,7 +581,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           if (!checked.ok || !/^https:\/\//.test(input.finalUrl ?? '')) throw failure('invalid_campaign');
           const client = google();
           if (client.configured) {
-            const createPaused = () => client.createSearchCampaign({ name: input.name, dailyBudgetCents: input.dailyBudgetCents, finalUrl: input.finalUrl, plan: checked.plan,
+            const createPaused = () => client.createSearchCampaign({ name: input.name, dailyBudgetCents: input.dailyBudgetCents, finalUrl: input.finalUrl, plan: checked.plan, ...located(),
               ...(input.flightDays === undefined ? {} : { endDate: campaignWindow(now(), input.flightDays).lastDay }) });
             return automatic ? launchGoogle(execution, input, checked.plan, client, createPaused) : { created: true, ...(await createPaused()) };
           }

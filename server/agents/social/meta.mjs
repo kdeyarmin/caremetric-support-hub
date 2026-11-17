@@ -90,6 +90,27 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
   const get = (path, params, options) => request('GET', path, params, options);
   const post = (path, params, options) => request('POST', path, params, options);
   const list = data => (Array.isArray(data?.data) ? data.data : []);
+  const regionCache = new Map();
+  /**
+   * Meta's region keys for US states, found by its location search (`search?type=adgeolocation`), never written by hand. `states` is
+   * [{ code, name }]. Each key is kept for the life of the process. A state with no exact US region match fails as meta_geo_unresolved.
+   */
+  async function regionKeys(states, { signal } = {}) {
+    const keys = [];
+    for (const state of states) {
+      const code = String(state?.code ?? '');
+      const wanted = String(state?.name ?? '');
+      if (!/^[A-Z]{2}$/.test(code) || !wanted) throw failure('meta_geo_unresolved');
+      if (!regionCache.has(code)) {
+        const data = await get('search', { type: 'adgeolocation', location_types: '["region"]', q: wanted, country_code: 'US', limit: 10 }, { signal });
+        const match = list(data).find(item => item.type === 'region' && item.country_code === 'US' && String(item.name ?? '').toLowerCase() === wanted.toLowerCase() && /^[0-9]{1,10}$/.test(String(item.key ?? '')));
+        if (!match) throw failure('meta_geo_unresolved');
+        regionCache.set(code, String(match.key));
+      }
+      keys.push(regionCache.get(code));
+    }
+    return keys;
+  }
   const at = value => { const time = Date.parse(value ?? ''); return Number.isFinite(time) ? new Date(time).toISOString() : null; };
   // A video mutation can have reached Meta even if its response is unreadable or a server error. Never retry such a mutation.
   const mutateVideo = async work => {
@@ -128,14 +149,29 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
     },
 
     /** New comments and messages from other people: ids, where and when only. Their words are read by `readItem`. */
-    async recentInbox({ signal, now = new Date(), hours = 48 } = {}) {
+    async recentInbox({ signal, now = new Date(), hours = 48, adComments = false } = {}) {
       const since = now.getTime() - hours * 3_600_000;
       const items = [];
       const recent = value => (Date.parse(value ?? '') || 0) >= since;
+      // Comments on running ads (Settings → Social media → "Read and answer comments on ads", team review 2026-11-17, stage 6): an ad's post
+      // is not in the Page's feed, so the active ads' posts (their creative's effective_object_story_id) are read too, at most five.
+      if (adComments && configured.ads && configured.pages) {
+        const ads = await get(`act_${account}/ads`, { fields: 'id,effective_status,creative{effective_object_story_id}', effective_status: '["ACTIVE"]', limit: 25 }, { signal });
+        const stories = [...new Set(list(ads).map(item => String(item.creative?.effective_object_story_id ?? '')).filter(id => /^[0-9]{1,40}_[0-9]{1,40}$/.test(id)))].slice(0, 5);
+        for (const story of stories) {
+          const data = await get(`${story}/comments`, { fields: 'id,created_time,from{id},permalink_url', order: 'reverse_chronological', limit: 25 }, { as: 'page', signal });
+          for (const comment of list(data)) {
+            if (String(comment.from?.id ?? '') === page || !recent(comment.created_time) || !metaId(String(comment.id))) continue;
+            items.push({ platform: 'facebook', kind: 'comment', id: String(comment.id), parentId: story, url: comment.permalink_url ?? null, at: at(comment.created_time), ad: true });
+          }
+        }
+      }
       if (configured.pages) {
         const feed = await get(`${page}/feed`, { fields: 'id,permalink_url,comments.order(reverse_chronological).limit(25){id,created_time,from{id},permalink_url}', limit: 10 }, { as: 'page', signal });
         for (const postItem of list(feed)) for (const comment of list(postItem.comments)) {
           if (String(comment.from?.id ?? '') === page || !recent(comment.created_time) || !metaId(String(comment.id))) continue;
+          // An ad made from a published Page post: its comments were read above, marked as on an ad.
+          if (items.some(item => item.platform === 'facebook' && item.id === String(comment.id))) continue;
           items.push({ platform: 'facebook', kind: 'comment', id: String(comment.id), parentId: String(postItem.id), url: comment.permalink_url ?? postItem.permalink_url ?? null, at: at(comment.created_time) });
         }
         const inbox = await get(`${page}/conversations`, { platform: 'messenger', fields: 'id,updated_time,messages.limit(1){id,from{id},created_time}', limit: 20 }, { as: 'page', signal });
@@ -185,6 +221,13 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
     },
 
     async publishPost({ platform, message, link = null, imageUrl = null }, { signal } = {}) {
+      // A Facebook post with an approved image is a photo post (Page photos, the caption its message, which carries the link); without
+      // one, a link post as before (team review 2026-11-17, stage 6).
+      if (platform === 'facebook' && imageUrl) {
+        if (!/^https:\/\//.test(imageUrl)) throw failure('meta_invalid_request');
+        const photo = await post(`${page}/photos`, { url: imageUrl, message, published: true }, { as: 'page', signal });
+        return { id: String(photo.post_id ?? photo.id ?? '') };
+      }
       if (platform === 'facebook') return { id: String((await post(`${page}/feed`, { message, ...(link ? { link } : {}) }, { as: 'page', signal })).id ?? '') };
       if (platform === 'instagram') {
         const created = await post(`${instagram}/media`, { image_url: imageUrl, caption: message }, { signal });
@@ -297,18 +340,23 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
      * with the approved daily budget on the ad set. The owner starts it in Ads Manager or by approving an ad into it. `endAt` (a launch
      * the owner handed over) ends the ad set then, so it can never spend past its month.
      */
-    async createCampaign({ name, dailyBudgetCents, audienceId, endAt = null }, { signal } = {}) {
+    async createCampaign({ name, dailyBudgetCents, audienceId, endAt = null, states = [] }, { signal } = {}) {
       if (!configured.ads) throw failure('meta_not_configured');
       if (!Number.isInteger(dailyBudgetCents) || dailyBudgetCents < 100 || !/^[0-9]{5,30}$/.test(String(audienceId ?? ''))) throw failure('meta_invalid_request');
       const end = endAt === null ? null : Date.parse(endAt);
       if (end !== null && !(Number.isFinite(end) && end > Date.now())) throw failure('meta_invalid_request');
+      // Limited to the roster's states (team review 2026-11-17, stage 6), each found through Meta's own location search before anything
+      // is created: a state it cannot name stops the campaign rather than letting it run nationwide.
+      const geo = states.length ? { regions: (await regionKeys(states, { signal })).map(key => ({ key })) } : { countries: ['US'] };
       const campaign = await post(`act_${account}/campaigns`, { name: name.slice(0, 100), objective: 'OUTCOME_TRAFFIC', status: 'PAUSED',
         special_ad_categories: [], is_adset_budget_sharing_enabled: false }, { signal });
       const adset = await post(`act_${account}/adsets`, { name: name.slice(0, 100), campaign_id: campaign.id, status: 'PAUSED', daily_budget: dailyBudgetCents,
         billing_event: 'IMPRESSIONS', optimization_goal: 'LINK_CLICKS', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', destination_type: 'WEBSITE',
-        targeting: { custom_audiences: [{ id: String(audienceId) }], geo_locations: { countries: ['US'] } }, ...(end === null ? {} : { end_time: Math.floor(end / 1000) }) }, { signal });
+        targeting: { custom_audiences: [{ id: String(audienceId) }], geo_locations: geo }, ...(end === null ? {} : { end_time: Math.floor(end / 1000) }) }, { signal });
       return { campaignId: String(campaign.id ?? ''), adsetId: String(adset.id ?? '') };
     },
+
+    regionKeys,
 
     /** Starts a campaign created paused, once its first ad is in it: the ad set, then the campaign. Used only for a launch the owner handed over. */
     async startCampaign({ campaignId, adsetId }, { signal } = {}) {

@@ -243,3 +243,50 @@ describe('the monthly outreach drafts', () => {
     expect(outcome.result).toMatchObject({ outcome: 'not_delivered', listings: 0, pitches: 0, dropped: 1, reasons: ['unlisted_price'] });
   });
 });
+
+describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
+  // Every backlog topic is taken, so only a county topic, or a topic written again after a quarter, is left to write.
+  const taken = topics.map(topic => stored(topic, 'executed', '2026-10-20T00:00:00Z'));
+  function reachFixture({ countyTopics = true, rosterStates = ['PA'], reach = true, articles = taken, queries = [] } = {}) {
+    const base = fixture({ answer: () => completion(referralDraft), state: { articles }, marketed: ['caremetric-intel'] });
+    if (reach) base.store.contentRosterCounties = vi.fn(async () => [{ countyFips: '42071', state: 'PA', agencies: 9 }, { countyFips: '42999', state: 'PA', agencies: 2 }]);
+    const feed = { configured: true, counties: vi.fn(async () => ({ counties: [{ county_fips: '42071', county_name: 'Lancaster County', state: 'PA' }] })) };
+    const searchConsole = { configured: true, read: vi.fn(async () => ({ properties: [{ ok: true, queries: queries.map(text => ({ keys: [text] })) }, { ok: false, queries: [{ keys: ['UNREAD'] }] }] })) };
+    const handlers = contentHandlers({ store: base.store, notifier: base.notifier, model: base.model, features: new Set([contentFeature]), marketed: ['caremetric-intel'],
+      feed, rosterStates, countyTopics, searchConsole, log: () => {} });
+    return { ...base, handlers, feed, searchConsole };
+  }
+
+  it('with the switch on, writes about the roster\'s counties that Intel\'s county list names', async () => {
+    const h = reachFixture();
+    const outcome = await h.handlers['content.weekly'](task(), { now: () => tuesday });
+    expect(h.store.contentRosterCounties).toHaveBeenCalledWith(12);
+    expect(h.feed.counties).toHaveBeenCalledWith({ states: ['PA'] });
+    expect(h.store.contentState.mock.calls[0][0]).toContain('home-health-hospice-lancaster-county-pa');
+    expect(h.store.contentState.mock.calls[0][0].filter(slug => slug.startsWith('home-health-hospice-'))).toHaveLength(1);
+    expect(h.requests[0].messages[0].content).toContain('Working title: Home health and hospice in Lancaster County, PA');
+    expect(outcome.result.topic).toBe('county-42071');
+  });
+
+  it('with the switch off, without roster states, or without the feature, writes no county topic', async () => {
+    for (const options of [{ countyTopics: false }, { rosterStates: [] }, { reach: false }]) {
+      const h = reachFixture(options);
+      const outcome = await h.handlers['content.weekly'](task(), { now: () => tuesday });
+      expect(h.feed.counties, JSON.stringify(options)).not.toHaveBeenCalled();
+      expect(outcome.result, JSON.stringify(options)).toEqual({ skipped: 'no_topic' });
+    }
+  });
+
+  it('reads Search Console\'s queries only with the feature, and writes a topic again once its quarter is over', async () => {
+    const old = topics.map(topic => stored(topic, 'executed', '2026-07-01T00:00:00Z'));
+    const h = reachFixture({ countyTopics: false, articles: old, queries: ['Home Health Referral Marketing'] });
+    const outcome = await h.handlers['content.weekly'](task(), { now: () => tuesday });
+    expect(h.searchConsole.read).toHaveBeenCalledTimes(1);
+    const written = topics.find(item => item.key === outcome.result.topic);
+    expect(h.requests[0].messages[0].content).toContain(`Suggested slug: ${written.slug.slice(0, 72)}-2026-q4`);
+    expect(h.requests[0].messages[0].content).toContain('This is a new article for 2026, quarter 4');
+    const before = reachFixture({ countyTopics: false, articles: old, reach: false });
+    expect((await before.handlers['content.weekly'](task(), { now: () => tuesday })).result).toEqual({ skipped: 'no_topic' });
+    expect(before.searchConsole.read).not.toHaveBeenCalled();
+  });
+});

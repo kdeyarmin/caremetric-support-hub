@@ -33,8 +33,22 @@ import {
 import { trustedWith } from '../handover.mjs';
 import { evaluateAds, rankPosts, rulesVersion } from './rules.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
-import { untaggedUrl } from '../links.mjs';
+import { untaggedUrl, validTagValue } from '../links.mjs';
 import { live } from '../../live.mjs';
+import { failingPlatforms } from '../ads/index.mjs';
+
+/**
+ * A post's own utm_content (team review 2026-11-17, stage 6), so a lead can be traced to the post that brought it: the approved creative's
+ * id when the post uses one (the Creative Director counts website leads by it), else `post-<week>-<platform>-<n>`. Before, every post
+ * carried `post`.
+ */
+export const postContent = ({ week, platform, index, assetId = null }) => {
+  if (typeof assetId === 'string' && validTagValue(assetId.toLowerCase())) return assetId.toLowerCase();
+  const value = `post-${String(week).replaceAll('-', '')}-${platform}-${index}`;
+  return validTagValue(value) ? value : 'post';
+};
+/** The intents a reply reading records as interest (the owner is told, and the weekly report counts them). */
+export const interestIntents = Object.freeze(['interested', 'pricing']);
 
 const day = 86_400_000;
 const labels = { facebook: 'Facebook', instagram: 'Instagram', messenger: 'Messenger', linkedin: 'LinkedIn' };
@@ -191,6 +205,22 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       catch (error) { if (signal?.aborted || error?.transient) throw error; performance = error?.code ?? 'social_error'; }
     }
     const ranked = rankPosts(posts, { now: moment });
+    // Reach (team review 2026-11-17, stage 6): while LinkedIn refuses the team (the ads planner's own reading of the refusals), its posts
+    // are emailed to paste instead of being queued to fail; and the leads each recent post brought feed the plan.
+    const reach = settings.reach === true;
+    let linkedinRefused = false;
+    if (reach && li.configured.page && typeof store.adsPlatformRefusals === 'function') {
+      try { linkedinRefused = failingPlatforms(await store.adsPlatformRefusals()).has('linkedin'); }
+      catch (error) { if (error?.transient) throw error; }
+    }
+    let leadsByPost = [];
+    if (reach && typeof store.socialPostLeads === 'function') {
+      try {
+        leadsByPost = ((await store.socialPostLeads(new Date(moment.getTime() - 28 * day).toISOString()))?.posts ?? [])
+          .filter(post => post.platform && Number(post.leads) > 0).slice(0, 5)
+          .map(post => ({ platform: post.platform, pillar: post.pillar ?? null, leads: Number(post.leads), text: String(post.firstLine ?? '').slice(0, 160) }));
+      } catch (error) { if (error?.transient) throw error; }
+    }
     const articles = await recentArticles(offered);
     const linkable = product => [...socialLinks(product), ...(articles[product] ?? [])];
     const articleUrls = product => (articles[product] ?? []).map(item => item.url);
@@ -201,6 +231,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       bestRecent: ranked.slice(0, 3).map(post => ({ platform: post.platform, engagement: post.engagement, text: post.text.slice(0, 240) })),
       weakestRecent: ranked.length > 3 ? ranked.slice(-2).map(post => ({ platform: post.platform, engagement: post.engagement, text: post.text.slice(0, 160) })) : [],
       recentOpenings: posts.slice(0, 12).map(post => firstLine(post.text)),
+      // Leads count for more than engagement: write more like the posts that brought people to the website.
+      ...(leadsByPost.length ? { postsThatBroughtLeads: leadsByPost } : {}),
     });
     const result = await runModel(task, { promptVersion: planPromptVersion, system: [{ text: planSystem, cache: true }, ...catalogBlocks(offered)], user, schema: planSchema, maxTokens: 8000, effort: effort(task),
       describe: output => `Planned ${plural(output.posts.length, 'social post')} for the week of ${week}.` }, signal);
@@ -221,8 +253,9 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
         if (!counts.founder || founderPosts >= counts.founder || !offered.includes(draft.product)) continue;
         const founderPage = draft.linkId ? linkable(draft.product).find(link => link.id === draft.linkId) : null;
         if (draft.linkId && !founderPage) { rejected.link = (rejected.link ?? 0) + 1; continue; }
-        const founderLink = tagSocialLink(founderPage?.url ?? null, { platform: 'linkedin', product: draft.product, content: 'post' });
-        const founderText = tagSocialText(withHashtags(founderLink ? `${draft.text.trim()}\n\n${founderLink}` : draft.text, draft.hashtags), { platform: 'linkedin', product: draft.product, content: 'post' });
+        const founderContent = reach ? postContent({ week, platform: 'founder', index: founderPosts + 1 }) : 'post';
+        const founderLink = tagSocialLink(founderPage?.url ?? null, { platform: 'linkedin', product: draft.product, content: founderContent });
+        const founderText = tagSocialText(withHashtags(founderLink ? `${draft.text.trim()}\n\n${founderLink}` : draft.text, draft.hashtags), { platform: 'linkedin', product: draft.product, content: founderContent });
         const founderChecked = checkSocialText(founderText, { surface: 'linkedin', product: draft.product, extraLinks: articleUrls(draft.product) });
         if (!founderChecked.ok) { rejected[founderChecked.reason] = (rejected[founderChecked.reason] ?? 0) + 1; continue; }
         founderPosts += 1;
@@ -233,7 +266,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
         if (targets.has(`social.founder_post:${founderTarget}`)) continue;
         const founderProposal = await propose(task, { kind: 'social.founder_post', targetKind: 'social_item', targetId: founderTarget,
           preview: `Post for your own LinkedIn profile (${productNames[draft.product]}), to publish ${when(founderSlot)} ${founderOnItsOwn ? 'on its own (you handed founder posts over)' : 'once you approve it'}:\n\n${founderChecked.text}`,
-          input: { product: draft.product, pillar: draft.pillar, message: founderChecked.text, scheduledFor: founderSlot } });
+          input: { product: draft.product, pillar: draft.pillar, message: founderChecked.text, scheduledFor: founderSlot, ...(reach ? { utmContent: founderContent } : {}) } });
         if (!founderProposal) break;
         if (founderProposal.created !== false) { await store.socialSchedule(founderProposal.id, null); proposed += 1; }
         continue;
@@ -243,12 +276,22 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       if (draft.linkId && !page) { rejected.link = (rejected.link ?? 0) + 1; continue; }
       // The data pillar is for an event the request named, once a week.
       if (draft.pillar === 'data' && (!events || dataPosts >= 1)) { rejected.data_pillar = (rejected.data_pillar ?? 0) + 1; continue; }
-      // The page's address with campaign tags for this platform (links.mjs): social-<product>, utm_content post.
-      const link = draft.platform === 'instagram' ? null : tagSocialLink(page?.url ?? null, { platform: draft.platform, product: draft.product, content: 'post' });
-      // A Facebook or connected LinkedIn link travels beside the text (it renders as a card); LinkedIn copy pasted by hand carries it.
-      const pasted = draft.platform === 'linkedin' && !li.configured.page;
+      // A Facebook or connected LinkedIn link travels beside the text (it renders as a card); LinkedIn copy pasted by hand carries it. While
+      // LinkedIn refuses the team (reach), its posts are pasted by hand too, rather than queued to fail at publish.
+      const pasted = draft.platform === 'linkedin' && (!li.configured.page || linkedinRefused);
+      // Compatible approved videos come first. Other Instagram posts need an image; LinkedIn image posts attach a link thumbnail; with reach
+      // a Facebook post is a photo post with its link in the text (Facebook posts were bare links, so approved creative reached only stories).
+      // Approved creative images precede the brand image list (Settings → Social media).
+      const pictured = ['instagram', 'linkedin', ...(reach ? ['facebook'] : [])].includes(draft.platform);
+      const assetKey = `${draft.product}:${draft.platform === 'linkedin' ? 'linkedin' : 'meta'}`;
+      const availableAssets = pasted ? [] : creativeImages[assetKey] ?? [];
+      const approvedAsset = availableAssets.find(asset => asset.kind === 'video' && videoPlacements[draft.platform].includes(asset.placement))
+        ?? (pictured ? availableAssets.find(asset => asset.kind === 'static') ?? null : null);
+      // The page's address with campaign tags for this platform (links.mjs): social-<product>, and with reach the post's own utm_content.
+      const content = reach ? postContent({ week, platform: draft.platform, index: used[draft.platform] + 1, assetId: approvedAsset?.id ?? null }) : 'post';
+      const link = draft.platform === 'instagram' ? null : tagSocialLink(page?.url ?? null, { platform: draft.platform, product: draft.product, content });
       // A product link the model wrote into the text gets the same tags as the one beside it.
-      const text = tagSocialText(withHashtags(pasted && link ? `${draft.text.trim()}\n\n${link}` : draft.text, draft.hashtags), { platform: draft.platform, product: draft.product, content: 'post' });
+      const text = tagSocialText(withHashtags(pasted && link ? `${draft.text.trim()}\n\n${link}` : draft.text, draft.hashtags), { platform: draft.platform, product: draft.product, content });
       const checked = checkSocialText(text, { surface: draft.platform, product: draft.product, extraLinks: articleUrls(draft.product) });
       if (!checked.ok) { rejected[checked.reason] = (rejected[checked.reason] ?? 0) + 1; continue; }
       used[draft.platform] += 1;
@@ -257,25 +300,20 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       const scheduledFor = slotFor({ week, day: draft.day, platform: draft.platform, index: used[draft.platform], now: moment });
       const targetId = `${draft.platform}:${week}:${used[draft.platform]}`;
       if (targets.has(`social.post:${targetId}`)) continue;
-      // Compatible approved videos come first. Other Instagram posts need an image; LinkedIn image posts attach a link thumbnail.
-      // Approved creative images precede the brand image list (Settings → Social media).
-      const pictured = ['instagram', 'linkedin'].includes(draft.platform);
-      const assetKey = `${draft.product}:${draft.platform === 'linkedin' ? 'linkedin' : 'meta'}`;
-      const availableAssets = creativeImages[assetKey] ?? [];
-      const approvedAsset = availableAssets.find(asset => asset.kind === 'video' && videoPlacements[draft.platform].includes(asset.placement))
-        ?? (pictured ? availableAssets.find(asset => asset.kind === 'static') ?? null : null);
       const brandImages = images();
       if (draft.platform === 'instagram' && !approvedAsset && !brandImages.length) continue;
       const videoUrl = approvedAsset?.kind === 'video' ? approvedAsset.url : null;
       const imageUrl = videoUrl ? null : approvedAsset?.url ?? (pictured && brandImages.length ? brandImages[(Number(week.replaceAll('-', '')) + used[draft.platform]) % brandImages.length] : null);
-      // Video posts have no separate link card: put the reviewed destination in their caption on Facebook and LinkedIn.
-      const message = videoUrl && link && !checked.text.includes(link) ? `${checked.text}\n\n${link}` : checked.text;
+      // Video posts, and Facebook photo posts, have no separate link card: put the reviewed destination in their caption.
+      const captioned = videoUrl || (draft.platform === 'facebook' && imageUrl);
+      const message = captioned && link && !checked.text.includes(link) ? `${checked.text}\n\n${link}` : checked.text;
       if (!checkSocialText(message, { surface: draft.platform, product: draft.product, extraLinks: articleUrls(draft.product) }).ok) { rejected.video_caption = (rejected.video_caption ?? 0) + 1; continue; }
       const proposal = await propose(task, {
         kind: 'social.post', targetKind: 'social_post', targetId,
         preview: `${labels[draft.platform]} post about ${productNames[draft.product]} (${draft.pillar}), to publish ${when(scheduledFor)}:\n\n${message}${link ? `\n\nLink: ${link}` : ''}${imageUrl ? `\n\nImage: ${approvedAsset ? `approved creative ${approvedAsset.id} (${imageUrl})` : imageUrl}` : ''}${videoUrl ? `\n\nVideo: approved creative ${approvedAsset.id} (${videoUrl})` : ''}`,
         input: { platform: draft.platform, product: draft.product, pillar: draft.pillar, message, link, imageUrl, scheduledFor, ...(videoUrl ? { videoUrl } : {}),
-          ...(draft.platform === 'linkedin' && link ? { linkLabel: page.label } : {}), ...(approvedAsset ? { creativeAssetId: approvedAsset.id } : {}) },
+          ...(draft.platform === 'linkedin' && link ? { linkLabel: page.label } : {}), ...(approvedAsset ? { creativeAssetId: approvedAsset.id } : {}),
+          ...(reach ? { utmContent: content } : {}) },
       });
       if (!proposal) break;
       if (approvedAsset) creativeImages[assetKey] = availableAssets.filter(asset => asset.id !== approvedAsset.id);
@@ -309,6 +347,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       { type: 'callout', tone: 'info', title: `Social plan for the week of ${week}.`, text: body },
       { type: 'paragraph', text: proposed ? 'Approve each post in the AI team. An approved post waits for its time slot.' : 'No post is waiting: the accounts are not connected, or no draft passed the checks.' },
       ...(performance === 'read' ? [] : [{ type: 'paragraph', text: performance === 'not_connected' ? 'No social account is connected, so this plan could not learn from past posts.' : `Some past posts could not be read (${performance.replaceAll('_', ' ')}).` }]),
+      ...(linkedinRefused && linkedin.length ? [{ type: 'paragraph', text: 'LinkedIn is refusing the team\'s connection, so this week\'s LinkedIn posts are here to paste instead of waiting to fail. Reconnect LinkedIn (Settings → Social media) and next week\'s go out on their own again.' }] : []),
       ...linkedin.flatMap((post, index) => [{ type: 'paragraph', text: `LinkedIn post ${index + 1} (${productNames[post.product]}, ${post.pillar})` }, { type: 'message', text: post.text }]),
       ...(founder.length ? [{ type: 'paragraph', text: `Posts for your own LinkedIn profile, to copy and post yourself (save your personal LinkedIn token on the connection card and they ${founderOnItsOwn ? 'publish at their time slots on their own instead' : 'wait for your approval instead'}):` }] : []),
       ...founder.flatMap((post, index) => [{ type: 'paragraph', text: `Your post ${index + 1} (${productNames[post.product]})` }, { type: 'message', text: post.text }]),
@@ -320,7 +359,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       try { await creative.planned(week); } catch { log(JSON.stringify({ event: 'hub_social_creative_plan_unqueued', week })); }
     }
     return { status: proposed ? 'awaiting_approval' : 'done', result: { week, proposed, ...(stories ? { stories } : {}), ...(events ? { events: events.releases.length + events.observances.length } : {}),
-      linkedin: linkedin.length, ...(founderPosts ? { founder: founderPosts } : {}), rejected, performance, delivery: results.map(item => `${item.channel}:${item.delivery}`) } };
+      linkedin: linkedin.length, ...(linkedinRefused ? { linkedinRefused: true } : {}), ...(leadsByPost.length ? { postsWithLeads: leadsByPost.length } : {}),
+      ...(founderPosts ? { founder: founderPosts } : {}), rejected, performance, delivery: results.map(item => `${item.channel}:${item.delivery}`) } };
   }
 
   // ---- The inbox ----------------------------------------------------------------------------------------------------------------------
@@ -332,9 +372,12 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     let items = [];
     const refused = [];
     let reached = 0;
+    // Settings → Social media → "Read and answer comments on ads" (reach): comments on running Meta ads too. LinkedIn's sponsored posts are
+    // not read (its post finder leaves them out, and the Development tier's daily calls are few).
+    const adComments = settings.reach === true && settings.adComments === true;
     for (const [on, client] of [[metaPosts(), meta], [linkedinNow, li]]) {
       if (!on) continue;
-      try { items = items.concat(await client.recentInbox({ signal, now: now() })); reached += 1; }
+      try { items = items.concat(await client.recentInbox({ signal, now: now(), ...(client === meta && adComments ? { adComments: true } : {}) })); reached += 1; }
       catch (error) {
         if (signal?.aborted || error?.transient) throw error;
         refused.push(error?.code ?? 'social_error');
@@ -346,7 +389,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     for (const item of items.slice(0, 40)) {
       signal?.throwIfAborted();
       const id = await store.enqueue(task.agentKey, 'social.interaction', `social:${item.platform}:${item.kind}:${item.id}`.slice(0, 200), {
-        payload: { platform: item.platform, kind: item.kind, id: item.id, parentId: item.parentId, url: item.url ?? null }, priority: 4, sourceKind: 'agent', sourceRef: `${item.platform}:${item.kind}`,
+        payload: { platform: item.platform, kind: item.kind, id: item.id, parentId: item.parentId, url: item.url ?? null, ...(item.ad === true ? { ad: true } : {}) }, priority: 4, sourceKind: 'agent', sourceRef: `${item.platform}:${item.kind}`,
       });
       if (id) fresh[item.kind] += 1;
     }
@@ -415,6 +458,21 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (result.outcome !== 'completed') return { result: { outcome: 'left_for_owner', reason: result.code ?? result.outcome, platform: item.platform, kind: item.kind } };
     const reading = result.output;
     if (reading.possiblePhi) return personal();
+    // Interest (reach, team review 2026-11-17, stage 6): an interested or pricing comment or message is recorded once and the owner is told,
+    // with the link, whatever happens to the reply. It had only a reply draft and a count in an email. Nothing the person wrote is kept.
+    if (settings.reach === true && interestIntents.includes(reading.intent) && !reading.hide && typeof store.socialInterestRecord === 'function') {
+      const product = socialProducts.includes(reading.product) ? reading.product : null;
+      let fresh = false;
+      try {
+        fresh = await store.socialInterestRecord({ platform: item.platform, itemId: item.id, url: /^https:\/\/[^\s"<>]+$/.test(item.url ?? '') ? item.url.slice(0, 500) : null,
+          product, intent: reading.intent, ad: item.ad === true }) === true;
+      } catch (error) { if (signal?.aborted || error?.transient) throw error; }
+      if (fresh && notifier) {
+        await notifier.send({ severity: 'info', subject: `${reading.intent === 'pricing' ? 'A price question' : 'Interest'} on ${labels[item.platform]}${item.ad === true ? ' (on an ad)' : ''}`,
+          body: `A ${where}${item.ad === true ? ' on one of your ads' : ''} reads as ${reading.intent === 'pricing' ? 'a question about price' : 'interest'}${product ? ` in ${productNames[product]}` : ''}. ${draftingOn() ? 'A reply waits for you in the AI team unless it needs you personally.' : 'Answer it on the platform.'} It has no email address, so it is not on the lead desk: the reply is how they hear back.${item.url ? `\n\nOpen it: ${item.url}` : ''}`,
+          dedupeKey: `social:interest:${item.platform}:${item.id}`.slice(0, 200), agentKey: task.agentKey, taskId: task.id });
+      }
+    }
     if (reading.hide && item.kind === 'comment' && !canRemove) return { result: { outcome: 'left_for_owner', reason: 'spam', intent: reading.intent, platform: item.platform, kind: item.kind } };
     if (reading.hide && item.kind === 'comment') {
       const proposal = await propose(task, { kind: 'social.moderate', targetKind: 'social_item', targetId: target,
@@ -593,11 +651,21 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       catch (error) { if (signal?.aborted || error?.transient) throw error; notes.push(`${source.name} ads could not be read (${String(error?.code ?? 'social_error').replaceAll('_', ' ')}).`); }
     }
     const waiting = (await open()).size;
+    // Reach (team review 2026-11-17, stage 6): what the week's posts brought, not only their likes: website leads by each post's own
+    // utm_content, and comments read as interest or a price question.
+    let reached = null;
+    if (settings.reach === true && typeof store.socialPostLeads === 'function') {
+      try { reached = await store.socialPostLeads(new Date(moment.getTime() - 7 * day).toISOString()); }
+      catch (error) { if (error?.transient) throw error; notes.push('Leads from posts could not be read.'); }
+    }
+    const postLeads = (reached?.posts ?? []).reduce((sum, post) => sum + (Number(post.leads) || 0), 0);
     const platforms = ['facebook', 'instagram', ...(li.configured.page ? ['linkedin'] : [])];
     const byPlatform = platforms.map(platform => { const mine = posts.filter(post => post.platform === platform); return [platform, mine.length, mine.reduce((sum, post) => sum + post.engagement, 0)]; });
     const spend = adsets.reduce((sum, item) => sum + item.spendCents, 0);
     const results = adsets.reduce((sum, item) => sum + item.results, 0);
-    const body = `${plural(posts.length, 'post')} in the last 7 days with ${posts.reduce((sum, post) => sum + post.engagement, 0)} engagement points; ads spent ${money(spend)} for ${plural(results, 'result')}. ${plural(waiting, 'change')} waiting for you.`;
+    const interested = Number(reached?.interested) || 0;
+    const brought = reached ? ` They brought ${plural(postLeads, 'website lead')}, and ${interested} ${interested === 1 ? 'comment or message' : 'comments or messages'} read as interest or a price question.` : '';
+    const body = `${plural(posts.length, 'post')} in the last 7 days with ${posts.reduce((sum, post) => sum + post.engagement, 0)} engagement points; ads spent ${money(spend)} for ${plural(results, 'result')}.${brought} ${plural(waiting, 'change')} waiting for you.`;
     const blocks = [
       { type: 'callout', tone: waiting ? 'warning' : 'info', title: 'Social media this week.', text: body },
       { type: 'paragraph', text: 'Posts' },
@@ -612,7 +680,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       dedupeKey: asked ? `social:report:run:${task.id}` : `social:report:${week}`, agentKey: task.agentKey, taskId: task.id });
     if (!asked && sent.every(item => item.delivery === 'duplicate')) return { result: { skipped: sent.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week } };
     await recordRun({ store, log }, task, { promptVersion: 'social-report.2', summary: `Sent the weekly social report: ${body}` });
-    return { result: { week, posts: posts.length, spendCents: spend, results, waiting } };
+    return { result: { week, posts: posts.length, spendCents: spend, results, waiting, ...(reached ? { postLeads, interested } : {}) } };
   }
 
   return { 'social.plan': plan, 'social.inbox': inbox, 'social.interaction': interaction, 'social.ads': ads, 'social.report': report };

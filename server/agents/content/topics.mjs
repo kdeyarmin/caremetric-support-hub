@@ -11,7 +11,10 @@
  */
 import { officialSources, productPageIds } from './facts.mjs';
 
-const topic = value => Object.freeze({ ...value, facts: Object.freeze(value.facts), sources: Object.freeze(value.sources), links: Object.freeze(value.links), keywords: Object.freeze(value.keywords) });
+// Every Intel article suggests Intel's free market report first, the call to action the cold email and the ads lead with (team review
+// 2026-11-17, stage 6: no article led to it).
+const reportFirst = value => (value.product === 'intel' && !value.links.includes('intel-market-review') ? ['intel-market-review', ...value.links] : value.links);
+const topic = value => Object.freeze({ ...value, facts: Object.freeze(value.facts), sources: Object.freeze(value.sources), links: Object.freeze(reportFirst(value)), keywords: Object.freeze(value.keywords) });
 
 const pchAndAlf = 'Administrators and owners of Pennsylvania personal care homes and Assisted Living Facilities';
 
@@ -426,23 +429,73 @@ export const topics = Object.freeze([
 ]);
 
 const rejectedCoolOffDays = 90;
+/** A topic whose article was published this long ago may be written again, as a new article for the quarter (team review 2026-11-17, stage 6). */
+export const rewriteAfterDays = 91;
 const openStatuses = new Set(['proposed', 'approved', 'auto_approved', 'executing']);
+/** The quarter a moment falls in, for a rewritten topic's address: 2027-q1. */
+export const quarterTag = moment => { const date = new Date(moment); return `${date.getUTCFullYear()}-q${Math.floor(date.getUTCMonth() / 3) + 1}`; };
+
+/**
+ * A county topic (team review 2026-11-17, stage 6; Settings → AI team → "Write articles about the roster's counties"): what an agency in
+ * one of the roster's counties should look at in its market, pointing to Intel's free county report and market report. It states no
+ * figure: the county's figures are in the report, and the article holds only the facts below and the fact sheet's. Null for a county
+ * without a usable name or state.
+ */
+export function countyTopic({ countyFips, state, name }) {
+  const full = String(name ?? '').replace(/[^A-Za-z .'-]/g, '').replace(/\s+/g, ' ').trim();
+  // A Louisiana parish or an Alaska borough keeps its own word; anything else is a county.
+  const kind = full.match(/\s(County|Parish|Borough|Census Area|Municipality)$/i)?.[1] ?? 'County';
+  const county = full.replace(/\s+(County|Parish|Borough|Census Area|Municipality)$/i, '').trim();
+  if (!/^[0-9]{5}$/.test(countyFips ?? '') || !/^[A-Z]{2}$/.test(state ?? '') || county.length < 2 || county.length > 40) return null;
+  const place = `${county} ${kind.toLowerCase().replace(/\b[a-z]/g, letter => letter.toUpperCase())}`;
+  const words = place.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
+  return topic({
+    key: `county-${countyFips}`, product: 'intel', kind: 'marketing', priority: 2,
+    title: `Home health and hospice in ${place}, ${state}: what to look at in the market`,
+    slug: `home-health-hospice-${words}-${state.toLowerCase()}`,
+    audience: `Owners, administrators and marketing leaders at home health agencies and hospices serving ${place}, ${state}`,
+    angle: `The questions an agency in ${place} should be able to answer about its market (who leads it, which hospitals its residents use and which physicians Intel ranks highest as referral sources), and how Intel's free county report and free market report answer them from public Medicare data. State no figure about the ${kind.toLowerCase()}: the reports hold them.`,
+    keywords: [`${place.toLowerCase()} home health`, `${place.toLowerCase()} hospice`, `home health market ${place.toLowerCase()}`],
+    facts: [
+      'Public Medicare data can show where to look, but it does not confirm a referral: confirmed referrals are the ones the agency records itself.',
+      'CMS publishes provider data about home health services at data.cms.gov.',
+    ],
+    sources: ['cms-home-health', 'cms-data'],
+    links: ['intel-county-report', 'intel-market-review', 'intel-home'],
+    inquiries: ['sales'],
+  });
+}
+
+/** How many of a topic's keywords a recent search query (Search Console) holds every longer word of. */
+export const queryMatches = (item, queries) => item.keywords.reduce((total, keyword) => {
+  const words = keyword.toLowerCase().split(/\s+/).filter(word => word.length > 3);
+  return total + (words.length && queries.some(query => words.every(word => query.includes(word))) ? 1 : 0);
+}, 0);
 
 /**
  * The topic to write next, or null when every topic is taken.
  * `articles`: the latest content.publish action per topic ({ topic, slug, product, status, at }) from the database.
  * `takenSlugs`: suggested slugs another content item already uses.
  * `questions`: recent inbox conversations counted by product and inquiry type ({ product, inquiryType, conversations }).
+ * `queries`: recent search queries people made (Search Console), lowercased; a topic whose keywords they hold is nudged up.
+ * `rewrite` (reach, team review 2026-11-17, stage 6): a topic published more than a quarter ago is written again, as a new article under
+ * the quarter's own address (before, every topic was written once and the backlog ran dry in six or seven weeks).
  */
-export function chooseTopic({ backlog = topics, articles = [], takenSlugs = [], questions = [], now = new Date() } = {}) {
+export function chooseTopic({ backlog = topics, articles = [], takenSlugs = [], questions = [], queries = [], now = new Date(), rewrite = false } = {}) {
   const latest = new Map(articles.map(article => [article.topic, article]));
   const slugs = new Set(takenSlugs);
   for (const article of articles) if (article.status === 'executed' || openStatuses.has(article.status)) slugs.add(article.slug);
   const coolOff = now.getTime() - rejectedCoolOffDays * 86_400_000;
-  const eligible = backlog.filter(item => {
+  const stale = now.getTime() - rewriteAfterDays * 86_400_000;
+  const due = item => { const last = latest.get(item.key); return rewrite && last?.status === 'executed' && new Date(last.at).getTime() <= stale; };
+  // A topic written again keeps its key and gets the quarter's own address; the article it replaces stays published, so the new one is
+  // written afresh rather than copied, under that address.
+  const again = item => Object.freeze({ ...item, rewrite: true, slug: `${item.slug.slice(0, 72)}-${quarterTag(now)}`,
+    angle: `${item.angle} This is a new article for ${quarterTag(now).replace('-q', ', quarter ')}: an earlier article on this topic stays published, so write it afresh, with the suggested slug as given.` });
+  const eligible = backlog.map(item => (due(item) ? again(item) : item)).filter(item => {
     const last = latest.get(item.key);
     if (slugs.has(item.slug)) return false;
-    if (!last) return true;
+    if (!last || due(item)) return true;
     if (last.status === 'executed' || openStatuses.has(last.status)) return false;
     // A rejected draft is left alone for a while; an expired or failed one may be tried again at once.
     return !(last.status === 'rejected' && new Date(last.at).getTime() > coolOff);
@@ -465,7 +518,9 @@ export function chooseTopic({ backlog = topics, articles = [], takenSlugs = [], 
     const matching = item.inquiries.reduce((total, inquiry) => total + (byInquiry.get(`${slug}:${inquiry}`) ?? 0), 0);
     // Priority leads; questions nudge (a log, so a busy week cannot drown the backlog); the last article's product steps back.
     // The database names products by their Hub slug (caremetric-intel), the backlog by its key (intel): compare the slug.
-    return item.priority + Math.log2(1 + asked) * 0.5 + Math.log2(1 + matching) * 0.5 - (recent && recent.product === slug ? 1 : 0);
+    // Searches people already make for a topic's keywords (Search Console's recent queries) nudge it up too, by at most one.
+    const searched = queries.length ? Math.min(queryMatches(item, queries), 2) : 0;
+    return item.priority + Math.log2(1 + asked) * 0.5 + Math.log2(1 + matching) * 0.5 + searched * 0.5 - (recent && recent.product === slug ? 1 : 0);
   };
   // Highest score first; the backlog's own order breaks ties, so the choice is deterministic.
   return eligible.map((item, index) => ({ item, index, value: score(item) }))

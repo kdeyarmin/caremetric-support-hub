@@ -124,6 +124,17 @@ acknowledgment on its own, reads every product's guides for a conversation with 
 watchdog, scorecard and strategist changes only when the feature is declared
 ([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 5).
 
+`20261117250100_reach_contract.sql` declares `platform.agents.reach.v1` once the settings, social, ads, creative and roster features are
+declared, `private.social_interest` has row level security and is closed to every role, `private.social_interest_record`,
+`private.social_post_leads`, `private.creative_expiring_warnings`, `private.content_roster_counties` and `private.ads_month_campaigns`
+are executable by `hub_app_server` alone and require its connection, the month's campaigns say which was created paused with no ad
+(`empty`), and both switches (`social.ad_comments`, `agents.content_county_topics`) have rows. Each test fails closed. The Hub server
+gives each post its own `utm_content`, posts a Facebook post with an approved image as a photo, emails a LinkedIn post to paste while
+LinkedIn refuses the team, records an interested or pricing comment and tells the owner, limits new paid campaigns to the roster's
+states, lists images with a warning before they lapse, and nudges and rewrites the Content Marketer's topics only when the feature is
+declared; it reads comments on ads and writes county topics only while their switches are on as well
+([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 6).
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a

@@ -414,3 +414,32 @@ describe('county snapshots', () => {
     expect(blocked[4].reasons.map(item => item.rule)).toContain('data_figure');
   }, 60_000);
 });
+
+describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
+  it('lists images with a warning that expire within two days for the owner, once a day, before planning', async () => {
+    const h = harness({ model: modelOf() });
+    h.store.creativeExpiringWarnings = vi.fn(async () => [{ assetId, product: 'caremetric-intel', placement: 'meta.feed_square', headline: 'Where does your agency rank?', expiresAt: '2026-11-10T20:00:00Z' }]);
+    await h.handlers['creative.plan'](h.task('creative.plan'), { now });
+    expect(h.store.creativeExpiringWarnings).toHaveBeenCalledWith(48);
+    const sent = h.notifier.send.mock.calls.find(([item]) => item.dedupeKey === 'creative:expiring:2026-11-09')[0];
+    expect(sent).toMatchObject({ severity: 'warning', subject: '1 image with a warning expires soon' });
+    expect(sent.blocks[0].rows[0]).toEqual(['CareMetric Intel, meta feed square: Where does your agency rank?', 'expires Tue, Nov 10, 3:00 PM']);
+    expect(sent.blocks[1]).toEqual({ type: 'button', label: 'Open the Creative screen', url: 'https://help.caremetric.ai/admin/creative' });
+    // Nothing expiring, or the database without the feature: no email.
+    const quiet = harness({ model: modelOf() });
+    quiet.store.creativeExpiringWarnings = vi.fn(async () => []);
+    await quiet.handlers['creative.plan'](quiet.task('creative.plan'), { now });
+    expect(quiet.notifier.send.mock.calls.some(([item]) => String(item.dedupeKey).startsWith('creative:expiring:'))).toBe(false);
+    const before = harness({ model: modelOf() });
+    await before.handlers['creative.plan'](before.task('creative.plan'), { now });
+    expect(before.notifier.send.mock.calls.some(([item]) => String(item.dedupeKey).startsWith('creative:expiring:'))).toBe(false);
+  });
+
+  it('tells the owner even when the model is not set up', async () => {
+    const h = harness();
+    h.store.creativeExpiringWarnings = vi.fn(async () => [{ assetId, product: 'carebase', placement: 'linkedin.single_image', headline: '', expiresAt: '2026-11-10T20:00:00Z' },
+      { assetId: briefId, product: 'carebase', placement: 'meta.story', headline: 'x', expiresAt: '2026-11-11T02:00:00Z' }]);
+    expect((await h.handlers['creative.plan'](h.task('creative.plan'), { now })).result).toEqual({ skipped: 'model_not_configured', expiring: 2 });
+    expect(h.notifier.send.mock.calls[0][0].subject).toBe('2 images with a warning expire soon');
+  });
+});

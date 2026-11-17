@@ -84,9 +84,25 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
         await markLive(input, published.id);
         return { published: true, id: published.id, video: true };
       }
-      const published = await careful(execution, () => (onLinkedIn(input)
-        ? li.publishPost({ message: input.message, link: input.link ?? null, linkTitle: input.linkLabel ?? null, imageUrl: input.imageUrl ?? null })
-        : meta.publishPost({ platform: input.platform, message: input.message, link: input.link ?? null, imageUrl: input.imageUrl ?? null })));
+      let published;
+      try {
+        published = await careful(execution, () => (onLinkedIn(input)
+          ? li.publishPost({ message: input.message, link: input.link ?? null, linkTitle: input.linkLabel ?? null, imageUrl: input.imageUrl ?? null })
+          : meta.publishPost({ platform: input.platform, message: input.message, link: input.link ?? null, imageUrl: input.imageUrl ?? null })));
+      } catch (error) {
+        // A LinkedIn post refused for the team's sign-in or permission is not lost (reach, team review 2026-11-17, stage 6): the owner gets
+        // it to paste, its link included. It still fails here, with LinkedIn's code, so nothing claims it was published.
+        if (settings.reach === true && onLinkedIn(input) && ['linkedin_token_invalid', 'linkedin_permission'].includes(error?.code) && notifier) {
+          const text = input.link && !input.message.includes(input.link) ? `${input.message}\n\n${input.link}` : input.message;
+          try {
+            await notifier.send({ severity: 'warning', subject: 'A LinkedIn post to paste: LinkedIn refused the team',
+              body: `LinkedIn refused the team's connection (${error.code.replaceAll('_', ' ')}) when this approved post was due, so here it is to paste on the LinkedIn Page yourself. Reconnect LinkedIn (Settings → Social media) and the next posts go out on their own.`,
+              blocks: [{ type: 'paragraph', text: 'Paste this on the LinkedIn Page:' }, { type: 'message', text }],
+              dedupeKey: `social:linkedin:paste:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId });
+          } catch { log(JSON.stringify({ event: 'hub_social_linkedin_paste_unsent', action_id: execution.id })); }
+        }
+        throw error;
+      }
       await markLive(input, published.id);
       return { published: true, id: published.id };
     },

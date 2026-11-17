@@ -170,11 +170,11 @@ anything starts off; plain fixes need no switch.
 | --- | --- | --- | --- |
 | 6.1 | **LinkedIn posts aren't lost.** While LinkedIn refuses the team, the week's LinkedIn posts are emailed to the owner to paste, as when no token is saved, and a failed LinkedIn post is added to that email. | 4.1 | Plain fix |
 | 6.2 | **Facebook posts carry the approved image**, as a photo post with the tagged link. | 4.2 | Plain fix |
-| 6.3 | **Interest becomes a lead.** <ul><li>An interested or pricing comment, on a post or an ad, creates a Hub lead.</li><li>That puts the person in front of the Sales Executive, and the owner gets an alert with the link.</li></ul> | 4.3 | Existing hand-over |
+| 6.3 | **Interest is recorded and the owner is told.** <ul><li>An interested or pricing comment or message, on a post or (with its switch) a Meta ad, is recorded once, and the owner gets an alert with its link, never its words.</li><li>It is not a Hub lead: a comment carries no email address, which a lead needs (see "What changed (stage 6)").</li><li>LinkedIn ad comments are not read (see "What changed (stage 6)").</li></ul> | 4.3 | Plain fix; ad comments: "Read and answer comments on ads" |
 | 6.4 | **Each post gets its own `utm_content`.** Leads per post feed the weekly plan and the Creative Director's learning. | 4.4, 5.1 | Plain fix |
 | 6.5 | **The free market report becomes the call to action** in posts, replies and articles, as in the cold email and ads. | 4.5, 5.4 | Plain fix |
-| 6.6 | **Paid campaigns aim at the roster.** <ul><li>Every platform is limited to the roster's states.</li><li>LinkedIn's company list is built from the roster through the API.</li><li>A paused fallback campaign no longer uses up the month.</li><li>The ad account is read once a day and reused.</li></ul> | 4.6, 4.7, 4.8 | Plain fix |
-| 6.7 | **The Content Marketer gets topics** from roster counties (a county's home health and hospice picture, linking to that county's report) and Search Console queries. Each topic is written once a quarter at most. | 5.3, 5.4 | Plain fix |
+| 6.6 | **Paid campaigns aim at the roster.** <ul><li>Every platform is limited to the roster's states, found through its own location lookup; a state it cannot name stops the launch.</li><li>A paused fallback campaign with no ad no longer uses up the month.</li><li>LinkedIn's ad account is read once a day and reused.</li><li>LinkedIn's company list from the roster is not built (see "What changed (stage 6)").</li></ul> | 4.6, 4.7, 4.8 | Plain fix |
+| 6.7 | **The Content Marketer gets topics** from roster counties (a county's home health and hospice picture, linking to the county report and the market report) and Search Console queries. A topic is written again a quarter after it was published, at most once a quarter. | 5.3, 5.4 | County topics: "Write articles about the roster's counties"; the rest a plain fix |
 | 6.8 | **An image with a warning is listed for the owner** before it expires, instead of lapsing unseen. | 5.2 | Plain fix |
 
 ## What changed (stage 4, Hub)
@@ -218,6 +218,37 @@ Behind `platform.agents.support-truth.v1` (`20261117240000_support_truth.sql` an
 Tests: pgTAP 117, `server/agents-support-truth-integration.mjs` (in CI, twice), `server/agents/support-truth.test.mjs` and new triage
 tests. The strategist test expects `strategist.3`. Nothing changes until the migrations are applied and the Hub restarts. The
 acknowledgment also waits for the switch.
+
+## What changed (stage 6)
+
+Behind `platform.agents.reach.v1` (`20261117250000_reach.sql` and its contract), stacked on stage 5. Nothing new sends, posts or spends
+with its switch off: the two new switches are off, and the rest changes only the targeting or wording of something already on, or
+tells the owner.
+
+| # | Change | Where |
+| --- | --- | --- |
+| 6.1 | While LinkedIn refuses the team (its last refusal of sign-in or permission is newer than its last reconnect), the week's LinkedIn posts go into the plan's email to paste, as when no token is saved, with a line saying why. A LinkedIn post refused at publishing for sign-in or permission is emailed to paste, its link included, and still fails with LinkedIn's code | `social.plan` in `social/tasks.mjs` (`linkedinRefused`), `social.post` in `social/executor.mjs` |
+| 6.2 | A Facebook post with an approved image is a Page photo whose caption carries the tagged link, instead of a link card | `publishPost` in `social/meta.mjs`, the planner's `pictured` |
+| 6.3 | An interested or pricing comment or message is recorded once (platform, id, link, product, reading; no words) and the owner is told with its link. With Settings → Social media → "Read and answer comments on ads" on, comments on running Meta ads (their posts are not in the Page's feed) are read too, at most five ads' posts, and handled like a post's; the reply offers the market report | `private.social_interest`, `private.social_interest_record`, `recentInbox({ adComments })`, `social.interaction` |
+| 6.4 | Each post has its own `utm_content`: an approved creative's id when it carries one (so the Creative Director's lead learning counts it), else `post-<week>-<platform>-<n>`. The plan reads which recent posts brought website leads (`postsThatBroughtLeads`, prompt `social-plan.8`), and the weekly report counts the leads and the interest | `postContent`, `private.social_post_leads`, `social.report` |
+| 6.5 | Intel's call to action in posts and replies is the free market report (or the county report), never the trial first (`social-plan.8`, `social-reply.5`). Every Intel article's suggested pages start with the market report | `social/content.mjs`, `content/topics.mjs` (`reportFirst`) |
+| 6.6 | New Meta, LinkedIn and Google campaigns are limited to the roster's states (Settings → Customer growth → States to prospect in), each state found through the platform's own lookup (Meta's location search, LinkedIn's targeting typeahead, Google's location suggestions), never a hard-coded id. A state a platform cannot name stops the launch and the owner is told; nothing runs nationwide in its place. With no states chosen, the whole country, as before. A launch that fell back to a paused campaign with no ad (no approved creative fit, or its first ad was refused) no longer takes the month's flight; one held back by the month's number still does. LinkedIn's ad account is read once an Eastern day and reused by the daily review, the weekly report and the Creative Director, forgotten after any change the team makes | `regionKeys`, `geoUrns`, `stateTargets`, `located()` in `ads/index.mjs`, `private.ads_month_campaigns` (`empty`), `onceADay` in `social/linkedin.mjs` |
+| 6.7 | With Settings → AI team → "Write articles about the roster's counties" on, the twelve counties with the most roster agencies (excluded ones left out) are topics, named from Intel's county list; a county topic states no figure and links to the county and market reports. Search Console's recent queries nudge a topic whose keywords people search. A topic published more than a quarter ago is written again under the quarter's own address | `countyTopic`, `queryMatches`, `chooseTopic({ rewrite })`, `private.content_roster_counties`, `tasks/content.mjs` |
+| 6.8 | Before planning, the Creative Director emails the owner the images waiting with a compliance warning whose proposal expires within two days, once a day | `tellExpiring` in `creative/tasks.mjs`, `private.creative_expiring_warnings` |
+
+**Not built in stage 6:**
+- **A comment as a Hub lead.** `private.leads` needs an email address, which a comment never carries, and the Sales Executive works
+  from email. The comment is recorded, the owner is alerted with its link, and the reply offers the market report, whose form makes
+  the lead.
+- **LinkedIn ad comments.** The post finder leaves out sponsored-only posts, and reading each ad's comments would pass the Development
+  tier's call limits. Meta's are read, behind their switch.
+- **LinkedIn's company list from the roster.** It needs LinkedIn's DMP segment access, which the app does not have. Upload the roster
+  company list in Campaign Manager, as the proposal says.
+- **The Creative Director's learning per post.** A post with an approved creative carries the creative's id as its `utm_content`, so
+  the creative's existing lead attribution counts it; a post without one is counted only in the social plan and report.
+
+Tests: pgTAP 118, `server/agents-reach-integration.mjs` (in CI, twice), unit tests for every rule. Nothing changes until the migrations
+are applied and the Hub restarts; ad comments and county topics also wait for their switches.
 
 ## Decisions for the owner
 

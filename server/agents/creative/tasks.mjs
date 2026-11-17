@@ -127,8 +127,30 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
   }
 
   // ---- Plan: marketing plan output becomes briefs -----------------------------------------------------------------------------------
+  /**
+   * Images waiting for the owner with a compliance warning, whose proposal expires within two days (reach, team review 2026-11-17, stage 6):
+   * such an image is never approved on its own, and it lapsed after seven days unseen. Listed once a day; nothing when there are none.
+   */
+  async function tellExpiring(task, moment) {
+    if (typeof store.creativeExpiringWarnings !== 'function' || !notifier) return 0;
+    let list;
+    try { list = await store.creativeExpiringWarnings(48); }
+    catch (error) { if (error?.transient) throw error; log(JSON.stringify({ event: 'hub_creative_expiring_unread', code: codeOf(error) })); return 0; }
+    if (!Array.isArray(list) || !list.length) return 0;
+    const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const rows = list.map(item => [`${productNames[item.product] ?? item.product}, ${String(item.placement ?? '').replace(/[._]/g, ' ')}${item.headline ? `: ${item.headline}` : ''}`, `expires ${fmt.format(new Date(item.expiresAt))}`]);
+    try {
+      await notifier.send({ severity: 'warning', subject: `${plural(list.length, 'image')} with a warning ${list.length === 1 ? 'expires' : 'expire'} soon`,
+        body: `${plural(list.length, 'image')} the Creative Director made ${list.length === 1 ? 'is' : 'are'} waiting for you with a compliance warning, and ${list.length === 1 ? 'it expires' : 'they expire'} within two days. An image with a warning is never approved on its own: approve or reject ${list.length === 1 ? 'it' : 'them'} on the Creative screen, or ${list.length === 1 ? 'it lapses' : 'they lapse'}.`,
+        blocks: [{ type: 'details', rows }, ...(origin ? [{ type: 'button', label: 'Open the Creative screen', url: `${origin}/admin/creative` }] : [])],
+        dedupeKey: `creative:expiring:${easternDate(moment)}`, agentKey: task.agentKey, taskId: task.id });
+    } catch { log(JSON.stringify({ event: 'hub_creative_expiring_unsent' })); }
+    return list.length;
+  }
+
   async function plan(task, { now = () => new Date() } = {}) {
-    if (!model?.configured) return { result: { skipped: 'model_not_configured' } };
+    const expiring = await tellExpiring(task, now());
+    if (!model?.configured) return { result: { skipped: 'model_not_configured', ...(expiring ? { expiring } : {}) } };
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
     const offered = await offeredNow();
     if (!offered.length) return { result: { skipped: 'no_marketed_product' } };

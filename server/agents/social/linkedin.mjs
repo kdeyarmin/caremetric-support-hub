@@ -295,6 +295,26 @@ export function linkedinClient({
     return { id: result.id };
   }
 
+  // LinkedIn's location for each US state, found by its ad targeting lookup (typeahead), never written by hand; kept for the process.
+  // `states` is [{ code, name }]. A state with no exact "<State>, United States" location fails as linkedin_geo_unresolved.
+  const geoCache = new Map();
+  async function geoUrns(states, signal) {
+    const urns = [];
+    for (const state of states) {
+      const code = String(state?.code ?? '');
+      const wanted = `${String(state?.name ?? '')}, United States`.toLowerCase();
+      if (!/^[A-Z]{2}$/.test(code) || !state?.name) throw failure('linkedin_geo_unresolved');
+      if (!geoCache.has(code)) {
+        const data = await get('adTargetingEntities', `q=typeahead&facet=${enc('urn:li:adTargetingFacet:locations')}&query=${enc(state.name)}`, { signal, auth: adsAuth });
+        const match = elements(data).find(item => String(item.name ?? '').toLowerCase() === wanted && /^urn:li:geo:[0-9]{1,20}$/.test(String(item.urn ?? '')));
+        if (!match) throw failure('linkedin_geo_unresolved');
+        geoCache.set(code, String(match.urn));
+      }
+      urns.push(geoCache.get(code));
+    }
+    return urns;
+  }
+
   async function pagePosts(signal) {
     const data = await get('posts', `author=${enc(org)}&q=author&count=20&sortBy=LAST_MODIFIED`, { signal });
     return elements(data).filter(item => linkedinPost(item.id) && (item.lifecycleState ?? 'PUBLISHED') === 'PUBLISHED' && !item.adContext);
@@ -307,7 +327,7 @@ export function linkedinClient({
     })).filter(item => item.urn);
   }
 
-  return {
+  const client = {
     configured,
     tier: development ? 'development' : 'standard',
     ids: { organization, account },
@@ -484,8 +504,11 @@ export function linkedinClient({
      * targeting (a state, a matched company list) in Campaign Manager and starts it there. `endAt` (a launch the owner handed over) ends
      * both then, so they can never spend past their month.
      */
-    async createCampaign({ name, dailyBudgetCents, currency = 'USD', startAt, endAt = null }, { signal } = {}) {
+    async createCampaign({ name, dailyBudgetCents, currency = 'USD', startAt, endAt = null, states = [] }, { signal } = {}) {
       needAds();
+      // Limited to the roster's states (team review 2026-11-17, stage 6), each found through LinkedIn's own location lookup before anything
+      // is created: a state it cannot name stops the campaign rather than letting it run nationwide.
+      const locations = states.length ? await geoUrns(states, signal) : ['urn:li:geo:103644278'];
       if (!Number.isInteger(dailyBudgetCents) || dailyBudgetCents < 1000 || !/^[A-Z]{3}$/.test(currency)) throw failure('linkedin_invalid_request');
       const start = Number.isFinite(Date.parse(startAt ?? '')) ? Date.parse(startAt) : Date.now() + 86_400_000;
       const end = endAt === null ? null : Date.parse(endAt);
@@ -501,7 +524,7 @@ export function linkedinClient({
         objectiveType: 'WEBSITE_VISIT', costType: 'CPM', optimizationTargetType: 'MAX_CLICK', dailyBudget: { amount, currencyCode: currency },
         locale: { country: 'US', language: 'en' }, offsiteDeliveryEnabled: false, runSchedule,
         targetingCriteria: { include: { and: [
-          { or: { 'urn:li:adTargetingFacet:locations': ['urn:li:geo:103644278'] } },
+          { or: { 'urn:li:adTargetingFacet:locations': locations } },
           { or: { 'urn:li:adTargetingFacet:industries': ['urn:li:industry:14'] } },
           { or: { 'urn:li:adTargetingFacet:seniorities': ['urn:li:seniority:5', 'urn:li:seniority:6', 'urn:li:seniority:7', 'urn:li:seniority:8', 'urn:li:seniority:9', 'urn:li:seniority:10'] } },
         ] } },
@@ -548,5 +571,30 @@ export function linkedinClient({
       catch (error) { if (signal?.aborted || error?.code === 'linkedin_unconfirmed') throw error; throw Object.assign(failure(error?.code ?? 'linkedin_invalid_request'), { postId: post.id }); }
       return { id: bareId(creative.id, /^urn:li:sponsoredCreative:/) ?? String(creative.id ?? ''), postId: post.id };
     },
+  };
+  return onceADay(client);
+}
+
+const easternDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
+/**
+ * The ad account read once an Eastern day (team review 2026-11-17, stage 6): the daily ad review, the weekly report and the Creative
+ * Director's two weekly jobs each read the whole account (up to about 24 calls each), which on the Development tier could pass its 100
+ * calls a day on a Monday. The first read of the day is kept and given to the others; a read that fails is not kept, and any change the
+ * team makes to the account (a new campaign or ad, a pause, a budget) forgets it, so the next read is fresh.
+ */
+export function onceADay(client) {
+  let kept = null;
+  const forget = method => async (...args) => { kept = null; return method(...args); };
+  return {
+    ...client,
+    async adsOverview({ signal, now = new Date() } = {}) {
+      const day = easternDay.format(now);
+      if (kept?.day === day) return kept.overview;
+      const overview = await client.adsOverview({ signal, now });
+      kept = { day, overview };
+      return overview;
+    },
+    pauseAd: forget(client.pauseAd), setDailyBudget: forget(client.setDailyBudget), createCampaign: forget(client.createCampaign),
+    startCampaign: forget(client.startCampaign), createAd: forget(client.createAd),
   };
 }
