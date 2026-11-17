@@ -63,7 +63,7 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 export function agentTeam({
   pool, growth: givenGrowth = null, growthMail = null, postalAddress = '', store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
-  anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, leadSecrets = {}, lifecycle = null, offerBilling = null,
+  anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, autoAcknowledge = false, leadSecrets = {}, lifecycle = null, offerBilling = null,
   social = null, meta = null, marketed = null, searchConsoleSites = undefined, searchConsoleCredentials = '', creative = null, visitorMetrics = null,
   inboundFollowup = false, concurrentTasks = 3, ads = null, watchdogIdleDays = 3, salesContext = false, strategist = false,
 }) {
@@ -120,8 +120,8 @@ export function agentTeam({
       states: growth?.roster?.states ?? null }),
     ...adsWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, social: socialWork.ads?.settings ?? {}, marketed: marketedSource, creative: creativeLink, publicOrigin, log }),
     ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, visitors: visitorMetrics ? input => visitorMetrics.read(input) : null, log,
-      strategist: strategistDeclared(features) ? strategist : false }),
-    ...strategistHandlers({ store, model: runtime, features, enabled: strategist, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, inboundFollowup, toolkit: toolkitNow, watchdogIdleDays, services: senderServices(sms, email) }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+      strategist: strategistDeclared(features) ? strategist : false, toolkit: toolkitNow, watchdogIdleDays }),
+    ...strategistHandlers({ store, model: runtime, features, enabled: strategist, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, autoAcknowledge, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, inboundFollowup, toolkit: toolkitNow, watchdogIdleDays, services: senderServices(sms, email) }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   // Settings → AI team → Tasks at once: how many tasks may run side by side.
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now, claimLimit: concurrentTasks });
   const admin = agentAdmin({

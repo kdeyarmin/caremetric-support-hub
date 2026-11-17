@@ -924,3 +924,59 @@ describe('who wrote (email review 2026-11-17)', () => {
     expect(await harness.run()).toMatchObject({ status: 'awaiting_approval', result: { reply: 'proposed', template: 'standard' } });
   });
 });
+
+describe('the support truth stage (team review 2026-11-17, stage 5)', () => {
+  const harnessWith = ({ snapshot, acknowledge = false, truth = true, autonomy = 'act', status = 'auto_approved', channels } = {}) => {
+    const sent = [];
+    const store = {
+      communicationSnapshot: vi.fn(async () => snapshot),
+      notificationCount: vi.fn(async () => 0),
+      startRun: vi.fn(async () => 'run-1'), finishRun: vi.fn(async () => undefined),
+      proposeAction: vi.fn(async () => ({ id: 'action-1', status, requestKey: 'k1', created: true })),
+    };
+    const notifier = { send: vi.fn(async input => { sent.push(input); return [{ channel: 'email', delivery: 'sent' }]; }) };
+    const handler = triageHandler({ store, notifier, truth, acknowledge: () => acknowledge, log: () => {} });
+    const task = taskOf({ agent: { autonomy, config: channels ? { channels } : {} } });
+    return { store, sent, run: () => handler(task, { now }) };
+  };
+
+  it('proposes the standard acknowledgment as its own kind while the owner\'s switch is on and the Concierge acts, and only then', async () => {
+    const on = harnessWith({ snapshot: snapshotOf('How do I export the staff roster by month?'), acknowledge: true });
+    const outcome = await on.run();
+    expect(on.store.proposeAction.mock.calls[0][0]).toMatchObject({ kind: 'communication.acknowledge', input: { template: 'standard', route: 'email',
+      body: 'Hello,\n\nThank you for contacting CareMetric Support. We have your message and a member of our team will review it and reply here.' } });
+    expect(Object.keys(on.store.proposeAction.mock.calls[0][0].input).sort()).toEqual(['basedOnMessageId', 'body', 'channel', 'classification', 'communicationId', 'reference', 'route', 'template']);
+    expect(outcome.result.reply).toBe('acknowledgment_approved');
+    for (const [label, options] of [['switch off', { acknowledge: false }], ['propose', { acknowledge: true, autonomy: 'propose' }], ['feature off', { acknowledge: true, truth: false }]]) {
+      const off = harnessWith({ snapshot: snapshotOf('How do I export the staff roster by month?'), ...options });
+      await off.run();
+      expect(off.store.proposeAction.mock.calls[0][0].kind, label).toBe('communication.reply');
+    }
+    // A sales acknowledgment and a machine's email never become one.
+    const sales = harnessWith({ snapshot: snapshotOf('What is your pricing for three facilities?'), acknowledge: true });
+    await sales.run();
+    expect(sales.store.proposeAction.mock.calls[0]?.[0]?.kind).not.toBe('communication.acknowledge');
+    const machine = harnessWith({ snapshot: snapshotOf('How do I export the roster?', { sender: { machine: true } }), acknowledge: true });
+    expect((await machine.run()).result.reply).toBe('machine_sender');
+  });
+
+  it('keeps a trialing or paying customer\'s question about the trial as support, and a stranger\'s as a sale', async () => {
+    const body = 'We are on the free trial and want to know how to sign up more users.';
+    const customer = harnessWith({ snapshot: snapshotOf(body, { account: { trialing: true, paying: false } }) });
+    expect((await customer.run()).result).toMatchObject({ category: 'general', rules: ['sales.customer_account'] });
+    const stranger = harnessWith({ snapshot: snapshotOf(body, { account: { trialing: false, paying: false } }) });
+    expect((await stranger.run()).result.category).toBe('sales');
+    const before = harnessWith({ snapshot: snapshotOf(body, { account: { trialing: true } }), truth: false });
+    expect((await before.run()).result.category).toBe('sales');
+  });
+
+  it('alerts the owner about an inbound text while texts are not triaged, and sends nothing back', async () => {
+    const text = harnessWith({ snapshot: snapshotOf('Is anyone there? The roster export is stuck.', { channel: 'sms', canText: true, subject: null }) });
+    const outcome = await text.run();
+    expect(text.sent).toHaveLength(1);
+    expect(outcome.result).toMatchObject({ outcome: 'alerted', channel: 'sms', reply: 'text_alert_only' });
+    expect(text.store.proposeAction).not.toHaveBeenCalled();
+    const before = harnessWith({ snapshot: snapshotOf('Is anyone there?', { channel: 'sms', canText: true, subject: null }), truth: false });
+    expect((await before.run()).result).toMatchObject({ outcome: 'skipped', reason: 'channel_off' });
+  });
+});

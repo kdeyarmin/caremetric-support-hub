@@ -338,6 +338,24 @@ why: an address check, a draft you turned down, the bounce guard), cold email bo
 on), the daily cap reached with approved emails waiting, most strong fits with no address, and an ad budget with nothing running. It
 said nothing the week every county snapshot was blocked and the month's flight failed ([review](AI_WORKFORCE_REVIEW_2026-11-17.md)).
 
+**Telling the owner the truth (team review, 2026-11-17, stage 5;** `platform.agents.support-truth.v1`,
+`20261117240000_support_truth.sql`; [review](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md)**).**
+
+- **"Nothing needs you" can happen again.** "Opportunities missing a contact" (every opportunity ever found with no contact, never
+  zero) left Needs you. The watchdog already names strong fits with no address when most have none.
+- **Losses you can fix today come first.** An ad platform that refused a campaign for its access, and cold email paused by the bounce
+  guard, are listed under Needs you as "Lost work", not under Worth knowing.
+- **Idle means idle for that agent.** A finished task counts as alive even when it skipped: a weekly report held for the scorecard, a
+  writer's day off, a Sales Executive with no prospect writing. An agent scheduled weekly is flagged only after 8 days.
+- **An agent that only skips is named.** An agent whose every task in 14 days skipped is named with the reason, such as the Content
+  Marketer having no topic left (`lastTaskAt`, `tasks14d`, `worked14d` and `skipped14d` in `private.agent_watchdog_facts`).
+- **The Monday scorecard reads the watchdog as the brief does**, with the toolkit's likely causes and your idle setting.
+- **Cost per verified trial** divides the Marketing Manager's AI spend and the ads by card-confirmed trials, not every agent's spend
+  (`marketingSpendCents`).
+- **CareBase is one pilot line**, since it is not marketed.
+- **The strategist never suggests a call.** Its activation move is the Account Manager's emails. It now names sign-ups that never
+  added a card (`conversion`, `noCard`) and trials that end unpaid (a new constraint, `paying`, judged by new paying customers).
+
 ### The Monday scorecard
 
 Every Monday at 07:50 Eastern (task `scorecard.weekly`, shown as "Monday scorecard") the Chief of Staff sends one email in place of
@@ -526,6 +544,32 @@ owner's own questions. The database now tells the Concierge who wrote, as flags 
   Executive is offered (`reply` is `machine_sender`, `answers_our_email` or `internal_sender`).
 
 Without the migration every message is handled as before.
+
+**Answering people (team review, 2026-11-17, stage 5;** `platform.agents.support-truth.v1`, `20261117240000_support_truth.sql`**).**
+
+- **Drafts for every conversation.** Every published guide is tagged to a product, and the 17 conversations of the two weeks before
+  had none, so no answer could be drafted. A conversation with no product now reads every product's guides; one with a product still
+  reads its own.
+- **The acknowledgment can go out on its own.** With **Settings → AI team → Send the support acknowledgment on its own** on, the
+  standard acknowledgment to a person who wrote by email or chat is its own action, `communication.acknowledge`. The database admits
+  only its exact text. The support answers step hands it over with the answers, so it is approved on its own. It is sent without your
+  session, written by the CareMetric AI Assistant (`private.agent_acknowledge_begin`), and checked again when it is sent:
+  - the switch is still on;
+  - the Concierge is still trusted with it;
+  - the sender is a person: not a machine, the Hub itself, a colleague or an answer to your own email;
+  - the conversation is open and has not moved.
+
+  The phi notice and the sales acknowledgment still wait for you.
+- **An acknowledgment is not an answer.** A lead whose conversation has only the fixed acknowledgment (standard or sales) still waits
+  for its first reply. So the reminders continue, and the first-reply figure counts the real answer
+  (`private.agent_growth_acknowledgment`).
+- **A customer's "trial" question stays support.** The snapshot says whether the sender's billing account is trialing or paying (`account`,
+  flags only). A customer who writes "free trial" or "sign up" is asking for help, not buying, so the question can be drafted for.
+- **An inbound text alerts you** even while texts are not triaged; nothing is sent back by text.
+- **A Sales Executive answer stays in its thread.** It goes out under the conversation's own subject ("Re: <the outreach's subject>"),
+  not "Your message to CareMetric support", when that subject is an email's, clean of identifiers and short enough.
+- **Trial work stops piling up.** Onboarding, activation and trial success plans for a self-service trial with no permitted contact are
+  not planned (the Account Manager's customer emails cover them). The migration closes those already open.
 
 Every five minutes (task `concierge.sweep`, "Look for new messages") it asks the database which
 conversations have a newest inbound message that has **settled** (90 seconds old, so a burst of texts counts

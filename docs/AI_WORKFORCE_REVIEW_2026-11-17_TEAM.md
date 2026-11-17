@@ -9,7 +9,8 @@ Reviewed November 17, 2026, against Hub `main` at `6988187` and Intel `main` at 
   and its migration is applied.
 - **Code:** the owner chose all four recommendations (below): stages 4, 5 and 6 in that order, a trial counted once its card is on
   file, the support acknowledgment sent on its own, and paid ads aimed at the roster's states. Stage 4 is in its own pull requests (Hub
-  `20261117230000_trial_path.sql`, feature `platform.agents.trial-path.v1`, and Intel's part).
+  `20261117230000_trial_path.sql`, feature `platform.agents.trial-path.v1`, and Intel's part). Stage 5 is stacked on it
+  (`20261117240000_support_truth.sql`, feature `platform.agents.support-truth.v1`).
 
 **The owner's ask:** record a baseline of the growth funnel today, then review the parts that earlier reviews barely covered:
 - the Support Concierge;
@@ -155,11 +156,11 @@ anything starts off; plain fixes need no switch.
 
 | # | Change | Fixes | Switch |
 | --- | --- | --- | --- |
-| 5.1 | **The Concierge can draft answers.** <ul><li>A conversation with no product reads guides of every product (a product's own guides first).</li><li>A conversation from an Intel customer or prospect is given Intel as its product.</li><li>The Hub loads Intel's Help topics (the generated Help inventory) as guides.</li></ul> | 2.1 | Plain fix |
+| 5.1 | **The Concierge can draft answers.** A conversation with no product reads guides of every product; one with a product reads its own. Loading Intel's Help topics into the Hub, and giving an Intel sender Intel as its product, are not built (see "What changed (stage 5)"). | 2.1 | Plain fix |
 | 5.2 | **An acknowledgment is not an answer.** The fixed acknowledgment no longer ends "waiting for a first reply", so reminders continue until a real answer. | 2.2 | Plain fix |
 | 5.3 | **The standard acknowledgment can go out on its own** on Act, to a real person only (after #261's sender flags). | 2.3 | "Send the support acknowledgment on its own" |
 | 5.4 | **Smaller fixes:** <ul><li>a Sales answer keeps the thread's subject;</li><li>an inbound text alerts the owner.</li></ul> | 2.5 | Plain fix |
-| 5.5 | **The morning brief and scorecard:** <ul><li>"Opportunities missing a contact" leaves Needs you;</li><li>the watchdog's top losses join Needs you;</li><li>Monday's brief leaves to the scorecard what the scorecard lists;</li><li>the scorecard passes the same watchdog options as the brief;</li><li>CareBase becomes one pilot line;</li><li>cost per trial is the Marketing Manager's spend plus ad spend, over card-confirmed trials.</li></ul> | 3.1, 3.3, 3.4 | Plain fix |
+| 5.5 | **The morning brief and scorecard:** <ul><li>"Opportunities missing a contact" leaves Needs you;</li><li>the watchdog's top losses join Needs you;</li><li>the scorecard passes the same watchdog options as the brief;</li><li>CareBase becomes one pilot line;</li><li>cost per trial is the Marketing Manager's spend plus ad spend, over card-confirmed trials.</li></ul> | 3.1, 3.3, 3.4 | Plain fix |
 | 5.6 | **The watchdog judges idleness by each agent's cadence.** <ul><li>A finished task counts as alive, even when it skipped.</li><li>A weekly agent is idle after eight days.</li><li>An agent that runs only on an event is never idle.</li><li>An agent whose runs have all skipped for two weeks is named.</li></ul> | 3.2, 5.3 | Plain fix |
 | 5.7 | **The strategist:** the "call or email" move becomes the email path. New moves: sign-ups with no card, and trials that end unpaid. | 3.5 | Plain fix |
 
@@ -191,6 +192,32 @@ anything starts off; plain fixes need no switch.
 
 Tests: pgTAP 116, `server/agents-trial-path-integration.mjs` (in CI, twice), unit tests for every rule. Three existing integration tests
 now confirm a card on their Intel trials, as a real trial must. Nothing changes until the migrations are applied and the Hub restarts.
+
+## What changed (stage 5)
+
+Behind `platform.agents.support-truth.v1` (`20261117240000_support_truth.sql` and its contract), stacked on stage 4.
+
+| # | Change | Where |
+| --- | --- | --- |
+| 5.1 | A conversation with no product reads every product's guides (every published guide is tagged to a product, so none could be drafted for). One with a product reads its own, as before | `concierge/knowledge.mjs` (`anyProduct`), `triage.mjs` |
+| 5.2 | The fixed acknowledgment (standard or sales) no longer counts as the answer to a lead: it still waits for its first reply, the reminders continue, and the first-reply figure counts the real answer | `private.agent_growth_acknowledgment`, patched `agent_growth_waiting` and `agent_growth_facts_json` |
+| 5.3 | The standard acknowledgment can go out on its own, behind a new switch. It is a kind of its own, `communication.acknowledge`, whose check admits only its exact text, by email or chat. The support answers step hands it over with the answers (added to the Concierge's list now, as that step is already automatic). It is written by the AI assistant and checked again when sent: the switch, the Concierge's trust, the sender is a person, and the thread has not moved | Settings → AI team → "Send the support acknowledgment on its own" (`agents.auto_acknowledge`); `private.agent_acknowledge_begin`, `communications.acknowledge`, `acknowledgeExecutor` |
+| 5.4 | A Sales Executive answer keeps the thread's subject when it is an email's, clean and short. An inbound text alerts the owner while texts are not triaged, and nothing is sent back | `subjectFor` in `concierge/executor.mjs`; the sweep and triage |
+| 4.7 (moved) | A trialing or paying customer's "trial" or "sign up" question stays support (the snapshot's `account` flags). Onboarding, activation and trial success plans for a trial nobody may write to are no longer planned, and those open are closed | `agent_communication_snapshot`, `growth/worker.mjs`, the migration's update |
+| 5.5 | The brief drops "Opportunities missing a contact" and lists the losses the owner can fix today (an ad platform's access, the bounce guard) under Needs you as "Lost work". The scorecard reads the watchdog with the brief's options. Cost per verified trial is the Marketing Manager's AI spend plus ads. CareBase is one pilot line | `tasks/brief.mjs`, `scorecard/index.mjs`, `scorecard/compose.mjs`, `marketingSpendCents` |
+| 5.6 | Idle by cadence: a finished task (even a skip) counts as alive, and a weekly schedule is idle after 8 days. An agent whose every task in 14 days skipped is named with the reason (no topic left, Observe, no marketed product) | `tasks/watchdog.mjs`, patched `agent_watchdog_facts` |
+| 5.7 | The strategist's activation move is the Account Manager's emails, never a call (`strategist.3`). New: sign-ups that never add a card (`conversion`), and trials that end unpaid (new constraint `paying`, watched by new paying customers) | `strategist/rules.mjs`, patched `growth_strategy_facts_json`, the notes' checks |
+
+**Not built in stage 5:**
+- **Loading Intel's Help topics into the Hub.** It needs a cross-repository feed. Publish Intel guides as Hub articles instead; the
+  Content Marketer's Intel articles count.
+- **Giving an Intel sender Intel as its product.** The account flags and every product's guides cover the drafting.
+- **Leaving Monday's approvals and products down to the scorecard.** The daily brief keeps them, so it is never incomplete; the
+  scorecard repeats them once a week.
+
+Tests: pgTAP 117, `server/agents-support-truth-integration.mjs` (in CI, twice), `server/agents/support-truth.test.mjs` and new triage
+tests. The strategist test expects `strategist.3`. Nothing changes until the migrations are applied and the Hub restarts. The
+acknowledgment also waits for the switch.
 
 ## Decisions for the owner
 

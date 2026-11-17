@@ -8,22 +8,26 @@
  * Every failure is coded and never retried. A send the provider did not confirm, or one recorded but never settled, also warns the
  * owner to look at the thread before anything else is sent.
  */
-import { replySubject } from './executor.mjs';
+import { subjectFor } from './executor.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const failure = code => Object.assign(new Error('The answer could not be sent.'), { code });
-const refusals = new Set(['answers_off', 'conversation_closed', 'conversation_missing', 'target_mismatch', 'thread_changed', 'reply_refused']);
+const refusals = new Set(['answers_off', 'acknowledge_off', 'not_a_person', 'conversation_closed', 'conversation_missing', 'target_mismatch', 'thread_changed', 'reply_refused']);
 
-export function answerExecutor({ communications, notifier, log = line => console.warn(line) }) {
+/**
+ * An executor that sends without the owner's session through one of the inbox's server paths: `communications.answer` (a drafted
+ * answer) or `communications.acknowledge` (the standard acknowledgment, platform.agents.support-truth.v1).
+ */
+function sessionlessExecutor({ send, kind, notifier, store = null, threadSubjects = false, log = line => console.warn(line) }) {
   async function warn(execution, reference) {
     try {
       await notifier.send({
         severity: 'warning', subject: `Check CM-${reference} before sending again`,
-        body: `An answer to CM-${reference} may or may not have reached the customer: the provider did not confirm it.\n\nOpen the conversation in Communications and look at the thread before you send anything else.`,
-        dedupeKey: `concierge:answer-check:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId,
+        body: `${kind === 'acknowledge' ? 'An acknowledgment' : 'An answer'} to CM-${reference} may or may not have reached the customer: the provider did not confirm it.\n\nOpen the conversation in Communications and look at the thread before you send anything else.`,
+        dedupeKey: `concierge:${kind}-check:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId,
       });
     } catch {
-      log(JSON.stringify({ event: 'hub_agent_answer_warning_unsent', action_id: execution.id }));
+      log(JSON.stringify({ event: `hub_agent_${kind}_warning_unsent`, action_id: execution.id }));
     }
   }
 
@@ -33,7 +37,7 @@ export function answerExecutor({ communications, notifier, log = line => console
     const reference = Number.isSafeInteger(input.reference) ? input.reference : 0;
     let outcome;
     try {
-      outcome = await communications.answer({ actionId: execution.id, execution: execution.execution ?? null, subject: replySubject });
+      outcome = await send({ actionId: execution.id, execution: execution.execution ?? null, subject: await subjectFor(execution, { store, threadSubjects }) });
     } catch (error) {
       if (error?.code === 'delivery_unsettled') { await warn(execution, reference); throw failure('delivery_unconfirmed'); }
       throw error;
@@ -45,4 +49,13 @@ export function answerExecutor({ communications, notifier, log = line => console
     await warn(execution, reference);
     throw failure(outcome?.delivery === 'unknown' ? 'delivery_unknown' : 'delivery_unconfirmed');
   };
+}
+
+export function answerExecutor({ communications, notifier, store = null, threadSubjects = false, log = line => console.warn(line) }) {
+  return sessionlessExecutor({ send: input => communications.answer(input), kind: 'answer', notifier, store, threadSubjects, log });
+}
+
+/** The standard acknowledgment, sent without the owner's session once they turned on "Send the support acknowledgment on its own". */
+export function acknowledgeExecutor({ communications, notifier, log = line => console.warn(line) }) {
+  return sessionlessExecutor({ send: input => communications.acknowledge(input), kind: 'acknowledge', notifier, log });
 }

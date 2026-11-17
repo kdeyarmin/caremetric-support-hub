@@ -148,7 +148,7 @@ const growthMail=chosenMail(setting('email.growth_provider'),{sendgrid:sendgridB
 // The Account Manager's customer emails: from the support address, replies to it, one-click unsubscribe headers, and the postal address in every footer.
 const customerMail=bulkSender({from:supportFrom,replyTo:supportReplyTo,category:'hub-lifecycle-email'});
 // The AI team: inert until "Run the AI team" is switched on in Settings, and every agent starts paused until the owner resumes it.
-const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:mailSender,ownerEmail:setting('agents.owner_email'),publicOrigin,enabled:setting('agents.enabled'),communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:setting('agents.customer_text_to_ai'),
+const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:mailSender,ownerEmail:setting('agents.owner_email'),publicOrigin,enabled:setting('agents.enabled'),communications:messaging,features,anthropicApiKey:process.env.ANTHROPIC_API_KEY,record:sqlAiUsageRecorder(pool).record,guides:guideLibrary({load:()=>api.rpc('list_published_content',{}),loadProducts:()=>api.rows('products')}),customerTextToAi:setting('agents.customer_text_to_ai'),autoAcknowledge:setting('agents.auto_acknowledge'),
   leadSecrets:leadSecrets(process.env),
   // Website leads followed up by email (Settings → Customer growth → Follow up website leads by email).
   inboundFollowup:setting('growth.inbound_followup'),
