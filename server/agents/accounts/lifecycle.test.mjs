@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { LAYOUT_MARKER, escapeHtml } from '../../email-layout.mjs';
 import {
-  dueTemplates, foundersWords, httpsOrigin, lifecycleEmail, lifecycleInput, lifecyclePreview, lifecycleProducts, lifecycleReadiness, lifecycleTemplates,
+  cardTermsWords, dueTemplates, foundersWords, httpsOrigin, lifecycleEmail, lifecycleInput, lifecyclePreview, lifecycleProducts, lifecycleReadiness, lifecycleTemplates,
   lifecycleWording, parseLifecycleInput, periodKey, planEmails, renderLifecycleEmail, stillApplies, unsubscribeLabel, wordingHash,
 } from './lifecycle.mjs';
 
@@ -21,7 +21,9 @@ const booking = 'https://cal.example.com/caremetric/setup';
 const postal = 'CareMetric, 100 Example Street, Altoona, PA 16601';
 const unsubscribeUrl = `https://hub.example.test/api/email/unsubscribe/${'b'.repeat(64)}`;
 const products = { carebase: 'CareMetric CareBase', 'caremetric-intel': 'CareMetric Intel' };
-const every = () => Object.entries(products).flatMap(([product, productName]) => lifecycleTemplates.map(template =>
+// Every email each product has (the trial path's `value_followup` only where the product has its next steps: Intel).
+const offered = product => lifecycleTemplates.filter(template => template !== 'value_followup' || lifecycleProducts[product].next);
+const every = () => Object.entries(products).flatMap(([product, productName]) => offered(product).map(template =>
   ({ template, product, link: null, input: lifecycleInput(trial({ product, productName }), template) })));
 
 describe('which email an account is due', () => {
@@ -152,7 +154,7 @@ describe('what one run proposes', () => {
 
   it('keys every email by its period: the template, the account and the product', () => {
     expect(periodKey({ template: 'welcome', tenant: 'maple-grove', product: 'carebase' })).toBe('account:welcome:maple-grove:carebase');
-    expect(new Set(every().map(({ input }) => input.periodKey)).size).toBe(lifecycleTemplates.length * 2);
+    expect(new Set(every().map(({ input }) => input.periodKey)).size).toBe(lifecycleTemplates.length * 2 - 1);
     for (const { input, template, product } of every()) expect(input.periodKey).toBe(`account:${template}:maple-grove:${product}`);
   });
 });
@@ -181,12 +183,14 @@ describe('the emails', () => {
   });
 
   it('has a subject and a purpose for each template', () => {
-    const subjects = Object.fromEntries(lifecycleTemplates.map(template => [template, lifecycleEmail(lifecycleInput(trial(), template)).subject]));
+    const subjects = Object.fromEntries(offered('carebase').map(template => [template, lifecycleEmail(lifecycleInput(trial(), template)).subject]));
     expect(subjects).toEqual({
       welcome: 'Welcome to CareMetric CareBase', setup_nudge: 'Need a hand getting set up in CareMetric CareBase?',
       trial_checkin: 'How is your CareMetric CareBase trial going?', testimonial_ask: 'Would you share a sentence about CareMetric CareBase?',
       cancel_save: 'Before your CareMetric CareBase plan ends', trial_ended: 'Thank you for trying CareMetric CareBase',
+      card_reminder: 'Finish starting your CareMetric CareBase trial', midtrial_nudge: 'A next step for your CareMetric CareBase trial',
     });
+    expect(() => lifecycleEmail(lifecycleInput(trial(), 'value_followup'))).toThrow('Unknown customer email.');
     const words = template => lifecycleWording(lifecycleInput(trial({ product: 'caremetric-intel', productName: 'CareMetric Intel' }), template));
     expect(words('welcome')).toContain('1. Open Setup from the Dashboard and name your agency.');
     expect(words('welcome')).toContain('https://www.caremetricintel.com/Help');
@@ -224,7 +228,8 @@ describe('the emails', () => {
     for (const { input, template, product, link } of every()) {
       // The trial check-in's Founders Sale paragraph (owner decision 2026-11-08) is checked word for word elsewhere; everything else holds.
       // CareMetric's own address in the themes' footers (support@caremetric.ai) is an address, not a mention of AI.
-      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '').replace(/\bsupport@caremetric\.ai\b/g, '');
+      // The card reminder's terms (Intel's own wording) are checked word for word in the trial path's tests.
+      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '').replace(cardTermsWords, '').replace(/\bsupport@caremetric\.ai\b/g, '');
       const label = `${product}/${template}/${link ? 'booking' : 'plain'}`;
       expect(text, label).not.toMatch(/\bAI\b|artificial|assistant|robot|\bbots?\b|automat/i);
       expect(text, label).not.toMatch(/\bcall(?:s|ed|ing)?\b|phone|voicemail|\bdial/i);
@@ -288,9 +293,11 @@ describe('the sent email', () => {
       expect(email.html).toContain(`<a href="${unsubscribeUrl}" target="_blank"`);
       expect(email.html).toContain(`>${unsubscribeLabel}</a>`);
       expect(email.html).toContain(escapeHtml(postal));
-      // The first two emails and the cancellation and win-back emails link to the product's help as a button; the check-in and the
-      // testimonial request do not.
-      expect(email.html.includes(`href="${lifecycleProducts[input.product].helpUrl}"`), input.template).toBe(['welcome', 'setup_nudge', 'cancel_save', 'trial_ended'].includes(input.template));
+      // The first two emails, the mid-trial emails and the cancellation and win-back emails link to the product's help as a button;
+      // the check-in and the testimonial request do not; the card reminder links to the billing page where the product has one.
+      const linksHelp = ['welcome', 'setup_nudge', 'midtrial_nudge', 'value_followup', 'cancel_save', 'trial_ended'].includes(input.template)
+        || (input.template === 'card_reminder' && !lifecycleProducts[input.product].billingUrl);
+      expect(email.html.includes(`href="${lifecycleProducts[input.product].helpUrl}"`), input.template).toBe(linksHelp);
     }
   });
 
@@ -358,5 +365,82 @@ describe('whether the Hub can send customer email', () => {
       'https:\\\\hub.example.test', 'http://hub.example.test', 'ftp://hub.example.test', 'javascript:alert(1)', 'https://', 'https://hub example.test', 'hub.example.test', '',
       null, undefined, 42, {},
     ]) expect(httpsOrigin(value), String(value)).toBeNull();
+  });
+});
+
+describe('the trial path (team review 2026-11-17, stage 4)', () => {
+  const intel = (over = {}) => trial({ product: 'caremetric-intel', productName: 'CareMetric Intel', cardConfirmedAt: null, activeAt: null,
+    firstValueAt: null, countyChosen: false, emails: emails({ card_reminder: null, midtrial_nudge: null, value_followup: null }), ...over });
+  const due = (fact, at = now) => dueTemplates(fact, at, { trialPath: true });
+
+  it('counts an Intel trial from its card: a sign-up without one gets only the card reminder, from about a day in to day 14', () => {
+    expect(due(intel({ trialStart: ago(0.5), created: ago(0.5) }))).toEqual([]);
+    expect(due(intel({ trialStart: ago(1), created: ago(1) }))).toEqual(['card_reminder']);
+    expect(due(intel({ trialStart: ago(14), created: ago(14) }))).toEqual(['card_reminder']);
+    expect(due(intel({ trialStart: ago(15), created: ago(15) }))).toEqual([]);
+    // Without the trial path the same sign-up is welcomed as a trial, as before.
+    expect(dueTemplates(intel({ trialStart: ago(1), created: ago(1) }), now)).toEqual(['welcome']);
+  });
+
+  it('welcomes an Intel trial in the two days after its card, whenever the sign-up began', () => {
+    expect(due(intel({ trialStart: ago(5), cardConfirmedAt: ago(1) }))).toEqual(['welcome']);
+    expect(due(intel({ trialStart: ago(5), cardConfirmedAt: ago(3) }))).toEqual(['setup_nudge']);
+  });
+
+  it('reads Intel\'s use from its activity events, and CareBase\'s from usage reports', () => {
+    expect(due(intel({ trialStart: ago(4), cardConfirmedAt: ago(4) }))).toEqual(['setup_nudge']);
+    expect(due(intel({ trialStart: ago(4), cardConfirmedAt: ago(4), hasUsage: false, activeAt: ago(1) }))).toEqual([]);
+    expect(due(intel({ trialStart: ago(4), cardConfirmedAt: ago(4), hasUsage: true }))).toEqual(['setup_nudge'], 'Intel sends no usage reports');
+    expect(due(trial({ trialStart: ago(4) }))).toEqual(['setup_nudge']);
+    expect(due(trial({ trialStart: ago(4), hasUsage: true }))).toEqual([]);
+  });
+
+  it('fills the middle of the trial: the next step without first value, what to do next with it, never with 5 days or fewer left', () => {
+    expect(due(intel({ trialStart: ago(12), cardConfirmedAt: ago(12) }))).toEqual(['midtrial_nudge']);
+    expect(due(intel({ trialStart: ago(12), cardConfirmedAt: ago(12), firstValueAt: ago(3), activeAt: ago(1) }))).toEqual(['value_followup']);
+    expect(due(intel({ trialStart: ago(9), cardConfirmedAt: ago(9) }))).toEqual([]);
+    expect(due(intel({ trialStart: ago(17), cardConfirmedAt: ago(17) }))).toEqual([]);
+    expect(due(intel({ trialStart: ago(12), cardConfirmedAt: ago(12), trialEnd: ahead(5) }))).toEqual(['trial_checkin']);
+    // CareBase has no next steps written: with usage it gets nothing in the middle; without, the next step.
+    expect(due(trial({ trialStart: ago(12), hasUsage: true }))).toEqual([]);
+    expect(due(trial({ trialStart: ago(12) }))).toEqual(['midtrial_nudge']);
+  });
+
+  it('never thanks a sign-up that never added its card for trying, and keeps the win-back for a trial that had one', () => {
+    const ended = over => intel({ status: 'canceled', trialStart: ago(31), trialEnd: ago(1), ...over });
+    expect(due(ended())).toEqual([]);
+    expect(due(ended({ cardConfirmedAt: ago(30) }))).toEqual(['trial_ended']);
+  });
+
+  it('proposes the new emails only with the trial path, and each at most once', () => {
+    const fact = intel({ trialStart: ago(2), created: ago(2) });
+    expect(planEmails([fact], now).candidates.map(entry => entry.template)).toEqual(['welcome']);
+    expect(planEmails([fact], now, { trialPath: true }).candidates.map(entry => entry.template)).toEqual(['card_reminder']);
+    expect(planEmails([{ ...fact, emails: { ...fact.emails, card_reminder: 'executed' } }], now, { trialPath: true }).candidates).toEqual([]);
+  });
+
+  it('still fits only while it applies: the card reminder until the card, the rest only after it', () => {
+    const sent = (template, over) => stillApplies(template, intel(over), { trialPath: true });
+    expect(sent('card_reminder', {})).toBe(true);
+    expect(sent('card_reminder', { cardConfirmedAt: ago(0) })).toBe(false);
+    expect(sent('welcome', {})).toBe(false);
+    expect(sent('welcome', { cardConfirmedAt: ago(0) })).toBe(true);
+    expect(sent('setup_nudge', { cardConfirmedAt: ago(4), activeAt: ago(0) })).toBe(false);
+    expect(sent('midtrial_nudge', { cardConfirmedAt: ago(12), firstValueAt: ago(0) })).toBe(false);
+    expect(sent('value_followup', { cardConfirmedAt: ago(12), firstValueAt: ago(1) })).toBe(true);
+    expect(sent('value_followup', { cardConfirmedAt: ago(12), firstValueAt: ago(1), cancelling: true })).toBe(false);
+    expect(stillApplies('card_reminder', intel(), {})).toBe(false, 'never without the trial path');
+  });
+
+  it('states Intel\'s card terms as Intel does, never "no credit card", and links the card reminder to Billing', () => {
+    expect(cardTermsWords).toBe('A credit card is required to start the trial. It is not charged during the trial: the plan you chose bills when the trial ends, unless you cancel before then.');
+    const input = lifecycleInput(intel(), 'card_reminder');
+    expect(input.helpUrl).toBe('https://www.caremetricintel.com/Billing');
+    const words = lifecycleWording(input);
+    expect(words).toContain(cardTermsWords);
+    expect(words).not.toMatch(/no credit card|no card/i);
+    expect(lifecycleInput(intel(), 'midtrial_nudge').helpUrl).toBe('https://www.caremetricintel.com/Help');
+    expect(lifecycleWording(lifecycleInput(intel(), 'midtrial_nudge'))).toContain('the physicians in that county that Intel ranks highest as referral sources');
+    expect(lifecycleWording(lifecycleInput(intel(), 'value_followup'))).toContain('When your trial ends, the plan you chose starts on its own');
   });
 });

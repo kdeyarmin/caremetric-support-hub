@@ -94,6 +94,17 @@ suggestions, and the `growth.sites` and `growth.evaluate_live` schedules exist. 
 for roster agencies, runs the live evaluation and shows its result in the scorecard only when the feature is declared
 ([AI workforce review, November 17](AI_WORKFORCE_REVIEW_2026-11-17.md), stage 3).
 
+`20261117230100_trial_path_contract.sql` declares `platform.agents.trial-path.v1` once the customer email, trial card and Sales
+Executive features are declared, `private.growth_trial_cards` has row level security and is closed to every role, the
+`growth_trial_card_seen` trigger on `private.billing_trial_cards` exists, `private.growth_capture_billing` no longer counts an Intel
+trial without its card and queues a counted trial that ended unpaid (`billing:trial_lost:`, the outbox accepting `churned`), the action
+check, the send ledger's template and period checks and `private.agent_lifecycle_json` accept `card_reminder`, `midtrial_nudge` and
+`value_followup`, the facts carry `cardConfirmedAt` and `firstValueAt` and stay executable by no role, `private.agent_lifecycle_defer`
+is executable by `hub_app_server` alone and requires its connection, `private.sales_handoff` includes the `trial` stage and
+`private.growth_app_event` accepts Intel's milestones. Each test fails closed. The Hub server plans the trial path's emails, reads a
+trial's card and activity, and lets a refused customer email wait only when the feature is declared
+([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 4).
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a

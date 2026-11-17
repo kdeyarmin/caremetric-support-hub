@@ -70,7 +70,7 @@ export function agentTeam({
   // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
   const marketing = features?.has?.(marketingFeature) === true;
   const creativeOn = creativeDeclared(features);
-  const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true, growthPriority: features?.has?.('platform.agents.growth-priority.v1') === true, growth: features?.has?.('platform.agents.customer-growth.v1') === true,
+  const store = givenStore ?? sqlAgentStore(pool, { fenced: features?.has?.('platform.agents.hardening.v1') === true, growthPriority: features?.has?.('platform.agents.growth-priority.v1') === true, trialPath: features?.has?.('platform.agents.trial-path.v1') === true, growth: features?.has?.('platform.agents.customer-growth.v1') === true,
     social: socialDeclared(features), socialVideo: features?.has?.('platform.agents.social-video.v1') === true,
     marketing, scorecard: scorecardDeclared(features), creative: creativeOn, creativeData: features?.has?.('platform.agents.creative-data.v1') === true,
     creativeReview: features?.has?.('platform.agents.creative-review.v1') === true,

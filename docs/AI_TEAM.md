@@ -863,6 +863,28 @@ approves the exact text on the Team screen, or, for an agent on **Act**, when th
 | Cancellation check-in | A trial or a paid plan the customer has set to cancel (however long it was paid for) | Thanks for using the product, and what did not work, by reply; the help link. No offer, price or call |
 | Ended-trial check-in | A trial that ended in the last 14 days with no payment ever made for the product (its subscription canceled, expired or paused) | Thanks for trying it, what got in the way, by reply, and help to pick up where they left off; the help link |
 
+**The trial path** ([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 4; `platform.agents.trial-path.v1`,
+`20261117230000_trial_path.sql`) changes the trial emails once the database declares it:
+
+- **An Intel trial starts with its card.** Intel opens a trial when someone opens card setup, before any card exists, so the Hub
+  counts the trial (and the scorecard its start) from the first time Stripe confirms the card (`private.growth_trial_cards`). Until
+  then the sign-up gets only the **card reminder** (from about a day in to day 14): its last step was not finished, Intel's card terms
+  word for word ("A credit card is required to start the trial…"), and a button to Intel's Billing page. It is never welcomed, sent
+  setup help or thanked for trying. The welcome counts its two days from the card.
+- **Setup help reads Intel's own activity** (`active` and `first_value` events). Intel sends no usage reports, so before this every
+  Intel trial was offered setup help. CareBase keeps its usage reports.
+- **The middle of the trial** (days 10 to 16, more than 5 days left): the **mid-trial next step** when the trial has not reached first
+  value (for Intel: open Setup, pick the county, build a first list), or **what to do next** once it has (Intel only: three next steps,
+  and that the plan starts on its own when the trial ends and everything built stays).
+- **A refused email waits.** Before, an email refused for the day's cap of 20 or because the address got a growth email in the last
+  72 hours ended there, and its template was never proposed again, so a prospect who signed up within three days of a cold email never
+  got a welcome. Now it waits (`private.agent_lifecycle_defer`: 9 AM Eastern the next day, or a day) and is checked again when it is tried.
+- **A trial that ends unpaid is lost**, once (`churned`), so the Sales review stops listing it; an extension moves the end date the
+  review reads.
+
+The three new emails follow the same approval as the others: proposed for your approval unless their template is on the Account
+emails step's list.
+
 The last two are proposed only while **Settings → Customer growth → Win-back and cancellation emails** is on (off until
 you turn it on) and the database declares `platform.agents.lifecycle-save.v1` (`20261113300000_lifecycle_save.sql`). They
 are never approved on their own: the autonomy step's list of templates does not include them. Payment failures stay with

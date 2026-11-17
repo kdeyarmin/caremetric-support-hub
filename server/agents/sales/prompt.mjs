@@ -73,6 +73,8 @@ export const responseSchema = {
 const stageWords = {
   identified: 'found by research, not yet contacted', researched: 'researched, not yet contacted', qualified: 'qualified, not yet contacted',
   contacted: 'CareMetric has emailed them', engaged: 'in conversation', demo: 'talking it through', nurture: 'said not now earlier',
+  // The hand-over includes a prospect in its trial (20261117230000_trial_path.sql).
+  trial: 'already in a free trial',
 };
 
 /**

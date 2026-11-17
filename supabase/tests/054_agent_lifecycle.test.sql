@@ -208,13 +208,14 @@ select is((select array_agg(tenant order by tenant) from lifecycle_rows), array[
 select ok(not exists (select 1 from lifecycle_rows where tenant = 'lifecycle-iota'),
   'An account that first paid long ago is not made new by a newer subscription');
 select is((select array_agg(k order by k) from lifecycle_rows, jsonb_object_keys(a) k where tenant = 'lifecycle-alpha'),
-  array['cancelling', 'created', 'emails', 'firstPaidAt', 'hasEmail', 'hasUsage', 'openUrgentCases', 'product', 'productName', 'status', 'suppressed', 'tenant', 'tenantName', 'trialEnd', 'trialStart'],
+  -- The trial path's facts (20261117230000_trial_path.sql): activeAt, cardConfirmedAt, countyChosen and firstValueAt.
+  array['activeAt', 'cancelling', 'cardConfirmedAt', 'countyChosen', 'created', 'emails', 'firstPaidAt', 'firstValueAt', 'hasEmail', 'hasUsage', 'openUrgentCases', 'product', 'productName', 'status', 'suppressed', 'tenant', 'tenantName', 'trialEnd', 'trialStart'],
   'Each row has exactly the whitelisted facts');
 select ok((select j::text !~ '(canary\.|Canary|example\.test|requester@|A subject that must not travel|(cus|sub|in)_lc)' from lifecycle_snap),
   'No address, contact name, case subject or Stripe identifier is anywhere in the facts');
 select is((select jsonb_build_object('hasEmail', a -> 'hasEmail', 'suppressed', a -> 'suppressed', 'emails', a -> 'emails', 'status', a -> 'status', 'productName', a -> 'productName')
     from lifecycle_rows where tenant = 'lifecycle-alpha'),
-  '{"hasEmail": true, "suppressed": false, "status": "trialing", "productName": "CareMetric CareBase", "emails": {"welcome": "rejected", "setup_nudge": null, "trial_checkin": null, "testimonial_ask": null, "cancel_save": null, "trial_ended": null}}'::jsonb,
+  '{"hasEmail": true, "suppressed": false, "status": "trialing", "productName": "CareMetric CareBase", "emails": {"welcome": "rejected", "setup_nudge": null, "trial_checkin": null, "testimonial_ask": null, "cancel_save": null, "trial_ended": null, "card_reminder": null, "midtrial_nudge": null, "value_followup": null}}'::jsonb,
   'A trial says it has an address, and what became of each template''s email (read by its period key)');
 select is((select a -> 'hasEmail' from lifecycle_rows where tenant = 'lifecycle-beta'), 'false'::jsonb, 'A blank billing address is no address');
 select is((select a -> 'hasUsage' from lifecycle_rows where tenant = 'lifecycle-beta'), 'false'::jsonb,

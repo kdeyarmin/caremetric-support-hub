@@ -374,7 +374,7 @@ owner decision 2026-11-13, replacing Apollo). It needs no paid service and no ke
   - A business is searched once and then left for 60 days. One matched to its Medicare record after its search, with nobody
     named, is searched again at once, so its CMS owners and NPI official are read. On 2026-11-17 every business searched with
     nobody named and not matched was searched again once, with the registry at its website's address
-    (`20261117220000_growth_research_people.sql`).
+    (`20261117220500_growth_research_people.sql`).
 - **Their address**, as far as Settings → Customer growth → Finding people's addresses allows:
   - *Names only: never look for a person's own address*: no address is looked for; outreach goes to the business's public
     address (info@).
@@ -743,6 +743,16 @@ Test mode, zero-dollar trial invoices, open/failed invoices, renewals and pre-ro
 subscription with unknown prior payment history remains uncounted unless it is a trial ending after rollout. Invoice/subscription
 webhook ordering is reconciled. Unverified checkout holds remain held; the existing growth maintenance worker drains eligible events,
 backs off individual failures and expires entries after 89 days. No subscription-status inference substitutes for a paid invoice.
+
+**An Intel trial counts from its card** (`platform.agents.trial-path.v1`, `20261117230000_trial_path.sql`, team review 2026-11-17,
+stage 4). Intel asks the Hub to open its trial when someone opens card setup, and Stripe starts the trial before any card is entered,
+so a trialing Intel subscription proves nothing. The mirror no longer queues `trial_started` for one: the first time Stripe confirms its
+card (`private.billing_trial_cards`, written on every entitlement check) queues it, once, under the same key, and
+`private.growth_trial_cards` keeps when that was after the trial ends. A CareBase trial, which needs no card, still counts when it
+starts. A counted trial that ends (canceled, expired or paused) with nothing ever paid on it is queued as `churned`
+(`billing:trial_lost:<subscription>`); a sign-up that never added its card was never a trial and is not lost either. An extended
+trial's new end date reaches its opportunity. Intel may also send three milestones as `active` events (`facts.metric`:
+`county_chosen`, `agency_saved`, `activated`); the Account Manager's facts read whether the county was chosen.
 
 The scorecard's `verifiedPaid`, `verifiedTrialStarts` and `lifecycleStartedAt` distinguish these prospective receipts from form submissions
 and incomplete historical windows. The original HMAC event endpoint remains available for explicitly mapped producers.

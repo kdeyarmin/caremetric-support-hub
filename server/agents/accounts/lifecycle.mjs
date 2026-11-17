@@ -15,6 +15,17 @@
  * - trial_ended      a trial that ended in the last 14 days with no payment ever made for the product: thanks for trying, and what got
  *                    in the way, told by reply.
  *
+ * The trial path (`trialPathFeature`, team review 2026-11-17, stage 4) changes three things once the database declares it:
+ * - A product that needs a card to start its trial (Intel) counts its trial from the card's first confirmation (`cardConfirmedAt`).
+ *   Until then the account gets only `card_reminder` (from about a day after it began, to day 14): one step left, and the card terms.
+ *   The welcome counts its days from the confirmation, and a trial that ends with no card confirmed is not thanked for trying.
+ * - Whether a trial has used the product is read from the product's own activity events (`activeAt`, `firstValueAt`) where it sends
+ *   them (Intel), not from billing usage reports, which Intel never sends; CareBase keeps the usage reports.
+ * - Days 10 to 16 of a trial with more than 5 days left: `midtrial_nudge` when the trial has not reached first value (the one step
+ *   that shows what the product does), else `value_followup` (what teams do next, and that the plan starts on its own) for a product
+ *   that has those words (Intel).
+ * A refused email (the day's cap, or the growth contact gap) then waits and is tried again rather than ending (executor.mjs).
+ *
  * The last two (`saveTemplates`) are proposed only while the database declares `lifecycleSaveFeature` and the owner has turned on
  * Settings → Customer growth → "Win-back and cancellation emails"; neither is ever approved on its own. Payment failures stay with
  * Stripe's own emails.
@@ -35,7 +46,11 @@ import { createHash } from 'node:crypto';
 import { renderEmail, themeFor } from '../../email-layout.mjs';
 
 export const lifecycleFeature = 'platform.agents.lifecycle.v1';
-export const lifecycleTemplates = Object.freeze(['welcome', 'setup_nudge', 'trial_checkin', 'testimonial_ask', 'cancel_save', 'trial_ended']);
+export const lifecycleTemplates = Object.freeze(['card_reminder', 'welcome', 'setup_nudge', 'midtrial_nudge', 'value_followup', 'trial_checkin',
+  'testimonial_ask', 'cancel_save', 'trial_ended']);
+/** The trial path's emails (20261117230000_trial_path.sql), proposed only while the database declares `trialPathFeature`. */
+export const trialPathTemplates = Object.freeze(['card_reminder', 'midtrial_nudge', 'value_followup']);
+export const trialPathFeature = 'platform.agents.trial-path.v1';
 /** The cancellation and win-back emails (20261113300000_lifecycle_save.sql), proposed only with their feature and the owner's switch. */
 export const saveTemplates = Object.freeze(['cancel_save', 'trial_ended']);
 export const lifecycleSaveFeature = 'platform.agents.lifecycle-save.v1';
@@ -45,7 +60,8 @@ const endedStatuses = Object.freeze(['canceled', 'incomplete_expired', 'paused']
 export const proposalLimit = 20;
 export const dailySendLimit = 20;
 export const templateWords = Object.freeze({ welcome: 'welcome', setup_nudge: 'setup help', trial_checkin: 'trial check-in', testimonial_ask: 'testimonial request',
-  cancel_save: 'cancellation check-in', trial_ended: 'ended-trial check-in' });
+  cancel_save: 'cancellation check-in', trial_ended: 'ended-trial check-in', card_reminder: 'card reminder', midtrial_nudge: 'mid-trial next step',
+  value_followup: 'what to do next' });
 export const unsubscribeLabel = 'Unsubscribe from CareMetric check-in emails';
 /** Customer emails sign off as the product's own team, with its website. */
 export const signatureFor = (productName, site) => Object.freeze([`The ${productName} team`, ...(site ? [site] : [])]);
@@ -62,6 +78,8 @@ export const lifecycleProducts = Object.freeze({
       'Choose the training each role needs and assign it.',
     ]),
     setup: 'Most teams start by importing their staff roster and assigning the training each role needs, so their training records are kept in one place for when a surveyor asks to see them. The help center walks through each step for a personal care home or an Assisted Living Facility.',
+    // Whether a trial has used it is read from billing usage reports (CareBase sends no activity events).
+    value: 'usage',
   }),
   'caremetric-intel': Object.freeze({
     site: Object.freeze({ label: 'caremetricintel.com', url: 'https://www.caremetricintel.com' }),
@@ -73,6 +91,17 @@ export const lifecycleProducts = Object.freeze({
       'Build a first list of physicians to reach.',
     ]),
     setup: 'Most teams start in Setup: they name the agency, pick the counties it covers and build a first list of physicians to reach. The Help page walks through each step.',
+    // Trial path: the trial needs a card (Intel keeps a sign-up on its Billing page until Stripe confirms one), and use is read from
+    // Intel's activity events.
+    cardRequired: true,
+    billingUrl: 'https://www.caremetricintel.com/Billing',
+    value: 'events',
+    midtrial: 'Most teams see what Intel can do once they open Setup, pick the county their trial covers and build a first list: the physicians in that county that Intel ranks highest as referral sources.',
+    next: Object.freeze([
+      'Add the accounts you visit, so visits, referrals and follow-ups stay in one place.',
+      'Log each visit as you make it, so your last visit and notes are ready before the next one.',
+      'Open County Intelligence to see where the county\'s residents are hospitalized and the referral sources near you.',
+    ]),
   }),
 });
 
@@ -91,8 +120,9 @@ export const periodKey = ({ template, tenant, product }) => `account:${template}
  * The templates an account and product are due, most pressing first, from one row of the database's facts
  * (private.agent_lifecycle_snapshot). Templates already proposed are not removed here; see `planEmails`.
  */
-export function dueTemplates(fact, now = new Date()) {
+export function dueTemplates(fact, now = new Date(), { trialPath = false } = {}) {
   if (!fact || !Object.hasOwn(lifecycleProducts, fact.product)) return [];
+  if (trialPath) return trialPathDue(fact, now);
   // A live trial or plan set to cancel gets the cancellation check-in only, never a welcome or a testimonial request. A subscription
   // that has ended keeps Stripe's cancellation fields, so the flag is read only while it is still trialing or active.
   if (fact.cancelling === true && ['trialing', 'active'].includes(fact.status)) return ['cancel_save'];
@@ -121,13 +151,64 @@ export function dueTemplates(fact, now = new Date()) {
   return [];
 }
 
+// Trial path: whether a trial with a card requirement has its card confirmed, when its trial counts from, and whether it has used the
+// product (activity events where the product sends them, else billing usage reports) or reached first value.
+const cardMissing = fact => lifecycleProducts[fact.product]?.cardRequired === true && at(fact.cardConfirmedAt) === null;
+const trialFrom = fact => {
+  const start = at(fact.trialStart) ?? at(fact.created);
+  const card = lifecycleProducts[fact.product]?.cardRequired === true ? at(fact.cardConfirmedAt) : null;
+  return start === null ? card : card === null ? start : Math.max(start, card);
+};
+const usedIt = fact => lifecycleProducts[fact.product]?.value === 'events' ? at(fact.activeAt) !== null : fact.hasUsage === true;
+const reachedValue = fact => lifecycleProducts[fact.product]?.value === 'events' ? at(fact.firstValueAt) !== null : fact.hasUsage === true;
+
+/** The templates due under the trial path (see the module's comment), most pressing first. */
+function trialPathDue(fact, now) {
+  if (fact.cancelling === true && ['trialing', 'active'].includes(fact.status)) return ['cancel_save'];
+  const moment = now.getTime();
+  if (endedStatuses.includes(fact.status)) {
+    // A sign-up whose card was never confirmed never started its trial, so it is not thanked for trying.
+    if (cardMissing(fact)) return [];
+    const end = at(fact.trialEnd);
+    return end !== null && at(fact.firstPaidAt) === null && end <= moment && moment - end < 14 * day ? ['trial_ended'] : [];
+  }
+  if (fact.status === 'trialing') {
+    if (cardMissing(fact)) {
+      const began = at(fact.trialStart) ?? at(fact.created);
+      return began !== null && moment - began >= 20 * 3_600_000 && moment - began <= 14 * day ? ['card_reminder'] : [];
+    }
+    const start = trialFrom(fact);
+    const end = at(fact.trialEnd);
+    const trialDay = start === null ? null : Math.floor((moment - start) / day);
+    const left = end === null ? null : (end - moment) / day;
+    const due = [];
+    if (trialDay !== null && trialDay >= 0 && trialDay <= 2) due.push('welcome');
+    if (left !== null && left > 2 && left <= 5) due.push('trial_checkin');
+    if (trialDay !== null && trialDay >= 3 && trialDay <= 6 && !usedIt(fact)) due.push('setup_nudge');
+    if (trialDay !== null && trialDay >= 10 && trialDay <= 16 && (left === null || left > 5)) {
+      if (!reachedValue(fact)) due.push('midtrial_nudge');
+      else if (lifecycleProducts[fact.product]?.next) due.push('value_followup');
+    }
+    return due;
+  }
+  return dueTemplates(fact, now);
+}
+
 /**
  * Whether an approved email still fits the account when it is about to be sent: the trial is still a trial (and, for the setup
  * offer, the product has still reported no positive usage), or the account is still paying with no open high or urgent case. A trial or a
  * plan that is being cancelled fits nothing.
  */
-export function stillApplies(template, fact) {
+export function stillApplies(template, fact, { trialPath = false } = {}) {
   if (!fact) return false;
+  if (trialPath) {
+    if (template === 'card_reminder') return fact.status === 'trialing' && fact.cancelling !== true && cardMissing(fact);
+    // Every other trial email waits for the card where the product needs one.
+    if (['welcome', 'setup_nudge', 'trial_checkin', 'midtrial_nudge', 'value_followup', 'trial_ended'].includes(template) && cardMissing(fact)) return false;
+    if (template === 'setup_nudge') return fact.status === 'trialing' && fact.cancelling !== true && !usedIt(fact);
+    if (template === 'midtrial_nudge') return fact.status === 'trialing' && fact.cancelling !== true && !reachedValue(fact);
+    if (template === 'value_followup') return fact.status === 'trialing' && fact.cancelling !== true && reachedValue(fact);
+  } else if (trialPathTemplates.includes(template)) return false;
   if (template === 'cancel_save') return fact.cancelling === true && ['trialing', 'active'].includes(fact.status);
   // A new subscription (a second trial, or a paid plan) is the newest one the facts show, and ends this email's moment.
   if (template === 'trial_ended') return endedStatuses.includes(fact.status) && at(fact.firstPaidAt) === null;
@@ -142,11 +223,12 @@ export function stillApplies(template, fact) {
  * email per account a run (a second one waits for the next run), never to an account without a usable address or one that
  * unsubscribed. Returns the candidates in order (most pressing template first, then the database's order: newest first) and counts.
  */
-export function planEmails(accounts, now = new Date(), { save = false } = {}) {
+export function planEmails(accounts, now = new Date(), { save = false, trialPath = false } = {}) {
   const entries = [];
   const skipped = { noAddress: 0, suppressed: 0, sameAccount: 0 };
   for (const fact of accounts ?? []) {
-    const due = dueTemplates(fact, now).filter(template => (save || !saveTemplates.includes(template)) && (fact.emails ?? {})[template] == null);
+    const due = dueTemplates(fact, now, { trialPath }).filter(template => (save || !saveTemplates.includes(template))
+      && (trialPath || !trialPathTemplates.includes(template)) && (fact.emails ?? {})[template] == null);
     if (due.length === 0) continue;
     if (fact.hasEmail !== true) { skipped.noAddress += 1; continue; }
     if (fact.suppressed === true) { skipped.suppressed += 1; continue; }
@@ -163,6 +245,9 @@ export function planEmails(accounts, now = new Date(), { save = false } = {}) {
   return { candidates, skipped };
 }
 
+/** The card reminder's terms, as Intel states them (docs/GTM_FACTS.md, `trialCardTerms`): the one place a customer email names a card. */
+export const cardTermsWords = 'A credit card is required to start the trial. It is not charged during the trial: the plan you chose bills when the trial ends, unless you cancel before then.';
+
 /** The Founders Sale as the trial check-in states it: the offer's exact terms (billing applies it automatically at conversion), no price. */
 export const foundersWords = productName => `If you decide to keep ${productName}, the Founders Sale applies on its own: eligible subscription charges are 50% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.`;
 
@@ -175,6 +260,51 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
   if (!words || !lifecycleTemplates.includes(template)) throw new TypeError('Unknown customer email.');
   const help = { type: 'button', label: words.helpLabel, url: helpUrl };
   const signature = signatureFor(productName, words.site);
+  if (template === 'card_reminder') {
+    // Intel's card terms as Intel states them (docs/GTM_FACTS.md, `trialCardTerms`); never "no credit card".
+    return {
+      subject: `Finish starting your ${productName} trial`,
+      preheader: 'One step left to start your trial.',
+      heading: 'One step left',
+      blocks: [
+        { type: 'paragraph', text: `You began a ${productName} trial for ${tenantName}, but its last step was not finished, so the trial has not started yet.` },
+        { type: 'paragraph', text: cardTermsWords },
+        { type: 'button', label: 'Finish starting your trial', url: helpUrl },
+        { type: 'paragraph', text: 'If something stopped you, reply to this email and tell us what it was. We will help you through it.' },
+      ],
+      signature,
+    };
+  }
+  if (template === 'midtrial_nudge') {
+    return {
+      subject: `A next step for your ${productName} trial`,
+      preheader: 'The one step that shows most teams what it can do.',
+      heading: 'A next step for your trial',
+      blocks: [
+        { type: 'paragraph', text: `You are partway through your ${productName} trial for ${tenantName}, and we wanted to point to the step that shows most teams what it can do.` },
+        { type: 'callout', tone: 'info', title: 'The next step:', text: words.midtrial ?? words.setup },
+        help,
+        { type: 'paragraph', text: 'If something is in the way, reply to this email and tell us what you would like to get done. We will send you the steps for it.' },
+      ],
+      signature,
+    };
+  }
+  if (template === 'value_followup') {
+    if (!words.next) throw new TypeError('Unknown customer email.');
+    return {
+      subject: `What to do next in ${productName}`,
+      preheader: 'You have built your first list. Here is what teams do next.',
+      heading: 'What to do next',
+      blocks: [
+        { type: 'paragraph', text: `You have built your first list in ${productName} for ${tenantName}. Teams that keep using it after the trial usually do these next:` },
+        { type: 'steps', items: words.next },
+        { type: 'paragraph', text: 'When your trial ends, the plan you chose starts on its own, and everything you have built stays in place.' },
+        help,
+        { type: 'paragraph', text: 'If you have a question, reply to this email. We will answer here.' },
+      ],
+      signature,
+    };
+  }
   if (template === 'welcome') {
     return {
       subject: `Welcome to ${productName}`,
@@ -300,7 +430,9 @@ export function lifecycleInput(fact, template) {
   if (!product || !slug.test(fact.tenant ?? '') || !lifecycleTemplates.includes(template)) throw new TypeError('Unknown customer email.');
   const input = {
     template, tenant: fact.tenant, tenantName: tidy(fact.tenantName, 80) || fact.tenant, product: fact.product,
-    productName: tidy(fact.productName, 60) || fact.product, helpUrl: product.helpUrl,
+    productName: tidy(fact.productName, 60) || fact.product,
+    // The card reminder links to the product's billing page, where the card is added; every other email to its help.
+    helpUrl: template === 'card_reminder' && product.billingUrl ? product.billingUrl : product.helpUrl,
     // Kept as null: the database's shape for this action still has the key, and no email offers a booking page any more.
     bookingUrl: null,
     periodKey: periodKey({ template, tenant: fact.tenant, product: fact.product }),

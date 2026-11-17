@@ -70,6 +70,8 @@ async function makeAccount(key, { email = canary(key), livemode = true, subscrip
       select $1::text, $2::uuid, $3::text, p.id, $4::text, 'charge_automatically', $5::boolean, now() - $6::float * interval '1 day', now() + $7::float * interval '1 day', $8::boolean,
         now() - $6::float * interval '1 day', now() from hub.products p where p.slug = $9::text`,
     [id, tenant, customer, subscription.status ?? 'trialing', subscription.cancelling ?? false, subscription.started ?? 1, subscription.ends ?? 29, livemode, subscription.product ?? 'carebase']);
+    // An Intel trial starts once Stripe confirms its card (20261117230000_trial_path.sql): recorded as billing.mjs records it.
+    if (subscription.card) await admin.query('insert into private.billing_trial_cards(stripe_subscription_id, tenant_id) values ($1, $2)', [id, tenant]);
     if (subscription.paid !== undefined) {
       await admin.query(`insert into private.billing_invoices(stripe_invoice_id, tenant_id, stripe_customer_id, stripe_subscription_id, status, currency, total, subtotal, amount_due,
           amount_paid, amount_remaining, livemode, stripe_created, seen_at)
@@ -146,7 +148,7 @@ try {
   // ---- Fixtures --------------------------------------------------------------------------------------------------------------------
   await admin.query('update private.billing_settings set livemode = true');
   await makeAccount('welcome', { subscriptions: [{ started: 1 }] });
-  await makeAccount('intel', { email: canary('welcome'), subscriptions: [{ product: 'caremetric-intel', started: 0.5, ends: 13.5 }] });
+  await makeAccount('intel', { email: canary('welcome'), subscriptions: [{ product: 'caremetric-intel', started: 0.5, ends: 13.5, card: true }] });
   await makeAccount('setup', { subscriptions: [{ started: 4, ends: 26 }] });
   await makeAccount('active', { subscriptions: [{ started: 4, ends: 26 }], usage: ['carebase'] });
   await makeAccount('checkin', { subscriptions: [{ started: 25, ends: 4 }] });
@@ -160,7 +162,7 @@ try {
   await makeAccount('silent', { subscriptions: [{ started: 1 }] });
   await makeAccount('crash', { subscriptions: [{ started: 1 }] });
   await makeAccount('replay', { subscriptions: [{ started: 1 }] });
-  await makeAccount('twice', { subscriptions: [{ started: 1 }, { product: 'caremetric-intel', started: 1.5, ends: 12.5 }] });
+  await makeAccount('twice', { subscriptions: [{ started: 1 }, { product: 'caremetric-intel', started: 1.5, ends: 12.5, card: true }] });
   const mine = list => list.filter(entry => entry.tenant.startsWith(prefix));
 
   // What the facts say: never an address, a contact name or a Stripe identifier.
@@ -231,7 +233,7 @@ try {
   const proposedRun = await fire();
   assert.equal(proposedRun.status, 'done', 'the run finishes once it has proposed');
   assert.deepEqual([proposedRun.result.outcome, proposedRun.result.proposed, proposedRun.result.autoApproved], ['proposed', 10, 0]);
-  assert.deepEqual(proposedRun.result.byTemplate, { welcome: 7, setup_nudge: 1, trial_checkin: 1, testimonial_ask: 1 });
+  assert.deepEqual(proposedRun.result.byTemplate, { card_reminder: 0, welcome: 7, setup_nudge: 1, midtrial_nudge: 0, value_followup: 0, trial_checkin: 1, testimonial_ask: 1 });
   assert.equal(proposedRun.result.deferred, 1, 'the second product of one account waits for the next run');
   let actions = await emailActions();
   // The account with two trials gets the newer one's welcome first (the facts come newest first).
@@ -372,7 +374,13 @@ try {
     await admin.query("insert into private.agent_lifecycle_emails (action_id, period_key, template, email_hash, unsubscribe_hash, status, finished_at) values ($1, $2, 'welcome', $3, $4, 'sent', now())",
       [id, input.periodKey, 'e'.repeat(64), digest(randomUUID())]);
   }
-  assert.equal((await approve('testimonial')).error, 'daily_limit');
+  // With the trial path (platform.agents.trial-path.v1) an email over the cap is not refused for good: it waits for 9 AM Eastern tomorrow.
+  const capped = await approve('testimonial');
+  assert.deepEqual([capped.status, capped.error ?? null], ['approved', null], 'an email over the cap waits instead of failing');
+  const waitingCap = await row('select status, not_before from private.agent_actions where id = $1', [(await actionFor('testimonial')).id]);
+  assert.equal(waitingCap.status, 'approved');
+  assert.equal(new Date(waitingCap.not_before).getTime(),
+    new Date((await row("select (date_trunc('day', now() at time zone 'America/New_York') + interval '1 day 9 hours') at time zone 'America/New_York' as t")).t).getTime());
   assert.equal(sent.length, 4);
   await admin.query('delete from private.agent_actions where id = any($1::uuid[])', [filler]);
 
@@ -424,14 +432,15 @@ try {
   assert.deepEqual(await team.actions.executeOne(offAction.id, { kind: 'email.send' }), { executed: false, failed: true, skipped: false, error: 'auto_send_off' });
   assert.equal(sent.length, 5);
 
-  // ---- More than a page: 205 newer trials on their tenth day cannot hide an older account whose email is due -------------------------
+  // ---- More than a page: 205 newer trials on their eighth day cannot hide an older account whose email is due -----------------------
+  // (Day 8: no email is due then, the mid-trial emails of the trial path starting on day 10.)
   const bulk = (await rows(`insert into hub.tenants(slug, name) select '${prefix}-bulk-' || n, 'Lifecycle Bulk ${run} ' || n from generate_series(1, 205) n returning id`)).map(entry => entry.id);
   tenants.push(...bulk);
   await admin.query(`with t as (select id, row_number() over (order by slug) as n from hub.tenants where id = any($1::uuid[]))
     insert into private.billing_customers(tenant_id, stripe_customer_id, email, name, livemode, seen_at) select id, 'cus_lc${run}bulk' || n, 'bulk' || n || '.${run}@example.test', '', true, now() from t`, [bulk]);
   await admin.query(`with t as (select id, row_number() over (order by slug) as n from hub.tenants where id = any($1::uuid[]))
     insert into private.billing_subscriptions(stripe_subscription_id, tenant_id, stripe_customer_id, product_id, status, collection_method, trial_start, trial_end, livemode, stripe_created, seen_at)
-    select 'sub_lc${run}bulk' || n, t.id, 'cus_lc${run}bulk' || n, p.id, 'trialing', 'charge_automatically', now() - interval '10 days', now() + interval '20 days', true, now() - interval '10 days', now()
+    select 'sub_lc${run}bulk' || n, t.id, 'cus_lc${run}bulk' || n, p.id, 'trialing', 'charge_automatically', now() - interval '8 days', now() + interval '22 days', true, now() - interval '8 days', now()
     from t cross join (select id from hub.products where slug = 'carebase') p`, [bulk]);
   await makeAccount('paged', { subscriptions: [{ status: 'active', started: 100, ends: -70, paid: 50 }] });
   // A trial that reported zero (the usage API accepts it) has no usage, so it still gets the setup offer.
@@ -443,7 +452,7 @@ try {
   assert.ok((await call('private.agent_lifecycle_snapshot', [200, null, null, 200])).accounts.some(entry => entry.tenant === slugs.paged), 'it is on the second');
   const pagedRun = await fire();
   assert.deepEqual([pagedRun.result.outcome, pagedRun.result.proposed, pagedRun.result.truncated], ['proposed', 2, false]);
-  assert.deepEqual(pagedRun.result.byTemplate, { welcome: 0, setup_nudge: 1, trial_checkin: 0, testimonial_ask: 1 });
+  assert.deepEqual(pagedRun.result.byTemplate, { card_reminder: 0, welcome: 0, setup_nudge: 1, midtrial_nudge: 0, value_followup: 0, trial_checkin: 0, testimonial_ask: 1 });
   assert.ok(pagedRun.result.read > 200, `every page was read (${pagedRun.result.read} accounts)`);
   assert.equal((await actionFor('paged')).input.template, 'testimonial_ask', 'the account on the second page gets its email');
   assert.equal((await actionFor('zerousage')).input.template, 'setup_nudge', 'and a report of zero does not hold back the setup offer');
@@ -460,7 +469,7 @@ try {
   const saveFacts = Object.fromEntries(mine((await call('private.agent_lifecycle_snapshot', [500, null, null])).accounts).map(entry => [entry.tenant, entry]));
   assert.deepEqual([saveFacts[slugs.leaving]?.cancelling, saveFacts[slugs.ended]?.status, saveFacts[slugs.longended], saveFacts[slugs.cameback]], [true, 'canceled', undefined, undefined],
     'a long-paid plan being cancelled and a trial that ended 5 days ago are in the facts; one that ended a month ago, or whose customer started a new subscription since, is not');
-  assert.deepEqual(Object.keys(saveFacts[slugs.ended].emails).sort(), ['cancel_save', 'setup_nudge', 'testimonial_ask', 'trial_checkin', 'trial_ended', 'welcome']);
+  assert.deepEqual(Object.keys(saveFacts[slugs.ended].emails).sort(), ['cancel_save', 'card_reminder', 'midtrial_nudge', 'setup_nudge', 'testimonial_ask', 'trial_checkin', 'trial_ended', 'value_followup', 'welcome']);
   await fire();
   assert.ok(!(await emailActions()).some(action => ['cancel_save', 'trial_ended'].includes(action.input.template)), 'nothing is proposed while the switch is off');
   const saveRun = await ownerCall('hub.request_agent_task', ['account_manager', 'accounts.lifecycle']);
