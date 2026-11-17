@@ -1,5 +1,6 @@
 import { createHash, createHmac, createPublicKey, randomBytes, verify } from 'node:crypto';
 import { live } from './live.mjs';
+import { validGrowthFromName } from './growth/sender.mjs';
 
 /**
  * Amazon SES for the Hub's email (docs/AMAZON_SES.md). Two senders with the same interface as the SendGrid ones in
@@ -137,13 +138,15 @@ export function sesMail({ accessKeyId, secretAccessKey, sessionToken = null, reg
 }
 
 /** SES for bulk, growth and customer email: the same interface as sendgridBulkMail (bulk-email.mjs). Settings may be functions. */
-export function sesBulkMail({ accessKeyId, secretAccessKey, sessionToken = null, region = 'us-east-2', configurationSet = null, from = 'support@caremetric.ai', fromName = 'CareMetric', replyTo = from, category = 'hub-bulk-email', fetchImpl = fetch, now = () => new Date() }) {
+export function sesBulkMail({ accessKeyId, secretAccessKey, sessionToken = null, region = 'us-east-2', configurationSet = null, from = 'support@caremetric.ai', fromName = 'CareMetric', fromNameLocked = false, replyTo = from, category = 'hub-bulk-email', fetchImpl = fetch, now = () => new Date() }) {
   const client = sesClient({ accessKeyId, secretAccessKey, sessionToken, region, configurationSet, fetchImpl, now });
   const sender = () => ({ from: String(live(from) ?? '').trim(), fromName: String(live(fromName) ?? ''), replyTo: String(live(replyTo) ?? '').trim() });
   return {
     get configured() { const value = sender(); return client.configured && emailAddress.test(value.from) && emailAddress.test(value.replyTo) && /^[a-z0-9-]{1,40}$/.test(category); },
-    async send({ to, subject, text, html, unsubscribeUrl, messageId }) {
-      const { from, fromName, replyTo } = sender();
+    // `messageFromName`: one message's own display name, as in sendgridBulkMail (bulk-email.mjs).
+    async send({ to, subject, text, html, unsubscribeUrl, messageId, fromName: messageFromName = null }) {
+      const { from, fromName: senderName, replyTo } = sender();
+      const fromName = messageFromName && live(fromNameLocked) !== true && validGrowthFromName(messageFromName) ? messageFromName.trim() : senderName;
       const headers = unsubscribeUrl ? { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } : {};
       const raw = mimeMessage({ from, fromName, to, replyTo, subject, text, html, headers, date: now() });
       const tags = [{ Name: 'category', Value: category }, ...(typeof messageId === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(messageId) ? [{ Name: 'growth_message_id', Value: messageId }] : [])];

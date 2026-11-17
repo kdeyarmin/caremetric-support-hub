@@ -23,11 +23,11 @@ it('saves the exact contact and policy versions used to write a draft',async()=>
  expect(store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({version:4,contactVersion:7,policyVersion:9}));
  expect(store.propose).toHaveBeenCalledWith('task','message');
 });
-it('keeps a first email\'s priority band with its arms once the database declares stage 2, and passes the short-form switch',async()=>{
+it('keeps a first email\'s priority band with its arms once the database declares stage 2',async()=>{
  const o={...base,version:4,contact_id:'contact',contact_version:7,eligibility:'permitted',priority_band:2,policy:{version:9,approved_claim:'Discuss staff training.'},evidence:[{id:'source',source_url:'https://example.org',claim:'Care operator.',observed_at:new Date().toISOString()}]};
  for(const [features,band] of [[new Set(['platform.agents.growth-priority.v1']),'2'],[new Set(),undefined]]) {
   const store={snapshot:vi.fn(async()=>({total:1,items:[o]})),plan:vi.fn(async()=> 'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn()};
-  const growth={store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token',priority:{shortFirst:()=>true}};
+  const growth={store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token'};
   await growthHandlers({growth,features})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
   expect(store.draft.mock.calls[0][2].arms.band).toBe(band);
  }
@@ -436,7 +436,9 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  const sweep=async(enabled)=>{
   const store={snapshot:vi.fn(async()=>({total:2,items:[o,{...o,id:'next',organization_id:'org2'}]})),plan:vi.fn(async()=> 'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn(),
    learningActive:vi.fn(async()=>({version:5,memo:'- Shorter emails drew more replies.'}))};
-  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Referral sources',body:'Which hospitals send your agency the most patients? Reply to this email and we will send the steps.',citations:['source'],needsHuman:false}}))};
+  // A first email to an Intel agency is its market report and one question (here the page where it gets one: it has no roster report).
+  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'A market report for your hospice',citations:['source'],needsHuman:false,
+   body:'A free market report for your hospice, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nWhich hospitals send your agency the most patients?'}}))};
   const growth={store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token',learning:{enabled}};
   const outcome=await growthHandlers({growth,model,features:new Set([growthLearningFeature])})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
   expect(outcome.result.rejected).toBeUndefined();
@@ -445,11 +447,14 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  const on=await sweep(true);
  expect(on.store.learningActive).toHaveBeenCalledTimes(1);
  expect(on.store.learningActive).toHaveBeenCalledWith('caremetric-intel');
- expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.16-m5');
+ expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.17-m5');
  expect(on.store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({memoVersion:5}));
+ // The report-only form needs no switch: the sweep hands the writer none, and the email records its form.
+ expect(on.store.draft.mock.calls[0][2].arms).toMatchObject({form:'short',length:'report'});
+ expect(JSON.parse(on.model.run.mock.calls[0][1].user).style).toBe('Keep the body to about one hundred words, never more than 120.');
  const off=await sweep(false);
  expect(off.store.learningActive).not.toHaveBeenCalled();
- expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.16');
+ expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.17');
  expect(off.store.draft.mock.calls[0][2].memoVersion).toBeUndefined();
 });
 
@@ -531,6 +536,114 @@ it('never sends an email whose words a newer rule refuses: it is withdrawn, so t
  await expect(run({store:fine})).resolves.toEqual({delivery:'accepted'});
  expect(fine.withdraw).not.toHaveBeenCalled();
  expect(mail.send).toHaveBeenCalledTimes(1);
+});
+it('withdraws a queued prospect email that names the card an Intel trial needs, and sends a customer message that does (owner direction 2026-11-17)',async()=>{
+ // Every trial offer was told to state the card terms until 2026-11-17; one approved before then is written again, not sent.
+ const body='You can try Intel free for 30 days. A credit card is required to start the trial, and canceling before it ends means no charge:\nhttps://www.caremetricintel.com/';
+ const claimed={send:true,to:'info@operator.example',id:'m',workId:'w',product:'caremetric-intel',purpose:'marketing',subject:'Which referral sources are slipping?',body};
+ const mail={configured:true,send:vi.fn(async()=>({delivery:'sent',id:'provider'}))};
+ const run=store=>growthExecutors({growth:{configured:()=>true,unsubscribeToken:()=>'a'.repeat(64),store},mail,publicOrigin:'https://hub.example.org',postalAddress:'CareMetric, 1 Main St, Altoona, PA'})['growth.message']({id:'a',input:{messageId:'m'}});
+ const store={claim:vi.fn(async()=>claimed),finish:vi.fn(async()=>true),withdraw:vi.fn(async()=>true)};
+ await expect(run(store)).resolves.toEqual({delivery:'withdrawn',reason:'card_terms'});
+ expect(store.withdraw).toHaveBeenCalledWith('m','card_terms');
+ expect(mail.send).not.toHaveBeenCalled();
+ // The same offer without the card goes out, and so does a customer's message that says what happens when its trial ends.
+ for(const over of [{body:'You can try Intel free for 30 days on one county:\nhttps://www.caremetricintel.com/'},{purpose:'success'},{product:'carebase'}]) {
+  const fine={claim:vi.fn(async()=>({...claimed,...over})),finish:vi.fn(async()=>true),withdraw:vi.fn()};
+  await expect(run(fine),JSON.stringify(Object.keys(over))).resolves.toEqual({delivery:'accepted'});
+  expect(fine.withdraw).not.toHaveBeenCalled();
+ }
+ expect(mail.send).toHaveBeenCalledTimes(3);
+});
+it('sends a founder-signed email from the founder\'s name, and a customer message without one (owner decision 2026-11-17)',async()=>{
+ const send=async claim=>{
+  const store={claim:vi.fn(async()=>({send:true,to:'info@operator.example',id:'m',workId:'w',product:'caremetric-intel',subject:'A question',body:'Which counties does your team cover?',...claim})),finish:vi.fn()};
+  const mail={configured:true,send:vi.fn(async()=>({delivery:'sent',id:'provider'}))};
+  await growthExecutors({growth:{store,configured:()=>true,unsubscribeToken:()=>'a'.repeat(64)},mail,publicOrigin:'https://hub.example.org',postalAddress:'CareMetric, 1 Main St, Altoona, PA'})['growth.message']({id:'a',input:{messageId:'m'}});
+  expect(mail.send).toHaveBeenCalledTimes(1);
+  return mail.send.mock.calls[0][0];
+ };
+ // The same rule as the signature: prospect outreach and a quiet follow-up to a prospect are the founder's letters.
+ const outreach=await send({purpose:'marketing'});
+ expect(outreach.fromName).toBe('Dr. Kevin Deyarmin, CareMetric');
+ expect(outreach.text).toContain('Dr. Kevin C. Deyarmin\nFounder, CareMetric');
+ const quiet=await send({purpose:'success',quiet:true});
+ expect(quiet.fromName).toBe('Dr. Kevin Deyarmin, CareMetric');
+ expect(quiet.text).toContain('Dr. Kevin C. Deyarmin\nFounder, CareMetric');
+ expect((await send({purpose:'marketing',product:'carebase'})).fromName).toBe('Dr. Kevin Deyarmin, CareMetric');
+ // A customer's message comes from the product team, under the sender's own name: it names none.
+ for(const claim of [{purpose:'success'},{purpose:'success',quiet:false},{}]) {
+  const customer=await send(claim);
+  expect(customer).not.toHaveProperty('fromName');
+  expect(customer.text).toContain('The CareMetric Intel team');
+  expect(customer.text).not.toContain('Deyarmin');
+ }
+ // Nothing else about the send changes with the name.
+ expect(outreach).toMatchObject({to:'info@operator.example',subject:'A question',messageId:'m',unsubscribeUrl:`https://hub.example.org/api/growth/preferences/${'a'.repeat(64)}`});
+});
+// What a sent email's links look like: the sweep tags every product page a draft links (links.mjs tagLinks), and an agency's report link
+// carries its own signed token.
+const rosterLine={id:'r',source_url:'https://data.cms.gov/provider-characteristics/hospitals-and-other-facilities/provider-of-services-file',observed_at:new Date().toISOString(),confidence:'high',
+ claim:'CMS Provider of Services file, 2026Q3: Riverbend Home Health (CCN 397001) is a Medicare-certified home health agency in Riverton, PA; certified June 27, 2024.'};
+const tagsOf=touch=>`utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch${touch}&utm_content=web`;
+const anchorOf=(html,url)=>new RegExp(`<a href="${url.replaceAll('&','&amp;').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}"[^>]*>([^<]*)</a>`).exec(html)?.[1]??null;
+it('shows a link on a line of its own by a short label in the HTML part, and keeps the address in the text part (email review 2026-11-17)',async()=>{
+ const {linkLabels}=await import('./worker.mjs');
+ const {reportLinks}=await import('./report-link.mjs');
+ const reports=reportLinks({key:'k'.repeat(40)});
+ const link=reports.linkFor({id:'o1',product:'caremetric-intel',name:'Riverbend Home Health',evidence:[rosterLine]});
+ const trial=`https://www.caremetricintel.com/?${tagsOf(2)}`;
+ const body=`One page of the report lists the hospitals your county's residents use.\n${link.url}\n\nYou can try it free for 30 days on one county:\n${trial}`;
+ const email=growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'The hospitals your county uses',body,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t',reports});
+ // The report: what it is, never its 100 characters of token.
+ expect(anchorOf(email.html,link.url)).toBe('Open your agency&#39;s market report (PDF)');
+ expect(email.html).not.toContain(`>${link.url}<`);
+ // The trial: the playbook's own name for the product's next step.
+ expect(anchorOf(email.html,trial)).toBe('Start a CareMetric Intel free trial');
+ expect(email.html).not.toContain('utm_campaign=growth-intel-touch2&amp;utm_content=web<');
+ // The plain-text part keeps both addresses, bare, on their own lines.
+ expect(email.text).toContain(`residents use.\n${link.url}\n\nYou can try it free for 30 days on one county:\n${trial}\n\nDr. Kevin C. Deyarmin`);
+ expect(email.text).not.toMatch(/Open your agency|Start a CareMetric Intel free trial/);
+ expect(linkLabels('caremetric-intel',body,reports)).toEqual({[link.url]:'Open your agency\'s market report (PDF)',[trial]:'Start a CareMetric Intel free trial'});
+ // The page where an agency gets its report, and any other product page by its own label.
+ const review=`https://www.caremetricintel.com/market-review?${tagsOf(1)}`, county=`https://www.caremetricintel.com/county-report?${tagsOf(2)}`;
+ const pages=growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'S',body:`Get it here:\n${review}\n\nOr the county's:\n${county}`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'});
+ expect(anchorOf(pages.html,review)).toBe('Get your agency&#39;s free market report');
+ expect(anchorOf(pages.html,county)).toBe('Free county report from CareMetric Intel');
+ const carebase=`https://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=growth-carebase-touch1&utm_content=web`;
+ expect(anchorOf(growthEmail({product:'carebase',purpose:'marketing',subject:'S',body:`Try it:\n${carebase}`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html,carebase)).toBe('Start a CareBase free trial');
+ // A link inside a sentence keeps its address as its words, and a label never makes a link of an address the email may not link.
+ const inline=growthEmail({product:'caremetric-intel',subject:'S',body:`See ${trial} today.`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html;
+ expect(anchorOf(inline,trial)).toBe(trial.replaceAll('&','&amp;'));
+ expect(linkLabels('caremetric-intel',`${link.url}\nhttps://cmcarebase.com/signup\nhttps://evil.example/`,null)).toEqual({});
+ const unverified=growthEmail({product:'caremetric-intel',subject:'S',body:`Your report:\n${link.url}`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'}).html;
+ expect(unverified).not.toContain(`href="${link.url}"`);
+ expect(unverified).not.toContain('Open your agency');
+ const forged=growthEmail({product:'caremetric-intel',subject:'S',body:`Your report:\n${link.url.slice(0,-4)}AAAA`,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t',reports}).html;
+ expect(forged).not.toContain('Open your agency');
+});
+it('labels a product page written without campaign tags too',async()=>{
+ // An email's product links are tagged when it is written, but one the owner edits, or wrote before tags, may carry a bare page.
+ const {linkLabels}=await import('./worker.mjs');
+ expect(linkLabels('caremetric-intel','Try it:\nhttps://www.caremetricintel.com/\n\nOr:\nhttps://www.caremetricintel.com/market-review',null))
+  .toEqual({'https://www.caremetricintel.com/':'Start a CareMetric Intel free trial','https://www.caremetricintel.com/market-review':'Get your agency\'s free market report'});
+ expect(linkLabels('carebase','https://cmcarebase.com/signup',null)).toEqual({'https://cmcarebase.com/signup':'Start a CareBase free trial'});
+});
+it('takes the inbox preview from the first real sentence, past an abbreviation in an agency\'s name (email review 2026-11-17)',async()=>{
+ const {firstSentence}=await import('./worker.mjs');
+ expect(firstSentence('I put together a free market report for St. Luke\'s Home Health from public Medicare data. It opens as a PDF.')).toBe('I put together a free market report for St. Luke\'s Home Health from public Medicare data.');
+ expect(firstSentence('I wrote to Dr. Phillips Home Care, Inc. about its county. Second sentence.')).toBe('I wrote to Dr. Phillips Home Care, Inc. about its county.');
+ expect(firstSentence('Mt. Carmel Hospice serves Erie County. Next.')).toBe('Mt. Carmel Hospice serves Erie County.');
+ expect(firstSentence('A. J. Smith Home Health serves two counties. Next.')).toBe('A. J. Smith Home Health serves two counties.');
+ expect(firstSentence('Does it match what your team sees? Reply either way.')).toBe('Does it match what your team sees?');
+ // A line with no sentence end gives no preview, as before; so does nothing at all.
+ expect(firstSentence('It opens as a PDF, with nothing to sign up for:')).toBe('');
+ for(const nothing of ['',null,undefined])expect(firstSentence(nothing)).toBe('');
+ // In the email: the first email's opening sentence, whole, is the line an inbox shows beside the subject.
+ const body='I put together a free market report for St. Luke\'s Home Health, Inc. from public Medicare data. It opens as a PDF, with nothing to sign up for:\nhttps://www.caremetricintel.com/market-review\n\nDoes it match what your team sees in the field?';
+ const email=growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'St. Luke\'s market report',body,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'});
+ expect(email.html).toContain('>I put together a free market report for St. Luke&#39;s Home Health, Inc. from public Medicare data.&#847;');
+ expect(email.html).not.toContain('>I put together a free market report for St.&#847;');
 });
 it('signs a quiet follow-up to a prospect as the founder, like the rest of the prospect\'s emails, and a customer email as the team',async()=>{
  const quiet=growthEmail({product:'caremetric-intel',purpose:'success',quiet:true,subject:'S',body:'Did our answer cover what you needed?',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'});

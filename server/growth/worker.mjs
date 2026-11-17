@@ -12,7 +12,8 @@ import { growthLearningFeature } from './learning.mjs';
 import { renderEmail, themeFor } from '../email-layout.mjs';
 import { evaluateGrowth } from './evaluation.mjs';
 import { enrichProspects } from './enrichment.mjs';
-import { discoveryQueries, linkablePages, senderFor } from './playbook.mjs';
+import { discoveryQueries, linkablePages, playbookFor, senderFor } from './playbook.mjs';
+import { founder } from '../agents/content/facts.mjs';
 import { searchResultLimit } from './research.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
 import { chooseSite, confirmsSite, phoneCandidates, phoneQuery, rankTarget, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
@@ -114,9 +115,9 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   // First emails wait for their address's check, and cold email for a tripped bounce guard (Settings → Customer growth).
   const holding=(features instanceof Set?features.has(growthAddressCheckFeature):Array.isArray(features)&&features.includes(growthAddressCheckFeature))
     &&typeof growth.store.draftHold==='function';
-  // Stage 2 of the 2026-11-17 review (priority.mjs; Settings → Customer growth): each first email keeps its priority band, half of the
-  // report-led first emails are written short while "Test a short first email" is on, and a prospect who replied and went quiet gets
-  // at most two follow-ups while "Follow up when a prospect who replied goes quiet" is on.
+  // Stage 2 of the 2026-11-17 review (priority.mjs; Settings → Customer growth): each first email keeps its priority band, and a
+  // prospect who replied and went quiet gets at most two follow-ups while "Follow up when a prospect who replied goes quiet" is on.
+  // (Its "Test a short first email" is retired: every first email built around a market report is that form now, draft.mjs.)
   const prioritized=hasGrowthPriority(features);
   const quieting=prioritized&&typeof growth.store.quietCandidates==='function';
   // The reader's review of each first email is recorded beside it, to judge the rewrite by.
@@ -259,8 +260,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           const report=work.kind==='outreach'&&growth.reports?(growth.reports.checkedLinkFor?await growth.reports.checkedLinkFor(o,{signal}):growth.reports.linkFor?.(o))??null:null;
           if(quality)topDrafts++;
           const views=viewing&&live(growth.views?.enabled)===true;
-          const short=prioritized&&work.kind==='outreach'&&live(growth.priority?.shortFirst)===true;
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,views,short,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,views,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           const {review,...message}=draft;
@@ -555,6 +555,39 @@ export function messageLinks(product,words,reports=null) {
   const tagged=(String(words??'').match(/https:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(linkTrailing,'')).filter(url=>pages.has(untaggedUrl(url))||(product==='caremetric-intel'&&reports?.accepts?.(url)===true));
   return [...pages,...new Set(tagged)];
 }
+/**
+ * What a link on a line of its own is called in the HTML part, by its address as written (email review 2026-11-17: a report link was
+ * shown as its whole address, some 300 characters of token and campaign tags, which reads as unsafe to click). The agency's own report,
+ * the product's next step (its free trial), the page where an agency gets its report, then any other product page by its own label.
+ * The plain-text part keeps the address.
+ */
+export function linkLabels(product,words,reports=null) {
+  const pages=new Map(linkablePages(product).map(page=>[page.url,page.label]));
+  const next=playbookFor(product)?.nextStep??null;
+  const labels={};
+  for(const line of String(words??'').split('\n')) {
+    const url=line.trim();
+    if(!/^https:\/\/[^\s<>"]+$/.test(url))continue;
+    // A link written without campaign tags is its own page.
+    const page=untaggedUrl(url)??url;
+    if(product==='caremetric-intel'&&reports?.accepts?.(url)===true)labels[url]='Open your agency\'s market report (PDF)';
+    else if(next?.url===page)labels[url]=next.label;
+    else if(pages.has(page))labels[url]=/\/market-review\/?$/.test(page)?'Get your agency\'s free market report':pages.get(page);
+  }
+  return labels;
+}
+// A full stop after one of these does not end a sentence: an agency's own name often carries one ("St. Luke's Home Health, Inc.").
+const abbreviated=/(?:\b(?:St|Ste|Dr|Mr|Mrs|Ms|Mt|Ft|Inc|Co|Corp|Ltd|Jr|Sr|No|vs)|\b[A-Z])\.$/;
+/** The first sentence of a line, for the inbox preview: up to the first full stop, question mark or exclamation mark that ends one. */
+export function firstSentence(line) {
+  const text=String(line??'');
+  for(const match of text.matchAll(/[.?!](?=\s|$)/g)) {
+    const sentence=text.slice(0,match.index+1);
+    if(match[0]==='.'&&abbreviated.test(sentence))continue;
+    return sentence;
+  }
+  return '';
+}
 /** The first name to greet a named contact by ("Jane" from "Jane Doe"), or null for a role address or a name that is not plainly one. */
 export function greetingName(name,sourceKind) {
   if(!['enriched','imported','inbound','owner'].includes(sourceKind))return null;
@@ -566,12 +599,12 @@ export function growthEmail({product,purpose=null,quiet=false,subject,body,posta
   // too, though it is drafted as a 'success' email for the Sales follow-ups hand-over (email review 2026-11-17).
   const sender=senderFor(product,quiet?'marketing':purpose);
   const words=String(body??'').trim();
-  const preheader=(words.split(/\n/).find(line=>line.trim()&&!/^https:\/\//.test(line.trim()))??'').match(/^.*?[.?!](?=\s|$)/)?.[0]??'';
+  const preheader=firstSentence(words.split(/\n/).find(line=>line.trim()&&!/^https:\/\//.test(line.trim()))??'');
   const address=String(postalAddress??'').trim();
   // The company's name once: the postal address often begins with it.
   const footer=[...(/^caremetric\b/i.test(address)?[]:['CareMetric']),...(address?[address]:[]),{label:growthOptOutLabel,url:unsubscribeUrl}];
   return renderEmail({layout:'letter',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
-    blocks:[{type:'message',text:`Hello${greeting?` ${greeting}`:''},\n\n${words}`,links:messageLinks(product,words,reports)}],
+    blocks:[{type:'message',text:`Hello${greeting?` ${greeting}`:''},\n\n${words}`,links:messageLinks(product,words,reports),labels:linkLabels(product,words,reports)}],
     signature:[...(sender.signer??[sender.team]),...(sender.site?[sender.site]:[])],footer});
 }
 export function growthExecutors({growth,mail,publicOrigin,postalAddress,features=null}) {
@@ -594,7 +627,7 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress,features
     // Intel trial with "no credit card", as if we saw a report opened, Intel's "the book") never go out: the email is withdrawn, and the
     // next sweep writes that work again under today's rules (20261117220000_email_review.sql). A database without the withdrawal marks it
     // failed instead, for the owner to see.
-    const outdated=outdatedWords({product:claimed.product,subject:claimed.subject,body:claimed.body});
+    const outdated=outdatedWords({product:claimed.product,subject:claimed.subject,body:claimed.body,purpose:claimed.purpose});
     if(outdated) {
       let withdrawn=false;
       try {withdrawn=typeof growth.store.withdraw==='function'&&await growth.store.withdraw(claimed.id,outdated)===true;}
@@ -610,7 +643,10 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress,features
     const email=growthEmail({product:claimed.product,purpose:claimed.purpose,quiet:claimed.quiet===true,subject:claimed.subject,body:claimed.body,postalAddress:live(postalAddress),unsubscribeUrl:link,
       reports:growth.reports,greeting:greetingName(claimed.contactName,claimed.sourceKind)});
     let outcome;
-    try {outcome=await mail.send({to:claimed.to,subject:claimed.subject,text:email.text,html:email.html,unsubscribeUrl:link,messageId:claimed.id});}
+    // A founder-signed email (the same rule as its signature, growthEmail) arrives from the founder's name, unless a display name is
+    // set in Settings → Email, which the sender then keeps (owner decision 2026-11-17).
+    const founderSigned=claimed.purpose==='marketing'||claimed.quiet===true;
+    try {outcome=await mail.send({to:claimed.to,subject:claimed.subject,text:email.text,html:email.html,unsubscribeUrl:link,messageId:claimed.id,...(founderSigned?{fromName:founder.fromName}:{})});}
     catch {outcome={delivery:'unknown',id:null};}
     const status=outcome.delivery==='sent'?'accepted':outcome.delivery==='failed'?'failed':'unknown';
     await growth.store.finish(claimed.id,status,outcome.id);

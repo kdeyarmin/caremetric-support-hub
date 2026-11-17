@@ -21,7 +21,9 @@ export const validGrowthFromName = value => typeof value === 'string' && /^[^\p{
 /**
  * @param {Record<string, string|undefined>} env
  * @param {{ supportFrom: string, supportReplyTo: string }} support the support sender and its Reply-To
- * @returns {{ from: string, fromName: string, replyTo: string, separate: boolean, warnings: string[] }}
+ * @returns {{ from: string, fromName: string, fromNameSet: boolean, replyTo: string, separate: boolean, warnings: string[] }}
+ *   `fromNameSet`: a usable display name is saved in Settings. A founder-signed email then keeps it; with none saved it arrives from
+ *   the founder's own name (worker.mjs, owner decision 2026-11-17).
  */
 export function growthSender(env, { supportFrom, supportReplyTo }) {
   const warnings = [];
@@ -35,9 +37,10 @@ export function growthSender(env, { supportFrom, supportReplyTo }) {
     warnings.push('The growth email sender (Settings → Email) shares the support address\'s domain; use a subdomain (for example go.caremetric.ai) to keep prospecting reputation apart.');
   }
   let fromName = defaultGrowthFromName;
-  if (name && validGrowthFromName(name)) fromName = name.trim();
+  const fromNameSet = Boolean(name && validGrowthFromName(name));
+  if (fromNameSet) fromName = name.trim();
   else if (name) warnings.push('The growth email display name (Settings → Email) is not usable (at most 64 characters, no quotes or angle brackets); growth email uses "CareMetric".');
   // Replies always go to the support inbox: the address Inbound Parse receives, so the Sales Executive sees the answer.
-  return { from, fromName, replyTo: supportReplyTo, separate, warnings };
+  return { from, fromName, fromNameSet, replyTo: supportReplyTo, separate, warnings };
 }
 const domainOf = address => address.slice(address.lastIndexOf('@') + 1).toLowerCase();

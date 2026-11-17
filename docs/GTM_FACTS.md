@@ -237,6 +237,16 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   trial**, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then (Hub billing
   since 2026-11-14, [Platform billing](PLATFORM_BILLING.md); Intel's site: "Credit card required · Cancel before trial end to avoid
   charges"). Never write "no credit card" for Intel (`trialCardTerms` in `facts.mjs`).
+- **How to offer the trial** (owner direction 2026-11-17; `trialMention` in `facts.mjs`): a card at sign-up is ordinary for a trial,
+  so nothing the team writes brings it up unasked.
+  - An email, a post, an ad or an article offers the trial in plain words: its length and what it covers.
+  - The card and billing terms above are stated, exactly as written, only when a reader asks what the trial needs or what happens
+    when it ends.
+  - They stay where the card is entered or is the subject: Intel's sign-up, Billing and pricing pages, and the email that asks a
+    sign-up to finish adding its card.
+  - Nothing may say that no card is needed (refused in code, `trial_terms`), and nothing calls the trial risk-free.
+  - A prospect email that names the card is refused when it is written and withdrawn when it would be sent (`card_terms` in
+    `server/growth/draft.mjs`).
 
 Plans (Intel's `src/lib/planCatalog.ts`). Annual billing saves about 17%. **Onboarding is free on every plan.**
 Intel publishes these figures at `https://www.caremetricintel.com/api/billing/catalog`; once the Hub has read it, the AI team

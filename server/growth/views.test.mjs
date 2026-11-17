@@ -79,8 +79,28 @@ describe('the second email follows whether the report was opened', () => {
     const unopened = await draft([]);
     expect(unopened.input.touchPlan).toBe(unviewedTouchAngle);
     expect(unopened.result.arms.viewed).toBe('no');
+    // With the setting off nothing is read about opens, and no arm is recorded: the second email points to the report again and offers
+    // the trial, as it does when nobody opened it (every second email offers the trial since 2026-11-17, draft.mjs).
     const off = await draft([], false);
-    expect(off.input.touchPlan).not.toBe(unviewedTouchAngle);
+    expect(off.input.touchPlan).toBe(unviewedTouchAngle);
     expect(off.result.arms.viewed).toBeUndefined();
+    const ignored = await draft([{ kind: 'report_viewed', occurred_at: now }], false);
+    expect(ignored.input.touchPlan).toBe(unviewedTouchAngle);
+    expect(ignored.result.arms.viewed).toBeUndefined();
+    expect(opened.result).toMatchObject({ modelGenerated: true });
+    expect(unopened.result).toMatchObject({ modelGenerated: true });
+  });
+
+  it('offers the free trial in both second emails, in plain words, and never says whether the report was opened or what the trial needs', () => {
+    for (const plan of [viewedTouchAngle, unviewedTouchAngle]) {
+      expect(plan).toMatch(/^Second email to an agency whose market report was sent with the first\. Do not say or hint that you know whether anyone opened it\./);
+      expect(plan).toMatch(/End with the 30-day free trial on one county they serve, in one plain sentence, then the trial link on its own line\./);
+      expect(plan).toMatch(/Do not bring up the credit card or billing, and never call the trial risk-free\./);
+      expect(plan).not.toMatch(/credit card is required|canceling before it ends|card terms/);
+    }
+    // After an open the email moves on from the report; otherwise it points to it once more.
+    expect(viewedTouchAngle).toMatch(/One link: the trial\./);
+    expect(unviewedTouchAngle).toMatch(/put the report link again on its own line/);
+    expect(unviewedTouchAngle).toMatch(/two links: the report, then the trial\./);
   });
 });

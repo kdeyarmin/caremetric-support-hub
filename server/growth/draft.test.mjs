@@ -1,6 +1,6 @@
 import {it,expect,vi} from 'vitest';
-import {criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,outdatedWords,shortFormProblem,weaknessMeanings} from './draft.mjs';
-import {playbookFor,quietPlays,shortFollowupClose,shortReportTouchAngle} from './playbook.mjs';
+import {criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,namesCard,outdatedWords,shortFormProblem,weaknessMeanings} from './draft.mjs';
+import {playbookFor,quietPlays,reportCloseAngle,reportTouchAngle,reviewFollowupAngle,reviewTouchAngle,shortFormLimits,touchAngle,unviewedTouchAngle,viewedTouchAngle} from './playbook.mjs';
 import {assessProspect} from './assessment.mjs';
 const now=new Date().toISOString();
 const opportunity={id:'o',product:'carebase',version:1,contact_id:'c',goal:'Staff training',policy:{approved_claim:'CareBase supports facility training.',booking_url:'https://example.org/book'},evidence:[{id:'source-1',source_url:'https://example.org',observed_at:now,claim:'A personal-care facility',confidence:'high'}],events:[]};
@@ -33,7 +33,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.16');
+ expect(request.promptVersion).toBe('growth.17');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -201,7 +201,7 @@ it('repairs a draft once, telling the writer what to fix, and reports why one wa
  const draft=await draftMessage({opportunity,work,task:{},model,onReject:code=>reasons.push(code)});
  expect(draft).toMatchObject({modelGenerated:true,body:'How do you track training hours today?'});
  const repair=model.run.mock.calls[1][1];
- expect(repair.promptVersion).toBe('growth.16-r');
+ expect(repair.promptVersion).toBe('growth.17-r');
  expect(repair.system[0].text).toBe(growthSystem);
  expect(JSON.parse(repair.user)).toMatchObject({previousDraft:{body:'A seamless way to train staff.'},fix:expect.stringMatching(/plain words/)});
  expect(reasons).toEqual([]);
@@ -237,7 +237,7 @@ it('writes outreach with the owner-approved memo as a last cached block, after t
  expect(request.system[1].text).toMatch(/^CareMetric CareBase capabilities/);
  expect(request.system[2].text).toContain('memo 3');
  expect(request.system[2].text).toContain('Too long');
- expect(request.promptVersion).toBe('growth.16-m3');
+ expect(request.promptVersion).toBe('growth.17-m3');
  expect(draft.memoVersion).toBe(3);
  // A customer's message and an unusable memo are written without it.
  model.run.mockClear();
@@ -247,13 +247,14 @@ it('writes outreach with the owner-approved memo as a last cached block, after t
  expect(customer?.memoVersion).toBeUndefined();
  model.run.mockClear();
  await draftMessage({opportunity,work,task:{},model,memo:{version:'3',memo:'x'}});
- expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.16');
+ expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.17');
 });
 
 it('records the applied report length without changing angle, subject or ordinary length treatments', async () => {
  const o={...opportunity,product:'caremetric-intel',policy:{...opportunity.policy,experiment_enabled:true}};
  const ordinary=messageArms(o,o.evidence);
- expect(messageArms(o,o.evidence,{reportLed:true})).toEqual({...ordinary,length:'report'});
+ // A first email built around a market report records its form with its length; nothing else about the arms changes.
+ expect(messageArms(o,o.evidence,{reportLed:true})).toEqual({...ordinary,length:'report',form:'short'});
  for(const context of [{touches:1},{memory:{lead:{kind:'report'}}},{memory:{reengagedAt:'2026-11-15'}}]) {
   const draft=await draftMessage({opportunity:{...o,...context},work,task:{}});
   expect(draft.arms.length).toBe(ordinary.length);
@@ -263,25 +264,30 @@ it('records the applied report length without changing angle, subject or ordinar
  expect(ordinary.length_basis).toBe('applied_v1');
 });
 
-// Stage 2 of the 2026-11-17 review: the reader's review (critic.2, row 2.5) and the short first email (row 2.6).
+// The first email to a CareMetric Intel agency (owner decisions 2026-11-15 and 2026-11-17): its market report and nothing else, with the
+// trial moved to the second email. The reader's review (critic.3) reads it under that rule.
 const intel={id:'oi',organization_id:'gi',product:'caremetric-intel',name:'Valley Home Health',version:1,contact_id:'c',stage:'qualified',touches:0,memory:{},
  policy:{approved_claim:'Intel shows every referral source in your county.',max_touches:3},
  evidence:[{id:'e1',source_url:'https://valleyhh.org/about',observed_at:now,claim:'Valley Home Health serves Allegheny County.',confidence:'high'}],events:[]};
 const report={label:'Free market report for Valley Home Health',url:'https://www.caremetricintel.com/report/abc.def'};
 const trial=playbookFor('caremetric-intel').nextStep.url;
-const shortBody=`I run a home health and hospice agency, and I built CareMetric Intel to see my own market.\n\nI put together a free market report for Valley Home Health from public Medicare data. It shows where the agency stands in its county and who refers the most.\n${report.url}\n\nIs Valley Home Health getting its share of the referrals in Allegheny County?`;
-const shortDraft={subject:'Referrals in Allegheny County',body:shortBody,citations:['e1'],needsHuman:false};
-const shortFirst=async(o,{short=true,offered=report,output=shortDraft,critic=false,run=null}={})=>{
+const reviewPage='https://www.caremetricintel.com/market-review';
+const inside='It shows where your agency stands among the agencies located in Allegheny County, which agencies lead the county and the hospitals its residents use most. It also lists the highest-ranked physicians for home health outreach.';
+const signed='I run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.';
+const firstBody=`I put together a free market report for Valley Home Health from public Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\n${inside}\n\n${signed}\n\nDoes it match what your team sees in the field?`;
+const firstDraft={subject:'Valley Home Health\'s Allegheny County market report',body:firstBody,citations:['e1'],needsHuman:false};
+const reviewDraft={...firstDraft,body:`A free market report for Valley Home Health, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\n${reviewPage}\n\n${inside}\n\n${signed}\n\nDoes it match what your team sees in the field?`};
+const general={subject:'Referral sources in your county',body:'Which referral sources does your team visit each week?',citations:['e1'],needsHuman:false};
+const firstEmail=async(o,{offered=report,output=firstDraft,critic=false,views=false,run=null}={})=>{
  const model={configured:true,run:run??vi.fn(async()=>({outcome:'completed',output}))};
- const result=await draftMessage({opportunity:o,work,task:{},model,report:offered,short,critic});
+ const result=await draftMessage({opportunity:o,work,task:{},model,report:offered,critic,views});
  return {result,model,input:JSON.parse(model.run.mock.calls[0]?.[1]?.user??'null')};
 };
-// An opportunity whose hash gives the wanted form.
-const withForm=form=>{for(let i=0;i<200;i+=1){const o={...intel,id:`o${i}`,organization_id:`g${i}`};if(messageArms(o,o.evidence,{reportLed:true,shortTest:true}).form===form)return o;}throw new Error('no such form');};
+const wordsIn=text=>text.replace(/https?:\/\/\S+/g,' ').split(/\s+/).filter(word=>/[A-Za-z0-9]/.test(word)).length;
 
-it('bumps the writer to growth.16 and the reader to critic.2, with a weakness code from a fixed list and a scale a good email can reach',()=>{
- expect(growthPromptVersion).toBe('growth.16');
- expect(criticPromptVersion).toBe('critic.2');
+it('bumps the writer to growth.17 and the reader to critic.3, with a weakness code from a fixed list and a scale a good email can reach',()=>{
+ expect(growthPromptVersion).toBe('growth.17');
+ expect(criticPromptVersion).toBe('critic.3');
  expect(criticWeaknesses).toEqual(['none','generic_opening','about_sender','too_long','too_many_asks','unclear_ask','wrong_problem','no_reason_now','reads_as_template']);
  expect(criticSchema.required).toEqual(['specific','relevant','clearAsk','wouldReply','weakness','weakestSentence']);
  expect(criticSchema.properties.weakness.enum).toEqual([...criticWeaknesses]);
@@ -296,7 +302,8 @@ it('gives the reader the brief\'s writer part and the writer\'s rules, keeps all
  const brief={setting:'home_health',summary:'A family-owned home health agency in Allegheny County.',triggers:[],
   pains:[{question:'Do you know which physicians certify the most home health patients in Allegheny County?'}],angle:'referral_sources',
   hook:{sentence:'Valley Home Health serves Allegheny County.',sourceUrl:'https://valleyhh.org/about'}};
- const draft={subject:'Referral sources in Allegheny County',body:'Valley Home Health serves Allegheny County.\n\nDo you know which physicians certify the most home health patients there?\n\nhttps://www.caremetricintel.com/market-review',citations:['e1'],needsHuman:false};
+ // No roster report here, so the first email points to the market report page.
+ const draft={subject:'Referral sources in Allegheny County',body:`A free market report for Valley Home Health, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\n${reviewPage}\n\nValley Home Health serves Allegheny County.\n\nDo you know which physicians certify the most home health patients there?`,citations:['e1'],needsHuman:false};
  const better={...draft,subject:'Your Allegheny County referral map'};
  const run=vi.fn(async(_task,request)=>{
   if(request.promptVersion===criticPromptVersion)return {outcome:'completed',output:JSON.parse(request.user).email.subject===better.subject
@@ -309,11 +316,16 @@ it('gives the reader the brief\'s writer part and the writer\'s rules, keeps all
  expect(result.subject).toBe(better.subject);
  expect(result.arms).toMatchObject({critic:'4',criticSpecific:'4',criticRelevant:'5',criticAsk:'4',weakness:'none',rewritten:'1'});
  const reads=run.mock.calls.filter(([,request])=>request.promptVersion===criticPromptVersion).map(([,request])=>JSON.parse(request.user));
- expect(reads[0]).toMatchObject({agency:{name:'Valley Home Health',summary:brief.summary},brief:{summary:brief.summary,pains:[brief.pains[0].question],angle:'referral_sources',hook:brief.hook.sentence},rules:[...criticRules]});
+ expect(reads[0]).toMatchObject({agency:{name:'Valley Home Health',summary:brief.summary},brief:{summary:brief.summary,pains:[brief.pains[0].question],angle:'referral_sources',hook:brief.hook.sentence}});
+ // The writer's rules, then the one that says this first email is the report alone on purpose.
+ expect(reads[0].rules.slice(0,criticRules.length)).toEqual([...criticRules]);
+ expect(reads[0].rules).toHaveLength(criticRules.length+1);
  expect(JSON.stringify(reads[0].brief)).not.toMatch(/sourceUrl|@/);
  const rewrite=JSON.parse(run.mock.calls.find(([,request])=>request.promptVersion===`${growthPromptVersion}-c`)[1].user);
  expect(rewrite.fix).toContain(`What most held it back: ${weaknessMeanings.generic_opening}.`);
  expect(rewrite.fix).toContain('"Valley Home Health serves Allegheny County."');
+ // The rewrite keeps the form: the report first, its one link and the one question.
+ expect(rewrite.fix).toContain('keeping the report offered in the first sentence, its one link and the one question');
  // A rewrite that scores lower keeps the first email and its scores.
  const worse=vi.fn(async(_task,request)=>{
   if(request.promptVersion===criticPromptVersion)return {outcome:'completed',output:JSON.parse(request.user).email.subject===better.subject
@@ -328,91 +340,220 @@ it('gives the reader the brief\'s writer part and the writer\'s rules, keeps all
 });
 
 it('keeps every arm, the reader\'s and the form\'s included, well inside the arms column\'s 600-byte limit',()=>{
+ // 'standard' is the longest value the form arm ever held (emails written before 2026-11-17 keep it).
  const largest={length:'control',length_basis:'applied_v1',trigger:`reask_${'x'.repeat(20)}`,angle:'hospital_outcomes',subject:'question',angle_by:'brief',viewed:'yes',
   critic:'5',criticSpecific:'5',criticRelevant:'5',criticAsk:'5',weakness:'reads_as_template',rewritten:'1',form:'standard',band:'4'};
  expect(Buffer.byteLength(JSON.stringify(largest))).toBeLessThan(500);
 });
 
-it('writes half of the report-led Intel first emails short when the test is on, by a stable hash, and no others',async()=>{
- const forms=[];
- for(let i=0;i<400;i+=1){const o={...intel,id:`o${i}`,organization_id:`g${i}`};forms.push(messageArms(o,o.evidence,{reportLed:true,shortTest:true}).form);}
- const share=forms.filter(form=>form==='short').length/forms.length;
- expect(share).toBeGreaterThan(0.4);
- expect(share).toBeLessThan(0.6);
- expect(new Set(forms)).toEqual(new Set(['short','standard']));
- // Stable: the same agency gets the same form every time, and the other arms are unchanged by the test.
- const o=withForm('short');
- expect(messageArms(o,o.evidence,{reportLed:true,shortTest:true}).form).toBe('short');
- const {form,...rest}=messageArms(o,o.evidence,{reportLed:true,shortTest:true});
- expect(form).toBe('short');
- expect(rest).toEqual(messageArms(o,o.evidence,{reportLed:true}));
- // Drafted: only with the switch, the agency's own report, a first touch, no re-ask or website lead, and Intel.
- expect((await shortFirst(o)).result.arms.form).toBe('short');
- expect((await shortFirst(o,{short:false})).result.arms.form).toBeUndefined();
- expect((await shortFirst(o,{offered:null,output:{...shortDraft,body:shortBody.replace(report.url,'https://www.caremetricintel.com/market-review')}})).result?.arms?.form).toBeUndefined();
- for(const context of [{touches:1},{memory:{reengagedAt:now,touchesBefore:3}},{memory:{lead:{kind:'county_report'}}},{product:'carebase'}]) {
-  const {model}=await shortFirst({...o,...context});
-  const call=model.run.mock.calls[0];
-  if(call)expect(JSON.parse(call[1].user).touchPlan).not.toBe(shortReportTouchAngle);
-  expect(messageArms({...o,...context},o.evidence,{reportLed:false,shortTest:false}).form).toBeUndefined();
+it('writes every first email to a CareMetric Intel agency as its market report and nothing else, and no other email that way',async()=>{
+ // Every agency, not half of them by a hash, and with no switch: the form goes with the report-led first email alone.
+ for(let i=0;i<50;i+=1) {
+  const o={...intel,id:`o${i}`,organization_id:`g${i}`};
+  expect(messageArms(o,o.evidence,{reportLed:true}).form).toBe('short');
+  expect(messageArms(o,o.evidence).form).toBeUndefined();
+ }
+ // With the agency's own report, and with the market report page for an agency that has no roster report.
+ const own=await firstEmail(intel);
+ expect(own.result).toMatchObject({modelGenerated:true,arms:{form:'short',length:'report'}});
+ expect(own.input.touchPlan).toBe(reportTouchAngle);
+ expect(own.input.report).toBe(true);
+ const review=await firstEmail(intel,{offered:null,output:reviewDraft});
+ expect(review.result).toMatchObject({modelGenerated:true,arms:{form:'short',length:'report'}});
+ expect(review.input.touchPlan).toBe(reviewTouchAngle);
+ expect(review.input.report).toBeUndefined();
+ // Never a later touch, a re-ask, a website lead, a nursing home or CareBase.
+ for(const [context,offered] of [[{touches:1},report],[{memory:{reengagedAt:now,touchesBefore:3},touches:3},report],[{memory:{lead:{kind:'county_report'}}},report],
+   [{name:'Maple Grove Nursing and Rehabilitation Center'},null],[{product:'carebase'},report]]) {
+  const {result,input}=await firstEmail({...intel,...context},{offered,output:general});
+  expect(result,JSON.stringify(context)).toMatchObject({modelGenerated:true});
+  expect(result.arms.form,JSON.stringify(context)).toBeUndefined();
+  expect([reportTouchAngle,reviewTouchAngle]).not.toContain(input.touchPlan);
  }
  // The template (no model) records the form too, so a draft's arms never depend on whether a model answered.
- expect((await draftMessage({opportunity:o,work,task:{},report,short:true})).arms.form).toBe('short');
+ expect((await draftMessage({opportunity:intel,work,task:{},report})).arms.form).toBe('short');
+ expect((await draftMessage({opportunity:intel,work,task:{}})).arms.form).toBe('short');
 });
 
-it('tells the short form\'s writer the short plan, holds it to about seventy words, the report and one question, and leaves the standard form as it was',async()=>{
- const o=withForm('short');
- const {result,input}=await shortFirst(o);
- expect(input.touchPlan).toBe(shortReportTouchAngle);
- expect(input.style).toMatch(/about seventy words, never more than 90/);
- expect(shortReportTouchAngle).not.toMatch(/credit card is required/);
+it('tells the first email\'s writer its plan and holds it to about one hundred words, the report\'s one link and one question',async()=>{
+ const {result,input}=await firstEmail(intel);
+ expect(shortFormLimits).toEqual({words:120,questions:1});
+ expect(input.touchPlan).toBe(reportTouchAngle);
+ expect(input.style).toBe('Keep the body to about one hundred words, never more than 120.');
+ // The plan: the report in the first sentence, which is the line an inbox shows, then the link, what is inside, who is writing, one question.
+ expect(reportTouchAngle).toMatch(/^First email, built around the agency's own free market report and nothing else\./);
+ expect(reportTouchAngle).toMatch(/First sentence: you put together a free market report for this agency, by name, from public Medicare data\./);
+ expect(reportTouchAngle).toMatch(/opens as a PDF with nothing to sign up for/);
+ expect(reviewTouchAngle).toMatch(/entering its CMS certification number on the market report page emails the report as a PDF/);
+ expect(reviewTouchAngle).not.toMatch(/nothing to sign up for/);
+ for(const plan of [reportTouchAngle,reviewTouchAngle]) {
+  expect(plan).toMatch(/the highest-ranked physicians for outreach/);
+  expect(plan).not.toMatch(/ranks? highest|ranked highest/);
+  expect(plan).toMatch(/exactly one question and exactly one link, in about one hundred words and never more than 120/);
+  expect(plan).toMatch(/No other link, no free trial and no price: those come in the next email\./);
+ }
  expect(result).toMatchObject({modelGenerated:true});
  expect(result.body).toContain(report.url);
- // Too long, two questions, the trial link or its terms: repaired once with the short form's hint, then refused.
- const filler=' The report also lists the county\'s largest agencies and the hospitals its residents use.'.repeat(4);
- for(const body of [`${shortBody}${filler}`,shortBody.replace('Is Valley','Do you plan visits? Is Valley'),`${shortBody}\n\n${trial}`,shortBody.replace('from public Medicare data.','from public Medicare data, and the free trial shows the rest.')]) {
+ expect(wordsIn(firstBody)).toBeLessThanOrEqual(shortFormLimits.words);
+ // Too long, a second question, the trial's link, the trial in words, or no link at all: repaired once with the form's hint, then refused.
+ const filler=' The report also lists the county\'s largest agencies and the hospitals its residents use.'.repeat(6);
+ expect(wordsIn(`${firstBody}${filler}`)).toBeGreaterThan(shortFormLimits.words);
+ for(const body of [`${firstBody}${filler}`,`${firstBody} Which county matters most to you?`,`${firstBody}\n\n${trial}`,
+   firstBody.replace('from public Medicare data.','from public Medicare data, and the free trial shows the rest.'),firstBody.replace(`\n${report.url}`,'')]) {
   const reasons=[];
-  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{...shortDraft,body}}))};
-  expect(await draftMessage({opportunity:o,work,task:{},model,report,short:true,onReject:code=>reasons.push(code)})).toBeNull();
+  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{...firstDraft,body}}))};
+  expect(await draftMessage({opportunity:intel,work,task:{},model,report,onReject:code=>reasons.push(code)})).toBeNull();
   expect(reasons).toEqual(['short_form_then_short_form']);
-  expect(JSON.parse(model.run.mock.calls[1][1].user).fix).toMatch(/short first email: at most 90 words/);
+  expect(JSON.parse(model.run.mock.calls[1][1].user).fix).toMatch(/This first email is the market report and nothing else: at most 120 words, the report offered in the first sentence, its link on its own line and exactly one question\. No other link, no free trial and no price\./);
  }
- expect(shortFormProblem(shortBody,{reportLinks:[report.url]})).toBeNull();
- expect(shortFormProblem(`${shortBody} Or not?`,{reportLinks:[report.url]})).toBe('questions');
- // The standard form keeps the long report-led plan, and its checks do not apply the short form's limits.
- const standard=withForm('standard');
- const longer={...shortDraft,body:`${shortBody.replace('Is Valley','Do you know every referral source in your territory? Is Valley')}\n\nIntel has a free trial with your own team.\n${trial}`};
- const plain=await shortFirst(standard,{output:longer});
- expect(plain.input.touchPlan).not.toBe(shortReportTouchAngle);
- expect(plain.input.touchPlan).toMatch(/within one hundred seventy words/);
- expect(plain.result).toMatchObject({modelGenerated:true});
- expect(draftProblem(longer,{product:'caremetric-intel',sources:o.evidence,outreach:true,organization:o.name,extraLinks:[report.url]})).toBeNull();
+ // An agency without a roster report is held to the market report page the same way: its own-report link is not that page.
+ expect(await draftMessage({opportunity:intel,work,task:{},model:{configured:true,run:async()=>({outcome:'completed',output:{...reviewDraft,body:reviewDraft.body.replace(reviewPage,trial)}})}})).toBeNull();
+ expect(shortFormProblem(firstBody,{reportLinks:[report.url]})).toBeNull();
+ expect(shortFormProblem(`${firstBody} Or not?`,{reportLinks:[report.url]})).toBe('questions');
+ expect(shortFormProblem(firstBody.replace('Does it match what your team sees in the field?','It may match what your team sees in the field.'),{reportLinks:[report.url]})).toBe('questions');
+ expect(shortFormProblem(`${firstBody}${filler}`,{reportLinks:[report.url]})).toBe('length');
+ expect(shortFormProblem(firstBody.replace(`\n${report.url}`,''),{reportLinks:[report.url]})).toBe('link');
+ expect(shortFormProblem(firstBody.replace(report.url,trial),{reportLinks:[report.url]})).toBe('link');
+ expect(shortFormProblem(`${firstBody.replace('Does it match what your team sees in the field?','Would the free trial help your team?')}`,{reportLinks:[report.url]})).toBe('trial');
 });
 
-it('tells the reader a short first email is short on purpose',async()=>{
- const o=withForm('short');
+it('accepts the email review\'s example first email, and refuses it with the trial, a second link, two questions, no link or too many words',()=>{
+ const sources=[{id:'e1',claim:'Valley Home Health is a Medicare-certified home health agency in Erie, Pennsylvania (CMS Provider of Services file).',source_url:'https://data.cms.gov/',observed_at:now},
+  {id:'county',claim:'Erie County has 48 home health agencies, by CMS\'s count.',source_url:'https://data.cms.gov/',observed_at:now}];
+ const example={subject:'Valley Home Health\'s Erie County market report',citations:['e1','county'],needsHuman:false,
+  body:`I put together a free market report for Valley Home Health from public Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\nCMS counts 48 home health agencies in Erie County. The report shows where yours stands among them, which agencies lead the county, the hospitals Erie County residents use most and the highest-ranked physicians for home health outreach. It ends with up to three moves to consider.\n\nI run a home health and hospice agency myself, and I built CareMetric Intel to see my own market this way.\n\nAfter you look, tell me: does it match what your team sees in the field?`};
+ const check=(body,over={})=>draftProblem({...example,body},{product:'caremetric-intel',sources,outreach:true,organization:'Valley Home Health',extraLinks:[report.url],form:'short',formLinks:[report.url],...over});
+ expect(check(example.body)).toBeNull();
+ expect(example.subject.length).toBeLessThan(60);
+ expect(wordsIn(example.body)).toBeLessThanOrEqual(120);
+ expect(check(example.body.replace('It ends with up to three moves to consider.','A free trial of CareMetric Intel shows the rest.'))).toBe('short_form');
+ expect(check(`${example.body}\n\n${trial}`)).toBe('short_form');
+ // The trial however it is worded; the report itself is free, so "free" alone is not the trial.
+ expect(check(example.body.replace('It ends with up to three moves to consider.','You can try CareMetric Intel free for 30 days.'))).toBe('short_form');
+ expect(check(example.body.replace('It ends with up to three moves to consider.','You can also try it for free.'))).toBe('short_form');
+ expect(check(`${example.body} Which county matters most to you?`)).toBe('short_form');
+ expect(check(example.body.replace(`\n${report.url}`,''))).toBe('short_form');
+ expect(check(`${example.body}${' The report also lists the county\'s largest agencies and the hospitals its residents use.'.repeat(4)}`)).toBe('short_form');
+ // The same words are not held to the form in a later email, and the county's figure needs its source.
+ expect(check(`${example.body} Which county matters most to you?`,{form:null,formLinks:null})).toBeNull();
+ expect(check(example.body,{sources:[sources[0]]})).toBe('citation');
+ expect(draftProblem({...example,citations:['e1']},{product:'caremetric-intel',sources:[sources[0]],outreach:true,organization:'Valley Home Health',extraLinks:[report.url],form:'short',formLinks:[report.url]})).toBe('claim');
+ // The words the writer's instructions once used for the physicians no longer fail as a rank (email review 2026-11-17).
+ expect(check(example.body.replace('the highest-ranked physicians for home health outreach','the physicians Intel ranks highest as referral sources'))).toBeNull();
+ expect(check(example.body.replace('The report shows where yours stands among them','Your agency ranks ninth among them'))).toBe('own_standing');
+});
+
+it('keeps the report-first shape without a model, in an email that passes the checks a written one gets',async()=>{
+ for(const offered of [report,null]) {
+  const link=offered?.url??reviewPage;
+  const draft=await draftMessage({opportunity:intel,work,task:{},report:offered});
+  expect(draft).toMatchObject({modelGenerated:false,subject:'A market report for Valley Home Health',citations:['e1'],arms:{form:'short',length:'report'}});
+  expect(draft.body.split('\n')[0]).toBe(offered?'I put together a free market report for Valley Home Health from public Medicare data. It opens as a PDF, with nothing to sign up for:'
+   :'A free market report for Valley Home Health, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:');
+  expect(draft.body.split('\n')[1].startsWith(link)).toBe(true);
+  expect(draft.body).toContain('the highest-ranked physicians for outreach');
+  expect(draft.body).toMatch(/Does it match what your team sees in the field\?$/);
+  expect(draft.body).not.toMatch(/free trial|credit card|ranks? highest|ranked highest|Any question, just reply/i);
+  expect(draftProblem({subject:draft.subject,body:draft.body,citations:draft.citations,needsHuman:false},
+   {product:'caremetric-intel',sources:intel.evidence,outreach:true,organization:intel.name,extraLinks:offered?[offered.url]:[],form:'short',formLinks:[link]})).toBeNull();
+ }
+ // An agency with no name on record is "your agency"; a later touch and CareBase keep the general template.
+ expect((await draftMessage({opportunity:{...intel,name:null},work,task:{},report})).body).toMatch(/^I put together a free market report for your agency from public Medicare data\./);
+ expect((await draftMessage({opportunity:{...intel,touches:1},work,task:{},report})).body).toMatch(/^Intel shows every referral source in your county\./);
+ expect((await draftMessage({opportunity,work,task:{}})).body).toMatch(/^CareBase supports facility training\./);
+});
+
+it('tells the reader the first email is the market report and nothing else, on purpose',async()=>{
  const run=vi.fn(async(_task,request)=>request.promptVersion===criticPromptVersion
   ?{outcome:'completed',output:{specific:4,relevant:4,clearAsk:5,wouldReply:4,weakness:'none',weakestSentence:''}}
-  :{outcome:'completed',output:shortDraft});
- const {result}=await shortFirst(o,{critic:true,run});
+  :{outcome:'completed',output:firstDraft});
+ const {result}=await firstEmail(intel,{critic:true,run});
  expect(result.arms).toMatchObject({form:'short',critic:'4',weakness:'none'});
  const read=JSON.parse(run.mock.calls.find(([,request])=>request.promptVersion===criticPromptVersion)[1].user);
- expect(read.rules.at(-1)).toMatch(/short form on purpose.*free trial and its terms come in the next email/);
+ expect(read.rules.at(-1)).toMatch(/This first email is the market report and nothing else, on purpose: the report offered in the first sentence, its one link and one question, in about one hundred words and never more than 120\. The free trial comes in the next email, so its absence is not a weakness, and neither is opening with the report\./);
+ // A first email that is not built around a report (a nursing home's) is read under the writer's rules alone.
+ const plain=vi.fn(async(_task,request)=>request.promptVersion===criticPromptVersion
+  ?{outcome:'completed',output:{specific:4,relevant:4,clearAsk:5,wouldReply:4,weakness:'none',weakestSentence:''}}
+  :{outcome:'completed',output:general});
+ await firstEmail({...intel,name:'Maple Grove Nursing and Rehabilitation Center'},{offered:null,critic:true,run:plain});
+ expect(JSON.parse(plain.mock.calls.find(([,request])=>request.promptVersion===criticPromptVersion)[1].user).rules).toEqual([...criticRules]);
 });
 
-it('offers the trial and its card terms in the second email after a short first one, and only then',async()=>{
- const second=async o=>{
-  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'What the report leaves open',body:`Your report is still there.\n${report.url}\n\nWho plans your team's visits?\n\n${trial}`,citations:['e1'],needsHuman:false}}))};
-  await draftMessage({opportunity:o,work,task:{},model,report,short:true,views:true});
-  return JSON.parse(model.run.mock.calls[0][1].user);
- };
- const afterShort=await second({...intel,touches:1,first_form:'short'});
- expect(afterShort.touchPlan).toContain(shortFollowupClose);
- expect(afterShort.touchPlan).toMatch(/^Second email to an agency whose market report was sent with the first/);
- expect(shortFollowupClose).toMatch(/credit card is required to start it and that canceling before it ends means no charge/);
- // After a standard first email, with the switch on or off, and on the third touch: unchanged.
- for(const o of [{...intel,touches:1,first_form:'standard'},{...intel,touches:1},{...intel,touches:2,first_form:'short'}])
-  expect((await second(o)).touchPlan).not.toContain(shortFollowupClose);
+it('offers the trial in an agency\'s second email and leaves the report with it in the third, on every path',async()=>{
+ const later=async(o,{offered=report,views=false}={})=>(await firstEmail(o,{offered,views,output:general})).input;
+ const opened=[{kind:'report_viewed',occurred_at:now}];
+ // The second email: how Intel turns a report into a plan after an open; otherwise a page of the report and its link again; the market
+ // report page again for an agency that had no report of its own. An open is read only while the owner's setting is on.
+ expect((await later({...intel,touches:1,events:opened},{views:true})).touchPlan).toBe(viewedTouchAngle);
+ expect((await later({...intel,touches:1},{views:true})).touchPlan).toBe(unviewedTouchAngle);
+ expect((await later({...intel,touches:1})).touchPlan).toBe(unviewedTouchAngle);
+ expect((await later({...intel,touches:1,events:opened})).touchPlan).toBe(unviewedTouchAngle);
+ expect((await later({...intel,touches:1},{offered:null})).touchPlan).toBe(reviewFollowupAngle);
+ expect((await later({...intel,touches:1,events:opened},{offered:null,views:true})).touchPlan).toBe(reviewFollowupAngle);
+ // It no longer depends on which form the first email took: every second email offers the trial.
+ for(const first_form of ['short','standard',undefined]) expect((await later({...intel,touches:1,first_form})).touchPlan).toBe(unviewedTouchAngle);
+ for(const plan of [viewedTouchAngle,unviewedTouchAngle,reviewFollowupAngle]) {
+  expect(plan).toMatch(/End with the 30-day free trial on one county they serve, in one plain sentence, then the trial link on its own line\./);
+  expect(plan).toMatch(/Do not bring up the credit card or billing, and never call the trial risk-free\./);
+ }
+ expect(viewedTouchAngle).toMatch(/^Second email to an agency whose market report was sent with the first\. Do not say or hint that you know whether anyone opened it\./);
+ expect(unviewedTouchAngle).toMatch(/^Second email to an agency whose market report was sent with the first\. Do not say or hint that you know whether anyone opened it\./);
+ expect(viewedTouchAngle).toMatch(/One link: the trial\./);
+ expect(unviewedTouchAngle).toMatch(/two links: the report, then the trial\./);
+ expect(reviewFollowupAngle).toMatch(/two links: the market report page, then the trial\./);
+ // The third: a short close, with the report or the page it was offered on, and no new pitch.
+ for(const offered of [report,null]) {
+  const third=await later({...intel,touches:2},{offered});
+  expect(third.touchPlan).toBe(reportCloseAngle);
+  expect(third.style).toBe('Keep the body under seventy words.');
+ }
+ expect(reportCloseAngle).toMatch(/the free market report stays where it is, with its link on its own line/);
+ expect(reportCloseAngle).toMatch(/if someone else handles marketing there, a reply saying who means the report reaches the right person/);
+ expect(reportCloseAngle).toMatch(/No new pitch, no free trial/);
+ // A nursing home, which Intel's reports do not cover, and CareBase keep the general plan for each touch.
+ const home={...intel,name:'Maple Grove Nursing and Rehabilitation Center'};
+ for(const touches of [0,1,2]) {
+  expect((await later({...home,touches},{offered:null})).touchPlan).toBe(touchAngle(touches+1));
+  expect((await later({...intel,product:'carebase',touches})).touchPlan).toBe(touchAngle(touches+1));
+ }
+});
+
+it('never brings up the card an Intel trial needs in a prospect email, and never tells a writer to (owner direction 2026-11-17)',()=>{
+ const answer=body=>({subject:'Referral sources in your county',body,citations:['s'],needsHuman:false});
+ const about=(product,body,outreach=true)=>draftProblem(answer(body),{product,sources:[{id:'s'}],outreach});
+ const offer='You can try it free for 30 days on one county.';
+ expect(about('caremetric-intel',`${offer} Which county comes first for your team?`)).toBeNull();
+ for(const terms of ['A credit card is required to start the trial.','A card is required to start.','Your card will be charged when the trial ends.','The plan you choose bills automatically when the trial ends.',
+   'A payment card starts it.','The card terms are on the sign-up page.','Your card is not charged during the trial.','You will need a card to start.',
+   'Add a card to begin.','The plan is billed automatically when it ends.'])
+  expect(about('caremetric-intel',`${offer} ${terms} Which county comes first for your team?`),terms).toBe('card_terms');
+ // Saying no card is needed stays refused, as it was.
+ expect(about('caremetric-intel',`${offer} No credit card is needed. Which county comes first for your team?`)).not.toBeNull();
+ // A message to a customer may still say what happens when its trial ends, and CareBase's trial needs no card to speak of.
+ expect(about('caremetric-intel','A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.',false)).toBeNull();
+ expect(about('carebase','You can start a 30-day free trial online, and no credit card is needed. How do you track training hours today?')).toBeNull();
+ expect(namesCard('caremetric-intel','Scan a business card after each visit.')).toBe(false);
+ expect(namesCard('caremetric-intel','The pre-visit card lists what to bring up.')).toBe(false);
+ expect(namesCard('caremetric-intel','Open the card before each visit, and add your notes after.')).toBe(false);
+ expect(namesCard('carebase','A credit card is required.')).toBe(false);
+ // An email written under the old instructions is withdrawn when its turn to send comes: prospect email only.
+ const waiting={product:'caremetric-intel',subject:'Which referral sources are slipping?',body:'You can try Intel free for 30 days (a credit card is required, and canceling before it ends avoids any charge).'};
+ expect(outdatedWords({...waiting,purpose:'marketing'})).toBe('card_terms');
+ expect(outdatedWords({...waiting,purpose:'success'})).toBeNull();
+ expect(outdatedWords(waiting)).toBeNull();
+ expect(outdatedWords({...waiting,product:'carebase',purpose:'marketing'})).toBeNull();
+ expect(outdatedWords({...waiting,body:offer,purpose:'marketing'})).toBeNull();
+ // The instructions: the trial in plain words, never its card; no touch plan asks for the terms.
+ expect(growthSystem).toContain('Never bring up the credit card or how billing starts in a message to a prospect');
+ expect(growthSystem).toContain('Never say that no card is needed, and never call the trial risk-free.');
+ for(const plan of [reportTouchAngle,reviewTouchAngle,viewedTouchAngle,unviewedTouchAngle,reviewFollowupAngle,reportCloseAngle,touchAngle(1),touchAngle(2),touchAngle(3)])
+  expect(plan).not.toMatch(/credit card is required|canceling before it ends|card terms|say (?:in one plain clause )?that a credit card/i);
+ // The fact sheet and the playbook that follow the instructions still hold the terms, as facts for a reader who asks.
+ const instructions=growthSystem.slice(0,growthSystem.indexOf('CareMetric fact sheet'));
+ expect(instructions.length).toBeGreaterThan(2000);
+ expect(instructions).not.toMatch(/credit card is required|canceling before it ends|three questions and carry two links/);
+ expect(growthSystem).toContain('A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.');
+ expect(growthSystem).toContain('How to offer the trial: Offer the free trial in plain words: its length and what it covers. Do not bring up the credit card or how billing starts.');
 });
 
 it('refuses a draft that implies we saw the reader open what we sent, or that uses Intel\'s own word "the book" (email review 2026-11-17)',()=>{

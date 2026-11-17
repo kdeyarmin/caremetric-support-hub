@@ -178,6 +178,16 @@ function linkedLine(line, links, s) {
   const pattern = new RegExp(`(${allowed.map(url => escapeHtml(url).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=$|[\\s.,;:!?)])`, 'g');
   return html.replace(pattern, match => `<a href="${match}" target="_blank"${s.theme.linkAttributes} style="${s.link}">${match}</a>`);
 }
+/**
+ * A line that is exactly one of the allowed addresses, shown as the label the caller gave for it ("Open your agency's market report
+ * (PDF)"), or null when it has none. Only the HTML part: the plain-text part keeps the address.
+ */
+function labelledLine(line, links, labels, s) {
+  const url = String(line).trim();
+  const label = labels && typeof labels === 'object' && Object.hasOwn(labels, url) ? labels[url] : null;
+  if (typeof label !== 'string' || !label.trim() || !Array.isArray(links) || !links.includes(url) || !/^https:\/\/[^\s"<>]+$/i.test(url)) return null;
+  return s.anchor(url, label.trim(), `${s.link}font-weight:600;`);
+}
 const listText = items => (Array.isArray(items) ? items : []).map(item => String(item ?? '')).filter(item => item.trim());
 // Link a caller-supplied reference without accepting raw HTML from email copy.
 function linkedText(text, link, s) {
@@ -190,9 +200,12 @@ const blocks = {
     html: ({ text, referenceLink }, s) => `<p style="${s.paragraph}">${linkedText(text, referenceLink, s)}</p>`,
     text: ({ text }) => String(text),
   },
-  /** Words a person wrote: shown exactly as written, paragraph by paragraph. `links`: exact addresses in it that may be links. */
+  /**
+   * Words a person wrote: shown exactly as written, paragraph by paragraph. `links`: exact addresses in it that may be links.
+   * `labels`: what a link on a line of its own is called instead of its address ({ address: label }), in the HTML part only.
+   */
   message: {
-    html: ({ text, links }, s) => String(text).split(blankLine).map(part => `<p style="${s.paragraph}">${part.split('\n').map(line => linkedLine(line, links, s)).join('<br>')}</p>`).join('\n'),
+    html: ({ text, links, labels }, s) => String(text).split(blankLine).map(part => `<p style="${s.paragraph}">${part.split('\n').map(line => labelledLine(line, links, labels, s) ?? linkedLine(line, links, s)).join('<br>')}</p>`).join('\n'),
     text: ({ text }) => String(text),
   },
   button: {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { reportLinkDays, reportLinks, reportMissingMs, reportOpensMs, reportToken, rosterAgency } from './report-link.mjs';
 import { growthEmail, growthExecutors } from './worker.mjs';
 import { draftMessage, draftProblem } from './draft.mjs';
-import { touchAngle } from './playbook.mjs';
+import { reportTouchAngle, reviewFollowupAngle, reviewTouchAngle, touchAngle } from './playbook.mjs';
 
 const key = 'k'.repeat(40);
 const roster = (ccn = '397001', setting = 'home health agency') => ({
@@ -84,7 +84,7 @@ describe('agency report links', () => {
     const opportunity = { id: 'o1', product: 'caremetric-intel', name: 'Riverbend Home Health', version: 1, contact_id: 'c', touches: 0,
       policy: { approved_claim: 'CareMetric Intel helps home health agencies focus their marketing.' }, evidence: [roster()], events: [] };
     const work = { kind: 'outreach', action: 'First touch', success: 'Reply' };
-    const body = `I run a home health and hospice agency, and I built CareMetric Intel to find every referral source.\n\nI put together a free market report for your agency:\n${link.url}`;
+    const body = `I put together a free market report for Riverbend Home Health from public Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nI run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nDoes it match what your team sees in the field?`;
     const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: { subject: 'Your county market', body, citations: ['roster-1'], needsHuman: false } })) };
     const draft = await draftMessage({ opportunity, work, task: {}, model, report: link });
     expect(draft).toMatchObject({ modelGenerated: true });
@@ -108,37 +108,56 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
   const work = { kind: 'outreach', action: 'First touch', success: 'Reply' };
   const reply = (body, citations = ['roster-1']) => ({ configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: { subject: 'Your county referral market', body, citations, needsHuman: false } })) });
 
-  it('asks about the reader\'s market, links its own report, then the trial with its card terms', async () => {
+  it('offers the agency its own market report and nothing else, and leaves the trial to the second email (owner decision 2026-11-17)', async () => {
     const link = reportLinks({ key }).linkFor(opportunity);
-    const body = `I run a home health and hospice agency, and I built CareMetric Intel to find every referral source.\n\nAre you getting your share of the referrals in your county? Does your team know every hospital and physician that refers in your territory? How well do you know the agencies you meet there?\n\nI put together a free market report for your agency from public Medicare data. Please review it with your managers and marketing team:\n${link.url}\n\nHow much could you grow if your team worked from the most current market intelligence? Try it free for 30 days. A credit card is required to start the trial, and canceling before it ends means no charge:\nhttps://www.caremetricintel.com/`;
+    const body = `I put together a free market report for Riverbend Home Health from public Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nIt shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county's residents use most and the highest-ranked physicians for outreach.\n\nI run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nDoes it match what your team sees in the field?`;
     const model = reply(body);
     const draft = await draftMessage({ opportunity, work, task: {}, model, report: link });
     expect(draft).toMatchObject({ modelGenerated: true });
     const input = JSON.parse(model.run.mock.calls[0][1].user);
-    expect(input.touchPlan).toMatch(/share of the referrals/);
-    expect(input.touchPlan).toMatch(/managers and marketing team/);
-    expect(input.touchPlan).toMatch(/credit card is required to start the trial/);
-    expect(input.touchPlan).toMatch(/Never call it risk-free/);
-    expect(input.style).toMatch(/one hundred seventy words/);
-    expect(draft.arms.length).toBe('report');
+    expect(input.touchPlan).toBe(reportTouchAngle);
+    expect(input.touchPlan).toMatch(/First sentence: you put together a free market report for this agency, by name, from public Medicare data/);
+    expect(input.touchPlan).toMatch(/exactly one short question the reader can answer by reply once they have looked/);
+    expect(input.touchPlan).toMatch(/No other link, no free trial and no price: those come in the next email/);
+    // The longer email it replaces asked three questions, offered the trial and stated its card terms.
+    expect(input.touchPlan).not.toMatch(/credit card|managers and marketing team|three questions|one hundred seventy words/);
+    expect(input.style).toBe('Keep the body to about one hundred words, never more than 120.');
+    expect(draft.arms).toMatchObject({ length: 'report', form: 'short' });
     expect(draft.variant).toBe('report');
-    // "Risk-free" is refused, as is "no credit card".
-    expect(await draftMessage({ opportunity, work, task: {}, model: reply(body.replace('Try it free for 30 days.', 'Try it risk-free for 30 days.')), report: link })).toBeNull();
-    expect(await draftMessage({ opportunity, work, task: {}, model: reply(body.replace('A credit card is required to start the trial, and canceling before it ends means no charge', 'No credit card needed')), report: link })).toBeNull();
+    // The trial does not belong in this email, with or without its link.
+    expect(await draftMessage({ opportunity, work, task: {}, model: reply(`${body}\n\nYou can try it free for 30 days:\nhttps://www.caremetricintel.com/`), report: link })).toBeNull();
+    expect(await draftMessage({ opportunity, work, task: {}, model: reply(body.replace('Does it match what your team sees in the field?', 'Would a free trial on your county help?')), report: link })).toBeNull();
+    // The second email offers it, in plain words: "risk-free", "no credit card" and the card terms themselves are refused there.
+    const second = async offer => {
+      const written = reply(`Does your team plan its week around the hospitals your county's residents use?\n${link.url}\n\n${offer}\nhttps://www.caremetricintel.com/`);
+      const sent = await draftMessage({ opportunity: { ...opportunity, touches: 1 }, work, task: {}, model: written, report: link });
+      return { sent, plan: JSON.parse(written.run.mock.calls[0][1].user).touchPlan };
+    };
+    const offered = await second('You can try it free for 30 days on one county:');
+    expect(offered.sent).toMatchObject({ modelGenerated: true });
+    expect(offered.plan).toMatch(/End with the 30-day free trial on one county they serve/);
+    expect(offered.plan).toMatch(/never call the trial risk-free/);
+    expect((await second('You can try it risk-free for 30 days on one county:')).sent).toBeNull();
+    expect((await second('You can try it free for 30 days, with no credit card needed:')).sent).toBeNull();
+    expect((await second('You can try it free for 30 days. A credit card is required to start the trial:')).sent).toBeNull();
   });
 
   it('sends an agency with no roster record to the page where it gets its own report', async () => {
     const web = { ...opportunity, evidence: [{ id: 'web-1', source_url: 'https://riverbend.example', observed_at: new Date().toISOString(), confidence: 'medium', claim: 'Riverbend Home Health serves Riverton County.' }] };
-    const model = reply('Are you getting your share of referrals?\n\nGet your free market report:\nhttps://www.caremetricintel.com/market-review', ['web-1']);
+    const model = reply('A free market report for Riverbend Home Health, built from public Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nDoes your team know which agencies lead Riverton County?', ['web-1']);
     const draft = await draftMessage({ opportunity: web, work, task: {}, model });
-    expect(draft).toMatchObject({ modelGenerated: true });
+    expect(draft).toMatchObject({ modelGenerated: true, arms: { form: 'short' } });
     const input = JSON.parse(model.run.mock.calls[0][1].user);
+    expect(input.touchPlan).toBe(reviewTouchAngle);
     expect(input.touchPlan).toMatch(/entering its CMS certification number on the market report page/);
     expect(input.links.map(item => item.url)).toContain('https://www.caremetricintel.com/market-review');
-    // Later touches and other products keep their own plans.
+    // Its one link is that page: the trial's page in its place, or beside it, is refused.
+    expect(await draftMessage({ opportunity: web, work, task: {}, model: reply('A free market report for Riverbend Home Health is one step away:\nhttps://www.caremetricintel.com/\n\nDoes your team know which agencies lead Riverton County?', ['web-1']) })).toBeNull();
+    // Its second email points to the page again and offers the trial.
     const second = reply('A different angle.\n\nhttps://www.caremetricintel.com/', ['web-1']);
     await draftMessage({ opportunity: { ...web, touches: 1 }, work, task: {}, model: second });
-    expect(JSON.parse(second.run.mock.calls[0][1].user).touchPlan).toMatch(/different angle/);
+    expect(JSON.parse(second.run.mock.calls[0][1].user).touchPlan).toBe(reviewFollowupAngle);
+    expect(reviewFollowupAngle).toMatch(/different angle/);
   });
 
   it('gives a nursing home the standard first email, without the agency-only report pages (owner decision 2026-11-16)', async () => {

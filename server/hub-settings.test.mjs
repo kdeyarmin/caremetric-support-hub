@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { once } from 'node:events';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { hubSettings, retiredVariables, settingFromEnv, settingGroups, settingInput, settingsCatalog, settingsFeature } from './hub-settings.mjs';
+import { hubSettings, retiredSettings, retiredVariables, settingFromEnv, settingGroups, settingInput, settingsCatalog, settingsFeature } from './hub-settings.mjs';
 import { live, rebuilt } from './live.mjs';
 import { socialConfig } from './agents/social/index.mjs';
 import { appServer } from './http.mjs';
@@ -18,7 +18,10 @@ const declared = new Set([settingsFeature]);
 describe('the settings catalog', () => {
   it('holds exactly the keys and kinds the migration creates', () => {
     const rows = [...migration.matchAll(/\('([a-z_]+\.[a-z_]+)', '(flag|text|number|list)'\)/g)].map(match => [match[1], match[2]]);
-    expect(settingsCatalog.map(item => [item.key, item.kind]).sort()).toEqual(rows.sort());
+    // A retired setting keeps its row (the release gates still check for it) and leaves the catalog, so no page shows it.
+    expect([...settingsCatalog, ...retiredSettings].map(item => [item.key, item.kind]).sort()).toEqual(rows.sort());
+    expect(retiredSettings.map(item => item.key)).toEqual(['growth.short_first_email']);
+    for (const retired of retiredSettings) expect(settingsCatalog.some(item => item.key === retired.key), retired.key).toBe(false);
     // The release gate refuses a database without the first release's 32 rows.
     expect(rows.length).toBeGreaterThanOrEqual(32);
     expect(contract).toContain('(select count(*) from private.hub_settings) < 32');

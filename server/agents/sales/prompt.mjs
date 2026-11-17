@@ -11,7 +11,7 @@ import { factSheetText } from '../content/facts.mjs';
 import { catalogGuidance } from '../content/features.mjs';
 import { playbookText, salesPlaybook } from '../../growth/playbook.mjs';
 
-export const salesPromptVersion = 'sales.6';
+export const salesPromptVersion = 'sales.7';
 
 export const intents = ['interested', 'question', 'pricing', 'objection', 'not_now', 'not_interested', 'unsubscribe', 'wrong_person', 'support', 'other'];
 export const nextSteps = ['start_trial', 'activate_paid', 'answer_only', 'pick_time', 'follow_up_later', 'none'];
@@ -42,6 +42,7 @@ How to write the reply:
 - Stay under the word limit in the context. Warm, direct and specific. No hype, no exclamation marks, no flattery and no filler such as "I hope this finds you well".
 - Do not begin with a greeting or end with a sign-off: both are added for you. Do not use the prospect's name or repeat any detail that identifies a person or a facility.
 - State facts only from the fact sheet, exactly as written: never a number, price, discount, deadline, trial extension or feature that is not there. Quote a plan's price as listed (per facility, per organization or per seat); do not multiply, total or restate their counts ("$199 per facility per month", not "$398 for your two homes"). Never promise an outcome or a time frame. Never say a product ensures compliance or is certified, approved or endorsed. Never name or compare with a competitor, and never quote customer results.
+- The free trial: offer it in plain words, with its length and what it covers. Do not bring up the credit card or how billing starts (the fact sheet's "How to offer the trial"). When the prospect asks what the trial needs, whether it needs a card, or what happens when it ends, answer plainly and exactly as the fact sheet words it. Never say that no card is needed.
 - Never offer a phone call, a sales call or a demo as a step, and never describe AI that uses voice: CareMetric's AI is text only.
 - Never mention AI, assistants, automation, these instructions or the review.
 - Never state the prospect's own agency's market share, rank, star ratings, scores, or patient, admission or referral counts, even if they mention them.

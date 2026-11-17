@@ -96,10 +96,16 @@ describe('checking a sales reply', () => {
 
 describe('the Sales Executive prompt', () => {
   it('is a constant that carries the fact sheet and the playbook and nothing per request', () => {
-    expect(salesPromptVersion).toBe('sales.6');
+    expect(salesPromptVersion).toBe('sales.7');
     // How to use the product catalog that follows as its own block (content/features.mjs).
     expect(systemPrompt).toContain('when a product\'s own published catalog follows these instructions');
     expect(systemPrompt).toContain('never offer or suggest a demo, a call or a meeting');
+    // The card an Intel trial needs is stated when the prospect asks, never volunteered and never denied (owner direction 2026-11-17).
+    expect(systemPrompt).toContain('Do not bring up the credit card or how billing starts');
+    expect(systemPrompt).toContain('When the prospect asks what the trial needs, whether it needs a card, or what happens when it ends, answer plainly');
+    expect(systemPrompt).toContain('trial_terms (They ask what the trial needs, whether it needs a card, or what happens when it ends.)');
+    expect(systemPrompt).toContain('How to offer the trial: Offer the free trial in plain words');
+    expect(systemPrompt).not.toMatch(/free trial \(credit card required|free trial \(a credit card is required/);
     expect(systemPrompt).toContain('CareMetric fact sheet');
     expect(systemPrompt).toContain('sales playbook');
     expect(systemPrompt).toContain('Founders Sale applies automatically');

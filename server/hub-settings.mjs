@@ -103,7 +103,7 @@ export const settingsCatalog = Object.freeze([
   { key: 'email.growth_from', group: 'email', kind: 'text', input: 'email', default: null, env: 'HUB_GROWTH_FROM_EMAIL', fromEnv: fromText, valid: validGrowthFromEmail,
     label: 'Growth email sender', help: 'Cold email and sales follow-ups only, on a domain or subdomain of its own so prospecting never affects the support address. The domain must exist and be authenticated (DKIM) in the same SendGrid account as the Hub\'s key, with DMARC published; warm it up first, and check that a test email shows DMARC: pass. Answers still go to the Reply-To. Empty: the support sender.' },
   { key: 'email.growth_from_name', group: 'email', kind: 'text', input: 'text', default: null, env: 'HUB_GROWTH_FROM_NAME', fromEnv: fromText, valid: validGrowthFromName,
-    label: 'Growth email display name', help: 'At most 64 characters, without quotes or angle brackets. Empty: "CareMetric".' },
+    label: 'Growth email display name', help: 'At most 64 characters, without quotes or angle brackets. Empty: a founder-signed email to a prospect arrives from "Dr. Kevin Deyarmin, CareMetric", and every other growth email from "CareMetric". A name set here is used for all of them.' },
   { key: 'email.provider', group: 'email', kind: 'text', input: 'choice', default: 'sendgrid', env: null,
     choices: [{ value: 'sendgrid', label: 'SendGrid' }, { value: 'ses', label: 'Amazon SES' }], valid: value => value === 'sendgrid' || value === 'ses',
     label: 'Email service', help: 'Which service sends the Hub\'s email: staff replies, alerts, customer, bulk and growth email. Amazon SES needs its access key in Railway and each sender\'s domain verified in SES. If the chosen service is not set up, the other one keeps sending.' },
@@ -185,8 +185,6 @@ export const settingsCatalog = Object.freeze([
     label: 'Send cold email from this hour', help: 'Eastern time, 0 to 23, Monday to Friday. With "until this hour", cold email waits outside these hours for the next opening; replies and customer emails are not held. Empty, with the other empty too: any time.' },
   { key: 'growth.send_until_hour', group: 'growth', kind: 'number', input: 'number', default: null, min: 1, max: 24, unit: 'hour', env: null, valid: wholeNumber(1, 24),
     label: 'Send cold email until this hour', help: 'Eastern time, 1 to 24, Monday to Friday; the hour itself is outside (16 stops at 4 pm). Must be later than "from this hour", or the hours are not used. Empty, with the other empty too: any time.' },
-  { key: 'growth.short_first_email', group: 'growth', kind: 'flag', input: 'toggle', default: false, env: null,
-    label: 'Test a short first email', help: 'Half of the Intel first emails that link the agency\'s own report are written short: about 70 words, the report and one question. The trial and its card terms move to the second email. The weekly memo compares the two once enough have gone.' },
   { key: 'growth.quiet_followup', group: 'growth', kind: 'flag', input: 'toggle', default: false, env: null,
     label: 'Follow up when a prospect who replied goes quiet', help: 'When a prospect replied with interest or a question and has not written since, the Marketing Manager drafts at most two short follow-ups, a few days apart, through the same checks, caps and opt-out link as every growth email. Any reply, opt-out or "no" stops them.' },
   { key: 'growth.sales_context', group: 'growth', kind: 'flag', input: 'toggle', default: false, env: null,
@@ -298,6 +296,12 @@ const byKey = new Map(settingsCatalog.map(entry => [entry.key, entry]));
 // decision 2026-11-09), so no message carries a booking page. HUB_APOLLO_API_KEY: the Hub finds people and addresses itself (owner
 // decision 2026-11-13).
 export const retiredVariables = Object.freeze(['HUB_BULK_EMAIL_FROM', 'HUB_BOOKING_URL', 'HUB_APOLLO_API_KEY']);
+/**
+ * Settings nothing reads any more. Their rows stay in the database, because the release gates that created them still check for them,
+ * and no page shows them. growth.short_first_email ("Test a short first email") was a half-and-half test of a first email that holds
+ * only the agency's market report: every such first email is that form since 2026-11-17 (growth/draft.mjs), by the owner's decision.
+ */
+export const retiredSettings = Object.freeze([Object.freeze({ key: 'growth.short_first_email', kind: 'flag' })]);
 const usable = (entry, value) => {
   if (value === null || value === undefined) return false;
   if (entry.kind === 'flag') return typeof value === 'boolean';

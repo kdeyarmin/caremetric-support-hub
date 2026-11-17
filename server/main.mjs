@@ -130,7 +130,7 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
     qualityWriter:setting('growth.quality_writer'),critic:setting('growth.draft_critic')},
   // Stage 2 of the 2026-11-17 review (Settings → Customer growth): the best prospects first, a short first email as a test, and a
   // follow-up when a prospect who replied goes quiet. The send hours are read by the send claim itself.
-  priority:{enabled:setting('growth.send_priority'),shortFirst:setting('growth.short_first_email'),quietFollowup:setting('growth.quiet_followup')},
+  priority:{enabled:setting('growth.send_priority'),quietFollowup:setting('growth.quiet_followup')},
   // The Monday live writing evaluation (Settings → Customer growth → Run a live writing evaluation each Monday; stage 3).
   liveEvaluation:{enabled:setting('growth.live_evaluation')},
   // Each Medicare roster agency's free market report on Intel, linked in its outreach (growth/report-link.mjs; the feed's shared secret).
@@ -143,7 +143,8 @@ const growthIdentity=()=>growthSender({HUB_GROWTH_FROM_EMAIL:settings.get('email
 for(const warning of growthIdentity().warnings)console.warn(warning);
 // Growth email has its own switch (Settings → Email → Growth email service, SendGrid by default): Amazon SES does not allow unsolicited
 // email, so prospecting stays off SES unless the owner chooses otherwise.
-const growthOptions={from:()=>growthIdentity().from,fromName:()=>growthIdentity().fromName,replyTo:()=>growthIdentity().replyTo};
+// A founder-signed email arrives from the founder's own name unless a display name is saved (Settings → Email): then that name is kept.
+const growthOptions={from:()=>growthIdentity().from,fromName:()=>growthIdentity().fromName,fromNameLocked:()=>growthIdentity().fromNameSet,replyTo:()=>growthIdentity().replyTo};
 const growthMail=chosenMail(setting('email.growth_provider'),{sendgrid:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,...growthOptions}),ses:sesBulkMail({...sesAccess,...growthOptions})},{intoSes:false});
 // The Account Manager's customer emails: from the support address, replies to it, one-click unsubscribe headers, and the postal address in every footer.
 const customerMail=bulkSender({from:supportFrom,replyTo:supportReplyTo,category:'hub-lifecycle-email'});

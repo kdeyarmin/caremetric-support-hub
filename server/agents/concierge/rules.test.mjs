@@ -185,8 +185,23 @@ describe('a reply with the original email quoted under it', () => {
       // docs/INTEL_MARKETING_PLAYBOOK.md trial terms and the site wording cited in docs/GTM_FACTS.md.
       '30-day free trial, one county, 3 marketer seats and 1 manager seat. A credit card is required to start it, and the plan chosen at sign-up bills automatically when it ends unless canceled first.',
       'Credit card required · Cancel before trial end to avoid charges',
+      // What outreach said until 2026-11-17, when the owner had the card left out of every trial offer (facts.mjs `trialMention`): the
+      // playbook's value point and its timing and demo answers, the first email's closing instruction, and the sentence an email
+      // carried. Emails already sent quote these under a prospect's reply for months, so they are still recognized.
+      'A 30-day free trial (credit card required; canceling before it ends avoids any charge).',
+      'Acknowledge it, mention the 30-day free trial (a credit card is required, and canceling before it ends avoids any charge), and ask when to check back. Record a dated follow-up.',
+      'CareMetric does not do live demos or sales calls. Offer the written walkthrough instead: the resource or guide that shows what they want to see, the 30-day free trial on one county (credit card required; canceling before it ends avoids any charge), and answers to any question by email.',
+      'End with the 30-day free trial as the way to see the referral sources in a county they serve: say in one plain clause that a credit card is required to start the trial and that canceling before it ends means no charge, then the trial link on its own line. Never call it risk-free.',
+      'You can try it free for 30 days. A credit card is required to start the trial, and canceling before it ends means no charge.',
+      // An answer to a prospect who asked what the trial needs (the playbook's `trial_terms` objection) may lead into the terms.
+      'Yes, a credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.',
+      'Here is what the trial needs: a credit card is required to start the trial, and the plan you chose bills automatically when it ends unless you cancel first.',
     ].filter(disclosure => /credit card/i.test(disclosure));
-    expect(disclosures.length).toBeGreaterThanOrEqual(9);
+    // Today the card is stated in the fact sheet's terms and offer and in the answer for a reader who asks; no outreach plan carries it.
+    expect(book.valuePoints.some(point => /credit card/i.test(point))).toBe(false);
+    expect([reportTouchAngle, reviewTouchAngle].some(plan => /credit card/i.test(plan))).toBe(false);
+    expect(book.objections.filter(objection => /credit card/i.test(objection.answer)).map(objection => objection.key)).toEqual(['trial_terms']);
+    expect(disclosures.length).toBeGreaterThanOrEqual(12);
     const request = 'Please change the credit card for my trial.';
     for (const disclosure of disclosures) {
       expect(withoutTrialPhrase(disclosure), disclosure).not.toMatch(/credit card/i);

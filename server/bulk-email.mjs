@@ -1,6 +1,7 @@
 import { HttpError, digest, transaction, withSession } from './sms-auth.mjs';
 import { live } from './live.mjs';
 import { renderEmail } from './email-layout.mjs';
+import { validGrowthFromName } from './growth/sender.mjs';
 
 /* Bulk email from the platform administrator to the users of each application,
    narrowed by role and account status. Audiences are read from each
@@ -63,13 +64,16 @@ export function bulkEmailHtml({ subject, body, applications, unsubscribeUrl, pos
  * SendGrid Mail Send for bulk email: one recipient per request, text then HTML, one-click unsubscribe headers, no tracking. The
  * Account Manager's customer emails use the same sender under their own SendGrid category.
  */
-export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', fromName = 'CareMetric', replyTo = from, category = 'hub-bulk-email', fetchImpl = fetch }) {
+export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', fromName = 'CareMetric', fromNameLocked = false, replyTo = from, category = 'hub-bulk-email', fetchImpl = fetch }) {
   // The sender, its display name and Reply-To are Hub settings (Settings → Email); each may be a function, read on each send.
   const sender = () => ({ from: String(live(from) ?? ''), fromName: String(live(fromName) ?? ''), replyTo: String(live(replyTo) ?? '') });
   return {
     get configured() { const now = sender(); return typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(now.from) && emailAddress.test(now.replyTo) && /^[a-z0-9-]{1,40}$/.test(category); },
-    async send({ to, subject, text, html, unsubscribeUrl, messageId }) {
-      const { from, fromName, replyTo } = sender();
+    // `messageFromName`: one message's own display name (a founder-signed growth email), used unless the owner saved a display name
+    // (`fromNameLocked`) or it is not one a mail service accepts.
+    async send({ to, subject, text, html, unsubscribeUrl, messageId, fromName: messageFromName = null }) {
+      const { from, fromName: senderName, replyTo } = sender();
+      const fromName = messageFromName && live(fromNameLocked) !== true && validGrowthFromName(messageFromName) ? messageFromName.trim() : senderName;
       const personalization = { to: [{ email: to }], ...(unsubscribeUrl ? { headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } } : {}) };
       let response;
       try {

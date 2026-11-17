@@ -27,9 +27,33 @@ export const statesStanding = sentence => briefPatterns.some(pattern => pattern.
 const emailPatterns = [
   /\b\d(?:\.\d)?[- ]?stars?\b/i,
   /\bstar rating (?:of|is|was)\b/i,
-  new RegExp(`\\b(?:ranks?|ranked|ranking)\\s+(?:#\\s?\\d+|${ordinal}|top|among|highest|lowest|near|in the top|no\\.)`, 'i'),
+  new RegExp(`\\b(?:ranks?|ranked|ranking)\\s+(?:#\\s?\\d+|${ordinal}|among|near|in the top|no\\.)`, 'i'),
   /#\s?\d+\s+(?:in|among|of|for)\b/i,
   new RegExp(`\\b${ordinal}[- ](?:largest|biggest|busiest|smallest)\\b`, 'i'),
   /\b(?:rated|scored)\s+(?:a\s+)?\d/i,
 ];
-export const emailStatesStanding = text => emailPatterns.some(pattern => pattern.test(String(text ?? '')));
+/**
+ * "Ranks highest", "ranked top" or "ranks lowest" is an agency's standing unless it is plainly about the physicians, clinicians or
+ * referral sources a market report lists ("the physicians Intel ranks highest as referral sources", email review 2026-11-17: the
+ * writer's own instructions used those words, and this check refused every draft that followed them). It is about them when the words
+ * after it say so ("as referral sources", "for home health outreach"), or when they are the nearest thing named before it in the
+ * sentence, with no agency, "you" or "it" in between.
+ */
+const superlativeRank = /\b(?:ranks?|ranked|ranking)\s+(?:top|highest|lowest)\b/gi;
+const sourcesNamed = /\b(?:physicians?|clinicians?|doctors?|practitioners?|referral\s+sources?)\b/gi;
+const agencyBetween = /\b(?:agency|agencies|hospices?|organi[sz]ations?|compan(?:y|ies)|you|it|they)\b/i;
+const aboutSources = /^\s+(?:as\s+referral\s+sources\b|for\s+(?:[a-z-]+\s+){0,3}outreach\b)/i;
+function ranksAnAgency(sentence) {
+  for (const match of sentence.matchAll(superlativeRank)) {
+    if (aboutSources.test(sentence.slice(match.index + match[0].length))) continue;
+    const before = sentence.slice(0, match.index);
+    const named = [...before.matchAll(sourcesNamed)].at(-1);
+    if (named && !agencyBetween.test(before.slice(named.index + named[0].length))) continue;
+    return true;
+  }
+  return false;
+}
+export function emailStatesStanding(text) {
+  const words = String(text ?? '');
+  return emailPatterns.some(pattern => pattern.test(words)) || words.split(/(?<=[.?!])\s+|\n+/).some(ranksAnAgency);
+}

@@ -232,8 +232,12 @@ Each agent keeps its existing controls and approval steps. This section only say
 - **Who to prioritize while new enrollments are frozen:** established agencies in counties with several competitors, agencies hiring
   marketers or liaisons, and any newly certified agency or new owner the roster shows. The last two are rare now but are the strongest
   signals.
-- **Touch 1:** the founder's story in one or two sentences, one likely problem as a question, one sentence on how Intel helps, then the
-  free trial. No price.
+- **Touch 1 to a home health agency or hospice** (owner decision 2026-11-17) is its free market report and nothing else. The first
+  sentence offers the report, by the agency's name; then its link, what is inside, one sentence on who the founder is, and one
+  question to answer by reply. No trial and no price: the trial is offered in touch 2, and touch 3 is a short close that leaves the
+  report with them. [Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report) has the form and its checks.
+- **Touch 1 to anyone else** (a nursing home, a CareBase prospect): the founder's story in one or two sentences, one likely problem
+  as a question, one sentence on how Intel helps, then the free trial. No price.
 - **Rotate the lead pillar** across prospects. The experiment angles are referral sources, territory, competitors, visit prep, hospital
   outcomes and slipping sources (`experimentAngles` in `server/growth/playbook.mjs`).
 - **Numbers:** only the agency's own facts, in a sentence about the agency ("Your agency serves six counties."). Never a county statistic
@@ -347,6 +351,8 @@ Most items are already enforced in code; the rest depend on judgment.
 - Say something concrete: who it is for, and what they can do, see or stop doing.
 - Show Intel as one marketing workspace, even when leading with one feature.
 - Quote prices, the trial and the Founders Sale exactly as the fact sheet words them.
+- Offer the trial in plain words. Do not bring up the credit card unless the reader asks what the trial needs or what happens when
+  it ends (owner direction 2026-11-17); never say that no card is needed.
 - Label public figures as research signals, and say referrals come from the agency's own records.
 - Carry the plan condition when a feature needs one (Growth and Pro, Pro, agency admins and managers).
 - Point to the trial, the walkthrough, the free county report or a written answer as the next step.

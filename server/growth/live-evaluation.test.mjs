@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { gradeCase, gradeLiveEvaluation, liveEvaluationCases, liveEvaluationHandlers, liveEvaluationNote, liveTriggers, passAverage, passLowest } from './live-evaluation.mjs';
 import { growthReachFeature, liveEvaluationVersion } from './reach.mjs';
-import { messageArms } from './draft.mjs';
+import { criticPromptVersion, messageArms } from './draft.mjs';
+import { reportTouchAngle, reviewTouchAngle } from './playbook.mjs';
 import { growthEvaluationVersion } from './evaluation.mjs';
 import { scorecardFeature, scorecardHandlers } from '../agents/scorecard/index.mjs';
 
@@ -11,17 +12,19 @@ const policy = { enabled: true, approvedClaim: 'CareMetric Intel shows home heal
 const scheduled = (over = {}) => ({ id: '00000000-0000-4000-8000-0000000000aa', agentKey: 'marketing_manager', kind: 'growth.evaluate_live', sourceKind: 'schedule', attempts: 1,
   requestKey: 'schedule:00000000-0000-4000-8000-000000000001:20261116T115000Z', agent: { autonomy: 'act' }, ...over });
 
-// A reader-and-writer model stand-in: writes a short first email that links the case's report, and scores it as told.
-const email = (report, source) => ({ subject: 'Your county\'s referral sources', body: `Are you getting your share of the referrals in your county?\n\nI put together a free market report for your agency from public Medicare data.\n${report}`,
+// A reader-and-writer model stand-in: writes a first email in the form every agency gets (its market report and one question, linking
+// the case's own report, or the market report page for a case without one), and scores it as told.
+const reviewPage = 'https://www.caremetricintel.com/market-review';
+const email = (link, source) => ({ subject: 'A market report for your agency', body: `I put together a free market report for your agency from public Medicare data.\n${link}\n\nDoes it match what your team sees in the field?`,
   citations: [source], needsHuman: false });
 function stubModel({ score = 4, weakness = 'none', outcome = 'completed', failOn = null } = {}) {
   const calls = [];
   return { calls, configured: true, run: vi.fn(async (_task, request) => {
     calls.push(request.promptVersion);
     if (outcome !== 'completed') return { outcome };
-    if (request.promptVersion === 'critic.2') return { outcome: 'completed', output: { specific: 4, relevant: 4, clearAsk: 4, wouldReply: typeof score === 'function' ? score() : score, weakness, weakestSentence: '' } };
+    if (request.promptVersion === criticPromptVersion) return { outcome: 'completed', output: { specific: 4, relevant: 4, clearAsk: 4, wouldReply: typeof score === 'function' ? score() : score, weakness, weakestSentence: '' } };
     const input = JSON.parse(request.user);
-    const report = input.links.find(link => link.url.includes('/report/'))?.url;
+    const report = input.links.find(link => link.url.includes('/report/'))?.url ?? input.links.find(link => link.url === reviewPage).url;
     const source = input.sources.find(item => item.id !== 'county').id;
     if (failOn && failOn(input)) return { outcome: 'completed', output: { ...email(report, source), body: `${email(report, source).body}\n\nWe guarantee more referrals.` } };
     return { outcome: 'completed', output: email(report, source) };
@@ -42,18 +45,25 @@ function setup({ state = { cases: [], policy }, enabled = true, features = new S
 
 describe('the twelve live evaluation cases', () => {
   const cases = liveEvaluationCases(monday, policy);
-  it('cover each trigger three times and every pairing of a brief and a form three times', () => {
+  it('cover each trigger three times and every pairing of a brief and the link the first email carries three times', () => {
     expect(cases).toHaveLength(12);
     expect(new Set(cases.map(item => item.key)).size).toBe(12);
+    expect(new Set(cases.map(item => item.opportunity.id)).size).toBe(12);
     for (const trigger of liveTriggers) expect(cases.filter(item => item.trigger === trigger)).toHaveLength(3);
-    for (const brief of [true, false]) for (const form of ['short', 'standard']) expect(cases.filter(item => item.brief === brief && item.form === form)).toHaveLength(3);
+    // The agency's own report, or the market report page for an agency with no roster record. (It was the short or the standard first
+    // email until every first email became the report and nothing else, 2026-11-17.)
+    for (const brief of [true, false]) for (const link of ['report', 'review']) expect(cases.filter(item => item.brief === brief && item.link === link)).toHaveLength(3);
+    // The database keeps a case under its key (private.growth_live_eval_record).
+    for (const item of cases) expect(item.key).toMatch(/^[a-z_.]{1,60}$/);
+    expect(cases.map(item => item.key)).toContain('web.brief.review');
   });
-  it('give each case the trigger and the form it asks for, as the sweep would read them', () => {
+  it('give each case the trigger it asks for, the first email\'s one form, and its own report only where the case has one', () => {
     for (const item of cases) {
-      const arms = messageArms(item.opportunity, item.opportunity.evidence, { reportLed: true, shortTest: true });
+      const arms = messageArms(item.opportunity, item.opportunity.evidence, { reportLed: true });
       expect(arms.trigger, item.key).toBe(item.trigger);
-      expect(arms.form, item.key).toBe(item.form);
-      expect(item.report.url).toMatch(/^https:\/\/www\.caremetricintel\.com\/report\/[A-Za-z0-9_.-]+$/);
+      expect(arms.form, item.key).toBe('short');
+      if (item.link === 'report') expect(item.report.url, item.key).toMatch(/^https:\/\/www\.caremetricintel\.com\/report\/[A-Za-z0-9_.-]+$/);
+      else expect(item.report, item.key).toBeNull();
       expect(Boolean(item.briefPart)).toBe(item.brief);
       expect(item.opportunity.policy.approved_claim).toBe(policy.approvedClaim);
     }
@@ -70,7 +80,7 @@ describe('the twelve live evaluation cases', () => {
 });
 
 describe('grading', () => {
-  const graded = (wouldReply, over = {}) => ({ kind: 'web', brief: true, form: 'short', ok: true, wouldReply, ...over });
+  const graded = (wouldReply, over = {}) => ({ kind: 'web', brief: true, link: 'report', ok: true, wouldReply, ...over });
   it('passes at an average of at least 3.5 with none below 2, and every draft through the checks', () => {
     expect(passAverage).toBe(3.5); expect(passLowest).toBe(2);
     expect(gradeLiveEvaluation([...Array(6).fill(graded(4)), ...Array(6).fill(graded(3))])).toMatchObject({ passed: true, average: 3.5, lowest: 3, failures: [] });
@@ -82,10 +92,10 @@ describe('grading', () => {
     expect(gradeLiveEvaluation(Array(5).fill(graded(5))).failures).toContain('incomplete');
   });
   it('keeps codes and scores, never words', () => {
-    const item = { trigger: 'new_owner', brief: false, form: 'standard' };
-    expect(gradeCase(item, { modelGenerated: true, body: 'secret words', arms: { critic: '4', weakness: 'too_long', form: 'standard' } }))
-      .toEqual({ kind: 'new_owner', brief: false, form: 'standard', ok: true, wouldReply: 4, weakness: 'too_long', formWritten: 'standard' });
-    expect(gradeCase(item, null, ['guarantee'])).toEqual({ kind: 'new_owner', brief: false, form: 'standard', ok: false, wouldReply: null, problem: 'guarantee' });
+    const item = { trigger: 'new_owner', brief: false, link: 'review' };
+    expect(gradeCase(item, { modelGenerated: true, body: 'secret words', arms: { critic: '4', weakness: 'too_long', form: 'short' } }))
+      .toEqual({ kind: 'new_owner', brief: false, link: 'review', ok: true, wouldReply: 4, weakness: 'too_long', formWritten: 'short' });
+    expect(gradeCase(item, null, ['guarantee'])).toEqual({ kind: 'new_owner', brief: false, link: 'review', ok: false, wouldReply: null, problem: 'guarantee' });
     expect(gradeCase(item, { modelGenerated: false, arms: {} })).toMatchObject({ ok: false });
   });
 });
@@ -104,9 +114,16 @@ describe('growth.evaluate_live', () => {
     expect([product, version, passed]).toEqual(['caremetric-intel', liveEvaluationVersion, true]);
     expect(version).not.toBe(growthEvaluationVersion);
     expect(results.results).toHaveLength(12);
-    expect(JSON.stringify(results)).not.toMatch(/referrals in your county|report\/live-eval/);
+    expect(JSON.stringify(results)).not.toMatch(/free market report|what your team sees|report\/live-eval|market-review/);
     expect(JSON.stringify(results).length).toBeLessThan(12_000);
-    expect(model.calls.filter(version => version === 'critic.2').length).toBeGreaterThanOrEqual(12);
+    expect(model.calls.filter(version => version === criticPromptVersion).length).toBeGreaterThanOrEqual(12);
+    expect(criticPromptVersion).toBe('critic.3');
+    // Six were written around the agency's own report and six around the market report page, each in the one first-email form.
+    const written = model.run.mock.calls.filter(([, request]) => request.promptVersion !== criticPromptVersion).map(([, request]) => JSON.parse(request.user));
+    expect(written.filter(input => input.touchPlan === reportTouchAngle && input.report === true)).toHaveLength(6);
+    expect(written.filter(input => input.touchPlan === reviewTouchAngle && input.report === undefined)).toHaveLength(6);
+    expect(results.results.map(item => item.link).sort()).toEqual([...Array(6).fill('report'), ...Array(6).fill('review')]);
+    expect(results.results.every(item => item.formWritten === 'short')).toBe(true);
     expect(notifier.send).not.toHaveBeenCalled();
     // Done for the week: a later try that day does nothing.
     expect((await run()).result).toEqual({ skipped: 'already_done', run: 'week:2026-11-16' });

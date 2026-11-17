@@ -2,7 +2,10 @@
  * The Account Manager's customer emails: short, fixed emails to the billing contact of a trial or a new paying account, written
  * once, here, and reviewed like any other copy. Pure: facts go in, words come out, and the same facts always give the same words.
  *
- * - welcome          days 0 to 2 of a trial: what to do first, with a link to the product's getting-started help.
+ * Each email opens with what the customer gets (email review 2026-11-17): the per-product words below say what the first steps lead
+ * to (`firstWin`), what the trial opens once its card is in (`opens`) and what stays when the plan starts (`kept`).
+ *
+ * - welcome          days 0 to 2 of a trial: the first three steps and the result they lead to, with a link to the product's help.
  * - setup_nudge      days 3 to 6 of a trial, only while the product has reported no positive usage for the account: an offer of
  *                    help (a report of zero, which the usage API accepts, is not usage).
  * - trial_checkin    when 5 days or fewer (and more than 2) are left in a trial: a personal check-in, and it says it is not a billing
@@ -78,6 +81,9 @@ export const lifecycleProducts = Object.freeze({
       'Choose the training each role needs and assign it.',
     ]),
     setup: 'Most teams start by importing their staff roster and assigning the training each role needs, so their training records are kept in one place for when a surveyor asks to see them. The help center walks through each step for a personal care home or an Assisted Living Facility.',
+    // What the first steps lead to, and what stays when the plan starts (email review 2026-11-17: each email says what the customer gets).
+    firstWin: 'each role\'s training assigned, with its records kept in one place for when a surveyor asks to see them',
+    kept: 'your facility, your staff roster and their training records',
     // Whether a trial has used it is read from billing usage reports (CareBase sends no activity events).
     value: 'usage',
   }),
@@ -91,12 +97,16 @@ export const lifecycleProducts = Object.freeze({
       'Build a first list of physicians to reach.',
     ]),
     setup: 'Most teams start in Setup: they name the agency, pick the counties it covers and build a first list of physicians to reach. The Help page walks through each step.',
+    firstWin: 'a list of the highest-ranked physicians for outreach in the county your trial covers',
+    kept: 'your lists, your accounts and every visit you have logged',
+    // What the trial opens once its card is confirmed (the card reminder).
+    opens: 'Once it starts, you pick the county your trial covers and build a list of its highest-ranked physicians for outreach.',
     // Trial path: the trial needs a card (Intel keeps a sign-up on its Billing page until Stripe confirms one), and use is read from
     // Intel's activity events.
     cardRequired: true,
     billingUrl: 'https://www.caremetricintel.com/Billing',
     value: 'events',
-    midtrial: 'Most teams see what Intel can do once they open Setup, pick the county their trial covers and build a first list: the physicians in that county that Intel ranks highest as referral sources.',
+    midtrial: 'Most teams see what Intel can do once they open Setup, pick the county their trial covers and build a first list: the highest-ranked physicians for outreach in that county.',
     next: Object.freeze([
       'Add the accounts you visit, so visits, referrals and follow-ups stay in one place.',
       'Log each visit as you make it, so your last visit and notes are ready before the next one.',
@@ -263,11 +273,12 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
   if (template === 'card_reminder') {
     // Intel's card terms as Intel states them (docs/GTM_FACTS.md, `trialCardTerms`); never "no credit card".
     return {
-      subject: `Finish starting your ${productName} trial`,
-      preheader: 'One step left to start your trial.',
+      subject: `One step left to start your ${productName} trial`,
+      preheader: 'Your trial has not started yet. One step is left.',
       heading: 'One step left',
       blocks: [
         { type: 'paragraph', text: `You began a ${productName} trial for ${tenantName}, but its last step was not finished, so the trial has not started yet.` },
+        ...(words.opens ? [{ type: 'paragraph', text: words.opens }] : []),
         { type: 'paragraph', text: cardTermsWords },
         { type: 'button', label: 'Finish starting your trial', url: helpUrl },
         { type: 'paragraph', text: 'If something stopped you, reply to this email and tell us what it was. We will help you through it.' },
@@ -277,11 +288,11 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
   }
   if (template === 'midtrial_nudge') {
     return {
-      subject: `A next step for your ${productName} trial`,
-      preheader: 'The one step that shows most teams what it can do.',
-      heading: 'A next step for your trial',
+      subject: `The one step that shows what ${productName} can do`,
+      preheader: 'One step shows most teams what it can do, and it is still ahead of you.',
+      heading: 'The step worth taking next',
       blocks: [
-        { type: 'paragraph', text: `You are partway through your ${productName} trial for ${tenantName}, and we wanted to point to the step that shows most teams what it can do.` },
+        { type: 'paragraph', text: `You are partway through your ${productName} trial for ${tenantName}. One step shows most teams what it can do, and it is still ahead of you.` },
         { type: 'callout', tone: 'info', title: 'The next step:', text: words.midtrial ?? words.setup },
         help,
         { type: 'paragraph', text: 'If something is in the way, reply to this email and tell us what you would like to get done. We will send you the steps for it.' },
@@ -292,8 +303,8 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
   if (template === 'value_followup') {
     if (!words.next) throw new TypeError('Unknown customer email.');
     return {
-      subject: `What to do next in ${productName}`,
-      preheader: 'You have built your first list. Here is what teams do next.',
+      subject: `Your first list is built. What to do next in ${productName}`,
+      preheader: 'What teams do next, and what stays in place when your trial ends.',
       heading: 'What to do next',
       blocks: [
         { type: 'paragraph', text: `You have built your first list in ${productName} for ${tenantName}. Teams that keep using it after the trial usually do these next:` },
@@ -307,11 +318,11 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
   }
   if (template === 'welcome') {
     return {
-      subject: `Welcome to ${productName}`,
-      preheader: `The first steps to get ${tenantName} up and running in ${productName}.`,
+      subject: `Welcome to ${productName}: your first three steps`,
+      preheader: `Three steps for ${tenantName}, and what they lead to.`,
       heading: `Welcome to ${productName}`,
       blocks: [
-        { type: 'paragraph', text: `Thank you for starting a ${productName} trial for ${tenantName}. Here is the quickest way to see it working with your own team:` },
+        { type: 'paragraph', text: `Thank you for starting a ${productName} trial for ${tenantName}. These three steps lead to the first result worth seeing: ${words.firstWin}.` },
         { type: 'steps', items: words.firstSteps },
         help,
         { type: 'paragraph', text: 'Each step has a short guide. If anything is unclear, reply to this email and we will help you through it.' },
@@ -327,6 +338,7 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
       blocks: [
         { type: 'paragraph', text: `You are a few days into your ${productName} trial for ${tenantName}, and we wanted to offer a hand with setup.` },
         { type: 'callout', tone: 'info', title: 'Where most teams start:', text: words.setup },
+        { type: 'paragraph', text: `Setup ends with the first result worth seeing: ${words.firstWin}.` },
         help,
         { type: 'paragraph', text: 'If something is slowing you down, or you are not sure where to start, reply to this email and tell us what you would like to get done first. We will send you the steps for it.' },
       ],
@@ -335,13 +347,14 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
   }
   if (template === 'trial_checkin') {
     return {
-      subject: `How is your ${productName} trial going?`,
+      subject: `Before your ${productName} trial ends`,
       preheader: 'A personal check-in, not a billing notice.',
       heading: 'How is your trial going?',
       blocks: [
         { type: 'paragraph', text: 'This is a personal check-in, not a billing notice.' },
         { type: 'paragraph', text: `Your ${productName} trial for ${tenantName} is nearing its end, and we wanted to ask how it is going. Is anything getting in the way: a step that is unclear, something you expected to find and did not, or a question from your team?` },
         { type: 'paragraph', text: 'Reply to this email and let us know. We will answer here.' },
+        { type: 'paragraph', text: `Everything you have built stays in place when your plan starts: ${words.kept}.` },
         // Owner decision 2026-11-08: the trial check-in names the Founders Sale, in its exact terms (docs/GTM_FACTS.md).
         { type: 'callout', tone: 'success', title: 'The Founders Sale.', text: foundersWords(productName) },
       ],

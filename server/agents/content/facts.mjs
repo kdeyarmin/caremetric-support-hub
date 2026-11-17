@@ -25,7 +25,7 @@
  * its home page), which the features catalog carries.
  */
 
-export const factsVersion = '2026-11-16.4';
+export const factsVersion = '2026-11-17.1';
 
 /**
  * Where public help articles live. An article's help-center address is `${helpCenterOrigin}/help/articles/<slug>`; that is its
@@ -45,6 +45,13 @@ const deepFreeze = value => {
  * trial signup"; Intel's own site says "Credit card required · Cancel before trial end to avoid charges"). Never "no credit card".
  */
 export const trialCardTerms = 'A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.';
+/**
+ * How the Intel trial is offered (owner direction 2026-11-17): a card at sign-up is ordinary for a trial, so nothing CareMetric writes
+ * brings it up unasked. The terms above stay on the sheet for a reader who asks, and for the email that asks a sign-up to finish adding
+ * its card (accounts/lifecycle.mjs `cardTermsWords`); Intel's own sign-up and Billing pages state them where the card is entered.
+ * Saying that no card is needed is still refused in code (validate.mjs `trial_terms`).
+ */
+export const trialMention = 'Offer the free trial in plain words: its length and what it covers. Do not bring up the credit card or how billing starts. State those terms, exactly as written above, only when the reader asks what the trial needs or what happens when it ends. Never say that no card is needed, and never call the trial risk-free.';
 const foundersSaleTerms = 'Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service on new paid product subscriptions, including existing free-trial users. The discount is applied automatically to eligible subscriptions after the trial, when paid service starts. No code or activation request is needed. Monthly billing receives 50% off the regular monthly rate; annual billing receives 50% off the published annual price paid upfront. Standard pricing resumes after the introductory year. Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization and product; plan eligibility and capacity limits still apply. No enrollment deadline or cap has been set. Source: live Stripe offer verified 2026-11-08; docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md.';
 
 const usd = cents => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -301,6 +308,7 @@ export const products = deepFreeze({
       'Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and locations, subject to plan and role.',
       'Reduce repeated research and report assembly. Saved lists, account history, supported reporting questions, file imports and reusable reports bring the work together. Any time or cost benefit depends on use.',
     ],
+    trialMention,
     // Prices, the trial and Intel's offers come from Intel's own catalog once the Hub has read it.
     get trialDays() { return intelFacts().trialDays; },
     get pricing() { return intelFacts().pricing; },
@@ -442,6 +450,8 @@ export const founder = deepFreeze({
   name: 'Dr. Kevin C. Deyarmin',
   credentials: 'ND, MSW, CHPCA, NCG',
   signOff: ['Dr. Kevin C. Deyarmin', 'Founder, CareMetric'],
+  // The name a founder-signed email arrives from, when Settings → Email → Growth email display name is empty (owner decision 2026-11-17).
+  fromName: 'Dr. Kevin Deyarmin, CareMetric',
   story: [
     'I run a home health and hospice agency and a healthcare consulting company.',
     'I needed a way to do business intelligence research on my competitors and to find every potential referral source in my market.',
@@ -571,6 +581,7 @@ export function factSheetText() {
     if (product.boundaries?.length) lines.push('What it is not, and how to say so:', ...product.boundaries.map(line => `- ${line}`));
     if (product.trialDays) lines.push(`Free trial: ${product.trialDays} days.`);
     lines.push('Pricing:', ...product.pricing.map(line => `- ${line}`), 'Offers:', ...product.offers.map(line => `- ${line}`));
+    if (product.trialMention) lines.push(`How to offer the trial: ${product.trialMention}`);
   }
   lines.push('', 'You may say:', ...claims.may.map(line => `- ${line}`));
   lines.push('', 'You may never say:', ...claims.mayNot.map(line => `- ${line}`));
