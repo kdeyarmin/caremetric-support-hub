@@ -6,17 +6,10 @@ import type { PendingMutationRequest } from "../security/mutationRequestKey";
 import { commandClient } from "./commandClient";
 import type { CommandClient } from "./commandClient";
 import { timeLabel } from "./readState";
+import { organizationStatusLabel } from "./organizationStatus";
 
 export interface AccessTarget { id: string; label: string; action: CommandAction; }
 const applicationName: Record<AppCommandProduct, string> = { carebase: "CareBase", intel: "CareMetric Intel" };
-/** An Intel organization's status as Intel stores it (billing's, or `disabled` while CareMetric has it suspended), in words. */
-const intelOrganizationStatuses: Record<string, string> = {
-  payment_required: "Awaiting payment details", trial: "Trial", active: "Active", past_due: "Past due", canceled: "Canceled", disabled: "Suspended",
-};
-/** How an application's organization status reads in the Hub. Unknown values are shown as sent. */
-export function organizationStatusLabel(product: string, status: string | null): string | null {
-  return product === "intel" && status !== null ? intelOrganizationStatuses[status] ?? status : status;
-}
 const fieldLabels = { active: "Profile active", status: "Status", billingState: "Access state", stateSource: "Access source", compedUntil: "Complimentary access ends" };
 function message(error: unknown) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
