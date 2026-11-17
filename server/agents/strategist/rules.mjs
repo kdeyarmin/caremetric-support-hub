@@ -11,7 +11,7 @@
  * things can hold any stage: the Marketing Manager's daily budget and the owner's own approvals.
  */
 
-export const strategistVersion = 'strategist.1';
+export const strategistVersion = 'strategist.2';
 
 /** The constraints the strategist can name, in funnel order, with the label the scorecard shows. */
 export const constraintLabels = Object.freeze({
@@ -49,12 +49,18 @@ const clamp = value => Math.max(0, Math.min(100, Math.round(value)));
 /** The week's figures as the rules and the model read them: whole numbers and whole percents only. */
 export function weekFigures(facts) {
   const e = facts?.email ?? {}, p = facts?.prospects ?? {}, c = facts?.conversion ?? {}, s = facts?.spend ?? {};
+  const steps = p.noContactSteps ?? {}, finder = facts?.addresses?.finder ?? {};
   // Cold emails attempted in the week, counted by message as the bounce guard counts them; delivery events can lag or be missing.
   const sent = Math.max(n(e.sent), n(e.delivered) + n(e.bounced));
   return {
     strong: n(p.strong), ready: n(p.strongReachable), strongNoContact: n(p.strongNoContact), awaitingPermission: n(p.strongAwaitingPermission), briefed: n(p.briefed),
     rosterOpen: n(facts?.roster?.unresolved), rosterResolved: n(facts?.roster?.resolvedInWeek),
     checked: n(facts?.addresses?.checked), unanswered: n(facts?.addresses?.unanswered),
+    // Where the strong fits with no usable address stopped, as of the read (they add up to strongNoContact), and the people finder's week.
+    noWebsite: n(steps.noWebsite), notSearched: n(steps.notSearched), unnamed: n(steps.unnamed), unmatched: n(steps.unnamedUnmatched),
+    namedNoAddress: n(steps.namedNoAddress), finderSearched: n(finder.searched), finderFound: n(finder.found), checksRanOutDays: n(finder.ranOutDays),
+    serverConfirmed: n(finder.confirmed), serverRefused: n(finder.refused), serverAcceptsAll: n(finder.acceptsAll), serverNoAnswer: n(finder.noAnswer),
+    addressChecks: n(facts?.settings?.addressChecks),
     firstSent: n(e.firstSent), followups: n(e.followups), sent, delivered: n(e.delivered), bounced: n(e.bounced), bounceRate: pct(n(e.bounced), sent),
     complaints: n(e.complaints), replies: n(e.replies), reportViews: n(e.reportViews), openRate: pct(n(e.reportViews), n(e.firstSent)),
     capDays: n(e.capDays), cap: n(facts?.settings?.coldEmailCap), waiting: n(e.approvedWaiting ?? e.waiting),
@@ -68,7 +74,8 @@ export function weekFigures(facts) {
 }
 
 /** The figures that are counts of the week itself; the others (strong fits, drafts waiting, approvals, the cap) are as of the read. */
-export const snapshotFigures = Object.freeze(['strong', 'ready', 'strongNoContact', 'awaitingPermission', 'rosterOpen', 'waiting', 'cap', 'productLimit', 'approvals', 'budgetDollars', 'guardSent', 'guardBounced']);
+export const snapshotFigures = Object.freeze(['strong', 'ready', 'strongNoContact', 'awaitingPermission', 'rosterOpen', 'waiting', 'cap', 'productLimit', 'approvals', 'budgetDollars', 'guardSent', 'guardBounced',
+  'noWebsite', 'notSearched', 'unnamed', 'unmatched', 'namedNoAddress', 'addressChecks']);
 export const weekOnly = figures => Object.fromEntries(Object.entries(figures).filter(([key]) => !snapshotFigures.includes(key)));
 
 /**
@@ -100,15 +107,17 @@ export function candidates(facts, previous = null) {
   if (f.waiting === 0 && f.ready < 10) {
     add('supply', f.ready === 0 ? 85 : 75 - f.ready * 3, { ready: f.ready, waiting: f.waiting, rosterOpen: f.rosterOpen, rosterResolved: f.rosterResolved },
       `Only ${f.ready} strong-fit ${f.ready === 1 ? 'agency was' : 'agencies were'} ready for a first email, and none was waiting.`,
-      f.rosterOpen > 0 ? `Raise "Roster agencies resolved a day": ${f.rosterOpen} roster agencies still have no confirmed website.`
+      f.rosterOpen > 0 ? `Raise "Most roster agencies to look up a day" (Settings → Customer growth): ${f.rosterOpen} roster agencies still have no confirmed website.`
         : 'Widen discovery to the next state the roster covers.', 'ready');
   }
-  // Strong fits the team cannot write to because no address was found: more address checks can help these.
+  // Strong fits the team cannot write to because no address was found. Where they stopped decides the move: more address checks help
+  // only when the people finder ran out of them (the first note asked to double a limit of 100 that was never reached); otherwise the
+  // step that lost the most of them is named, with what can move it.
   if (f.strong >= 10) {
     const share = pct(f.strongNoContact, f.strong);
-    add('reach', share >= 50 ? 40 + share / 2 : share, { strong: f.strong, strongNoContact: f.strongNoContact, share },
-      `${f.strongNoContact} of ${f.strong} strong-fit agencies (${share}%) have no address the team may write to.`,
-      'Raise "Most address checks a day" so the people finder tries more decision-makers per agency.', 'strongNoContact');
+    const reach = reachMove(f, facts?.settings?.addressMode, facts?.prospects?.noContactSteps != null);
+    add('reach', share >= 50 ? 40 + share / 2 : share, { strong: f.strong, strongNoContact: f.strongNoContact, share, ...reach.evidence },
+      `${f.strongNoContact} of ${f.strong} strong-fit agencies (${share}%) have no address the team may write to${reach.headline}.`, reach.move, 'strongNoContact');
   }
   // Strong fits whose address was found and waits for your permission: the people finder no longer looks past it, so only your
   // decision (or handing named contacts over to the team) moves them.
@@ -165,7 +174,7 @@ export function candidates(facts, previous = null) {
   if (f.budgetDays >= 3) {
     add('budget', 45 + f.budgetDays * 5, { budgetDays: f.budgetDays, budgetDollars: f.budgetDollars, spendDollars: f.spendDollars },
       `The Marketing Manager ran out of its $${f.budgetDollars} daily budget on ${f.budgetDays} of 7 days.`,
-      'Raise the Marketing Manager\'s daily budget on the AI team page, or lower "Account briefs a day".', 'budgetDays');
+      'Raise the Marketing Manager\'s daily budget on the AI team page, or lower "Most account briefs a day" (Settings → Customer growth).', 'budgetDays');
   }
   if (f.approvals >= 10) {
     add('approvals', 40 + Math.min(f.approvals, 40), { approvals: f.approvals },
@@ -173,6 +182,51 @@ export function candidates(facts, previous = null) {
       'Clear the approvals queue, or let the kinds you always approve go on their own on the AI team page.', 'approvals');
   }
   return list.sort((a, b) => b.score - a.score || Object.keys(constraintLabels).indexOf(a.key) - Object.keys(constraintLabels).indexOf(b.key));
+}
+
+/**
+ * The reach constraint's move, from where the strong fits with no usable address stopped (facts.prospects.noContactSteps) and the people
+ * finder's week (facts.addresses.finder). Returns the headline's tail, the move and the evidence. A raise of "Most address checks a day"
+ * is offered only when the finder ran out of the day's checks on two or more days.
+ */
+export function reachMove(f, addressMode = 'verify', known = true) {
+  const settings = 'Settings → Customer growth';
+  const importStep = 'on Growth ("Import a list of prospects")';
+  if (f.checksRanOutDays >= 2 && f.addressChecks > 0 && f.addressChecks < 500) {
+    const next = Math.min(500, Math.max(f.addressChecks + 10, f.addressChecks * 2));
+    return { evidence: { checksRanOutDays: f.checksRanOutDays, addressChecks: f.addressChecks, suggestedChecks: next },
+      headline: `; the people finder ran out of address checks on ${f.checksRanOutDays} of 7 days`,
+      move: `Raise "Most address checks a day" (${settings}) from ${f.addressChecks} to ${next}.` };
+  }
+  const steps = { unnamed: f.unnamed, namedNoAddress: f.namedNoAddress, noWebsite: f.noWebsite, notSearched: f.notSearched };
+  const [step, count] = Object.entries(steps).sort((a, b) => b[1] - a[1])[0];
+  const evidence = { ...steps, ...(f.unmatched ? { unmatched: f.unmatched } : {}), checksRanOutDays: f.checksRanOutDays,
+    ...(f.addressChecks ? { addressChecks: f.addressChecks } : {}) };
+  // Facts from before the steps were counted: say nothing about why, and offer no raise.
+  if (!known || count === 0) {
+    return { evidence: f.addressChecks ? { addressChecks: f.addressChecks, checksRanOutDays: f.checksRanOutDays } : {}, headline: '',
+      move: `Read on Growth who the people finder named at the highest-fit of them, and import the work addresses you know ${importStep}.` };
+  }
+  if (step === 'unnamed') {
+    return { evidence, headline: `; the people finder named nobody at ${count} of them${f.unmatched ? `, ${f.unmatched} not matched to a Medicare record` : ''}`,
+      move: `Import the owner's or administrator's work address you know for the highest-fit of them ${importStep}; no daily limit held the finder back.` };
+  }
+  if (step === 'namedNoAddress') {
+    if (addressMode !== 'verify') {
+      return { evidence, headline: `; at ${count} of them the people finder named someone but found no address`,
+        move: `Set "Finding people's addresses" (${settings}) to also guess and check addresses with the business's mail server.` };
+    }
+    const servers = f.serverAcceptsAll + f.serverNoAnswer;
+    return { evidence: { ...evidence, serverAcceptsAll: f.serverAcceptsAll, serverNoAnswer: f.serverNoAnswer },
+      headline: `; at ${count} the finder named someone but no mail server confirmed an address${servers ? ` (${f.serverAcceptsAll} accept any, ${f.serverNoAnswer} no answer)` : ''}`,
+      move: `Import the named people's work addresses you know ${importStep}; their mail servers cannot confirm a guessed one.` };
+  }
+  if (step === 'noWebsite') {
+    return { evidence, headline: `; ${count} of them have no website of their own to search`,
+      move: `Raise "Most roster agencies to look up a day" (${settings}) so more of them get a confirmed website.` };
+  }
+  return { evidence, headline: `; the people finder has not reached ${count} of them yet`,
+    move: 'Leave the people finder running: it has not reached them yet, and no daily limit held it back.' };
 }
 
 /** Every number the model may write: the week's figures, the week before's, the candidates' evidence and any `extra` it was given. */
