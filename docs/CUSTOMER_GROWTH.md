@@ -214,7 +214,7 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   writer its own product's published catalog (`server/agents/content/features.mjs`), as its own cached block after the instructions,
   the way the Sales Executive and the Social Media Manager get it. Its numbers join the fact sheet's in that message's checks, so a
   sentence about the product may state them as the catalog words them, and no other figure: for Intel, the figures its site publishes
-  about its data ("150+ public healthcare datasets", "33,000+ ZIP areas and 3,200+ counties"); for CareBase, the Pennsylvania
+  about its data ("150+ healthcare datasets", "33,000+ ZIP areas and 3,200+ counties"); for CareBase, the Pennsylvania
   requirements its site states ("12 hours of training a year" for a personal care home's direct care workers, 16 in an ALF). Neither
   message may state the other product's numbers.
 - **Campaign tags**: the product pages in every growth message, model-written or template, carry utm_source `caremetric`,

@@ -110,7 +110,7 @@ const amountPattern=/\$\s?((?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?)/g;
 const amountsIn=text=>[...String(text??'').matchAll(amountPattern)].map(match=>Number(match[1].replace(/,/g,'')));
 // The product's own published catalog joins the fact sheet (owner direction 2026-11-16: Intel's first, then CareBase's), as it does for
 // the Sales Executive and the Social Media Manager: the writer is given it, and a sentence about the product may state its numbers
-// ("150+ public healthcare datasets" for Intel, "12 hours of training a year" for CareBase), never another product's.
+// ("150+ healthcare datasets" for Intel, "12 hours of training a year" for CareBase), never another product's.
 /** The numbers a sentence about the product may state: the fact sheet's and its catalog's (content/features.mjs catalogNumbers). */
 export const productNumbers=product=>catalogNumbers(product);
 export const productAmounts=factsKey=>new Set(amountsIn([...(factProducts[factsKey]?.pricing??[]),...(factProducts[factsKey]?.offers??[])].join('\n')));

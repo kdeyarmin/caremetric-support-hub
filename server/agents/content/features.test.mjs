@@ -12,7 +12,7 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(total).toBe(intel.publishedCount);
     expect(total).toBeGreaterThanOrEqual(90);
     expect(intel.areas.map(area => area.name)).toEqual(expect.arrayContaining(['Healthcare marketing CRM', 'Daily field work', 'Expenses, mileage and reimbursement',
-      'Referral and admission tracking', 'Prospecting and targeting', 'Market and territory research', 'Public data library', 'Competitor intelligence', 'Manager and team tools']));
+      'Referral and admission tracking', 'Prospecting and targeting', 'Market and territory research', 'Healthcare data library', 'Competitor intelligence', 'Manager and team tools']));
     expect(intel.areas.every(area => area.intro && area.features.every(feature => feature.name && feature.does))).toBe(true);
     expect(intel.pillars).toHaveLength(12);
     expect(intel.pillars.every(pillar => pillar.title && pillar.why && pillar.area)).toBe(true);
@@ -47,13 +47,13 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(problems).not.toContain('vocabulary');
     // The prompt carries the features, the data and its sources, and the site's own caveats.
     for (const phrase of ['Stark annual limit tracking', 'Competitor rankings', 'EMR report imports', 'County intelligence', 'NPPES', 'Care Compare', 'American Community Survey',
-      'not a promise of referrals', 'The 30-day trial includes Pro features in one county', 'Site finder', 'Public data library']) expect(text).toContain(phrase);
+      'not a promise of referrals', 'The 30-day trial includes Pro features in one county', 'Site finder', 'Healthcare data library']) expect(text).toContain(phrase);
     // The AI apps and CRM Intel connects to are written generically. The count of its datasets is the site's own, which the owner
     // approved on 2026-11-16 (the fact sheet's Intel boundaries).
     expect(text).not.toMatch(/ChatGPT|Claude|HubSpot/);
-    expect(text).toContain('More than 150 public healthcare datasets');
+    expect(text).toContain('More than 150 healthcare datasets');
     // The site's own figures about its data, the only ones the team may state (the fact sheet's Intel boundaries).
-    for (const figure of ['- 150+ public healthcare datasets:', '- 33,000+ ZIP areas and 3,200+ counties:', '- Every NPI in the national provider registry:']) expect(text).toContain(figure);
+    for (const figure of ['- 150+ healthcare datasets:', '- 33,000+ ZIP areas and 3,200+ counties:', '- Every NPI in the national provider registry:']) expect(text).toContain(figure);
     expect(featuresText('intel')).toBe(text);
     expect(featuresText('advisors')).toBe('');
   });

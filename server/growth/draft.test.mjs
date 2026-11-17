@@ -184,7 +184,7 @@ it('lets a message state the numbers its own product\'s catalog states, and give
  expect(growthSystem).toContain('one the product\'s catalog states');
  const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'Your first setup step',body:'Where are you in setup?',citations:[],needsHuman:false}}))};
  const customer={kind:'onboarding',action:'Agree the goal',success:'First value'};
- for (const [product,heading,phrase,other] of [['caremetric-intel',/^CareMetric Intel features and data/,'150+ public healthcare datasets',/^CareMetric CareBase capabilities/m],
+ for (const [product,heading,phrase,other] of [['caremetric-intel',/^CareMetric Intel features and data/,'150+ healthcare datasets',/^CareMetric CareBase capabilities/m],
    ['carebase',/^CareMetric CareBase capabilities/,'12 hours of training a year',/^CareMetric Intel features and data/m]]) {
   model.run.mockClear();
   await draftMessage({opportunity:{...opportunity,product,stage:'trial',owner_agent:'account_manager'},work:customer,task:{},model});
