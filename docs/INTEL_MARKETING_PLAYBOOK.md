@@ -420,7 +420,7 @@ The biggest gap against the leaders is proof: they show scale numbers and custom
 - [x] **Approve data-scale figures for the fact sheet.** Intel's site already says 150+ public datasets, every NPI refreshed weekly,
   33,000+ ZIP areas, 3,200+ counties and daily CMS release checks. The team cannot use them because they are not on the fact sheet. The
   November 9 site review asked for production to be confirmed first. **Approved by the owner on 2026-11-16.** The features catalog now
-  carries the site's "by the numbers" figures as the site words them (150+ public healthcare datasets, every NPI in the national
+  carries the site's "by the numbers" figures as the site words them (150+ healthcare datasets, every NPI in the national
   registry, 33,000+ ZIP areas and 3,200+ counties, daily checks for new CMS releases), and the fact sheet's Intel boundaries allow those
   and no other count about its data.
 - [ ] **Get one permissioned pilot result.** Every leader leads with a customer outcome. One real, dated result with a stated baseline
