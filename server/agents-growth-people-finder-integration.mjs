@@ -44,7 +44,7 @@ try {
   assert.ok(candidate, 'A researched roster agency is a candidate');
   assert.deepEqual(candidate.agencies, [{ ccn, name: 'Synthetic Finder Hospice', city: 'Harrisburg', state: 'PA', zip: '17110', phone: '7175550100', setting: 'hospice' }]);
   // Matched to its Medicare record after it was searched, with nobody named, it is searched again: its CMS owners and NPI official can
-  // be read now (20261117220000_growth_research_people.sql). Searched after the match, it waits its 60 days.
+  // be read now (20261117220500_growth_research_people.sql). Searched after the match, it waits its 60 days.
   const isCandidate = async () => (await store.peopleCandidates(20)).some(item => item.id === org);
   await admin.query("update private.growth_organizations set people_searched_at=now()-interval '1 hour' where id=$1", [org]);
   await admin.query("update private.growth_roster_targets set resolved_at=now()-interval '2 hours' where ccn=$1", [ccn]);
