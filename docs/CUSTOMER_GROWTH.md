@@ -342,6 +342,13 @@ What the three emails hold, in order:
   withdrawn when it would be sent (`public_data`, `callsDataPublic` in `draft.mjs`). The writer is also told never to call the data
   proprietary, exclusive or licensed, and the Sales Executive answers plainly when a prospect asks where it comes from. If your
   approved pitch on the Growth page says "public", edit it there: the writer is given that pitch as written.
+- **Every email is easy to read** (owner direction 2026-11-17: "I don't need full file names, years cited, or super formal
+  sentences"). The writer is told to write the way people talk: everyday words, short sentences, contractions. No prospect email
+  cites a data file or its year ("(CMS, 2024)", "the Provider of Services file", "2026Q3"); one that does is rewritten
+  (`data_citation`, `citesDataFile` in `draft.mjs`). A county figure is stated without the file and year that follow it in its
+  source. The fixed sections keep every sentence to 25 words or fewer and hold no year (`campaign.test.mjs`), and the Founders
+  Sale is said there in everyday words. The trial and customer emails use the same voice; only the card terms and the Founders
+  Sale in the trial check-in keep their exact terms.
 - **The rank check no longer refuses the writer's own words.** Until 2026-11-17 the instructions said "the physicians Intel ranks
   highest as referral sources" and the check for an agency's own rank (`emailStatesStanding`) refused "ranks highest", so a draft
   that followed its instructions failed. A rank that is plainly about physicians or referral sources now passes, and the

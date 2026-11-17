@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { campaignBlock, campaignBlocks, campaignEyebrow, campaignTouches, dataFigures, featurePoints, founderQuote, readCampaign, reportTiles, reviewPage, shortPoints, weekSteps, withCampaign } from './campaign.mjs';
-import { callsDataPublic, namesCard, outdatedWords, productNumbers } from './draft.mjs';
+import { callsDataPublic, citesDataFile, namesCard, outdatedWords, productNumbers } from './draft.mjs';
 import { offersMeeting, playbookFor } from './playbook.mjs';
 import { emailStatesStanding } from './standing.mjs';
 import { mentionsOpen } from './opens.mjs';
@@ -28,11 +28,11 @@ describe('the marketing sections of an email to a CareMetric Intel agency (email
     expect(featurePoints).toHaveLength(5);
     expect(first).toContain(`"${founderQuote}"`);
     expect(first).toContain(`Try CareMetric Intel free for ${products.intel.trialDays} days on one county, with your own team. No demo to sit through, and the prices are on our website.\n${trial(1)}`);
-    expect(first).toMatch(/A question first\? Reply to this email and I will answer it\.$/);
+    expect(first).toMatch(/Have a question first\? Just reply\. I'll answer it\.$/);
     const second = campaignBlock(2, links(2));
     expect(second).toMatch(/^A week in CareMetric Intel\n\nMonday: Pick who to see\n/);
     expect(weekSteps.map(step => step.tag)).toEqual(['Monday', 'Every day', 'After each visit', 'Friday']);
-    expect(second).toContain('Founders Sale: 50% off your first 12 months\n50% off eligible subscription charges for the first 12 months of paid service. It is applied automatically when your paid plan starts, with no code needed.');
+    expect(second).toContain('Founders Sale: 50% off your first 12 months\nHalf off your plan\'s price for your first 12 months as a paying customer. It\'s applied on its own when your paid plan starts. No code needed.');
     expect(second).toContain(`Try it on your county, free for ${products.intel.trialDays} days\nYour own county, your own team. No demo to sit through, and the prices are on our website.\n${trial(2)}`);
     expect(second).toMatch(new RegExp(`Your market report is still here:\\n${report.replace(/[.]/g, '\\.')}$`));
     const third = campaignBlock(3, links(3));
@@ -58,6 +58,10 @@ describe('the marketing sections of an email to a CareMetric Intel agency (email
       expect(unclearCopy(words), label).toEqual([]);
       expect(namesCard(product, words), label).toBe(false);
       expect(callsDataPublic(product, words), label).toBe(false);
+      // Easy to read (owner direction 2026-11-17): no data file or year cited, and no sentence over twenty-five words.
+      expect(citesDataFile(words), label).toBe(false);
+      expect(words, label).not.toMatch(/\b(?:19|20)\d\d\b/);
+      for (const sentence of words.split(/(?<=[.?!])\s+|\n+/)) expect(sentence.split(/\s+/).filter(Boolean).length, sentence).toBeLessThanOrEqual(25);
       expect(emailStatesStanding(words), label).toBe(false);
       expect(offersMeeting(words), label).toBe(false);
       expect(mentionsOpen(words), label).toBe(false);
@@ -66,7 +70,7 @@ describe('the marketing sections of an email to a CareMetric Intel agency (email
       expect(outdatedWords({ product, subject: 'Your market report', body: withCampaign(openings[touch], touch, links(touch, own)), purpose: 'marketing' }), label).toBeNull();
     }
     // The founder's words are the fact sheet's story: its own agency and need, built for it and used every day, with nothing added.
-    for (const phrase of ['I run a home health and hospice agency and a healthcare consulting company.', 'find every potential referral source in my market', 'so I built CareMetric Intel', 'I use it every day']) expect(founderQuote).toContain(phrase);
+    for (const phrase of ['I run a home health and hospice agency and a healthcare consulting company.', 'find every potential referral source in my market', 'So I built CareMetric Intel', 'I use it every day']) expect(founderQuote).toContain(phrase);
     expect(founder.story.join(' ')).toContain('I run a home health and hospice agency and a healthcare consulting company.');
     // The figures are the ones Intel's own site publishes, and the report card names only what every report holds.
     expect(dataFigures.map(([value]) => value)).toEqual(['150+', 'Every NPI', '3,200+', 'Daily']);

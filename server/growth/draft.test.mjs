@@ -1,5 +1,5 @@
 import {it,expect,vi} from 'vitest';
-import {callsDataPublic,criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,namesCard,outdatedWords,problemHints,shortFormProblem,weaknessMeanings} from './draft.mjs';
+import {callsDataPublic,citesDataFile,criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,namesCard,outdatedWords,problemHints,shortFormProblem,weaknessMeanings} from './draft.mjs';
 import {playbookFor,quietPlays,reportCloseAngle,reportTouchAngle,reviewFollowupAngle,reviewTouchAngle,shortFormLimits,touchAngle,unviewedTouchAngle,viewedTouchAngle} from './playbook.mjs';
 import {readCampaign} from './campaign.mjs';
 import {assessProspect} from './assessment.mjs';
@@ -565,6 +565,31 @@ it('names where Intel\'s data comes from without calling it public, in every pro
  expect(outdatedWords({...waiting,purpose:'marketing'})).toBe('public_data');
  expect(outdatedWords({...waiting,purpose:'success'})).toBeNull();
  expect(outdatedWords({...waiting,product:'carebase',purpose:'marketing'})).toBeNull();
+});
+
+// The owner on the emails, 2026-11-17: "I want this easy to read. I don't need full file names, years cited, or super formal sentences."
+it('keeps a prospect email easy to read: no data file or its year cited, and the writer is told to write the way people talk',()=>{
+ const answer=body=>({subject:'Referral sources in your county',body,citations:['s'],needsHuman:false});
+ const sources=[{id:'s',claim:'48 home health agencies located in Erie County (CMS Post-Acute Care data, 2024).'}];
+ const about=(body,outreach=true)=>draftProblem(answer(body),{product:'caremetric-intel',sources,outreach});
+ const ask=' Which county comes first for your team?';
+ // The county's figure, said the way a person would say it.
+ expect(about(`Erie County has 48 home health agencies, by CMS's count.${ask}`)).toBeNull();
+ expect(about(`CMS counts 48 home health agencies in Erie County.${ask}`)).toBeNull();
+ for(const words of ['Erie County has 48 home health agencies (CMS, 2024).','Erie County has 48 home health agencies (2024).','CMS\'s 2024 file counts 48 home health agencies in Erie County.',
+   'The 2024 data shows 48 home health agencies in Erie County.','The Provider of Services file lists your agency in Erie County.','The post-acute care file counts 48 home health agencies in Erie County.',
+   'As of 2026Q3 your agency is listed in Erie County.'])
+  expect(about(`${words}${ask}`),words).toBe('data_citation');
+ // A year that is a plain fact about the organization is not a citation, and neither is anything in a message to a customer.
+ expect(citesDataFile('Your agency opened a second office in Meadville in 2025.')).toBe(false);
+ expect(citesDataFile('You have served Erie County since 1998.')).toBe(false);
+ expect(about('Your report uses the 2024 data. Where are you in setup?',false)).toBeNull();
+ expect(problemHints.data_citation).toContain('no year in brackets, no quarter and no file\'s name');
+ // The writer is told, and so is the plan for the first email's opening.
+ expect(growthSystem).toContain('Easy to read comes first. Write the way you would say it to another agency owner across a table');
+ expect(growthSystem).toContain('Never cite where a figure comes from the way a report does');
+ expect(growthSystem).toContain('Leave out what follows the figure in brackets (the file and its year)');
+ expect(reportTouchAngle).toContain('without the file or year that follows it in brackets');
 });
 
 it('never brings up the card an Intel trial needs in a prospect email, and never tells a writer to (owner direction 2026-11-17)',()=>{

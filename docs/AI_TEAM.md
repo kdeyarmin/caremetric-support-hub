@@ -900,7 +900,7 @@ approves the exact text on the Team screen, or, for an agent on **Act**, when th
 
 | Email | When | What it says |
 | --- | --- | --- |
-| Welcome | Days 0 to 2 of a trial | Thank you for starting the trial, the first three steps for the product and the result they lead to (Intel: a list of the highest-ranked physicians for outreach in the trial's county), and a button to its getting-started help (CareBase's help center, Intel's Help page) |
+| Welcome | Days 0 to 2 of a trial | Thanks for starting the trial, the first three steps for the product and the result they lead to (Intel: a list of the highest-ranked physicians for outreach in the trial's county), and a button to its getting-started help (CareBase's help center, Intel's Help page) |
 | Setup help | Days 3 to 6 of a trial, only while the product has reported no positive usage for the account (a report of zero is not usage) | An offer of help with setup, the result setup ends with, and the help link |
 | Trial check-in | When 5 days or fewer (and more than 2) are left in a trial | A personal check-in asking whether anything is in the way, and what stays in place when the plan starts. It says it is not a billing notice |
 | Testimonial request | 45 to 60 days after the account's first paid invoice for the product, on any subscription it has had for it, with no open high or urgent case | Would they share a sentence or two: their words are used only with their permission, in the form they approve, with or without their name, and a reply is how they say yes |

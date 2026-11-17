@@ -180,7 +180,7 @@ describe('sending an approved customer email', () => {
       outcomes.push(await send(execution()).then(result => result, error => ({ code: error.code, message: error.message })), logs);
     }
     const kept = JSON.stringify(outcomes);
-    for (const secret of [canary, 'Thank you for starting', 'unsubscribe/']) expect(kept, secret).not.toContain(secret);
+    for (const secret of [canary, 'Thanks for starting', 'unsubscribe/']) expect(kept, secret).not.toContain(secret);
   });
 });
 

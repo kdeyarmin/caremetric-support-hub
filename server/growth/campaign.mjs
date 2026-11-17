@@ -28,15 +28,15 @@ const trialPage = () => playbookFor(campaignProduct)?.nextStep?.url ?? null;
 const trialDays = () => facts.intel.trialDays;
 
 /**
- * The founder's story as a quote: the fact sheet's story (`founder.story`) in one breath, with nothing added to it. "Research my
+ * The founder's story as a quote: the fact sheet's story (`founder.story`) in three short sentences, with nothing added to it. "Research my
  * competitors" is the fact sheet's own shorter wording (`founder.storyAbout`).
  */
-export const founderQuote = 'I run a home health and hospice agency and a healthcare consulting company. I needed a way to research my competitors and find every potential referral source in my market, so I built CareMetric Intel, and I use it every day.';
+export const founderQuote = 'I run a home health and hospice agency and a healthcare consulting company. I needed a way to research my competitors and find every potential referral source in my market. So I built CareMetric Intel, and I use it every day.';
 
 /** What Intel does, as the first email lists it: the fact sheet's five things to lead with, in a reader's words. */
 export const featurePoints = Object.freeze([
-  ['Finds every referral source', 'The physicians in your counties ranked from Medicare data, the hospitals your county\'s residents use and the facilities around them, each with its practice location. Save the ones worth a visit to a list.'],
-  ['Watches your competition', 'Every home health agency and hospice in your territory, ranked by Medicare share. You get an alert when a competitor\'s star rating, owner or service area changes.'],
+  ['Finds every referral source', 'The physicians in your counties, ranked from Medicare data, plus the hospitals and facilities around them. Save the ones worth a visit.'],
+  ['Watches your competition', 'Every home health agency and hospice in your territory, ranked by Medicare share. You get an alert when a rating, owner or service area changes.'],
   ['Plans each marketer\'s week', 'A daily plan, a suggested route and a prep card before each visit, so every stop has a reason.'],
   ['Keeps every relationship in one place', 'Accounts, contacts, visit notes and follow-ups, logged from a phone before you leave the parking lot.'],
   ['Shows what the work led to', 'Referrals and admissions by source and by marketer, how fast your team answers, and an alert when a top source starts to slip.'],
@@ -68,18 +68,20 @@ const words = {
   1: {
     eyebrow: 'Your free market report is ready',
     heading: 'What CareMetric Intel does for your agency, every day',
-    sectionEyebrow: 'The report is one page of it',
+    sectionEyebrow: 'The report is just the start',
     figures: () => ['By the numbers:', ...dataFigures.map(([value, label]) => `- ${value} ${label}`)].join('\n'),
     closeTitle: 'See every referral source in your county',
     closeText: () => `Try CareMetric Intel free for ${trialDays()} days on one county, with your own team. No demo to sit through, and the prices are on our website.`,
-    closeNote: 'A question first? Reply to this email and I will answer it.',
+    closeNote: 'Have a question first? Just reply. I\'ll answer it.',
   },
   2: {
     eyebrow: 'From your market report to a plan',
     heading: 'A week in CareMetric Intel',
     offerEyebrow: 'Founders Sale',
     offerTitle: '50% off your first 12 months',
-    offerText: '50% off eligible subscription charges for the first 12 months of paid service. It is applied automatically when your paid plan starts, with no code needed.',
+    // The sale's terms in everyday words (facts.mjs `foundersSaleTerms`): half off the plan's own price for the first paid year, applied
+    // by billing with no code. "Your plan's price" leaves out what the terms exclude (setup fees, add-ons, taxes).
+    offerText: 'Half off your plan\'s price for your first 12 months as a paying customer. It\'s applied on its own when your paid plan starts. No code needed.',
     closeTitle: () => `Try it on your county, free for ${trialDays()} days`,
     closeText: 'Your own county, your own team. No demo to sit through, and the prices are on our website.',
     reportLead: { own: 'Your market report is still here:', page: 'Your free market report is one step away:' },

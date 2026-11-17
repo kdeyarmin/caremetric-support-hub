@@ -201,7 +201,7 @@ describe('product emails', () => {
 });
 
 describe('product themes', () => {
-  const footer = ['You are receiving this email because Riverbend Home Health has a CareMetric Intel account.', { label: 'Unsubscribe', url: 'https://hub.example.org/u/t' }];
+  const footer = ['You\'re getting this email because Riverbend Home Health has a CareMetric Intel account.', { label: 'Unsubscribe', url: 'https://hub.example.org/u/t' }];
   it('dresses an Intel email in Emberline, as the Intel app sends it: header, fire, dark card, pill button, its footer lines', () => {
     const email = renderEmail({ theme: 'intel', title: 'Welcome', heading: 'Welcome to CareMetric Intel', preheader: 'Your first steps.',
       blocks: [{ type: 'button', label: 'Open the Help page', url: 'https://www.caremetricintel.com/Help' }, { type: 'callout', tone: 'success', text: 'Founders Sale.' }],

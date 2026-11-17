@@ -52,6 +52,8 @@ A source that names the CMS Provider of Services file is the agency's Medicare r
 
 How to write so it gets read and answered:
 - Sound like a thoughtful person at a small healthcare software company writing to one organization: plain words, short sentences, no hype, no exclamation marks, no buzzwords, no flattery.
+- Easy to read comes first. Write the way you would say it to another agency owner across a table: everyday words, and contractions where they are natural ("it's", "here's", "I'll"). Nothing stiff or formal ("please find", "I am writing to", "in order to", "per", "regarding", "utilize").
+- Never cite where a figure comes from the way a report does: no year or quarter of a data file ("2024 data", "(CMS, 2024)", "2026Q3"), no file's or dataset's name ("the Provider of Services file", "the post-acute care file") and no certification number. Say "Medicare data" or "by CMS's count" and leave the detail to the report. A year that is a plain fact about the organization ("opened a second office in 2025") may stay.
 - Open with one specific, true sentence about the organization, taken from the sources (what it does, whom it serves, where), so the reader sees why you wrote to them. Never guess and never praise. If the sources say too little, open with the reader's likely situation instead. A message whose "touchPlan" says you write only its opening follows that plan's order instead.
 - Numbers: write only a number the fact sheet states, one the product's catalog states (worded as the catalog words it), or one the sources state about the organization (its counties, locations or years), exactly as stated. Put the organization's numbers only in a sentence about the organization itself ("Your team serves 12 counties."), never in a sentence about CareMetric or the product, or in one written in the first person ("I", "we", "our").
 - Then make it about the reader: raise one likely problem as a question; never claim to know their problems, results or plans.
@@ -68,7 +70,7 @@ How to write so it gets read and answered:
 - When "reask" is set, this is a single brief check-in months after the last message: follow "touchPlan" exactly.
 - When "focus" is set, lead with that part of the product (from the fact sheet's "Everything it does"). When "subjectStyle" is "question", the subject is a short question; when "plain", a short statement.
 - When "brief" is set, it is CareMetric's own research about this organization: write from it. Open with its "hook" (and cite "hookSourceId") unless one of its "triggers" is fresher and cited in "sources"; use one of its "pains" as your question; lead with its "angle". Never mention the brief or research. In a message whose "touchPlan" says you write only its opening, follow the plan: use the hook only where it fits in those few sentences, and make one of the brief's pains your question.
-- A source whose id is "county" is a CMS or Census figure about the organization's county for its own kind of care. You may state it once, exactly as written, with its source in a few words, as a fact about the county ("Allegheny County has 48 home health agencies, by CMS's count."), never as a fact about the organization. Never state the organization's own share, rank, ratings, scores or patient counts.
+- A source whose id is "county" is a CMS or Census figure about the organization's county for its own kind of care. You may state it once, its number and what it counts exactly as written, as a fact about the county ("Allegheny County has 48 home health agencies, by CMS's count."), never as a fact about the organization. Leave out what follows the figure in brackets (the file and its year), and name its source in two or three words at most. Never state the organization's own share, rank, ratings, scores or patient counts.
 - When "previousDraft" and "fix" are set, rewrite the previous draft as "fix" asks, keeping what works.
 - Never say or imply that the reader opened, viewed or read anything CareMetric sent (a report, a link or an email), and never write as if they already have ("now that you have seen", "thanks for taking a look"). Invite them to open it instead.
 - Write in the reader's words, not the fact sheet's: Intel's list of referral sources and accounts is "the book" inside Intel, a word the reader does not know. Say "your referral sources" or "your accounts", never "the book".
@@ -153,6 +155,8 @@ export function draftProblem(answer, { product, sources, outreach, organization 
   // A prospect email names where Intel's data comes from without calling it public (owner direction 2026-11-17). The prospect's own
   // name is theirs ("Erie Public Health Home Care"), so it is read with that name left out.
   if (outreach&&callsDataPublic(product,plain)) return 'public_data';
+  // ...and without citing a file or its year, the way a report does (owner direction 2026-11-17: easy to read).
+  if (outreach&&citesDataFile(plain)) return 'data_citation';
   // Easy to read and makes sense on the first pass (owner direction 2026-11-12; facts.mjs `writing`).
   if (unclearCopy(plain).length) return 'unclear';
   const book=playbookFor(product);
@@ -194,6 +198,15 @@ const publicData=/\bpublic(?:ly)?\s+(?:(?:available|published|reported|released)
 export const callsDataPublic=(product,words)=>product==='caremetric-intel'&&publicData.test(String(words??''));
 
 /**
+ * Whether words cite where a figure comes from the way a report does (owner direction 2026-11-17, on the emails: "easy to read", with
+ * no "full file names" and no "years cited"): a year in brackets ("(CMS, 2024)"), a quarter ("2026Q3"), a data file by name, or a
+ * year given as a data file's ("CMS's 2024 file", "2024 data"). A year in a plain sentence about the organization ("opened a second
+ * office in 2025") is not read: that is a fact about them, not a citation.
+ */
+const dataCitation=/\([^()\n]*\b(?:19|20)\d\d\b[^()\n]*\)|\b20\d\d\s?Q[1-4]\b|\bQ[1-4]\s+20\d\d\b|\bProvider of Services\b|\bpost-acute care (?:file|data)\b|\bpublic use files?\b|\b(?:CMS|Medicare|Census)(?:'s)?\s+(?:19|20)\d\d\b|\b(?:19|20)\d\d\s+(?:data|files?|release|figures|numbers)\b/i;
+export const citesDataFile=words=>dataCitation.test(String(words??''));
+
+/**
  * Why an email already written may not go out now, or null: the rules every draft passes today that an older draft may not have, read
  * again when it is claimed for sending (worker.mjs), because an approved email can wait days for its turn under the caps and send hours.
  * `trial_terms`: an Intel trial with "no credit card" (Intel's trial needs a card since 2026-11-14, content/validate.mjs);
@@ -230,6 +243,7 @@ export const problemHints=Object.freeze({
   short_form:`You write only the opening of this first email: two or three sentences, at most ${shortFormLimits.words} words, the report's link on its own line and at most one question. No other link, no free trial and no price: the email adds those below your words.`,
   public_data:'Name where the data comes from (Medicare, CMS, the U.S. Census Bureau) without the word "public": write "Medicare data", not "public Medicare data" or "publicly available data". Do not call it proprietary, exclusive or licensed either.',
   card_terms:'Offer the free trial in plain words, without bringing up the credit card or how billing starts. Never say that no card is needed.',
+  data_citation:'Do not cite a data file or its year: no year in brackets, no quarter and no file\'s name. Say "by CMS\'s count" or "from Medicare data" and leave the detail to the report.',
 });
 /**
  * Why the opening the writer wrote for a first email built around a market report is not that opening, or null: more than

@@ -98,7 +98,7 @@ export const lifecycleProducts = Object.freeze({
     ]),
     setup: 'Most teams start in Setup: they name the agency, pick the counties it covers and build a first list of physicians to reach. The Help page walks through each step.',
     firstWin: 'a list of the highest-ranked physicians for outreach in the county your trial covers',
-    kept: 'your lists, your accounts and every visit you have logged',
+    kept: 'your lists, your accounts and every visit you\'ve logged',
     // What the trial opens once its card is confirmed (the card reminder).
     opens: 'Once it starts, you pick the county your trial covers and build a list of its highest-ranked physicians for outreach.',
     // Trial path: the trial needs a card (Intel keeps a sign-up on its Billing page until Stripe confirms one), and use is read from
@@ -274,14 +274,14 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
     // Intel's card terms as Intel states them (docs/GTM_FACTS.md, `trialCardTerms`); never "no credit card".
     return {
       subject: `One step left to start your ${productName} trial`,
-      preheader: 'Your trial has not started yet. One step is left.',
+      preheader: 'Your trial hasn\'t started yet. One step is left.',
       heading: 'One step left',
       blocks: [
-        { type: 'paragraph', text: `You began a ${productName} trial for ${tenantName}, but its last step was not finished, so the trial has not started yet.` },
+        { type: 'paragraph', text: `You started a ${productName} trial for ${tenantName}, but the last step isn't done, so the trial hasn't begun.` },
         ...(words.opens ? [{ type: 'paragraph', text: words.opens }] : []),
         { type: 'paragraph', text: cardTermsWords },
         { type: 'button', label: 'Finish starting your trial', url: helpUrl },
-        { type: 'paragraph', text: 'If something stopped you, reply to this email and tell us what it was. We will help you through it.' },
+        { type: 'paragraph', text: 'If something stopped you, just reply and tell us what it was. We\'ll help you through it.' },
       ],
       signature,
     };
@@ -289,13 +289,13 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
   if (template === 'midtrial_nudge') {
     return {
       subject: `The one step that shows what ${productName} can do`,
-      preheader: 'One step shows most teams what it can do, and it is still ahead of you.',
+      preheader: 'One step shows most teams what it can do, and it\'s still ahead of you.',
       heading: 'The step worth taking next',
       blocks: [
-        { type: 'paragraph', text: `You are partway through your ${productName} trial for ${tenantName}. One step shows most teams what it can do, and it is still ahead of you.` },
+        { type: 'paragraph', text: `You're partway through your ${productName} trial for ${tenantName}. One step shows most teams what it can do, and it's still ahead of you.` },
         { type: 'callout', tone: 'info', title: 'The next step:', text: words.midtrial ?? words.setup },
         help,
-        { type: 'paragraph', text: 'If something is in the way, reply to this email and tell us what you would like to get done. We will send you the steps for it.' },
+        { type: 'paragraph', text: 'If something\'s in the way, just reply and tell us what you\'d like to get done. We\'ll send you the steps.' },
       ],
       signature,
     };
@@ -307,11 +307,11 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
       preheader: 'What teams do next, and what stays in place when your trial ends.',
       heading: 'What to do next',
       blocks: [
-        { type: 'paragraph', text: `You have built your first list in ${productName} for ${tenantName}. Teams that keep using it after the trial usually do these next:` },
+        { type: 'paragraph', text: `You've built your first list in ${productName} for ${tenantName}. Teams that keep using it after the trial usually do these next:` },
         { type: 'steps', items: words.next },
-        { type: 'paragraph', text: 'When your trial ends, the plan you chose starts on its own, and everything you have built stays in place.' },
+        { type: 'paragraph', text: 'When your trial ends, the plan you chose starts on its own, and everything you\'ve built stays in place.' },
         help,
-        { type: 'paragraph', text: 'If you have a question, reply to this email. We will answer here.' },
+        { type: 'paragraph', text: 'If you have a question, just reply. We\'ll answer here.' },
       ],
       signature,
     };
@@ -322,10 +322,10 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
       preheader: `Three steps for ${tenantName}, and what they lead to.`,
       heading: `Welcome to ${productName}`,
       blocks: [
-        { type: 'paragraph', text: `Thank you for starting a ${productName} trial for ${tenantName}. These three steps lead to the first result worth seeing: ${words.firstWin}.` },
+        { type: 'paragraph', text: `Thanks for starting a ${productName} trial for ${tenantName}. These three steps get you to the first result worth seeing: ${words.firstWin}.` },
         { type: 'steps', items: words.firstSteps },
         help,
-        { type: 'paragraph', text: 'Each step has a short guide. If anything is unclear, reply to this email and we will help you through it.' },
+        { type: 'paragraph', text: 'Each step has a short guide. If anything\'s unclear, just reply and we\'ll help you through it.' },
       ],
       signature,
     };
@@ -336,11 +336,11 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
       preheader: 'Where most teams start, and how to get help with any step.',
       heading: 'Need a hand with setup?',
       blocks: [
-        { type: 'paragraph', text: `You are a few days into your ${productName} trial for ${tenantName}, and we wanted to offer a hand with setup.` },
+        { type: 'paragraph', text: `You're a few days into your ${productName} trial for ${tenantName}, and we wanted to offer a hand with setup.` },
         { type: 'callout', tone: 'info', title: 'Where most teams start:', text: words.setup },
         { type: 'paragraph', text: `Setup ends with the first result worth seeing: ${words.firstWin}.` },
         help,
-        { type: 'paragraph', text: 'If something is slowing you down, or you are not sure where to start, reply to this email and tell us what you would like to get done first. We will send you the steps for it.' },
+        { type: 'paragraph', text: 'If something\'s slowing you down, or you\'re not sure where to start, just reply and tell us what you\'d like to get done first. We\'ll send you the steps.' },
       ],
       signature,
     };
@@ -352,9 +352,9 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
       heading: 'How is your trial going?',
       blocks: [
         { type: 'paragraph', text: 'This is a personal check-in, not a billing notice.' },
-        { type: 'paragraph', text: `Your ${productName} trial for ${tenantName} is nearing its end, and we wanted to ask how it is going. Is anything getting in the way: a step that is unclear, something you expected to find and did not, or a question from your team?` },
-        { type: 'paragraph', text: 'Reply to this email and let us know. We will answer here.' },
-        { type: 'paragraph', text: `Everything you have built stays in place when your plan starts: ${words.kept}.` },
+        { type: 'paragraph', text: `Your ${productName} trial for ${tenantName} is almost over, and we wanted to ask how it's going. Is anything getting in the way? A step that's unclear, something you expected to find and didn't, or a question from your team?` },
+        { type: 'paragraph', text: 'Just reply and let us know. We\'ll answer here.' },
+        { type: 'paragraph', text: `Everything you've built stays in place when your plan starts: ${words.kept}.` },
         // Owner decision 2026-11-08: the trial check-in names the Founders Sale, in its exact terms (docs/GTM_FACTS.md).
         { type: 'callout', tone: 'success', title: 'The Founders Sale.', text: foundersWords(productName) },
       ],
@@ -364,13 +364,13 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
   if (template === 'cancel_save') {
     return {
       subject: `Before your ${productName} plan ends`,
-      preheader: 'What did not work, in a line or two, helps us fix it.',
+      preheader: 'What didn\'t work, in a line or two, helps us fix it.',
       heading: 'Before your plan ends',
       blocks: [
-        { type: 'paragraph', text: `We saw that ${tenantName} has chosen to end its ${productName} plan. Thank you for using ${productName}.` },
-        { type: 'paragraph', text: 'Before it ends, would you tell us what did not work? A step that was unclear, something you needed and did not find, or a problem we could fix. Reply to this email: a line or two is enough, and we read every reply.' },
+        { type: 'paragraph', text: `We saw that ${tenantName} is ending its ${productName} plan. Thanks for using ${productName}.` },
+        { type: 'paragraph', text: 'Before it ends, would you tell us what didn\'t work? A step that was unclear, something you needed and didn\'t find, or a problem we could fix. Just reply. A line or two is enough, and we read every reply.' },
         help,
-        { type: 'paragraph', text: 'If you would rather not, there is no need to reply.' },
+        { type: 'paragraph', text: 'If you\'d rather not, there\'s no need to reply.' },
       ],
       signature,
     };
@@ -381,9 +381,9 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
       preheader: 'What got in the way, in a line or two, helps us make it better.',
       heading: `Thank you for trying ${productName}`,
       blocks: [
-        { type: 'paragraph', text: `Your ${productName} trial for ${tenantName} has ended. Thank you for taking the time to try it.` },
-        { type: 'paragraph', text: 'Would you tell us what got in the way? A step that was unclear, something you expected to find and did not, or simply the timing. Reply to this email: a line or two is enough, and we read every reply.' },
-        { type: 'paragraph', text: 'If you would like to pick up where you left off, reply and we will help you get going again.' },
+        { type: 'paragraph', text: `Your ${productName} trial for ${tenantName} has ended. Thanks for taking the time to try it.` },
+        { type: 'paragraph', text: 'Would you tell us what got in the way? A step that was unclear, something you expected to find and didn\'t, or simply the timing. Just reply. A line or two is enough, and we read every reply.' },
+        { type: 'paragraph', text: 'If you\'d like to pick up where you left off, reply and we\'ll help you get going again.' },
         help,
       ],
       signature,
@@ -394,18 +394,18 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
     preheader: 'A sentence from you helps other teams decide whether it fits them.',
     heading: 'Would you share a sentence?',
     blocks: [
-      { type: 'paragraph', text: `Thank you for choosing ${productName} for ${tenantName}. We are glad to have you with us.` },
-      { type: 'paragraph', text: 'Would you be willing to share a sentence or two about your experience? Teams deciding whether it fits them find it helpful to hear from people who use it.' },
-      { type: 'paragraph', text: 'If you are willing, reply to this email to say yes, and include your sentence if you have it ready.' },
-      { type: 'callout', tone: 'info', text: 'We would use your words only with your permission, only in the form you approve, and with or without your name and organization, as you prefer.' },
-      { type: 'paragraph', text: 'If you would rather not, there is no need to reply.' },
+      { type: 'paragraph', text: `Thanks for choosing ${productName} for ${tenantName}. We're glad to have you with us.` },
+      { type: 'paragraph', text: 'Would you share a sentence or two about how it\'s going? Teams deciding whether it fits them like to hear from people who use it.' },
+      { type: 'paragraph', text: 'If you\'re willing, just reply to say yes, and include your sentence if you have it ready.' },
+      { type: 'callout', tone: 'info', text: 'We\'d use your words only with your permission, only in the form you approve, and with or without your name and organization, as you prefer.' },
+      { type: 'paragraph', text: 'If you\'d rather not, there\'s no need to reply.' },
     ],
     signature,
   };
 }
 
 const footerLines = (input, unsubscribe, postalAddress) => [
-  `You are receiving this email because ${input.tenantName} has a ${input.productName} account.`,
+  `You're getting this email because ${input.tenantName} has a ${input.productName} account.`,
   unsubscribe,
   ...(String(postalAddress ?? '').trim() ? [String(postalAddress).trim()] : []),
 ];
