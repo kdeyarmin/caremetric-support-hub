@@ -62,6 +62,8 @@ export function growthStore(pool) {
     peopleCandidates:limit=>server('private.growth_people_candidates',[limit]),
     peopleRecord:(org,people)=>server('private.growth_people_record',[org,JSON.stringify(people)]),
     enrichmentReserve:credits=>server('private.growth_enrichment_reserve',[credits]),
+    // The verification service's checks today (20261117233000_growth_address_service.sql): false once the owner's daily number is used.
+    addressServiceReserve:checks=>server('private.growth_address_service_reserve',[checks]),
     enrichedContact:(person,email,name)=>server('private.growth_enriched_contact',[person,email,name??null]),
     // A found address and how: 'published' with its page on the business's own site, or 'mail_server' (20261113290000_growth_people_finder.sql).
     personAddress:(person,email,name,found,sourceUrl)=>server('private.growth_person_address',[person,email,name??null,found,sourceUrl??null]),

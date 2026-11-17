@@ -20,6 +20,8 @@
  *      business's own addresses follow first, asked of the business's mail server (server/growth/mailbox.mjs), which must refuse a
  *      made-up mailbox and accept the guess. One check a business, reserved in the database under the owner's daily number
  *      (Most address checks a day) before it is made.
+ *    - When the mail server gives no clear answer, and the owner has switched it on, a verification service is asked about the
+ *      same shapes (address-service.mjs); an address it confirms is recorded as found by the service.
  *    Either way the address is recorded for the owner's review: nothing is sent to it until the owner permits it on the Growth screen.
  *    Once the owner hands named people's email addresses over (the "Named people's email addresses" autonomy step,
  *    20261115200000_autonomy_handover.sql), the database permits such an address on its own instead (it is one the business published or
@@ -146,6 +148,8 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
     const counts = { searched: 0, people: 0, found: 0, published: 0, verified: 0, permitted: 0, noCredit: 0, unreachable: 0 };
     // Agencies not matched to a Medicare record whose authorized official the registry named, found by their site's address.
     let byPlace = 0;
+    // Answers the verification service gave when a mail server would not (address-service.mjs).
+    let byService = 0;
     // What the mail servers answered, so the run shows why an agency yielded no address (2026-11-16: 17 checks gave 3 addresses).
     const answers = {};
     // Why the mail server gave no answer, by the checker's reason (mailbox.mjs `unansweredReason`), named as the address check names it.
@@ -200,7 +204,9 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
           answers[result] = (answers[result] ?? 0) + 1;
           const reason = unansweredReason(answer);
           if (reason) why[reason] = (why[reason] ?? 0) + 1;
-          if (result === 'verified') { found = { email: answer.email, how: 'mail_server', sourceUrl: null }; break; }
+          // Confirmed by the business's mail server, or by the verification service when the server would not say (address-service.mjs).
+          if (answer?.via === 'service') byService++;
+          if (result === 'verified') { found = { email: answer.email, how: answer?.via === 'service' ? 'service' : 'mail_server', sourceUrl: null }; break; }
           if (result === 'unreachable') counts.unreachable++;
           if (result !== 'rejected') break;
           const next = named.find(other => other !== person && other !== chosen && Number.isFinite(other.rank) && record.includes(other.entry));
@@ -220,7 +226,7 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
         }
       } catch (error) { if (error?.code !== '22023') throw error; }
     }
-    return { result: { ...counts, ...(byPlace ? { byPlace } : {}), ...(Object.keys(answers).length ? { answers } : {}), ...(Object.keys(why).length ? { why } : {}) } };
+    return { result: { ...counts, ...(byPlace ? { byPlace } : {}), ...(byService ? { byService } : {}), ...(Object.keys(answers).length ? { answers } : {}), ...(Object.keys(why).length ? { why } : {}) } };
   }
   return { 'growth.people': people };
 }

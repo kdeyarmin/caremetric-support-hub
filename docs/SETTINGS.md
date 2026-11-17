@@ -92,7 +92,7 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Customer growth | Follow up website leads by email | County report, contact and savings-model leads get a two-email follow-up, after your approval |
 | Customer growth | Days before asking again | When a "not now" or a silent prospect is asked once more (at least 30) |
 | Customer growth | Win-back and cancellation emails | The Account Manager proposes, for your approval, one email when a trial ends unpaid and one when a plan is set to cancel |
-| Customer growth | Finding people's addresses; Most address checks a day | Named decision-makers from the CMS owners file, the NPI registry and their own websites; an address they publish, or one their mail server confirms; every address waits for your review until you hand "Named people's email addresses" over on the AI team page |
+| Customer growth | Finding people's addresses; Most address checks a day; Ask a verification service when a mail server won't answer; Most verification service checks a day | Named decision-makers from the CMS owners file, the NPI registry and their own websites; an address they publish, or one their mail server confirms; every address waits for your review until you hand "Named people's email addresses" over on the AI team page |
 | Customer growth | Learn which agencies opened their report | Reads from Intel which market report links were opened (agency and time only), alerts you on an agency's first open, and shapes its second email ([Customer growth](CUSTOMER_GROWTH.md#which-agencies-opened-their-market-report)) |
 | Customer growth | Write an account brief before the first email; Most account briefs a day; Most to spend on one account brief | A brief per Intel agency from Intel's data, its county's figures for its own setting and dated web triggers, written on the top model ([Customer growth](CUSTOMER_GROWTH.md#an-account-brief-before-the-first-email-written-and-reviewed-on-the-top-model)) |
 | Customer growth | Write first emails on the top model; Have a reader review each first email | The first email written from the brief on the top model, and a second model's 1-to-5 review with one rewrite below 4 |
@@ -132,6 +132,7 @@ Secrets, which are never shown on screen or stored in the database:
 - `HUB_SES_ACCESS_KEY_ID`, `HUB_SES_SECRET_ACCESS_KEY` (Amazon SES sending key, [AMAZON_SES.md](AMAZON_SES.md))
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `HUB_GROWTH_SIGNING_KEY`, `HUB_GROWTH_SEARCH_API_KEY`, `HUB_GROWTH_CAREBASE_EVENT_KEY`, `HUB_GROWTH_INTEL_EVENT_KEY`
+- `ZEROBOUNCE_API_KEY` (only for Settings → Customer growth → Ask a verification service when a mail server won't answer)
 - `HUB_LEAD_SECRET_CAREBASE`, `HUB_LEAD_SECRET_INTEL`, `HUB_LEAD_SECRET_ADVISORS`
 - `HUB_SOCIAL_CREDENTIALS_KEY` (server encryption key for the Meta and LinkedIn connection cards)
 - `HUB_META_ACCESS_TOKEN` (legacy fallback until the Meta card is first saved)

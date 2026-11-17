@@ -5,7 +5,8 @@
  *
  * 1. The database hands out a few permitted cold-email addresses never yet written to (an email waiting first, then the best fit).
  * 2. Each is asked of its business's own mail server with the people finder's checker (mailbox.mjs: a made-up mailbox first, then the
- *    address, from the null sender, no message ever sent). The answer is recorded. An address whose mailbox does not exist becomes
+ *    address, from the null sender, no message ever sent), and of the verification service when the server gives no clear answer and
+ *    the owner has switched it on (address-service.mjs). The answer is recorded. An address whose mailbox does not exist becomes
  *    undeliverable, its waiting emails are cancelled and its business goes back to the people finder; one the server could not answer
  *    for is asked again later, at most three times.
  * 3. While the bounce guard is tripped (Settings → Customer growth → "Pause cold email at this bounce rate"), the owner is told once a
@@ -66,7 +67,8 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
     if (typeof mailbox?.check !== 'function' || mailbox.configured !== true) return { result: { ...guardResult, skipped: 'checker_not_configured' } };
     // Empty while checking is off (the database reads the owner's setting).
     const candidates = await growth.store.mailboxCandidates(verifyPerRun);
-    const counts = { checked: 0, verified: 0, rejected: 0, catch_all: 0, unknown: 0, unreachable: 0, undeliverable: 0, cancelled: 0 };
+    // byService: answers the verification service gave when the mail server would not (address-service.mjs).
+    const counts = { checked: 0, verified: 0, rejected: 0, catch_all: 0, unknown: 0, unreachable: 0, undeliverable: 0, cancelled: 0, byService: 0 };
     const why = {};
     let stopped = null;
     for (const candidate of candidates) {
@@ -83,6 +85,7 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
       try { saved = diagnosing ? await growth.store.mailboxRecord(candidate.id, result, reason) : await growth.store.mailboxRecord(candidate.id, result); }
       catch (error) { if (error?.code !== '22023') throw error; continue; }
       counts.checked++; counts[result]++;
+      if (answer?.via === 'service') counts.byService++;
       if (reason) why[reason] = (why[reason] ?? 0) + 1;
       if (saved?.eligibility === 'undeliverable') counts.undeliverable++;
       counts.cancelled += Number(saved?.cancelled ?? 0);
