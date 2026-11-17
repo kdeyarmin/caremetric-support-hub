@@ -85,6 +85,15 @@ open brings the second email forward, and the memo's facts count report opens pe
 closed. The Hub server passes a deferral's reason, lists quiet prospects, writes the short first email and gives the Sales Executive its
 context only when the feature is declared ([AI workforce review, November 17](AI_WORKFORCE_REVIEW_2026-11-17.md), stage 2).
 
+`20261117210100_growth_reach_contract.sql` declares `platform.agents.growth-reach.v1` once the growth priority, roster and learning
+features are declared, `private.growth_roster_site_next`, `private.growth_roster_site_record`, `private.growth_live_eval_state`,
+`private.growth_live_eval_record` and `private.growth_live_evaluation_latest` are executable by `hub_app_server` alone and require its
+connection, `private.growth_live_eval_cases` has row level security and is closed to every role, the four stage 3 settings have rows, a
+site the web search found graduates through the lookups' own `private.growth_roster_resolved`, `hub.growth_roster` carries the
+suggestions, and the `growth.sites` and `growth.evaluate_live` schedules exist. Each test fails closed. The Hub server searches the web
+for roster agencies, runs the live evaluation and shows its result in the scorecard only when the feature is declared
+([AI workforce review, November 17](AI_WORKFORCE_REVIEW_2026-11-17.md), stage 3).
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a

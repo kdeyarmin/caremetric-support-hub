@@ -95,9 +95,24 @@ Each new behaviour has its own switch, off (or empty) until you set it; the deta
 | 8 | At most two follow-ups to a prospect who replied, was answered and went quiet (four days after the answer, then five days later), through the same send claim, caps and opt-out; a customer email, so the Sales follow-ups step hands it over | Follow up when a prospect who replied goes quiet |
 | 9 | The Sales Executive answers with the account brief, which email was answered and whether the report was opened (never said to the prospect) | Give the Sales Executive the account brief |
 
+## What changed (stage 3)
+
+Started on 2026-11-17 at the owner's request, before the week of clean data the review had planned; the owner's decisions that day are
+marked. Details are in [Customer growth](CUSTOMER_GROWTH.md#reaching-the-right-agencies-and-checking-the-writing-2026-11-17)
+(`20261117210000_growth_reach.sql`, feature `platform.agents.growth-reach.v1`).
+
+| # | Change | Setting (Settings → Customer growth) |
+| --- | --- | --- |
+| 1 | **Agencies under pressure first** (owner's decision). Intel already sent each agency's county and state share and rank, and its HHVBP adjustment and Hospice Care Index; the Hub dropped them. They are kept as research (never in an email) and ranked: a small share of a crowded county +8, a Medicare pay cut under HHVBP +8 (+10 at 2% or more), low quality stars +5, a low Hospice Care Index +5; the county's leader -10, top stars -3. A new certification (+25) and a new owner (+20) still lead. The rank decides which agencies are looked up first | None (the roster's own rank) |
+| 2 | **A web search for the agencies not found** (66 on 2026-11-16). The model proposes up to two sites; one is used only when the usual checks confirm it, through the same path as a lookup (owner's decision). An unconfirmed suggestion is only shown on Growth | Search the web for roster agencies not found; Most agencies to search the web for a day (10); Most to spend on one website search (10 cents) |
+| 3 | **A live writing evaluation each Monday** (owner approved cases, grading and cost): twelve made-up Intel agencies across the four triggers, with and without a brief, short and standard, written on the real writer and read by the reader. Passes when every draft passes the checks and the reader's average "would reply" is at least 3.5 with none below 2. Recorded as `growth.live.1`, so it never holds up sending; the Monday scorecard reports it | Run a live writing evaluation each Monday |
+
+The fourth stage 3 item, a Monday note naming the week's binding constraint, was built separately (kdeyarmin/caremetric-support-hub#258).
+
 ## What you need to do, in this order
 
-1. **Merge this pull request** once its checks pass. Railway deploys it; the migrations apply as usual.
+1. **Merge this pull request** once its checks pass. Railway deploys it; the migrations are applied to production by hand, before the
+   switches are turned on.
 2. **Reconnect LinkedIn** (Settings → Social media). It also decides where the month's flight can run: until then the plan gives it to
    Meta, the day after the deploy.
 3. **Set Intel's Google Analytics property** (Settings → Analytics).
@@ -115,17 +130,13 @@ Each new behaviour has its own switch, off (or empty) until you set it; the deta
 | Stage 1 itself | No new model call. The image review is one call per image as before |
 | Images reviewed again once | Up to 18 images at about a cent each, from the Creative Director's $3 a day |
 | Snapshots rendered again once | 12 renders inside "Most renders a day" |
+| Stage 3 | The website search: up to 10 agencies a day at most 10 cents each (about $1 a day at most, and only until the 66 are done). The live evaluation: about $1.50 to $3 a week. Ranking: no model call; one more call to Intel's feed per 25 agencies when the roster is read |
 | Stage 2 | The reader's review reads the brief and the rules (a little more input, about a cent an email as before); each quiet follow-up is one draft call (about 2 cents); the Sales Executive's context adds a few hundred input tokens to a reply. The brief's write-up now has a ceiling, so a brief never costs more than "Most to spend on one account brief" |
 
 ## Not built (in order of what it would add)
 
-- **Stage 3, after a week of clean data:**
-  - Rank roster agencies with more of what Intel already sends (county share, state rank, stars, the HHVBP adjustment, the Hospice Care
-    Index); today it uses certification, ownership change, control type, size and county crowding.
-  - A Monday review of the whole funnel by the Chief of Staff on the top model, from counts and the watchdog's findings, naming the one
-    binding constraint.
-  - A research pass that proposes websites for the 66 roster agencies with none confirmed.
-  - A writing evaluation run on a live model, which needs your sign-off on the cases, how they are graded and its cost.
+- **Slipping stars in the rank.** Intel sends one star rating, with no history; a trend would need Intel to send the previous release.
+- **Approving a suggested website by hand.** By the owner's decision only a code-confirmed site is used.
 - **Usage-aware trial emails.** Intel reports only lists built and activities done; first sign-in, setup and seats would need an Intel change.
 - **Public county market pages on Intel**, for search traffic.
 - **A paid address-checking service**, once the new reason counts show why checks go unanswered.

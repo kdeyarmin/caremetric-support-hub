@@ -536,6 +536,40 @@ Plain fixes (no switch):
 
 `server/agents-growth-priority-integration.mjs` runs the database side through the real roles in CI, twice.
 
+## Reaching the right agencies, and checking the writing (2026-11-17)
+
+Stage 3 of the [November 17 review](AI_WORKFORCE_REVIEW_2026-11-17.md) (`20261117210000_growth_reach.sql`, feature
+`platform.agents.growth-reach.v1`), with the owner's decisions of that day.
+
+- **Agencies under pressure first** (`rankTarget`, `pressureWeights` in `server/growth/roster.mjs`). Each roster read also asks Intel's
+  `agency_facts` for the page's open agencies (25 a call) and keeps, in the target's facts, the county and state share and rank, the
+  HHVBP payment adjustment and its year, and the Hospice Care Index. They are research only: never in the claim, the research line or an
+  email (the `own_standing` check is unchanged). The rank adds: a share under 5% of a county with 10 or more agencies +8 ("Small share of
+  a crowded county"), an HHVBP payment adjustment below 0 +8 or of -2% or lower +10 ("Medicare pay cut"), home health quality stars of
+  2.5 or less +5, a Hospice Care Index of 7 or less +5; it takes 10 from the county's leader (first among 3 or more) and 3 from stars of
+  4.5 or more. A new certification (+25) and a new owner (+20) still lead. When the feed refuses or the run's time is spent, the rest are
+  ranked without these figures until the next weekly read. The rank decides which agencies are looked up first.
+- **A web search for agencies not found** (Settings → Customer growth → "Search the web for roster agencies not found", "Most agencies to
+  search the web for a day", "Most to spend on one website search"; task `growth.sites`, hourly, `server/growth/site-search.mjs`). An
+  agency the name and phone searches did not find (`no_site` or `not_confirmed`), not searched in 30 days, gets one web search by the
+  Marketing Manager: the model is told only its name, city, state, setting and CMS telephone number and names at most two candidate
+  sites, never a directory or a government site. Each candidate is read by the contact finder and checked exactly as a lookup's
+  (`confirmsSite`: the CMS number on its pages, or the agency's name and place on its home page; the shared-host rule); a confirmed one
+  graduates through `private.growth_roster_resolved`, as a lookup does. An unconfirmed candidate is only a suggestion on Growth ("Suggested
+  by a web search, not confirmed"); nothing is sent to it, and there is no button to use it (owner's decision).
+- **A live writing evaluation each Monday** (Settings → Customer growth → "Run a live writing evaluation each Monday"; task
+  `growth.evaluate_live`, 06:50 Eastern, `server/growth/live-evaluation.mjs`). Twelve made-up Intel agencies (invented names, `.example`
+  sites, CCNs 990101 to 990104, no person, address or telephone number) cover the four triggers (a new agency, a new owner, a CMS record,
+  the web), each with three of the four pairings of brief or none and short or standard. Each is written on the real writer, with the
+  active memo and the top model as the settings say, and read by the reader (`critic.2`). The run passes when every draft passes the
+  checks, the reader scored every draft, the average "would reply" is at least 3.5 and none is below 2. Each grade is kept as it is
+  written (`private.growth_live_eval_cases`, 120 days), so the twelve run over a few tries inside the scheduler's limit. The result is
+  recorded as `growth.live.1`, never `growth.1`, so it never holds up sending; the Monday scorecard reports it, and you are told only when
+  it does not pass. A day's budget running out ends it as not finished. About $1.50 to $3 a week from the Marketing Manager's budget.
+
+`server/agents-growth-sites-integration.mjs` and `server/agents-growth-live-eval-integration.mjs` run the database side through the real
+roles in CI, twice each.
+
 ## Checking an address before the first email, and the bounce guard
 
 Owner decision 2026-11-16 ([review](AI_WORKFORCE_REVIEW_2026-11-16.md)). Of the first 22 cold emails, 3 bounced (14%), all to

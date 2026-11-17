@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import {
-  chooseSite, confirmsSite, displayName, distinctiveWords, phonesIn, rankTarget, researchOnlyPrefix, resolutionQuery, rosterClaim,
+  chooseSite, confirmsSite, displayName, distinctiveWords, phonesIn, pressureFacts, pressureWeights, rankTarget, researchOnlyPrefix, resolutionQuery, rosterClaim,
   rosterRow, rosterStates, statesNamed,
 } from './roster.mjs';
 
@@ -44,6 +44,59 @@ describe('roster rows', () => {
     expect(rankTarget(item({ signals: [{ type: 'closed', detected_in: '2026Q3', date: null, detail: null }] }), now).excluded).toBe(true);
     // A termination date still ahead is not a closure yet.
     expect(rankTarget(item({ termination_date: '2027-01-01' }), now).excluded).toBe(false);
+  });
+
+  it('ranks agencies under pressure first and the county leader last (owner decision 2026-11-17)', () => {
+    const w = pressureWeights;
+    const base = rankTarget(item(), now).rank;
+    // A small share of a crowded county: + the competitive county's 5 and the small share's weight.
+    expect(rankTarget(item({ volume: { county_share: 0.03, county_rank: 9, county_providers: 14 } }), now))
+      .toMatchObject({ rank: base + 5 + w.smallShare, reasons: ['Competitive county', 'Small share of a crowded county'] });
+    // A small share where few agencies compete is no sign of pressure.
+    expect(rankTarget(item({ volume: { county_share: 0.03, county_rank: 4, county_providers: 6 } }), now).rank).toBe(base);
+    // The county leader comes last, but not the only agency in its county.
+    expect(rankTarget(item({ volume: { county_share: 0.4, county_rank: 1, county_providers: 6 } }), now))
+      .toMatchObject({ rank: base + w.countyLeader, reasons: ['Leads its county'] });
+    expect(rankTarget(item({ volume: { county_share: 1, county_rank: 1, county_providers: 1 } }), now).rank).toBe(base);
+    // A Medicare pay cut under HHVBP, and a deeper one.
+    expect(rankTarget(item(), now, { hhvbpAdjustmentPct: -0.8 })).toMatchObject({ rank: base + w.hhvbpCut, reasons: ['Medicare pay cut (HHVBP)'] });
+    expect(rankTarget(item(), now, { hhvbpAdjustmentPct: -3.2 })).toMatchObject({ rank: base + w.hhvbpDeepCut, reasons: ['Medicare pay cut of 2% or more (HHVBP)'] });
+    expect(rankTarget(item(), now, { hhvbpAdjustmentPct: 1.5 }).rank).toBe(base);
+    // Stars: low ones up, the top rating a little down; the middle changes nothing.
+    expect(rankTarget(item({ quality: { care_star_rating: 2.5, data_year: '2026' } }), now)).toMatchObject({ rank: base + w.lowStars, reasons: ['Low quality star rating'] });
+    expect(rankTarget(item({ quality: { care_star_rating: 5, data_year: '2026' } }), now)).toMatchObject({ rank: base + w.topStars, reasons: ['Top quality star rating'] });
+    expect(rankTarget(item({ quality: { care_star_rating: 3.5, data_year: '2026' } }), now).rank).toBe(base);
+    // A low Hospice Care Index.
+    expect(rankTarget(item(), now, { hospiceCareIndex: 6 })).toMatchObject({ rank: base + w.lowCareIndex, reasons: ['Low Hospice Care Index'] });
+    expect(rankTarget(item(), now, { hospiceCareIndex: 9 }).rank).toBe(base);
+  });
+
+  it('puts an agency under pressure ahead of its county leader with otherwise the same record, and never above a new owner', () => {
+    const volume = { medicare_patients: 400, county_providers: 14 };
+    const pressed = rankTarget(item({ volume: { ...volume, county_share: 0.03, county_rank: 11 } }), now, { hhvbpAdjustmentPct: -2.5 });
+    const leader = rankTarget(item({ volume: { ...volume, county_share: 0.35, county_rank: 1 } }), now, { hhvbpAdjustmentPct: 1.1 });
+    expect(pressed.rank).toBeGreaterThan(leader.rank);
+    expect(pressed.rank - leader.rank).toBe(pressureWeights.smallShare + pressureWeights.hhvbpDeepCut - pressureWeights.countyLeader);
+    // Each pressure weight stays below a new owner's 20, so a change of ownership still leads among otherwise equal agencies.
+    for (const [key, weight] of Object.entries(pressureWeights)) if (!/Below|AtMost|AtLeast|Among|crowded/.test(key)) expect(Math.abs(weight)).toBeLessThan(20);
+    // The clamp holds with every term at once.
+    expect(rankTarget(item({ certification_date: '2026-01-15', change_of_ownership_date: '2026-03-01', control_type: 'Proprietary',
+      quality: { care_star_rating: 1.5, data_year: '2026' }, volume: { ...volume, county_share: 0.01, county_rank: 12 } }), now,
+      { hhvbpAdjustmentPct: -5, hospiceCareIndex: 3 }).rank).toBe(100);
+  });
+
+  it('keeps the new figures as research facts only, never in the claim or the research line', () => {
+    const row = rosterRow(item({ volume: { data_year: '2024', medicare_patients: 300, county_fips: '42101', county_share: 0.031, county_rank: 9,
+      county_providers: 14, state_share: 0.004, state_rank: 120, state_providers: 410 } }), '2026Q3', now,
+      { ccn: '391501', owners: [], hhvbp: { totalPerformanceScore: 41.2, paymentAdjustmentPct: -1.4, paymentYear: 2026 }, hospice_care_index: { score: 6, period: '2023' } });
+    expect(row.facts).toMatchObject({ countyShare: 0.031, stateShare: 0.004, stateRank: 120, stateProviders: 410, hhvbpAdjustmentPct: -1.4,
+      hhvbpPaymentYear: '2026', hospiceCareIndex: 6 });
+    expect(row.reasons).toEqual(expect.arrayContaining(['Small share of a crowded county', 'Medicare pay cut (HHVBP)', 'Low Hospice Care Index']));
+    for (const text of [row.claim, row.research]) expect(text).not.toMatch(/HHVBP|Care Index|share|0\.031|-1\.4|120th/i);
+    expect(JSON.stringify(row.facts).length).toBeLessThan(4000);
+    // Malformed or missing facts add nothing.
+    expect(pressureFacts(null)).toEqual({});
+    expect(pressureFacts({ hhvbp: { paymentAdjustmentPct: 'x' }, hospice_care_index: { score: 42 } })).toEqual({});
   });
 
   it('keeps only states the feed knows, once each', () => {

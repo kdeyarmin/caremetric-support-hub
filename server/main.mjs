@@ -106,7 +106,9 @@ const messaging=communications({pool,delegations:capabilities,publicOrigin,
 const roster={feed:intelFeedReader({features,enabled:setting('growth.roster'),key:process.env.HUB_INTEL_FEED_SECRET}),
   states:setting('growth.roster_states'),daily:setting('growth.roster_daily_resolutions'),
   // Web-found prospects matched to their Medicare record each day, so each gets its own market report (growth/agency-match.mjs).
-  matchDaily:setting('growth.roster_match_daily')};
+  matchDaily:setting('growth.roster_match_daily'),
+  // A web search for agencies the name and phone searches missed (Settings → Customer growth; stage 3 of the 2026-11-17 review).
+  siteResearch:{enabled:setting('growth.roster_site_research'),perDay:setting('growth.roster_site_research_per_day'),cents:setting('growth.roster_site_research_cents')}};
 // Decision-makers and their work addresses, found by the Hub itself: the NPI registry, the business's own website and, when the owner
 // chooses it, the business's own mail server (Settings → Customer growth → Finding people's addresses). No key: nothing to set in Railway.
 const people={mode:setting('growth.enrichment_provider'),registry:npiRegistry(),
@@ -124,6 +126,8 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   // Stage 2 of the 2026-11-17 review (Settings → Customer growth): the best prospects first, a short first email as a test, and a
   // follow-up when a prospect who replied goes quiet. The send hours are read by the send claim itself.
   priority:{enabled:setting('growth.send_priority'),shortFirst:setting('growth.short_first_email'),quietFollowup:setting('growth.quiet_followup')},
+  // The Monday live writing evaluation (Settings → Customer growth → Run a live writing evaluation each Monday; stage 3).
+  liveEvaluation:{enabled:setting('growth.live_evaluation')},
   // Each Medicare roster agency's free market report on Intel, linked in its outreach (growth/report-link.mjs; the feed's shared secret).
   reports:reportLinks({key:process.env.HUB_INTEL_FEED_SECRET}),importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
   sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});

@@ -47,6 +47,28 @@ it('reads the roster for the owner\'s states, ranks it, and graduates an agency 
   expect(result).toMatchObject({ period: '2026Q3', read: { pages: 1, rows: 1 }, looked: 1, graduated: 1, contacts: 1 });
 });
 
+it('reads each open agency\'s HHVBP adjustment and Hospice Care Index 25 at a time and ranks with them; a refusal ranks the rest without', async () => {
+  const items = Array.from({ length: 30 }, (_, i) => item(String(391600 + i)));
+  const closed = item('391599', { termination_date: '2026-01-01' });
+  const { store, growth, run } = setup({ pages: [page([...items, closed])], targets: [] });
+  growth.roster.feed.agencyFacts = vi.fn(async ({ ccns }) => ({ agencies: ccns.map(ccn => ({ ccn, owners: [], hhvbp: { paymentAdjustmentPct: -2.4, paymentYear: 2026 }, hospice_care_index: null })) }));
+  const { result } = await run();
+  expect(growth.roster.feed.agencyFacts.mock.calls.map(([args]) => args.ccns.length)).toEqual([25, 5]);
+  expect(growth.roster.feed.agencyFacts.mock.calls.flatMap(([args]) => args.ccns)).not.toContain('391599');
+  const rows = store.rosterUpsert.mock.calls[0][1];
+  expect(rows.find(row => row.ccn === '391600')).toMatchObject({ facts: { hhvbpAdjustmentPct: -2.4, hhvbpPaymentYear: '2026' } });
+  expect(rows.find(row => row.ccn === '391600').reasons).toContain('Medicare pay cut of 2% or more (HHVBP)');
+  expect(result.read).toMatchObject({ pages: 1, rows: 31, facts: 2 });
+
+  const refused = setup({ pages: [page(items)], targets: [] });
+  refused.growth.roster.feed.agencyFacts = vi.fn(async () => { throw Object.assign(new Error('no'), { code: 'feed_refused' }); });
+  const outcome = await refused.run();
+  expect(refused.growth.roster.feed.agencyFacts).toHaveBeenCalledTimes(1);
+  expect(refused.store.rosterUpsert.mock.calls[0][1]).toHaveLength(30);
+  expect(refused.store.rosterUpsert.mock.calls[0][1][0].facts.hhvbpAdjustmentPct).toBeUndefined();
+  expect(outcome.result.read).toMatchObject({ pages: 1, rows: 30, factsStopped: 'feed_refused' });
+});
+
 it('does not read the roster again within the week, and starts over when the states change', async () => {
   const fresh = { period: '2026Q3', states: ['PA'], cursor: null, complete: true, syncedAt: '2026-11-12T00:00:00Z' };
   const kept = setup({ sync: fresh, targets: [] });

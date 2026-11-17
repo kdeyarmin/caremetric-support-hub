@@ -9,6 +9,11 @@ export function growthStore(pool) {
     maintenance:()=>server('private.growth_maintenance'),
     // node-pg sends a JavaScript array as a Postgres array, not JSON: jsonb arguments that can be arrays are sent as JSON text.
     evaluate:(product,version,passed,results)=>server('private.growth_evaluate',[product,version,passed,JSON.stringify(results)]),
+    // The Monday live writing evaluation (20261117210000_growth_reach.sql; live-evaluation.mjs reads it with the feature): each case's
+    // grade as it is written, the run's state with the Intel policy, and the latest result for the scorecard.
+    liveEvalState:run=>server('private.growth_live_eval_state',[run]),
+    liveEvalRecord:(run,key,result)=>server('private.growth_live_eval_record',[run,key,JSON.stringify(result)]),
+    liveEvaluationLatest:since=>server('private.growth_live_evaluation_latest',[since]),
     workspace:(token,offset=0)=>withSession(pool,token,db=>run(db,'hub.growth_workspace',[offset])),
     detail:(token,id)=>withSession(pool,token,db=>run(db,'hub.growth_detail',[id])),
     researchTarget:(token,id)=>withSession(pool,token,db=>run(db,'hub.growth_research_target',[id])),
@@ -41,6 +46,9 @@ export function growthStore(pool) {
     rosterUpsert:(period,rows)=>server('private.growth_roster_upsert',[period,JSON.stringify(rows)]),
     rosterNext:(limit,daily)=>server('private.growth_roster_next',[limit,daily]),
     rosterResolved:(ccn,data)=>server('private.growth_roster_resolved',[ccn,data]),
+    // A web search for the agencies the lookups did not find (20261117210000_growth_reach.sql; site-search.mjs reads it with the feature).
+    rosterSiteNext:(limit,daily)=>server('private.growth_roster_site_next',[limit,daily]),
+    rosterSiteRecord:(ccn,data)=>server('private.growth_roster_site_record',[ccn,data]),
     roster:(token,offset=0)=>withSession(pool,token,db=>run(db,'hub.growth_roster',[offset])),
     // Web-found prospects matched to their Medicare record (20261115233000_growth_roster_match.sql). node-pg sends the outcome object
     // as JSON.

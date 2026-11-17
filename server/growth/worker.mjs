@@ -15,7 +15,7 @@ import { enrichProspects } from './enrichment.mjs';
 import { discoveryQueries, linkablePages, senderFor } from './playbook.mjs';
 import { searchResultLimit } from './research.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
-import { chooseSite, confirmsSite, phoneCandidates, phoneQuery, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
+import { chooseSite, confirmsSite, phoneCandidates, phoneQuery, rankTarget, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
 // Why it waits goes with it: the send claim's status ('daily_limit', 'outside_hours', ...), read by private.growth_defer_action.
 const deferred=(reason=null)=>Object.assign(new Error('Action is deferred'),{code:'action_deferred',...(reason?{reason}:{})});
 const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
@@ -382,7 +382,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const state=await growth.store.rosterSyncState();
     const sameStates=JSON.stringify([...(state?.states??[])].sort())===JSON.stringify([...states].sort());
     const fresh=state?.complete&&state.syncedAt&&Date.parse(state.syncedAt)>now().getTime()-rosterRefreshMs;
-    const read={pages:0,rows:0};
+    const read={pages:0,rows:0,facts:0};
     let stopped=null,period=state?.period??null;
     if(!(sameStates&&fresh)) {
       let restart=!sameStates||Boolean(state?.complete), cursor=restart?null:state?.cursor??null;
@@ -396,7 +396,10 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
         // CMS published a new quarter part-way through a read: start the read again on it.
         if(!restart&&period&&answer.period!==period&&cursor){restart=true;cursor=null;period=answer.period;continue;}
         period=answer.period;
-        const rows=answer.items.filter(item=>item.state&&item.name).map(item=>rosterRow(item,answer.period,now()));
+        const items=answer.items.filter(item=>item.state&&item.name);
+        // Each open agency's HHVBP payment adjustment and Hospice Care Index, for the rank only (stage 3, under pressure first).
+        const pressure=await agencyPressure(items,{signal,spent,read,now});
+        const rows=items.map(item=>rosterRow(item,answer.period,now(),pressure.get(item.ccn)??null));
         if(rows.length)await growth.store.rosterUpsert(answer.period,rows);
         read.pages++;read.rows+=rows.length;
         await growth.store.rosterSyncSave({period:answer.period,states,cursor:answer.next_cursor??'',complete:!answer.next_cursor,pages:1,rows:rows.length,restart});
@@ -420,7 +423,31 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
       }
     }
     const {byPhone,...counts}=looked;
-    return {result:{period,states:states.length,...(read.pages?{read}:{}),...(stopped?{stopped}:{}),...counts,...(byPhone?{byPhone}:{})}};
+    const {facts:factCalls,factsStopped,...pagesRead}=read;
+    return {result:{period,states:states.length,...(read.pages?{read:{...pagesRead,...(factCalls?{facts:factCalls}:{}),...(factsStopped?{factsStopped}:{})}}:{}),...(stopped?{stopped}:{}),...counts,...(byPhone?{byPhone}:{})}};
+  }
+  /**
+   * The open agencies of one roster page with their `agency_facts` entry (HHVBP payment adjustment, Hospice Care Index), read 25 at a
+   * time at the feed's pace while the run has time. They only rank (roster.mjs pressureWeights); a feed that refuses or fails leaves the
+   * rest of the page ranked without them, and the next weekly read tries again.
+   */
+  async function agencyPressure(items,{signal,spent,read,now}) {
+    const found=new Map(), feed=growth.roster?.feed;
+    if(typeof feed?.agencyFacts!=='function')return found;
+    const ccns=items.filter(item=>!rankTarget(item,now()).excluded).map(item=>item.ccn);
+    for(let at=0;at<ccns.length&&!read.factsStopped;at+=25) {
+      signal?.throwIfAborted(); if(spent()){read.factsStopped='time';break;}
+      await pause(feed.paceMs,signal);
+      try {
+        const answer=await feed.agencyFacts({ccns:ccns.slice(at,at+25),signal});
+        read.facts++;
+        for(const agency of answer?.agencies??[])found.set(agency.ccn,agency);
+      } catch(error) {
+        if(signal?.aborted)throw error;
+        read.factsStopped=error?.code??'feed_unavailable';
+      }
+    }
+    return found;
   }
   /**
    * One roster agency: find its own website, confirm it, and graduate it into the pipeline with its public record as evidence. The search
