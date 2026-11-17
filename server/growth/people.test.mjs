@@ -176,6 +176,21 @@ describe('an agency not matched to its Medicare record (2026-11-17)', () => {
   });
 });
 
+describe('an address the verification service confirmed (2026-11-17)', () => {
+  const team = { people: [{ name: 'Jane Doe', title: 'Administrator', sourceUrl: 'https://valleyhospice.org/team' }], addresses: [] };
+  it('records it as found by the service, with no page, and counts it', async () => {
+    const { store, run } = setup({ team, check: { result: 'verified', email: 'jdoe@valleyhospice.org', via: 'service' } });
+    const { result } = await run();
+    expect(store.personAddress).toHaveBeenCalledWith(expect.any(String), 'jdoe@valleyhospice.org', 'Jane Doe', 'service', null);
+    expect(result).toMatchObject({ found: 1, verified: 1, byService: 1, answers: { verified: 1 } });
+    // The mail server's own confirmation is recorded as before, and no service count appears.
+    const own = setup({ team });
+    const mine = (await own.run()).result;
+    expect(own.store.personAddress).toHaveBeenCalledWith(expect.any(String), 'jane.doe@valleyhospice.org', 'Jane Doe', 'mail_server', null);
+    expect(mine).not.toHaveProperty('byService');
+  });
+});
+
 describe('the next decision-maker (2026-11-16)', () => {
   const team = { people: [{ name: 'Jane Doe', title: 'Administrator', sourceUrl: 'https://valleyhospice.org/team' }, { name: 'Sam Lee', title: 'Director of Business Development', sourceUrl: 'https://valleyhospice.org/team' }],
     addresses: [] };

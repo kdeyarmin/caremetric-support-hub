@@ -85,6 +85,7 @@ const marketingConnectionContracts=await Promise.all([
   ['platform.agents.growth-priority.v1','20261117190100_growth_priority_contract.sql'],
   ['platform.agents.growth-reach.v1','20261117210100_growth_reach_contract.sql'],
   ['platform.agents.trial-path.v1','20261117230100_trial_path_contract.sql'],
+  ['platform.agents.growth-address-service.v1','20261117233100_growth_address_service_contract.sql'],
 ].map(async([feature,file])=>({feature,sql:await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8')})));
 // The owner's 2026-11-15 hand-over (20261115200000_autonomy_handover.sql) lifted two refusals the founder post and paid ads gates read
 // when they were declared: any automatic approval of those kinds, and any autonomy step naming a founder post. Their replays run against
@@ -94,6 +95,9 @@ const handoverMigration=await readFile(new URL('../supabase/migrations/202611152
 // Applying the hand-over migration again redefines private.growth_person_address without the work recovery's patch (20261117180000), so
 // that migration (idempotent too) is applied again before its own gate is replayed.
 const workRecoveryMigration=await readFile(new URL('../supabase/migrations/20261117180000_work_recovery.sql',import.meta.url),'utf8');
+// The verification service's migration takes 'service' in the address recorder the hand-over replay above restores, so it is replayed
+// before its gate, as work recovery's is.
+const addressServiceMigration=await readFile(new URL('../supabase/migrations/20261117233000_growth_address_service.sql',import.meta.url),'utf8');
 const beforeHandover=`delete from private.agent_autonomy_steps where requires_feature='platform.agents.autonomy-handover.v1';
 alter table private.agent_actions drop constraint agent_actions_founder_post_check, add constraint agent_actions_founder_post_check check (
   kind <> 'social.founder_post' or coalesce(agent_key = 'social_manager' and target_kind = 'social_item' and target_id ~ '^founder:[0-9]{4}-[0-9]{2}-[0-9]{2}:[1-5]$'
@@ -383,6 +387,7 @@ try {
       if(entry.feature==='platform.agents.founder-posts.v1') await client.query(beforeHandover);
       if(entry.feature==='platform.agents.autonomy-handover.v1') await client.query(handoverMigration);
       if(entry.feature==='platform.agents.work-recovery.v1') await client.query(workRecoveryMigration);
+      if(entry.feature==='platform.agents.growth-address-service.v1') await client.query(addressServiceMigration);
       expected.features.push(entry.feature);
       await client.query(entry.sql);
       assert.deepEqual(await readContract(),expected,`${entry.feature} adds only its own feature`);

@@ -101,6 +101,37 @@ try {
   assert.deepEqual(mine, [[`jdoe@${domain}`, 'published', `https://www.${domain}/team`], [`sam.lee@${domain}`, 'mail_server', null]]);
   await assert.rejects(asRole('anon', 'select hub.growth_people(0)'), refused('42501'), 'Only signed-in sessions read the people waiting');
 
+  // ---- 4b. The verification service (20261117233000_growth_address_service.sql) --------------------------------------------------
+  // Its checks are reserved by the server, none while the owner's switch is off, within the daily number; an address it confirmed is
+  // recorded as found by the service, with no page, and as its address check's answer.
+  const seedService = (await admin.query("select key,value,changed_at from private.hub_settings where key in ('growth.address_service','growth.address_service_daily')")).rows;
+  const today = "(now() at time zone 'America/New_York')::date";
+  const seedDay = await row(`select used from private.growth_address_service_days where day=${today}`);
+  try {
+    await admin.query(`delete from private.growth_address_service_days where day=${today}`);
+    await admin.query("update private.hub_settings set value=null where key in ('growth.address_service','growth.address_service_daily')");
+    assert.equal(await store.addressServiceReserve(1), false, 'Off: no service check is reserved');
+    await admin.query("update private.hub_settings set value='true' where key='growth.address_service'");
+    await admin.query("update private.hub_settings set value='2' where key='growth.address_service_daily'");
+    assert.deepEqual([await store.addressServiceReserve(1), await store.addressServiceReserve(1), await store.addressServiceReserve(1)], [true, true, false],
+      'Within the owner\'s daily number');
+    await assert.rejects(store.addressServiceReserve(0), refused('22023'));
+    for (const role of ['authenticated', 'anon', 'service_role']) {
+      await assert.rejects(asRole(role, 'select private.growth_address_service_reserve(1)'), refused('42501'), role);
+    }
+  } finally {
+    for (const s of seedService) await admin.query('update private.hub_settings set value=$2,changed_at=$3 where key=$1', [s.key, s.value, s.changed_at]);
+    await admin.query(`delete from private.growth_address_service_days where day=${today}`);
+    if (seedDay) await admin.query(`insert into private.growth_address_service_days(day,used) values(${today},$1)`, [seedDay.used]);
+  }
+  const [lee] = (await store.peopleRecord(org, [{ name: 'Lee Ray', title: 'Executive Director', source: 'website', sourceUrl: `https://${domain}/team` }])).map(item => item.id);
+  await assert.rejects(store.personAddress(lee, `lee.ray@${domain}`, 'Lee Ray', 'service', `https://${domain}/team`), refused('22023'), 'A service-confirmed address has no page');
+  const byService = await store.personAddress(lee, `lee.ray@${domain}`, 'Lee Ray', 'service', null);
+  assert.equal(byService.found, true);
+  assert.deepEqual(await row('select mailbox_result,source_url from private.growth_contacts where id=$1', [byService.contactId]), { mailbox_result: 'verified', source_url: null });
+  assert.equal((await row('select address_found from private.growth_people where id=$1', [lee])).address_found, 'service');
+  assert.ok((await ownerCall('hub.growth_people', [0])).items.some(item => item.email === `lee.ray@${domain}` && item.found === 'service'), 'The owner sees it was found by the service');
+
   // ---- 5. The gate refuses drift ------------------------------------------------------------------------------------------------
   const client = await admin.connect();
   const rewrite = (signature, from, to) => `do $$ declare d text := pg_get_functiondef('${signature}'::regprocedure); begin
@@ -119,7 +150,7 @@ try {
     }
   } finally { client.release(); }
 
-  console.log('People finder integration passed: candidates carry their roster agencies, one matched after its search with nobody named is searched again, people come from the website and the NPI registry, a found address records how it was found and its page on the business\'s own site, waits for the owner, never on another domain, taken or unsubscribed, the owner sees how each was found, and gate drift. Nothing was fetched or sent.');
+  console.log('People finder integration passed: candidates carry their roster agencies, one matched after its search with nobody named is searched again, people come from the website and the NPI registry, a found address records how it was found and its page on the business\'s own site, waits for the owner, never on another domain, taken or unsubscribed, the owner sees how each was found, the verification service\'s checks are reserved within the owner\'s number and an address it confirmed is recorded as such, and gate drift. Nothing was fetched or sent.');
 } finally {
   if (org) {
     await admin.query('delete from private.growth_people where organization_id=$1', [org]);

@@ -23,6 +23,15 @@ describe('checking an address before the first email (20261116100000_growth_addr
     expect(Object.keys(verifyHandlers({ growth: { store: { mailboxCandidates: vi.fn() } }, features }))).toEqual(['growth.verify']);
   });
 
+  it('counts the answers the verification service gave when the mail server would not, and records them as answers', async () => {
+    const mailbox = checker({ 'info@a.example.org': { result: 'verified', email: 'info@a.example.org', via: 'service' },
+      'info@b.example.org': { result: 'rejected', via: 'service' } });
+    const { store, run } = handler({ mailbox, candidates: [{ id: 'a', email: 'info@a.example.org' }, { id: 'b', email: 'info@b.example.org' }] });
+    const outcome = await run(task);
+    expect(store.mailboxRecord.mock.calls).toEqual([['a', 'verified'], ['b', 'rejected']]);
+    expect(outcome.result).toMatchObject({ checked: 2, verified: 1, rejected: 1, byService: 2 });
+  });
+
   it('asks each handed-out address of its own business\'s mail server and records the answer, keeping only counts', async () => {
     const mailbox = checker({ 'info@dead.example.org': 'rejected', 'jane@live.example.org': { result: 'verified', email: 'jane@live.example.org' },
       'info@any.example.org': 'catch_all', 'info@quiet.example.org': { result: 'unknown', reason: 'temporary' } });

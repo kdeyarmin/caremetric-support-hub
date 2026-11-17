@@ -386,6 +386,18 @@ owner decision 2026-11-13, replacing Apollo). It needs no paid service and no ke
     An address is kept only when the server refuses a made-up mailbox and accepts the guess: a server that accepts everything,
     refuses the Hub, or answers "try later" confirms nothing. Settings → Customer growth → Most address checks a day limits how
     many agencies are checked (10 until you save a number).
+  - *A verification service when the mail server won't answer* (since 2026-11-17, off until you switch on Settings → Customer
+    growth → Ask a verification service when a mail server won't answer). Most mail servers refuse to answer the Hub's cloud
+    server: on 2026-11-16 the check confirmed 2 of 27 addresses, and every reason recorded since was a policy refusal. With the
+    switch on, when the mail server gives no clear answer (a refusal about the Hub, a temporary answer, no answer at all, or the
+    checker resting), ZeroBounce is asked about the same shapes, best first, at most three a person, and stops at the first it
+    answers for. Valid confirms the address (recorded as found by the verification service, auto-permitted under your hand-over like
+    a mail server's confirmation); catch-all and unknown confirm nothing; invalid, spam trap, abuse and do-not-mail refuse it (a
+    role address such as info@ that is do-not-mail only for being a role address counts as its mailbox answering). Each check is
+    one ZeroBounce credit, about a cent (its first 100 a month are free), reserved first under Settings → Customer growth → Most
+    verification service checks a day (50 until you save a number). It needs the ZeroBounce API key (`ZEROBOUNCE_API_KEY`, a
+    Railway secret). The `growth.people` and `growth.verify` results count its answers (`byService`). Only the address is sent to
+    ZeroBounce; no name or page.
 - **Every address waits for you** on Growth → Decision-makers to review, which shows how it was found (with the page that publishes
   it) and nothing is sent to it until you permit it. Never a personal address on another domain, never a phone number, never an
   unsubscribed address.
@@ -636,7 +648,9 @@ emails a day" is under 2%. Two settings, both off until you save them (`20261116
     later try answers, and each
     run counts them (`why`). On the first day 25 of 47 addresses went unanswered; these say whether asking again ever helps.
   - It needs Railway's Pro plan (port 25), like the people finder's checks, and is not counted in "Most address checks a day". When
-    three servers in a row cannot be reached the checker rests six hours and spends no tries.
+    three servers in a row cannot be reached the checker rests six hours and spends no tries. A server that gives no clear answer
+    sends the address to the verification service while that is switched on (see "Finding decision-makers and their addresses"):
+    one check, within its own daily number.
   - Since 2026-11-17 ([review](AI_WORKFORCE_REVIEW_2026-11-17.md): 25 of 44 checks had no answer and nothing said why):
     - A server that offers STARTTLS is asked over TLS, as servers that refuse a plain sender expect (the certificate is not checked:
       nothing but the questions crosses it); one that asks for TLS without offering it says so (`tls_required`), and a TLS

@@ -80,6 +80,7 @@ function foundHow(p:z.infer<typeof peopleSchema>['items'][number]) {
  if(p.source==='imported')return 'Imported';
  if(p.found==='published'&&p.sourceUrl?.startsWith('https://'))return <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer">Published on its website</a>;
  if(p.found==='mail_server')return 'Confirmed by its mail server';
+ if(p.found==='service')return 'Confirmed by the verification service';
  if(p.found==='apollo')return 'Apollo';
  return 'Found';
 }

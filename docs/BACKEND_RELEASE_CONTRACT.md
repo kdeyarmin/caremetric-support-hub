@@ -105,6 +105,13 @@ is executable by `hub_app_server` alone and requires its connection, `private.sa
 trial's card and activity, and lets a refused customer email wait only when the feature is declared
 ([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 4).
 
+`20261117233100_growth_address_service_contract.sql` declares `platform.agents.growth-address-service.v1` once the address check,
+people finder and work recovery features are declared, `private.growth_address_service_reserve` is executable by `hub_app_server` alone,
+requires its connection and reads the owner's switch, `private.growth_address_service_cap` and `private.growth_address_service_days`
+are closed to every role, both settings have rows, and `private.growth_person_address` and the `growth_people.address_found` check take
+'service'. Each test fails closed. The Hub server asks the verification service only when the feature is declared, the owner's switch is
+on and its key is set.
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a
