@@ -103,25 +103,29 @@ describe('sales playbook', () => {
     expect(lifecyclePlay('unknown')).toBe(lifecyclePlay('outreach'));
   });
 
-  it('gives a CareMetric Intel agency three emails around its market report: the report alone, then the trial, then a short close (owner decision 2026-11-17)', () => {
+  it('gives a CareMetric Intel agency three marketing emails around its market report, and asks the writer for the opening of each (owner direction 2026-11-17)', () => {
     expect(playbookVersion).toBe('sales-playbook.6');
     expect(shortFormLimits).toEqual({ words: 120, questions: 1 });
     // Six plans, each its own job.
     const plans = [reportTouchAngle, reviewTouchAngle, viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle, reportCloseAngle];
     expect(new Set(plans).size).toBe(6);
-    // The first: the report offered in the first sentence, one link, one question, no trial.
+    // Every plan asks for the opening only and names what the email adds below it (campaign.mjs), so nothing is written twice.
+    for (const plan of plans) {
+      expect(plan).toMatch(/You write only the opening of this email, as its first words under the greeting\./);
+      expect(plan).toMatch(/The email adds: /);
+    }
+    // The first: the report for this agency, its one link, at most one question; the email itself tells the story and offers the trial.
     for (const first of [reportTouchAngle, reviewTouchAngle]) {
       expect(first).toMatch(/^First email, built around /);
-      expect(first).toMatch(/That sentence is what the reader sees in their inbox beside the subject, so it holds the offer and nothing else\./);
       expect(first).toMatch(/Never state or hint at the agency's own figure, rank or rating: the reader opens the report to see them\./);
-      expect(first).toMatch(/you run a home health and hospice agency, and you built CareMetric Intel to see your own market this way/);
-      expect(first).toMatch(/No other link, no free trial and no price: those come in the next email\./);
+      expect(first).toMatch(/what CareMetric Intel does in five points, your story as the founder in your own words, and the free trial with its link/);
+      expect(first).toMatch(/No other link, no free trial, no price and no story about yourself in your words\./);
       expect(first).not.toMatch(/Founders Sale|risk-free|three questions|two links/);
     }
-    // The second offers the trial; the third does not, and leaves the report with the reader.
-    for (const second of [viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle]) expect(second).toMatch(/free trial on one county they serve/);
-    expect(reportCloseAngle).toMatch(/^Third and last email: a short close of about fifty words\./);
-    expect(reportCloseAngle).toMatch(/No new pitch, no free trial/);
+    // The second email's sections carry the Founders Sale and the trial; the third's, the report and the trial's link.
+    for (const second of [viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle]) expect(second).toMatch(/the Founders Sale, the 30-day free trial with its link, and the market report's link again/);
+    expect(reportCloseAngle).toMatch(/^Third and last email: a short close\./);
+    expect(reportCloseAngle).toMatch(/No link in your words, no new pitch and no question\./);
     // None tells the writer to call or meet, and the words each uses for the report's physicians pass the standing check (standing.mjs).
     for (const plan of plans) {
       expect(offersMeeting(plan)).toBe(false);

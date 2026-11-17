@@ -108,7 +108,7 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
   const work = { kind: 'outreach', action: 'First touch', success: 'Reply' };
   const reply = (body, citations = ['roster-1']) => ({ configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: { subject: 'Your county referral market', body, citations, needsHuman: false } })) });
 
-  it('offers the agency its own market report and nothing else, and leaves the trial to the second email (owner decision 2026-11-17)', async () => {
+  it('has the writer open with the agency\'s own market report, and adds what the software does and the trial below it (owner direction 2026-11-17)', async () => {
     const link = reportLinks({ key }).linkFor(opportunity);
     const body = `I put together a free market report for Riverbend Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nIt shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county's residents use most and the highest-ranked physicians for outreach.\n\nI run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nDoes it match what your team sees in the field?`;
     const model = reply(body);
@@ -116,15 +116,19 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     expect(draft).toMatchObject({ modelGenerated: true });
     const input = JSON.parse(model.run.mock.calls[0][1].user);
     expect(input.touchPlan).toBe(reportTouchAngle);
-    expect(input.touchPlan).toMatch(/First sentence: you put together a free market report for this agency, by name, from Medicare data/);
-    expect(input.touchPlan).toMatch(/exactly one short question the reader can answer by reply once they have looked/);
-    expect(input.touchPlan).toMatch(/No other link, no free trial and no price: those come in the next email/);
-    // The longer email it replaces asked three questions, offered the trial and stated its card terms.
+    expect(input.touchPlan).toMatch(/you put together a free market report for this agency, by name, from Medicare data/);
+    expect(input.touchPlan).toMatch(/You may end with one short question the reader can answer by reply/);
+    expect(input.touchPlan).toMatch(/No other link, no free trial, no price and no story about yourself in your words\./);
+    // The longer email it replaces asked three questions and stated the trial's card terms.
     expect(input.touchPlan).not.toMatch(/credit card|managers and marketing team|three questions|one hundred seventy words/);
-    expect(input.style).toBe('Keep the body to about one hundred words, never more than 120.');
+    expect(input.style).toBe('Write two or three sentences, never more than 120 words.');
+    // The stored email is the writer's opening, then the sections every agency gets: what the software does and the trial.
+    expect(draft.body.startsWith(body)).toBe(true);
+    expect(draft.body).toContain('What CareMetric Intel does for your agency, every day');
+    expect(draft.body).toMatch(/Try CareMetric Intel free for 30 days on one county, with your own team\..*\nhttps:\/\/www\.caremetricintel\.com\/\?utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch1/);
     expect(draft.arms).toMatchObject({ length: 'report', form: 'short' });
     expect(draft.variant).toBe('report');
-    // The trial does not belong in this email, with or without its link.
+    // The trial is the email's to offer, not the writer's: in the opening it is refused, with or without its link.
     expect(await draftMessage({ opportunity, work, task: {}, model: reply(`${body}\n\nYou can try it free for 30 days:\nhttps://www.caremetricintel.com/`), report: link })).toBeNull();
     expect(await draftMessage({ opportunity, work, task: {}, model: reply(body.replace('Does it match what your team sees in the field?', 'Would a free trial on your county help?')), report: link })).toBeNull();
     // The second email offers it, in plain words: "risk-free", "no credit card" and the card terms themselves are refused there.
@@ -135,8 +139,9 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     };
     const offered = await second('You can try it free for 30 days on one county:');
     expect(offered.sent).toMatchObject({ modelGenerated: true });
-    expect(offered.plan).toMatch(/End with the 30-day free trial on one county they serve/);
-    expect(offered.plan).toMatch(/never call the trial risk-free/);
+    expect(offered.plan).toMatch(/the Founders Sale, the 30-day free trial with its link, and the market report's link again/);
+    expect(offered.sent.body).toContain('A week in CareMetric Intel');
+    expect(offered.sent.body).toContain('Founders Sale: 50% off your first 12 months');
     expect((await second('You can try it risk-free for 30 days on one county:')).sent).toBeNull();
     expect((await second('You can try it free for 30 days, with no credit card needed:')).sent).toBeNull();
     expect((await second('You can try it free for 30 days. A credit card is required to start the trial:')).sent).toBeNull();
@@ -149,7 +154,7 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     expect(draft).toMatchObject({ modelGenerated: true, arms: { form: 'short' } });
     const input = JSON.parse(model.run.mock.calls[0][1].user);
     expect(input.touchPlan).toBe(reviewTouchAngle);
-    expect(input.touchPlan).toMatch(/entering its CMS certification number on the market report page/);
+    expect(input.touchPlan).toMatch(/put the market report page's link on its own line/);
     expect(input.links.map(item => item.url)).toContain('https://www.caremetricintel.com/market-review');
     // Its one link is that page: the trial's page in its place, or beside it, is refused.
     expect(await draftMessage({ opportunity: web, work, task: {}, model: reply('A free market report for Riverbend Home Health is one step away:\nhttps://www.caremetricintel.com/\n\nDoes your team know which agencies lead Riverton County?', ['web-1']) })).toBeNull();

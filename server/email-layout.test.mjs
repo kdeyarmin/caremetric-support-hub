@@ -12,6 +12,21 @@ const themeColors = key => {
     .map(color => color.toUpperCase()));
 };
 
+/** One of every marketing block, each value carrying `value`. */
+const marketingSections = value => [
+  { type: 'message', text: `Opening ${value}` },
+  { type: 'tiles', eyebrow: `REPORT ${value}`, title: `Your report ${value}`, subtitle: `From data ${value}`, items: [`ONE ${value}`, 'TWO', 'THREE'], value: `inside ${value}` },
+  { type: 'action', label: `Open ${value}`, url: 'https://intel.example.com/report/abc?a=1&b=2', note: `Opens ${value}` },
+  { type: 'features', eyebrow: `WHAT ${value}`, title: `What it does ${value}`, items: [[`Finds ${value}`, `Every source ${value}`], ['Plans', 'Each week']] },
+  { type: 'stats', items: [[`150+ ${value}`, `datasets ${value}`], ['Daily', 'checks'], ['3,200+', 'counties']] },
+  { type: 'quote', text: `I built it ${value}`, name: `Dr. ${value}`, role: `Founder ${value}` },
+  { type: 'cards', title: `A week ${value}`, items: [{ tag: `Monday ${value}`, title: `Pick ${value}`, text: `Who to see ${value}` }] },
+  { type: 'offer', eyebrow: `SALE ${value}`, title: `Half off ${value}`, text: `For a year ${value}` },
+  { type: 'panel', title: `Try it ${value}`, text: `Free ${value}`, button: { label: `Start ${value}`, url: 'https://intel.example.com/?utm_source=a&utm_medium=b', quiet: true },
+    link: { lead: `Still here ${value}:`, label: `Open ${value}`, url: 'https://intel.example.com/report/abc' }, note: `Reply ${value}` },
+  { type: 'points', title: `In short ${value}`, items: [[`Finds ${value}`, `sources ${value}`]], link: { lead: `When ready ${value}:`, label: `start ${value}`, url: 'https://intel.example.com/' } },
+];
+
 /** Every email the Hub sends, plus the branded layout every future notification will use. */
 const emails = {
   'support reply': () => supportReplyEmail({ subject: `Login help ${hostile}`, reference: 1042, body: `Hi ${hostile},\n\nWe reset your access.\n\nThanks,\nSam` }),
@@ -35,6 +50,12 @@ const emails = {
     ],
     footer: [`You're receiving this because ${hostile}.`],
   }),
+  // The sections of a marketing email to an agency (growth/campaign.mjs), in each theme.
+  ...Object.fromEntries(['intel', 'hub', 'carebase'].map(theme => [`marketing email layout (${theme})`, () => renderEmail({
+    theme, title: `Report for ${hostile}`, preheader: `A report for ${hostile}.`, eyebrow: `Ready ${hostile}`, heading: `Your report ${hostile}`, greeting: `Hello ${hostile},`,
+    blocks: marketingSections(hostile),
+    signature: [`Founder ${hostile}`, 'CareMetric'], footer: [`1 Main St ${hostile}`],
+  })])),
 };
 
 describe('every outgoing email uses the shared layout', () => {
@@ -97,6 +118,47 @@ describe('layout behavior', () => {
   });
   it('refuses unknown blocks instead of dropping content', () => {
     expect(() => renderEmail({ title: 't', blocks: [{ type: 'raw', html: '<b>x</b>' }], footer: [] })).toThrow(TypeError);
+  });
+});
+
+describe('marketing sections (email review 2026-11-17)', () => {
+  const render = (blocks, over = {}) => renderEmail({ theme: 'intel', title: 'Your market report', heading: 'Your market report', blocks, signature: [], footer: ['CareMetric'], ...over });
+  it('puts a short line in capitals above the headline, and opens with the caller\'s own greeting', () => {
+    const email = render([{ type: 'message', text: 'Opening.' }], { eyebrow: 'Your free market report is ready', greeting: 'Hello Jane,' });
+    expect(email.html).toMatch(/>YOUR FREE MARKET REPORT IS READY<\/p>\n<h1 [^>]*>Your market report<\/h1>\n<p [^>]*>Hello Jane,<\/p>/);
+    expect(email.text.startsWith('Your market report\n\nHello Jane,\n\nOpening.')).toBe(true);
+    // Without them an email is as before: no line above the headline, and the usual greeting.
+    const plain = render([{ type: 'message', text: 'Opening.' }]);
+    expect(plain.html).not.toContain('letter-spacing:1.6px');
+    expect(plain.html).toContain('>Hello,</p>');
+    // A personal email has no headline, so no line above it.
+    expect(render([], { layout: 'personal', eyebrow: 'Above' }).html).not.toContain('ABOVE');
+  });
+  it('lays out a report card, one accent button, numbered points, figures, a signed quote, step cards, an offer and a closing panel', () => {
+    const email = render(marketingSections('x'));
+    // A button is one link in the accent color, with no "copy this link" line under it: a marketing link is long.
+    expect(email.html).toContain('<a href="https://intel.example.com/report/abc?a=1&amp;b=2" target="_blank"');
+    expect(email.html).toContain('>Open x \u2192</a>');
+    expect(email.html).not.toMatch(/copy|paste/i);
+    expect(email.html).toContain(`bgcolor="${intelPalette.brandDark}"`);
+    // The closing panel's quiet button is light on the dark card, so the report's button stays the one accent above it.
+    expect(email.html).toContain(`bgcolor="${intelPalette.heading}"`);
+    expect(email.html).toContain('&ldquo;I built it x&rdquo;');
+    expect(email.html).toContain('>MONDAY X</p>');
+    expect(email.html).toContain('>IN SHORT X</p>');
+    expect(email.html).toMatch(/>1<\/td>[\s\S]*>2<\/td>/);
+    // The text part says the same thing, in order, with each link written out.
+    for (const part of ['Your report x: ONE x, TWO, THREE', 'Open x:\nhttps://intel.example.com/report/abc?a=1&b=2', 'What it does x\n\n1. Finds x\nEvery source x\n\n2. Plans\nEach week',
+      '150+ x datasets x. Daily checks. 3,200+ counties', '"I built it x"', 'A week x\n\nMonday x: Pick x\nWho to see x', 'Half off x\nFor a year x',
+      'Try it x\nFree x\nhttps://intel.example.com/?utm_source=a&utm_medium=b', 'In short x\n- Finds x sources x']) expect(email.text, part).toContain(part);
+  });
+  it('accepts only absolute https links in a button, a panel and a linked line', () => {
+    for (const url of ['javascript:alert(1)', 'http://intel.example.com', '/relative', 'https://intel.example.com/"onmouseover="x']) {
+      expect(() => render([{ type: 'action', label: 'Go', url }]), url).toThrow(TypeError);
+      expect(() => render([{ type: 'panel', title: 't', text: 'x', button: { label: 'Go', url } }]), url).toThrow(TypeError);
+      expect(() => render([{ type: 'panel', title: 't', text: 'x', link: { label: 'Go', url } }]), url).toThrow(TypeError);
+      expect(() => render([{ type: 'points', items: [['a', 'b']], link: { label: 'Go', url } }]), url).toThrow(TypeError);
+    }
   });
 });
 

@@ -123,7 +123,7 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 `HUB_APOLLO_API_KEY` (the Hub finds people and their addresses itself); the Hub warns at start while any of them is set. Delete them.
 
 **Retired settings.** "Test a short first email" (Customer growth) left the Settings page on 2026-11-17: every first email built around
-a market report is that form now ([Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report)). Its row stays in the database,
+a market report has one form now, a short opening and the email's own sections ([Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report)). Its row stays in the database,
 because the release gate that created it checks for it, and nothing reads it (`retiredSettings` in `server/hub-settings.mjs`).
 
 **Growth email display name**, when empty: a founder-signed email to a prospect arrives from "Dr. Kevin Deyarmin, CareMetric", and

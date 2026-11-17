@@ -232,10 +232,12 @@ Each agent keeps its existing controls and approval steps. This section only say
 - **Who to prioritize while new enrollments are frozen:** established agencies in counties with several competitors, agencies hiring
   marketers or liaisons, and any newly certified agency or new owner the roster shows. The last two are rare now but are the strongest
   signals.
-- **Touch 1 to a home health agency or hospice** (owner decision 2026-11-17) is its free market report and nothing else. The first
-  sentence offers the report, by the agency's name; then its link, what is inside, one sentence on who the founder is, and one
-  question to answer by reply. No trial and no price: the trial is offered in touch 2, and touch 3 is a short close that leaves the
-  report with them. [Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report) has the form and its checks.
+- **The three touches to a home health agency or hospice** (owner direction 2026-11-17) are designed marketing emails in Intel's
+  look. The writer writes only each one's short opening for that agency; the rest is the same for every agency and comes from the
+  fact sheet. Touch 1: the agency's free market report first, then what Intel does in five points, the founder's story and the
+  free trial. Touch 2: a week of the work in Intel, the Founders Sale and the trial. Touch 3: a short close that leaves the report
+  with them. No price in any of them, and no card terms. [Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report) has
+  the form and its checks.
 - **Touch 1 to anyone else** (a nursing home, a CareBase prospect): the founder's story in one or two sentences, one likely problem
   as a question, one sentence on how Intel helps, then the free trial. No price.
 - **Rotate the lead pillar** across prospects. The experiment angles are referral sources, territory, competitors, visit prep, hospital

@@ -2,6 +2,7 @@ import { products, planOpportunity, qualify } from './policy.mjs';
 import { draftMessage, growthPromptVersion } from './draft.mjs';
 import { discoveryQuery, operatorHost, playbookFor, reportTouchAngle, reviewTouchAngle, unviewedTouchAngle } from './playbook.mjs';
 import { assessProspect } from './assessment.mjs';
+import { readCampaign } from './campaign.mjs';
 
 /**
  * The key the database's send claim requires for a recent passing evaluation (`version='growth.1'` in private.growth_claim_message).
@@ -31,7 +32,7 @@ export async function evaluateGrowth(now = new Date()) {
     const work = { kind: 'outreach', action: 'Offer one useful next step.', success: 'A qualified reply.' };
     const draft = { subject: 'A useful next step', body: 'Would a free trial with your own team be useful?', citations: ['source-a'], needsHuman: false };
     const model = output => ({ configured: true, run: async () => ({ outcome: 'completed', output }) });
-    // The first email to a CareMetric Intel agency is its market report and nothing else (its own cases, below), so the general cases
+    // The first email to a CareMetric Intel agency has a form of its own (its own cases, below), so the general cases
     // are drafted as that agency's second email. CareBase's first email is the general one.
     const general = product === 'caremetric-intel' ? { ...base, touches: 1 } : base;
     const touch = product === 'caremetric-intel' ? 2 : 1;
@@ -55,11 +56,12 @@ export async function evaluateGrowth(now = new Date()) {
     const ownTags = `utm_source=caremetric&utm_medium=email&utm_campaign=growth-${product === 'carebase' ? 'carebase' : 'intel'}-touch${touch}`;
     const tagged = await invoke({ ...draft, body: `Would a free trial help?\n\n${page.replace(/(#.*)?$/, '?utm_source=x&utm_medium=y&utm_campaign=z$1')}` });
     // utm_content names the draft's experiment arm (draft.mjs messageArms): short codes only.
-    check('tagged product page link allowed and given its campaign tags', tagged?.modelGenerated === true && new RegExp(`${page.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\?${ownTags}&utm_content=[a-z0-9-]{1,60}$`).test(tagged.body));
+    check('tagged product page link allowed and given its campaign tags', tagged?.modelGenerated === true && new RegExp(`${page.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\?${ownTags}&utm_content=[a-z0-9-]{1,60}$`, 'm').test(tagged.body));
     check('tagged link to another host rejected', await invoke({ ...draft, body: 'Would a free trial help?\n\nhttps://unsupported.example.org/?utm_source=x&utm_medium=y&utm_campaign=z' }) === null);
     check('tag carrying another address rejected', await invoke({ ...draft, body: `Would a free trial help?\n\n${page}?utm_source=x&utm_medium=y&utm_campaign=z&next=https://unsupported.example.org` }) === null);
-    // The first email to a CareMetric Intel agency (owner decision 2026-11-17): its market report and nothing else, held by code to the
-    // report's one link and one question, with the trial moved to the second email. No prospect email names the card a trial needs.
+    // The first email to a CareMetric Intel agency (owner direction 2026-11-17): the writer's opening, held by code to the report's one
+    // link and at most one question, then what the software does and the trial, added by code. No prospect email names the card a
+    // trial needs.
     const report = { label: 'Free market report for the agency', url: 'https://www.caremetricintel.com/report/synthetic.case' };
     const reviewPage = 'https://www.caremetricintel.com/market-review';
     const inside = 'It shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county\'s residents use most and the highest-ranked physicians for outreach.';
@@ -82,10 +84,15 @@ export async function evaluateGrowth(now = new Date()) {
       const trial = `You can try it free for 30 days on one county:\n${playbookFor(product).nextStep.url}`;
       check('second email offers the trial', (await second(`One page of the report lists the hospitals your county's residents use. Does your team plan its week around them?\n${report.url}\n\n${trial}`))?.modelGenerated === true
         && seen.at(-1)?.touchPlan === unviewedTouchAngle && /free trial/.test(unviewedTouchAngle));
+      // Each of the agency's three emails carries its marketing sections after the writer's opening (campaign.mjs), and reads back whole.
+      const whole = touches => draftMessage({ opportunity: { ...base, touches }, work, task: {}, report });
+      const laid = async touches => readCampaign((await whole(touches))?.body, { reports: { accepts: url => url === report.url } });
+      check('agency email says what the software does and offers the trial', (await laid(0))?.touch === 1 && (await laid(1))?.touch === 2 && (await laid(2))?.touch === 3
+        && /What CareMetric Intel does for your agency, every day/.test(written.body) && /Try CareMetric Intel free for 30 days on one county/.test(written.body));
       check('prospect email calling the data public rejected', await second(`One page of the report, built from public Medicare data, lists the hospitals your county's residents use. Does your team plan its week around them?\n${report.url}\n\n${trial}`) === null);
       check('prospect email naming the card rejected', await second(`Does your team plan its week around the hospitals your county's residents use?\n\nA credit card is required to start the trial. ${trial}`) === null);
     } else {
-      check('report-only first email never written for this product', (await draftMessage({ opportunity: base, work, task: {}, model: capture(draft), report }))?.arms?.form === undefined);
+      check('report-led first email never written for this product', (await draftMessage({ opportunity: base, work, task: {}, model: capture(draft), report }))?.arms?.form === undefined);
     }
     check('discovery rotates daily', discoveryQuery(product, now) !== discoveryQuery(product, new Date(now.getTime() + 86400000)));
     check('directories are not prospects', !operatorHost('www.aplaceformom.com') && !operatorHost('pa.gov'));

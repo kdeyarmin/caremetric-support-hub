@@ -6,7 +6,7 @@
  * 1. Twelve made-up CareMetric Intel agencies (`liveEvaluationCases`): the four triggers the sweep writes from (newly certified, a new
  *    owner, the CMS record alone, the agency's own website), each three times, so every pairing of with or without an account brief and
  *    the agency's own report or the market report page comes up three times. (Until 2026-11-17 the second half of each pairing was the
- *    short or the standard first email; every first email is now the report and nothing else, so the link it carries took its place.)
+ *    short or the standard first email; every first email built around a report now has one form, so the link it carries took its place.)
  *    Invented names, places, numbers and sites; no person, address or phone.
  * 2. Each is written on the real writer path (draft.mjs `draftMessage`, the real model, the top model where the sweep would use it, the
  *    approved learning memo where the sweep would use it) and read by the real reader (draft.mjs `criticPromptVersion`), as a first

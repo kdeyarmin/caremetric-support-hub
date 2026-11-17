@@ -14,6 +14,7 @@ import { evaluateGrowth } from './evaluation.mjs';
 import { enrichProspects } from './enrichment.mjs';
 import { discoveryQueries, linkablePages, playbookFor, senderFor } from './playbook.mjs';
 import { founder } from '../agents/content/facts.mjs';
+import { campaignBlocks, campaignEyebrow, campaignProduct, readCampaign } from './campaign.mjs';
 import { searchResultLimit } from './research.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
 import { chooseSite, confirmsSite, phoneCandidates, phoneQuery, rankTarget, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
@@ -603,9 +604,23 @@ export function growthEmail({product,purpose=null,quiet=false,subject,body,posta
   const address=String(postalAddress??'').trim();
   // The company's name once: the postal address often begins with it.
   const footer=[...(/^caremetric\b/i.test(address)?[]:['CareMetric']),...(address?[address]:[]),{label:growthOptOutLabel,url:unsubscribeUrl}];
-  return renderEmail({layout:'letter',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
+  const signature=[...(sender.signer??[sender.team]),...(sender.site?[sender.site]:[])];
+  const letter=renderEmail({layout:'letter',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
     blocks:[{type:'message',text:`Hello${greeting?` ${greeting}`:''},\n\n${words}`,links:messageLinks(product,words,reports),labels:linkLabels(product,words,reports)}],
-    signature:[...(sender.signer??[sender.team]),...(sender.site?[sender.site]:[])],footer});
+    signature,footer});
+  // A marketing email to a CareMetric Intel agency (campaign.mjs; email review 2026-11-17: the plain letter read as something to throw
+  // away). Its words are the writer's opening and the sections code added when it was drafted; here they are laid out in Intel's own
+  // look: the subject as the headline, the opening, the report's card and button, what the software does, the founder's words, the
+  // offer and the trial. The plain-text part is the letter, word for word as approved. Any other email, and one whose sections were
+  // edited, stays a letter.
+  const campaign=product===campaignProduct&&purpose==='marketing'?readCampaign(words,{reports}):null;
+  if(!campaign)return letter;
+  const designed=renderEmail({layout:'branded',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
+    eyebrow:campaignEyebrow(campaign.touch),heading:subject,greeting:`Hello${greeting?` ${greeting}`:''},`,
+    blocks:campaignBlocks(campaign,{links:messageLinks(product,campaign.opening,reports)}).filter(Boolean),
+    // The first email carries the founder's words as a signed quote, so it needs no second sign-off under its closing panel.
+    signature:campaign.touch===1?[]:signature,footer});
+  return {html:designed.html,text:letter.text};
 }
 export function growthExecutors({growth,mail,publicOrigin,postalAddress,features=null}) {
   if(!growth)return {};

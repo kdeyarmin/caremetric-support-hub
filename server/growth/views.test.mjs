@@ -94,13 +94,13 @@ describe('the second email follows whether the report was opened', () => {
   it('offers the free trial in both second emails, in plain words, and never says whether the report was opened or what the trial needs', () => {
     for (const plan of [viewedTouchAngle, unviewedTouchAngle]) {
       expect(plan).toMatch(/^Second email to an agency whose market report was sent with the first\. Do not say or hint that you know whether anyone opened it\./);
-      expect(plan).toMatch(/End with the 30-day free trial on one county they serve, in one plain sentence, then the trial link on its own line\./);
-      expect(plan).toMatch(/Do not bring up the credit card or billing, and never call the trial risk-free\./);
+      // The writer writes the opening; the email's own sections offer the trial (campaign.mjs).
+      expect(plan).toMatch(/The email adds: a week of the work in CareMetric Intel in four steps, the Founders Sale, the 30-day free trial with its link, and the market report's link again\./);
+      expect(plan).toMatch(/No link in your words, and nothing about the credit card or billing\./);
       expect(plan).not.toMatch(/credit card is required|canceling before it ends|card terms/);
     }
-    // After an open the email moves on from the report; otherwise it points to it once more.
-    expect(viewedTouchAngle).toMatch(/One link: the trial\./);
-    expect(unviewedTouchAngle).toMatch(/put the report link again on its own line/);
-    expect(unviewedTouchAngle).toMatch(/two links: the report, then the trial\./);
+    // After an open the opening moves on from the report; otherwise it leads with a page of it.
+    expect(viewedTouchAngle).toMatch(/Pick up where a report leaves an agency/);
+    expect(unviewedTouchAngle).toMatch(/lead with one page of the report/);
   });
 });

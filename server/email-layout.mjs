@@ -249,6 +249,106 @@ ${rows.map(([label, value]) => `<tr><td valign="top" style="padding:4px 12px 4px
     text: ({ title, text }) => (title ? `${title} ${text}` : String(text)),
   },
 };
+// ---- Marketing blocks ---------------------------------------------------------------------------------------------------------------
+// The sections of a marketing email to a prospect (growth/campaign.mjs; email review 2026-11-17: a plain letter read as something to
+// throw away). Built from the theme's own colors, so they follow the product's look. Every value is escaped here.
+const eyebrowStyle = s => `margin:0 0 8px;${s.font}font-size:12px;line-height:16px;letter-spacing:1.6px;font-weight:700;color:${s.p.brand};`;
+const titleStyle = s => `margin:0 0 16px;${s.font}font-size:22px;line-height:29px;font-weight:800;color:${s.p.heading};`;
+/** A pill button in the theme's accent, with no copy-this-link fallback under it: a marketing link is long, and the text part carries it. */
+const accentButton = (label, url, s, quiet = false) => `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 6px;">
+<tr><td align="center" bgcolor="${quiet ? s.p.heading : s.p.brandDark}" style="border-radius:999px;background-color:${quiet ? s.p.heading : s.p.brandDark};">
+${s.anchor(url, `${label} \u2192`, `display:inline-block;padding:15px 28px;${s.font}font-size:17px;line-height:20px;font-weight:700;color:${quiet ? s.p.canvas : s.p.onBrand};text-decoration:none;border-radius:999px;`)}
+</td></tr></table>`;
+const sectionRule = s => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 22px;"><tr><td style="border-top:1px solid ${s.p.hairline};font-size:0;line-height:0;">&nbsp;</td></tr></table>`;
+const marketingBlocks = {
+  /** One primary action in the accent color, with a short note under it. */
+  action: {
+    html: ({ label, url, note, quiet }, s) => `${accentButton(label, url, s, quiet === true)}${note ? `\n<p style="${s.small}margin-bottom:18px;">${escapeHtml(note)}</p>` : ''}`,
+    text: ({ label, url }) => `${label}:\n${url}`,
+  },
+  /** A preview card: what a report holds, as tiles whose values the reader opens the report to see. */
+  tiles: {
+    html: ({ eyebrow, title, subtitle, items, value }, s) => {
+      const cells = listOf(items).map(label => `<td width="50%" valign="top" style="padding:5px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${s.p.card};border:1px solid ${s.p.hairline};border-radius:10px;border-collapse:separate;"><tr><td style="padding:11px 12px 10px;">
+<p style="margin:0 0 4px;${s.font}font-size:11px;line-height:15px;letter-spacing:0.8px;font-weight:700;color:${s.p.muted};">${escapeHtml(label)}</p>
+<p style="margin:0;${s.font}font-size:17px;line-height:22px;font-weight:700;color:${s.p.brand};">${escapeHtml(value)}</p></td></tr></table></td>`);
+      const rows = [];
+      for (let i = 0; i < cells.length; i += 2) rows.push(`<tr>${cells[i]}${cells[i + 1] ?? '<td width="50%"></td>'}</tr>`);
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px;background-color:${s.p.panel};border:1px solid ${s.p.hairline};border-top:3px solid ${s.p.brandDark};border-radius:12px;border-collapse:separate;"><tr><td style="padding:16px 13px 11px;">
+${eyebrow ? `<p style="margin:0 5px 2px;${s.font}font-size:11px;line-height:15px;letter-spacing:1.4px;font-weight:700;color:${s.p.brand};">${escapeHtml(eyebrow)}</p>` : ''}
+<p style="margin:0 5px 10px;${s.font}font-size:19px;line-height:25px;font-weight:700;color:${s.p.heading};">${escapeHtml(title)}${subtitle ? `<br><span style="font-size:14px;font-weight:500;color:${s.p.body};">${escapeHtml(subtitle)}</span>` : ''}</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows.join('\n')}</table></td></tr></table>`;
+    },
+    text: ({ title, items }) => `${title}: ${listOf(items).join(', ')}`,
+  },
+  /** What the product does: numbered points, each a bold title and a line under it, under a section heading. */
+  features: {
+    html: ({ eyebrow, title, items }, s) => `${sectionRule(s)}${eyebrow ? `<p style="${eyebrowStyle(s)}">${escapeHtml(eyebrow)}</p>` : ''}<h2 style="${titleStyle(s)}">${escapeHtml(title)}</h2>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 6px;">
+${pairsOf(items).map(([name, words], index) => `<tr><td valign="top" width="44" style="padding:0 0 18px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" valign="middle" width="32" height="32" bgcolor="${s.p.brandDark}" style="width:32px;height:32px;border-radius:16px;background-color:${s.p.brandDark};${s.font}font-size:15px;line-height:32px;font-weight:800;color:${s.p.onBrand};">${index + 1}</td></tr></table></td>
+<td valign="top" style="padding:0 0 18px;"><p style="margin:0 0 3px;${s.font}font-size:17px;line-height:24px;font-weight:700;color:${s.p.heading};">${escapeHtml(name)}</p><p style="margin:0;${s.font}font-size:15px;line-height:23px;color:${s.p.body};">${escapeHtml(words)}</p></td></tr>`).join('\n')}
+</table>`,
+    text: ({ title, items }) => [title, ...pairsOf(items).map(([name, words], index) => `${index + 1}. ${name}\n${words}`)].join('\n\n'),
+  },
+  /** Labeled cards, one per step ("Monday", "Every day"), under a section heading. */
+  cards: {
+    html: ({ title, items }, s) => `<h2 style="${titleStyle(s)}">${escapeHtml(title)}</h2>
+${listOf(items).map(item => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;background-color:${s.p.panel};border:1px solid ${s.p.hairline};border-left:3px solid ${s.p.brandDark};border-radius:10px;border-collapse:separate;"><tr><td style="padding:14px 16px 13px;">
+<p style="margin:0 0 4px;${s.font}font-size:11px;line-height:15px;letter-spacing:1.3px;font-weight:700;color:${s.p.brand};">${escapeHtml(String(item?.tag ?? '').toUpperCase())}</p>
+<p style="margin:0 0 3px;${s.font}font-size:17px;line-height:24px;font-weight:700;color:${s.p.heading};">${escapeHtml(item?.title)}</p>
+<p style="margin:0;${s.font}font-size:15px;line-height:23px;color:${s.p.body};">${escapeHtml(item?.text)}</p></td></tr></table>`).join('\n')}`,
+    text: ({ title, items }) => [title, ...listOf(items).map(item => `${item?.tag}: ${item?.title}\n${item?.text}`)].join('\n\n'),
+  },
+  /** A row of figures: a large value over a small label, two to a row. */
+  stats: {
+    html: ({ items }, s) => {
+      const cells = pairsOf(items).map(([value, label]) => `<td width="50%" valign="top" style="padding:10px 6px;"><p style="margin:0;${s.font}font-size:24px;line-height:28px;font-weight:800;color:${s.p.heading};">${escapeHtml(value)}</p><p style="margin:2px 0 0;${s.font}font-size:13px;line-height:18px;color:${s.p.muted};">${escapeHtml(label)}</p></td>`);
+      const rows = [];
+      for (let i = 0; i < cells.length; i += 2) rows.push(`<tr>${cells[i]}${cells[i + 1] ?? '<td width="50%"></td>'}</tr>`);
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;background-color:${s.p.canvas};border:1px solid ${s.p.hairline};border-radius:12px;border-collapse:separate;"><tr><td style="padding:8px 12px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows.join('\n')}</table></td></tr></table>`;
+    },
+    text: ({ items }) => pairsOf(items).map(([value, label]) => `${value} ${label}`).join('. '),
+  },
+  /** Someone's own words, with their name and role under them. */
+  quote: {
+    html: ({ text, name, role }, s) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;"><tr><td style="border-left:3px solid ${s.p.brandDark};padding:2px 0 2px 16px;">
+<p style="margin:0 0 10px;${s.font}font-size:17px;line-height:27px;font-style:italic;color:${s.p.heading};">&ldquo;${escapeHtml(text)}&rdquo;</p>
+${name ? `<p style="margin:0;${s.font}font-size:15px;line-height:22px;font-weight:700;color:${s.p.heading};">${escapeHtml(name)}</p>` : ''}${role ? `<p style="margin:0;${s.font}font-size:14px;line-height:21px;color:${s.p.muted};">${escapeHtml(role)}</p>` : ''}</td></tr></table>`,
+    text: ({ text }) => `"${text}"`,
+  },
+  /** A current offer, in the theme's highlighted callout. */
+  offer: {
+    html: ({ eyebrow, title, text }, s) => {
+      const colors = s.theme.callouts.info;
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;background-color:${colors.fill};border:1px solid ${colors.border};border-radius:14px;border-collapse:separate;"><tr><td style="padding:20px 20px 18px;">
+${eyebrow ? `<p style="${eyebrowStyle(s)}margin-bottom:6px;">${escapeHtml(eyebrow)}</p>` : ''}<p style="margin:0 0 8px;${s.font}font-size:24px;line-height:30px;font-weight:800;color:${s.p.heading};">${escapeHtml(title)}</p>
+<p style="margin:0;${s.font}font-size:15px;line-height:23px;color:${colors.text};">${escapeHtml(text)}</p></td></tr></table>`;
+    },
+    text: ({ title, text }) => `${title}\n${text}`,
+  },
+  /** The closing panel: a heading, a sentence, one button, and an optional second link and note under it. */
+  panel: {
+    html: ({ title, text, button, link, note }, s) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px;background-color:${s.p.panel};border:1px solid ${s.p.brandDark};border-radius:14px;border-collapse:separate;"><tr><td style="padding:22px 20px 20px;">
+<h2 style="margin:0 0 8px;${s.font}font-size:22px;line-height:29px;font-weight:800;color:${s.p.heading};">${escapeHtml(title)}</h2>
+<p style="margin:0 0 16px;${s.font}font-size:16px;line-height:25px;color:${s.p.body};">${escapeHtml(text)}</p>
+${button ? accentButton(button.label, button.url, s, button.quiet === true) : ''}
+${link ? `<p style="margin:12px 0 0;${s.font}font-size:15px;line-height:22px;color:${s.p.body};">${link.lead ? `${escapeHtml(link.lead)} ` : ''}${s.anchor(link.url, link.label, `color:${s.p.brand};font-weight:700;text-decoration:underline;`)}</p>` : ''}
+${note ? `<p style="margin:10px 0 0;${s.font}font-size:14px;line-height:21px;color:${s.p.muted};">${escapeHtml(note)}</p>` : ''}</td></tr></table>`,
+    text: ({ title, text, button }) => `${title}\n${text}${button ? `\n${button.url}` : ''}`,
+  },
+  /** Short points with a check mark, each with a bold lead, under a small heading, then an optional linked line. */
+  points: {
+    html: ({ title, items, link }, s) => `${sectionRule(s)}${title ? `<p style="margin:0 0 12px;${s.font}font-size:12px;line-height:16px;letter-spacing:1.6px;font-weight:700;color:${s.p.muted};">${escapeHtml(String(title).toUpperCase())}</p>` : ''}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 6px;">
+${pairsOf(items).map(([lead, words]) => `<tr><td valign="top" width="26" style="padding:0 8px 12px 0;${s.font}font-size:16px;line-height:23px;font-weight:700;color:${s.p.brand};">&#10003;</td><td valign="top" style="padding:0 0 12px;${s.font}font-size:15px;line-height:23px;color:${s.p.body};"><strong style="color:${s.p.heading};">${escapeHtml(lead)}</strong> ${escapeHtml(words)}</td></tr>`).join('\n')}
+</table>${link ? `\n<p style="margin:4px 0 18px;${s.font}font-size:16px;line-height:25px;color:${s.p.body};">${link.lead ? `${escapeHtml(link.lead)} ` : ''}${s.anchor(link.url, link.label, `color:${s.p.brand};font-weight:700;text-decoration:underline;`)}</p>` : ''}`,
+    text: ({ title, items }) => [title, ...pairsOf(items).map(([lead, words]) => `- ${lead} ${words}`)].filter(Boolean).join('\n'),
+  },
+};
+const listOf = items => (Array.isArray(items) ? items : []);
+const pairsOf = items => listOf(items).filter(item => Array.isArray(item) && item.length >= 2).map(item => [String(item[0] ?? ''), String(item[1] ?? '')]);
+Object.assign(blocks, marketingBlocks);
+
 function renderBlock(block, kind, s) {
   const renderer = blocks[block?.type];
   if (!renderer) throw new TypeError(`Unknown email block: ${block?.type}`);
@@ -312,24 +412,29 @@ ${details.map(line => `<p style="margin:0;${s.font}font-size:14px;line-height:21
  * @param {string} email.title the subject, used as the document title
  * @param {string} [email.brand] the wordmark in the Hub theme's branded header: the product's name for an email about one product
  * @param {string} [email.preheader] one-sentence inbox preview (every layout)
+ * @param {string} [email.eyebrow] a short line above the headline, shown in capitals (branded layout; a marketing email)
  * @param {string} [email.heading] the headline (branded layout)
+ * @param {string} [email.greeting] the whole greeting line, in place of "Hi <name>," (branded layout)
  * @param {string|null} [email.recipientName] greets "Hi <name>," or "Hello," (branded layout)
- * @param {Array<object>} email.blocks paragraph | message | steps | checklist | button | details | callout
+ * @param {Array<object>} email.blocks paragraph | message | steps | checklist | button | details | callout, and for a marketing
+ *   email: action | tiles | features | cards | stats | quote | offer | panel | points
  * @param {Array<string|{label: string, url: string}>} [email.signature] sign-off lines; the first is the signer, a { label, url } line a link
  * @param {Array<string|{label: string, url: string}>} email.footer why they received it, how to get help;
  *   a { label, url } line is a link (an unsubscribe link, say). A theme may add its own lines after them.
  */
-export function renderEmail({ layout = 'branded', theme = 'hub', title, brand = PRODUCT_WORDMARK, preheader, heading, recipientName, blocks: content, signature = [`— The ${SUPPORT_TEAM_NAME} team`], footer: callerFooter, referenceLink = null }) {
+export function renderEmail({ layout = 'branded', theme = 'hub', title, brand = PRODUCT_WORDMARK, preheader, eyebrow = null, heading, recipientName, greeting: greetingLine = null, blocks: content, signature = [`— The ${SUPPORT_TEAM_NAME} team`], footer: callerFooter, referenceLink = null }) {
   const s = stylesFor(theme);
   // A theme's own lines follow the caller's footer; with no footer (the approved wording alone) there are none.
   const footer = callerFooter.length ? [...callerFooter, ...s.theme.footerAfter.filter(line => !callerFooter.includes(line))] : [];
   if (layout === 'letter') return renderLetter({ title, preheader, blocks: content, signature, footer: callerFooter, s });
   const branded = layout !== 'personal';
-  const greeting = branded ? (recipientName && String(recipientName).trim() ? `Hi ${String(recipientName).trim()},` : 'Hello,') : null;
+  // `greeting` gives the whole line when the caller has its own ("Hello Jane,", as a letter to a prospect opens).
+  const greeting = branded ? (greetingLine && String(greetingLine).trim() ? String(greetingLine).trim() : recipientName && String(recipientName).trim() ? `Hi ${String(recipientName).trim()},` : 'Hello,') : null;
   const [signer, ...signatureDetails] = signature;
   const { p, font } = s;
 
   const body = [
+    branded && eyebrow ? `<p style="${eyebrowStyle(s)}">${escapeHtml(String(eyebrow).toUpperCase())}</p>` : '',
     branded && heading ? `<h1 style="margin:0 0 16px;font-family:${s.theme.headingFontStack ?? s.theme.fontStack};font-size:${s.theme.headingFontStack ? '26px;line-height:32px;font-weight:600' : '22px;line-height:30px;font-weight:700'};color:${p.heading};">${linkedText(heading, referenceLink, s)}</h1>` : '',
     greeting ? `<p style="${s.paragraph}">${escapeHtml(greeting)}</p>` : '',
     ...content.map(block => renderBlock({ ...block, referenceLink }, 'html', s)),

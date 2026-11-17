@@ -451,7 +451,7 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  expect(on.store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({memoVersion:5}));
  // The report-only form needs no switch: the sweep hands the writer none, and the email records its form.
  expect(on.store.draft.mock.calls[0][2].arms).toMatchObject({form:'short',length:'report'});
- expect(JSON.parse(on.model.run.mock.calls[0][1].user).style).toBe('Keep the body to about one hundred words, never more than 120.');
+ expect(JSON.parse(on.model.run.mock.calls[0][1].user).style).toBe('Write two or three sentences, never more than 120 words.');
  const off=await sweep(false);
  expect(off.store.learningActive).not.toHaveBeenCalled();
  expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.17');
@@ -644,6 +644,79 @@ it('takes the inbox preview from the first real sentence, past an abbreviation i
  const email=growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'St. Luke\'s market report',body,postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'});
  expect(email.html).toContain('>I put together a free market report for St. Luke&#39;s Home Health, Inc. from Medicare data.&#847;');
  expect(email.html).not.toContain('>I put together a free market report for St.&#847;');
+});
+// Email review 2026-11-17, the owner on the plain letter: "something that I'd throw away without even reading", "there's no explanation of
+// what else the software does". The three emails to an agency are laid out in Intel's own look, with what the software does and the trial.
+it('lays a marketing email to an Intel agency out in Intel\'s look, with what the software does and the trial, and keeps the text part the approved words',async()=>{
+ const {reportLinks}=await import('./report-link.mjs');
+ const {withCampaign,founderQuote,featurePoints,weekSteps,shortPoints}=await import('./campaign.mjs');
+ const reports=reportLinks({key:'k'.repeat(40)});
+ const link=reports.linkFor({id:'o1',product:'caremetric-intel',name:'Riverbend Home Health',evidence:[rosterLine]});
+ const trialOf=touch=>`https://www.caremetricintel.com/?${tagsOf(touch)}`;
+ const send=(body,over={})=>growthEmail({product:'caremetric-intel',purpose:'marketing',subject:'Riverbend Home Health\'s market report',body,postalAddress:'CareMetric, 100 Example Way',
+  unsubscribeUrl:'https://hub.example.org/u/t',greeting:'Jane',reports,...over});
+ const count=(text,part)=>text.split(part).length-1;
+ const escaped=text=>text.replaceAll('\'','&#39;');
+
+ // The first email: the report, then what the software does, the founder's words and the trial.
+ const opening=`I put together a free market report for Riverbend Home Health from Medicare data. It shows where the agency stands in its county and who to call on next.\n${link.url}`;
+ const body=withCampaign(opening,1,{trialUrl:trialOf(1),reportUrl:link.url,ownReport:true});
+ const first=send(body);
+ expect(first.html).toContain('data-caremetric-email="branded"');
+ expect(first.html).toContain('>YOUR FREE MARKET REPORT IS READY</p>');
+ expect(first.html).toMatch(/<h1[^>]*>Riverbend Home Health&#39;s market report<\/h1>/);
+ expect(first.html).toContain('Hello Jane,');
+ expect(first.html).toContain('I put together a free market report for Riverbend Home Health from Medicare data.');
+ // The report is a card with one button, never 100 characters of token in the text.
+ expect(anchorOf(first.html,link.url)).toBe('Open your market report →');
+ expect(count(first.html,`href="${link.url}"`)).toBe(1);
+ expect(first.html).not.toContain(`>${link.url}<`);
+ for(const tile of ['WHERE YOU STAND','WHO LEADS THE COUNTY','TOP HOSPITALS','TOP PHYSICIANS FOR OUTREACH'])expect(first.html).toContain(tile);
+ for(const [title,text] of featurePoints){expect(first.html).toContain(escaped(title));expect(first.html).toContain(escaped(text));}
+ for(const figure of ['150+','Every NPI','3,200+','Daily'])expect(first.html).toContain(`>${figure}</p>`);
+ expect(first.html).toContain(`&ldquo;${founderQuote}&rdquo;`);
+ expect(anchorOf(first.html,trialOf(1))).toBe('Start your free trial →');
+ // The founder's words are signed once, under the quote.
+ expect(count(first.html,'Dr. Kevin C. Deyarmin')).toBe(1);
+ expect(first.html).toContain('CareMetric, 100 Example Way');
+ expect(anchorOf(first.html,'https://hub.example.org/u/t')).not.toBeNull();
+ // The text part is the email as it was approved, word for word, signed and with its links written out.
+ expect(first.text.startsWith(`Hello Jane,\n\n${body}\n\nDr. Kevin C. Deyarmin\nFounder, CareMetric\n`)).toBe(true);
+ expect(first.text).toContain(link.url);
+ expect(first.text).toContain(trialOf(1));
+
+ // The second email: a week of the work, the offer and the trial, with the report still one click away.
+ const second=send(withCampaign('The market report I sent for Riverbend Home Health lists the hospitals its county\'s residents use.\n\nHow does your team decide who to visit each week?',2,
+  {trialUrl:trialOf(2),reportUrl:link.url,ownReport:true}),{subject:'From the report to a week\'s plan'});
+ expect(second.html).toContain('>FROM YOUR MARKET REPORT TO A PLAN</p>');
+ for(const step of weekSteps){expect(second.html).toContain(step.tag.toUpperCase());expect(second.html).toContain(escaped(step.title));}
+ expect(second.html).toContain('>FOUNDERS SALE</p>');
+ expect(second.html).toContain('50% off your first 12 months');
+ expect(anchorOf(second.html,trialOf(2))).toBe('Start your free trial →');
+ expect(anchorOf(second.html,link.url)).toBe('Open your market report (PDF)');
+ expect(count(second.html,'Dr. Kevin C. Deyarmin')).toBe(1);
+ expect(second.html).not.toMatch(/opened|clicked|noticed/i);
+
+ // The third email: short, with the report, three lines on the software and the trial as a link.
+ const third=send(withCampaign('This is my last note. The market report for Riverbend Home Health stays where it is.',3,{trialUrl:trialOf(3),reportUrl:link.url,ownReport:true}),{subject:'A last note'});
+ expect(third.html).toContain('>A LAST NOTE</p>');
+ expect(anchorOf(third.html,link.url)).toBe('Open your market report →');
+ for(const [lead] of shortPoints)expect(third.html).toContain(escaped(lead));
+ expect(anchorOf(third.html,trialOf(3))).toBe('start a 30-day free trial on one county');
+
+ // An agency with no report of its own is sent to the page where it gets one.
+ const page='https://www.caremetricintel.com/market-review';
+ const review=send(withCampaign(`I can put together a free market report for Riverbend Home Health from Medicare data.\n${page}`,1,{trialUrl:trialOf(1),reportUrl:page,ownReport:false}));
+ expect(anchorOf(review.html,page)).toBe('Get your free market report →');
+
+ // Anything else stays the plain letter: sections someone edited, an email that is not marketing, another product, and a letter with no sections.
+ const letterOf=email=>expect(email.html).toContain('data-caremetric-email="letter"');
+ const edited=send(body.replace('Watches your competition','Beats your competition'));
+ letterOf(edited);
+ expect(edited.html).toContain('Beats your competition');
+ letterOf(send(body,{purpose:'success'}));
+ letterOf(send(body,{product:'carebase'}));
+ letterOf(send(opening));
 });
 it('signs a quiet follow-up to a prospect as the founder, like the rest of the prospect\'s emails, and a customer email as the team',async()=>{
  const quiet=growthEmail({product:'caremetric-intel',purpose:'success',quiet:true,subject:'S',body:'Did our answer cover what you needed?',postalAddress:'',unsubscribeUrl:'https://hub.example.org/u/t'});

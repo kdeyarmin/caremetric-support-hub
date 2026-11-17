@@ -49,7 +49,14 @@ The owner chose (2026-11-04) to let the Marketing Manager send two kinds of emai
 (`growth.sales_followup`, `growth.cold_email`); a supervised week or Keep approving takes it off, and every message then waits for
 the owner, model-written or not.
 
-- **How a growth email looks.** A letter, not a newsletter (`growthEmail` in `server/growth/worker.mjs`): left-aligned and
+- **How a marketing email to an Intel agency looks** (owner direction 2026-11-17, on the plain letter: "something that I'd throw
+  away without even reading", "there's no explanation of what else the software does"). The three emails to a home health agency
+  or hospice are laid out in Intel's own look (`growthEmail`, `server/growth/campaign.mjs`, the marketing blocks in
+  `server/email-layout.mjs`): Intel's header, a short line in capitals, the subject as the headline, the writer's opening, then
+  the email's own sections. [Each agency's own market report](#each-agencys-own-market-report) says what each email holds. The
+  text part stays the approved words, as a letter. Every other growth email is the letter described next. A designed email is
+  more likely to be filed under Promotions than a plain letter; the owner chose the designed email knowing that.
+- **How every other growth email looks.** A letter, not a newsletter (`growthEmail` in `server/growth/worker.mjs`): left-aligned and
   without images, so it reads like an email a person typed and is not filed as a promotion. It is in the theme of the
   product's app: an Intel letter is the Intel app's own dark Emberline letter, with the ember accent on its links. It opens with "Hello,", then
   the approved words (the product's own pages are clickable links, nothing else is), then the sign-off with the product's
@@ -294,31 +301,40 @@ post-acute file gets its county's report built around it, saying CMS hasn't publ
 directory doesn't list yet has no report, so its email offers the market review page instead of a link that opens to "No report for
 this link".
 
-**The first email is the report and nothing else** (owner direction 2026-11-15, and owner decision 2026-11-17 for "nothing else";
-`reportTouchAngle` and `reviewTouchAngle` in `playbook.mjs`, `growth.17`). A prospect that is clearly a nursing home gets the general
-first email instead, as Intel's reports serve home health and hospice agencies only. The email goes to the agency's best contact: a
-named owner, administrator or marketing leader when the team found one, else the role address, and, as separate emails, the other
-decision-makers there (see [Several decision-makers at one organization](#several-decision-makers-at-one-organization)).
+**The first email leads with the report, then says what the software does and offers the trial** (owner direction 2026-11-15 for
+the report; owner direction 2026-11-17 for the rest: a first email that was the report and nothing else, which this section
+described for a few hours that day, was "the worst marketing email that I've ever seen", with "no explanation of what else the
+software does"). A prospect that is clearly a nursing home gets the general first email instead, as Intel's reports serve home
+health and hospice agencies only. The email goes to the agency's best contact: a named owner, administrator or marketing leader
+when the team found one, else the role address, and, as separate emails, the other decision-makers there (see
+[Several decision-makers at one organization](#several-decision-makers-at-one-organization)).
 
-1. **The first sentence is the offer**: a free market report made for this agency, by name, from Medicare data. It is also
-   the line the inbox shows beside the subject.
-2. **The report link**, with a few words saying it opens as a PDF with nothing to sign up for.
-3. **What is inside**, in two sentences: where the agency stands among the county's agencies, which agencies lead, the hospitals
-   the county's residents use most, the highest-ranked physicians for outreach and up to three moves. A county figure from the
-   brief is stated first, about the county.
-4. **One sentence on who is writing**: the founder runs a home health and hospice agency and built Intel to see his own market.
-5. **One question** the reader can answer by reply after looking.
+**Who writes what.** The writer writes only the **opening**, for this one agency (`reportTouchAngle` and `reviewTouchAngle` in
+`playbook.mjs`, `growth.17`): two or three sentences that say a free market report was made for the agency, by name, from Medicare
+data, with the report's link on its own line and at most one question. A county figure from the brief comes first, about the county.
+Code holds the opening to that (`shortFormProblem`): at most 120 words, at most one question, the report's link and no other, no
+trial and no price. Everything after the opening is the same for every agency, written once in `server/growth/campaign.mjs` from
+the fact sheet, and added to the email when it is drafted (`withCampaign`). So **the email you approve on the Growth page is the
+whole email**, sections included, and the sent text part is those words. `campaign.test.mjs` runs every section through the checks
+a written email passes (the fact sheet's numbers, no card, no "public", no rank or rating of an agency, no demo, nothing about opens).
 
-Code holds it to that form (`shortFormProblem`): at most 120 words, exactly one question, the report's link and no other, and no
-trial or price. The subject names the agency or its county and the report, or asks the question the report answers. Until 2026-11-17
-the standard first email also asked three questions and offered the trial with its card terms, in up to 170 words, and this form was
-a test for half of the agencies.
+What the three emails hold, in order:
 
-- **The second email offers the trial**, four days later, in plain words and without its card terms: after a report open, how Intel
-  turns a report into a plan (`viewedTouchAngle`); otherwise one page of the report, its link again and what Intel adds
-  (`unviewedTouchAngle`). It never says whether the report was opened.
-- **The third email is a short close** (`reportCloseAngle`): the report stays at its link, and a reply saying who handles marketing
-  sends it to the right person.
+| Email | Line above the headline | The writer's opening | Then, the same for every agency |
+| --- | --- | --- | --- |
+| First | Your free market report is ready | The report made for this agency, and its link | A card that previews the report (where you stand, who leads the county, top hospitals, top physicians for outreach; the values stay in the report) with the button "Open your market report". What CareMetric Intel does, in five numbered points. Four figures about its data. The founder's story as a signed quote. A closing panel with the 30-day free trial's button. |
+| Second, four days later | From your market report to a plan | What a team does with a report, and one question | A week in CareMetric Intel in four cards (Monday, every day, after each visit, Friday). The Founders Sale, in its approved words. The free trial's button, and the report's link again. |
+| Third | A last note | A short close: the report stays, forward it to whoever handles marketing | The report's button, three lines on what Intel does, and the trial as a link. |
+
+- **The headline is the subject.** The subject names the agency or its county and the report, or asks the question the report
+  answers.
+- **The second email never says whether the report was opened.** Its sections are the same words to every agency; only the
+  writer's angle differs (`viewedTouchAngle`, `unviewedTouchAngle`).
+- **If you edit an email's sections on the Growth page**, it is sent with your words as a plain letter, not in the designed layout:
+  the layout is applied only when the sections read back exactly as written (`readCampaign`). Editing the opening keeps the layout.
+- **Changing what the sections say** is a code change in `campaign.mjs`, checked against the fact sheet by its test. They hold no
+  setting: the trial's length and the Founders Sale's words come from the fact sheet.
+- **Without a model** the email keeps its shape: a fixed opening, then the same sections.
 - **No prospect email brings up the credit card** (owner direction 2026-11-17). One that does is refused when written and withdrawn
   when it would be sent (`card_terms`). "Risk-free" is refused (`guarantee`), as is "no credit card" (`trial_terms`).
 - **No prospect email calls Intel's data public** (owner direction 2026-11-17). It names the source instead: "Medicare data",
@@ -333,7 +349,8 @@ a test for half of the agencies.
 
 An Intel prospect with no roster record gets the same email with the market report page
 (`https://www.caremetricintel.com/market-review`, `intel-market-review`) in place of its own link: any agency gets its full report
-there by entering its CCN. Its second email (`reviewFollowupAngle`) points to that page again and offers the trial. The writer never
+there by entering its CCN. Its card's button reads "Get your free market report", and its second email (`reviewFollowupAngle`)
+points to that page again and offers the trial. The writer never
 states a figure from the report: the reader opens it to see them. CareMetric's own agency (`ownAgencies` in `roster.mjs`) is never a
 prospect. The link check accepts that one report link for that one draft, and no other agency's. The report's trial link carries
 `utm_content=agency-report`, so the Monday scorecard counts the visits it brings.
@@ -530,9 +547,9 @@ earns a 4), the reader sees the brief's writer part and the writer's own rules, 
 (`generic_opening`, `about_sender`, `too_long`, `too_many_asks`, `unclear_ask`, `wrong_problem`, `no_reason_now`, `reads_as_template`, or
 `none`). All four scores and the weakness are kept with the email (`arms.criticSpecific`, `criticRelevant`, `criticAsk`, `weakness`; no
 text), a rewrite is told the weakness too, and the Monday memo names the commonest weakness once three drafts share it.
-Since `critic.3` (2026-11-17, later that day): the reader is told that the first email to an Intel agency is its market report and
-nothing else, on purpose, so opening with the report and offering no trial are never scored as weaknesses. Scores under `critic.2`
-and `critic.3` judge different emails and are not compared.
+Since `critic.3` (2026-11-17, later that day): the reader sees the whole first email to an Intel agency and is told that the writer
+wrote only its opening, so it judges the opening (does it make you open the report?) and never scores opening with the county or the
+report as a weakness. Scores under `critic.2` and `critic.3` judge different emails and are not compared.
 
 **Money.** A brief costs about 30 to 45 cents (research on the draft tier, the brief on the top model); a first email on the top model
 about 7 to 15 cents, the review about a cent. The migration raises the Marketing Manager's daily budget to $15 (owner decision
@@ -559,7 +576,7 @@ first, a third of them on a Sunday afternoon. Each switch below is under Setting
   after "from": any time, as before.
 - **Test a short first email** (`growth.short_first_email`): **retired on 2026-11-17** by the owner's decision. It wrote half of the
   Intel first emails that link the agency's own report short (the report and one question, with the trial in the second email). Every
-  first email built around a market report is now that form (see
+  first email built around a market report now has one form, a short opening and the email's own sections (see
   [Each agency's own market report](#each-agencys-own-market-report)), so the switch is gone from the Settings page. Its row stays in
   the database, because the stage's release gate checks for it (`retiredSettings` in `server/hub-settings.mjs`). Each such email still
   records `arms.form` as `short`, which the database reads as the first email's form (`first_form`); the weekly memo no longer compares
