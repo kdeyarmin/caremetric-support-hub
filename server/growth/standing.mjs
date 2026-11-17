@@ -28,6 +28,8 @@ const emailPatterns = [
   /\b\d(?:\.\d)?[- ]?stars?\b/i,
   /\bstar rating (?:of|is|was)\b/i,
   new RegExp(`\\b(?:ranks?|ranked|ranking)\\s+(?:#\\s?\\d+|${ordinal}|among|near|in the top|no\\.)`, 'i'),
+  // A rank given to the agency itself, with the agency named between ("ranks your agency highest", "ranked yours #2").
+  new RegExp(`\\b(?:ranks?|ranked)\\s+(?:your|the|this)\\s+agency\\s+(?:#\\s?\\d+|${ordinal}|top|highest|lowest|last)\\b|\\b(?:ranks?|ranked)\\s+(?:yours|you)\\s+(?:#\\s?\\d+|${ordinal}|top|highest|lowest|last)\\b`, 'i'),
   /#\s?\d+\s+(?:in|among|of|for)\b/i,
   new RegExp(`\\b${ordinal}[- ](?:largest|biggest|busiest|smallest)\\b`, 'i'),
   /\b(?:rated|scored)\s+(?:a\s+)?\d/i,
@@ -37,7 +39,9 @@ const emailPatterns = [
  * referral sources a market report lists ("the physicians Intel ranks highest as referral sources", email review 2026-11-17: the
  * writer's own instructions used those words, and this check refused every draft that followed them). It is about them when the words
  * after it say so ("as referral sources", "for home health outreach"), or when they are the nearest thing named before it in the
- * sentence, with no agency, "you" or "it" in between.
+ * sentence, with no agency, "you" or "it" in between. (Main fixed the same refusal the same day by setting aside "the physicians
+ * Intel ranks highest", #270: 35 own_standing refusals in 55 writer sweeps. This reading covers that wording and the others the
+ * writer's plans now use, and #270's own cases are kept in the test.)
  */
 const superlativeRank = /\b(?:ranks?|ranked|ranking)\s+(?:top|highest|lowest)\b/gi;
 const sourcesNamed = /\b(?:physicians?|clinicians?|doctors?|practitioners?|referral\s+sources?)\b/gi;
