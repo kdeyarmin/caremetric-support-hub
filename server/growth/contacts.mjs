@@ -103,10 +103,22 @@ export function personalAddresses(text, domain) {
  * and anything else is a prefix.
  */
 export function robotsPatternMatches(pattern, path) {
+  // The site writes the pattern and, through a redirect, can choose the path too. Read as a regular expression (one `.*` per `*`), a
+  // rule with a run of wildcards backtracked for minutes to hours on a path it does not match, holding the Hub's only thread. Matching
+  // the literal pieces left to right, each at its first place after the one before, gives the same answer in one pass: an earlier
+  // place for a piece never leaves less room for the pieces after it.
   const anchored = pattern.endsWith('$');
-  const body = anchored ? pattern.slice(0, -1) : pattern;
-  const source = body.split('*').map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*');
-  return new RegExp(`^${source}${anchored ? '$' : ''}`).test(path);
+  const parts = (anchored ? pattern.slice(0, -1) : pattern).split('*');
+  if (!path.startsWith(parts[0])) return false;
+  let at = parts[0].length;
+  for (let index = 1; index < parts.length; index += 1) {
+    // Anchored, the last piece must end the path, and may start anywhere after the pieces before it.
+    if (anchored && index === parts.length - 1) return path.length - at >= parts[index].length && path.endsWith(parts[index]);
+    const found = path.indexOf(parts[index], at);
+    if (found < 0) return false;
+    at = found + parts[index].length;
+  }
+  return !anchored || at === path.length;
 }
 
 /**

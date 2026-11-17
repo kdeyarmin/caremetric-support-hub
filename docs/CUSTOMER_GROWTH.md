@@ -616,7 +616,9 @@ first, a third of them on a Sunday afternoon. Each switch below is under Setting
   five days after the first note (`private.growth_quiet_candidates`). Each is a customer email (purpose `success`, the Sales follow-ups
   step), drafted and checked like any growth email, with the same send claim, caps and opt-out link; a reply, a no, a "not now", a
   meeting, a trial, an opt-out or a complaint ends them. The note asks whether the answer helped and gives the one self-serve next step; it
-  never says it noticed anything the prospect did.
+  never says it noticed anything the prospect did. The fixed acknowledgment ("we have your request and will reply here",
+  `private.agent_growth_acknowledgment`) is not an answer: a prospect who got only that gets no follow-up until someone answers
+  (`20261117260000_review_repairs.sql`).
 - **Give the Sales Executive the account brief** (`growth.sales_context`). When drafting a reply to a prospect, the Sales Executive also
   reads the brief's writer part (never the research part, so never a leader's name, a fit or the agency's own standing), which of our
   emails was answered (its touch, subject and form) and whether the report was opened (yes or no), through
@@ -846,7 +848,8 @@ backs off individual failures and expires entries after 89 days. No subscription
 stage 4). Intel asks the Hub to open its trial when someone opens card setup, and Stripe starts the trial before any card is entered,
 so a trialing Intel subscription proves nothing. The mirror no longer queues `trial_started` for one: the first time Stripe confirms its
 card (`private.billing_trial_cards`, written on every entitlement check) queues it, once, under the same key, and
-`private.growth_trial_cards` keeps when that was after the trial ends. A CareBase trial, which needs no card, still counts when it
+`private.growth_trial_cards` keeps when that was after the trial ends (for the trials live when this was released, their start:
+`20261117260000_review_repairs.sql` corrects the time the release copied from the last entitlement check). A CareBase trial, which needs no card, still counts when it
 starts. A counted trial that ends (canceled, expired or paused) with nothing ever paid on it is queued as `churned`
 (`billing:trial_lost:<subscription>`); a sign-up that never added its card was never a trial and is not lost either. An extended
 trial's new end date reaches its opportunity. Intel may also send three milestones as `active` events (`facts.metric`:

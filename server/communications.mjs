@@ -100,11 +100,53 @@ export function supportReplyEmail({ subject, reference, body, channel, override 
   });
   return { subject: title, text, html };
 }
+/*
+ * Anyone can email the support address, and SendGrid signs whatever arrives (up to 30 MB), so an inbound email's HTML is hostile input.
+ * The blocks below are removed exactly as the lazy regexes `/<!--[\s\S]*?-->/g`, `/<(script|style|head|title)\b[\s\S]*?<\/\1>/gi`
+ * and `/<[^>]+>/g` removed them, but in one pass each: an opener whose closer never follows is passed over instead of being scanned
+ * to the end of the message again for every opener. Those regexes took time that grew with the square of the length (1 MB of "<"
+ * held the Hub's only thread for about ten minutes).
+ */
+const blockTags = ['script', 'style', 'head', 'title'];
+// Lower-cases ASCII letters only, so every index into the result is the same index into the original (`toLowerCase` can lengthen
+// some characters), and only the letters a tag name can match case-insensitively are folded, as the `i` flag does.
+const asciiLower = value => value.replace(/[A-Z]+/g, letters => letters.toLowerCase());
+function withoutComments(text) {
+  let out = '', at = 0;
+  for (;;) {
+    const start = text.indexOf('<!--', at);
+    const end = start < 0 ? -1 : text.indexOf('-->', start + 4);
+    // No closer after this opener means none after any later one: the rest is kept.
+    if (end < 0) return out + text.slice(at);
+    out += `${text.slice(at, start)} `;
+    at = end + 3;
+  }
+}
+function withoutBlocks(text) {
+  const lower = asciiLower(text);
+  const lastClose = Object.fromEntries(blockTags.map(tag => [tag, lower.lastIndexOf(`</${tag}>`)]));
+  let out = '', at = 0, from = 0;
+  for (;;) {
+    const start = lower.indexOf('<', from);
+    if (start < 0) return out + text.slice(at);
+    from = start + 1;
+    // The tag name must end there (`\b`): <header> is not <head>.
+    const tag = blockTags.find(name => lower.startsWith(name, start + 1) && !/\w/.test(lower[start + 1 + name.length] ?? ''));
+    if (!tag || lastClose[tag] < start + 1 + tag.length) continue;
+    out += `${text.slice(at, start)} `;
+    at = from = lower.indexOf(`</${tag}>`, start + 1 + tag.length) + tag.length + 3;
+  }
+}
+// A "<" after the last ">" can never close, so only the text up to the last ">" goes through the tag pattern.
+function withoutTags(text) {
+  const end = text.lastIndexOf('>');
+  return text.slice(0, end + 1).replace(/<[^>]+>/g, ' ') + text.slice(end + 1);
+}
 /** Reduces an HTML-only email to text. Head, title, style, script and comment content
     (including a quoted copy of a Hub reply's own markup) never reach the stored message. */
 export function htmlToText(html) {
-  return String(html || '').replace(/<!--[\s\S]*?-->/g, ' ').replace(/<(script|style|head|title)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+  return withoutTags(withoutBlocks(withoutComments(String(html || ''))).replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|tr|h[1-6])>/gi, '\n'))
+    .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
     .replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
 }
 
@@ -188,10 +230,17 @@ export function sendgridMail({ apiKey, from = 'support@caremetric.ai', replyTo =
 }
 
 const unsettledDelivery = 'The provider answered, but the delivery could not be recorded. Check the conversation before sending again.';
+// SendGrid Inbound Parse posts messages of up to 30 MB, attachments included.
+export const inboundEmailBytes = 32 * 1024 * 1024;
+// Inbound email bodies read at once. The signature can only be checked once a body is whole, and the timestamp that comes before it
+// is the sender's to choose, so without a cap unsigned posts could each hold up to twice the limit while being read and joined, and
+// together exhaust the Hub's memory. A post refused here (429) is retried by SendGrid.
+export const inboundEmailReads = 4;
 
 export function communications({ pool, delegations, publicOrigin = defaultPublicOrigin, twilioAuthToken, sendgridInboundPublicKey, sms, email, chatEnabled = false, now = () => new Date() }) {
   // Website chat is a Hub setting the owner switches on the Settings page; `chatEnabled` may be a function, read on each request.
   const chatOn = () => live(chatEnabled) === true;
+  let inboundReading = 0;
   let inboundKey = null;
   // A malformed key disables inbound email rather than stopping the whole Hub.
   try { if (sendgridInboundPublicKey) inboundKey = createPublicKey({ key: Buffer.from(sendgridInboundPublicKey, 'base64'), format: 'der', type: 'spki' }); }
@@ -263,15 +312,22 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
     async emailWebhook(req) {
       if (!inboundKey) throw new HttpError(503, 'Inbound email is not configured.');
       if (req.headers['content-type']?.split(';')[0] !== 'multipart/form-data') throw new HttpError(415, 'Unsupported message format.');
-      // A post without a current signature is refused before its body is read; the signature itself covers the exact bytes, so it is
-      // checked once they are all here.
+      // A post without signature headers or with a stale timestamp is refused before its body is read; the signature itself covers the
+      // exact bytes, so it is checked once they are all here. The timestamp is the sender's to choose, so it alone proves nothing.
       const signature = req.headers['x-twilio-email-event-webhook-signature'], timestamp = req.headers['x-twilio-email-event-webhook-timestamp'];
       if (typeof signature !== 'string' || typeof timestamp !== 'string' || !/^\d{9,11}$/.test(timestamp)
         || Math.abs(now().getTime() / 1000 - Number(timestamp)) > 600) throw new HttpError(403, 'Invalid signature.');
       // SendGrid Inbound Parse posts messages of up to 30 MB, attachments included; the attachments are not stored (below), but a message
-      // refused for its size is retried and then dropped, and never reaches Communications.
-      const payload = await rawBody(req, 32 * 1024 * 1024);
-      if (!sendgridSignatureValid(inboundKey, signature, timestamp, payload)) throw new HttpError(403, 'Invalid signature.');
+      // refused for its size is retried and then dropped, and never reaches Communications. A body declared larger is refused unread,
+      // and at most `inboundEmailReads` bodies are read and checked at once.
+      if (Number(req.headers['content-length']) > inboundEmailBytes) throw new HttpError(413, 'Request is too large.');
+      if (inboundReading >= inboundEmailReads) throw new HttpError(429, 'Too many messages are arriving at once. Try again shortly.');
+      inboundReading++;
+      let payload;
+      try {
+        payload = await rawBody(req, inboundEmailBytes);
+        if (!sendgridSignatureValid(inboundKey, signature, timestamp, payload)) throw new HttpError(403, 'Invalid signature.');
+      } finally { inboundReading--; }
       let form;
       try { form = await new Response(payload, { headers: { 'content-type': req.headers['content-type'] } }).formData(); }
       catch { throw new HttpError(400, 'Unsupported message.'); }
