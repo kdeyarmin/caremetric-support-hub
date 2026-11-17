@@ -1,4 +1,4 @@
-// A web search for roster agencies not found, through the real roles (20261117200000_growth_reach.sql, stage 3 of the 2026-11-17 review):
+// A web search for roster agencies not found, through the real roles (20261117210000_growth_reach.sql, stage 3 of the 2026-11-17 review):
 // only agencies the lookups left unresolved (no site, or a site not confirmed) are handed out, within the day's number and once an hour;
 // a site the code confirms graduates the agency through the roster's own path with its contact recorded; a site it cannot confirm is
 // kept only as a suggestion; a lookup that took the agency meanwhile wins; and an agency searched is not searched again for 30 days.

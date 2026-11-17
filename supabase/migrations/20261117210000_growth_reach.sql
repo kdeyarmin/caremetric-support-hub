@@ -14,7 +14,7 @@
 --    server runs it on Mondays.
 -- 4. Ranking under pressure needs no SQL: the roster read keeps the new figures in each target's facts and ranks with them.
 --
--- Nothing is sent by this migration. 20261117200100_growth_reach_contract.sql declares platform.agents.growth-reach.v1.
+-- Nothing is sent by this migration. 20261117210100_growth_reach_contract.sql declares platform.agents.growth-reach.v1.
 set local lock_timeout = '10s';
 
 insert into private.hub_settings (key, kind) values

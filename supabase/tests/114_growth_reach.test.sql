@@ -1,7 +1,7 @@
 begin;
 select plan(18);
 
--- Stage 3 of the AI workforce review of 2026-11-17 (20261117200000_growth_reach.sql).
+-- Stage 3 of the AI workforce review of 2026-11-17 (20261117210000_growth_reach.sql).
 select ok(hub.get_backend_contract() -> 'features' ? 'platform.agents.growth-reach.v1', 'The growth reach feature is declared');
 select is((select count(*)::int from private.hub_settings where key in ('growth.roster_site_research', 'growth.roster_site_research_per_day',
   'growth.roster_site_research_cents', 'growth.live_evaluation') and value is null), 4, 'The four stage 3 settings start off or at their defaults');

@@ -1,4 +1,4 @@
-// The Monday live writing evaluation through the real roles (20261117200000_growth_reach.sql, server/growth/live-evaluation.mjs): only the
+// The Monday live writing evaluation through the real roles (20261117210000_growth_reach.sql, server/growth/live-evaluation.mjs): only the
 // Hub server reads and records it; twelve made-up cases are written and read over several tries of one task, each grade kept once; the
 // finished run is recorded as 'growth.live.1' (never the send gate's 'growth.1') and read back for the scorecard; a run that does not
 // pass tells the owner once; a finished run does nothing more. The writer and reader are a stand-in model. Disposable loopback database

@@ -85,7 +85,7 @@ open brings the second email forward, and the memo's facts count report opens pe
 closed. The Hub server passes a deferral's reason, lists quiet prospects, writes the short first email and gives the Sales Executive its
 context only when the feature is declared ([AI workforce review, November 17](AI_WORKFORCE_REVIEW_2026-11-17.md), stage 2).
 
-`20261117200100_growth_reach_contract.sql` declares `platform.agents.growth-reach.v1` once the growth priority, roster and learning
+`20261117210100_growth_reach_contract.sql` declares `platform.agents.growth-reach.v1` once the growth priority, roster and learning
 features are declared, `private.growth_roster_site_next`, `private.growth_roster_site_record`, `private.growth_live_eval_state`,
 `private.growth_live_eval_record` and `private.growth_live_evaluation_latest` are executable by `hub_app_server` alone and require its
 connection, `private.growth_live_eval_cases` has row level security and is closed to every role, the four stage 3 settings have rows, a

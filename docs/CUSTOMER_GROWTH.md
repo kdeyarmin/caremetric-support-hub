@@ -538,7 +538,7 @@ Plain fixes (no switch):
 
 ## Reaching the right agencies, and checking the writing (2026-11-17)
 
-Stage 3 of the [November 17 review](AI_WORKFORCE_REVIEW_2026-11-17.md) (`20261117200000_growth_reach.sql`, feature
+Stage 3 of the [November 17 review](AI_WORKFORCE_REVIEW_2026-11-17.md) (`20261117210000_growth_reach.sql`, feature
 `platform.agents.growth-reach.v1`), with the owner's decisions of that day.
 
 - **Agencies under pressure first** (`rankTarget`, `pressureWeights` in `server/growth/roster.mjs`). Each roster read also asks Intel's

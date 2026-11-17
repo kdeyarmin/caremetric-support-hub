@@ -99,7 +99,7 @@ Each new behaviour has its own switch, off (or empty) until you set it; the deta
 
 Started on 2026-11-17 at the owner's request, before the week of clean data the review had planned; the owner's decisions that day are
 marked. Details are in [Customer growth](CUSTOMER_GROWTH.md#reaching-the-right-agencies-and-checking-the-writing-2026-11-17)
-(`20261117200000_growth_reach.sql`, feature `platform.agents.growth-reach.v1`).
+(`20261117210000_growth_reach.sql`, feature `platform.agents.growth-reach.v1`).
 
 | # | Change | Setting (Settings → Customer growth) |
 | --- | --- | --- |
