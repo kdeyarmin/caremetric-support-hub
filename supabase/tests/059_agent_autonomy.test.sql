@@ -75,7 +75,8 @@ select ok(position('for update' in pg_get_functiondef('hub.set_agent_autonomy_st
   'The owner''s change locks the step before comparing its version');
 select is((select autonomy from private.agents where key = 'account_manager'), 'act', 'The Account Manager acts');
 select is((select config -> 'auto_send_templates' from private.agents where key = 'account_manager'),
-  '["setup_nudge", "testimonial_ask", "trial_checkin", "welcome"]'::jsonb, 'All four account emails send on their own');
+  '["card_reminder", "midtrial_nudge", "setup_nudge", "testimonial_ask", "trial_checkin", "value_followup", "welcome"]'::jsonb,
+  'All seven account emails send on their own (the trial path''s three since 20261117245000_trial_emails_auto_send.sql)');
 select is((select (private.agent_autonomy_apply('account_emails', 'automatic', null, 'test')) ->> 'status'), 'automatic',
   'Making an automatic step automatic again changes nothing');
 
