@@ -221,6 +221,24 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
     expect(off.mock.calls.some(([url]) => new URL(url).pathname.endsWith('/ads'))).toBe(false);
   });
 
+  it('still reads the Page, Messenger and Instagram when Meta refuses the ads read, and stops only when the run is aborted', async () => {
+    const now = new Date('2026-11-08T15:00:00Z');
+    const handlers = [
+      [/^GET \/v23\.0\/1111$/, { access_token: 'EAAG-page-token-abcdefghijklmnop' }],
+      [/^GET \/v23\.0\/act_3333\/ads$/, json({ error: { code: 200, type: 'OAuthException', message: 'Requires ads_read permission' } }, 403)],
+      [/^GET \/v23\.0\/1111\/feed$/, { data: [{ id: '1111_9', comments: { data: [{ id: '9_1', created_time: '2026-11-08T14:00:00Z', from: { id: '5555' } }] } }] }],
+      [/^GET \/v23\.0\/1111\/conversations$/, { data: [] }],
+      [/^GET \/v23\.0\/2222\/media$/, { data: [] }],
+    ];
+    const fetchImpl = route(handlers);
+    expect(await client(fetchImpl).recentInbox({ now, adComments: true }))
+      .toEqual([{ platform: 'facebook', kind: 'comment', id: '9_1', parentId: '1111_9', url: null, at: '2026-11-08T14:00:00.000Z' }]);
+    expect(fetchImpl.mock.calls.some(([url]) => new URL(url).pathname.endsWith('/act_3333/ads'))).toBe(true);
+    const stop = new AbortController();
+    stop.abort();
+    await expect(client(route(handlers)).recentInbox({ now, adComments: true, signal: stop.signal })).rejects.toMatchObject({ code: expect.stringMatching(/^meta_/) });
+  });
+
   it('limits a new campaign to the roster\'s states through Meta\'s own location search, and launches nothing when a state is not found', async () => {
     const seen = [];
     const fetchImpl = vi.fn(async (url, init = {}) => {

@@ -930,7 +930,14 @@ approves the exact text on the Team screen, or, for an agent on **Act**, when th
 
 The three new emails are on the Account emails step's list (owner decision of November 17,
 `20261117245000_trial_emails_auto_send.sql`), so with that step automatic they go out on their own like the welcome; the executor still
-checks each against the account when it is sent.
+checks each against the account when it is sent. That migration (and `20261117240000_support_truth.sql`, for the acknowledgment) added
+them through the step's own switch, which also sets the agent to Act, so an owner who had set the Account Manager or the Concierge to
+Propose or Observe after handing the step over lost that choice. `20261117260000_review_repairs.sql` restores the level the audit
+trail shows the owner chose (`private.agent_autonomy_owner_level`: their latest choice on the AI team page, carried through the step
+changes since) and records it as an `agent.autonomy` event with no actor; a migration that extends an automatic step's list adds the
+values to the agent's config itself. The trials that were live when the trial path was released count from their start again: their
+card's first confirmation had been copied from the last entitlement check (`private.growth_trial_cards`, corrected once and counted in
+the audit trail as `growth.trial_cards_corrected`).
 
 The last two are proposed only while **Settings → Customer growth → Win-back and cancellation emails** is on (off until
 you turn it on) and the database declares `platform.agents.lifecycle-save.v1` (`20261113300000_lifecycle_save.sql`). They
@@ -1165,7 +1172,8 @@ the ad rules, the checks and the Meta and LinkedIn permissions are in [Social me
   publishing is emailed to paste, link included.
 - An interested or pricing comment or message is recorded once (no words) and the owner is told with its link. It is not a lead: a
   comment carries no email address. With **Settings → Social media → Read and answer comments on ads** on, comments on running Meta
-  ads are read too (at most five ads' posts); LinkedIn ad comments are not read.
+  ads are read too (at most five ads' posts); LinkedIn ad comments are not read. When Meta refuses or fails the ads read, only those
+  ad comments wait for the next run: the Page's comments, Messenger and Instagram are still read.
 - New paid campaigns on Meta, LinkedIn and Google are limited to the roster's states (Settings → Customer growth → States to prospect
   in), each found through the platform's own location lookup; a state it cannot name stops the launch and the owner is told. A launch
   that fell back to a paused campaign with no ad no longer takes the month's flight. LinkedIn's ad account is read once a day.

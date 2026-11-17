@@ -155,15 +155,21 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
       const recent = value => (Date.parse(value ?? '') || 0) >= since;
       // Comments on running ads (Settings → Social media → "Read and answer comments on ads", team review 2026-11-17, stage 6): an ad's post
       // is not in the Page's feed, so the active ads' posts (their creative's effective_object_story_id) are read too, at most five.
+      // Reading them is extra: when Meta refuses or fails it (the ad account's access, a rate limit), only the ad comments not yet read
+      // wait for the next run (the inbox looks back 48 hours); the Page's comments, Messenger and Instagram are still read.
       if (adComments && configured.ads && configured.pages) {
-        const ads = await get(`act_${account}/ads`, { fields: 'id,effective_status,creative{effective_object_story_id}', effective_status: '["ACTIVE"]', limit: 25 }, { signal });
-        const stories = [...new Set(list(ads).map(item => String(item.creative?.effective_object_story_id ?? '')).filter(id => /^[0-9]{1,40}_[0-9]{1,40}$/.test(id)))].slice(0, 5);
-        for (const story of stories) {
-          const data = await get(`${story}/comments`, { fields: 'id,created_time,from{id},permalink_url', order: 'reverse_chronological', limit: 25 }, { as: 'page', signal });
-          for (const comment of list(data)) {
-            if (String(comment.from?.id ?? '') === page || !recent(comment.created_time) || !metaId(String(comment.id))) continue;
-            items.push({ platform: 'facebook', kind: 'comment', id: String(comment.id), parentId: story, url: comment.permalink_url ?? null, at: at(comment.created_time), ad: true });
+        try {
+          const ads = await get(`act_${account}/ads`, { fields: 'id,effective_status,creative{effective_object_story_id}', effective_status: '["ACTIVE"]', limit: 25 }, { signal });
+          const stories = [...new Set(list(ads).map(item => String(item.creative?.effective_object_story_id ?? '')).filter(id => /^[0-9]{1,40}_[0-9]{1,40}$/.test(id)))].slice(0, 5);
+          for (const story of stories) {
+            const data = await get(`${story}/comments`, { fields: 'id,created_time,from{id},permalink_url', order: 'reverse_chronological', limit: 25 }, { as: 'page', signal });
+            for (const comment of list(data)) {
+              if (String(comment.from?.id ?? '') === page || !recent(comment.created_time) || !metaId(String(comment.id))) continue;
+              items.push({ platform: 'facebook', kind: 'comment', id: String(comment.id), parentId: story, url: comment.permalink_url ?? null, at: at(comment.created_time), ad: true });
+            }
           }
+        } catch (error) {
+          if (signal?.aborted) throw error;
         }
       }
       if (configured.pages) {
