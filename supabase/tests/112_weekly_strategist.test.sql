@@ -1,5 +1,5 @@
 begin;
-select plan(8);
+select plan(9);
 
 -- The owner's switch exists and starts off.
 select is((select kind from private.hub_settings where key = 'agents.strategist'), 'flag', 'The strategist is a switch');
@@ -22,6 +22,12 @@ select throws_ok($$ select private.growth_strategy_facts(now() - interval '7 day
 -- A note is for a week, from its Monday, and names a known constraint with a figure to watch (none for "none").
 select throws_ok($$ insert into private.agent_strategy_notes (week, constraint_key, headline, why, move, watch, chosen_by, prompt_version)
   values ('2026-11-10', 'reach', 'h', 'w', 'm', 'strongNoContact', 'rules', 'strategist.1') $$, '23514', null, 'A note starts on a Monday');
+
+-- The funnel says where strong fits with no address stopped, what the people finder did in the week, and the two settings a reach move
+-- can name (20261117200000_strategist_reach.sql).
+select ok((private.growth_strategy_facts_json(now() - interval '7 days', now()) #> '{prospects,noContactSteps}') ?& array['noWebsite', 'notSearched', 'unnamed', 'unnamedUnmatched', 'namedNoAddress']
+  and (private.growth_strategy_facts_json(now() - interval '7 days', now()) #> '{addresses,finder}') ?& array['searched', 'found', 'ranOutDays', 'confirmed', 'refused', 'acceptsAll', 'noAnswer']
+  and (private.growth_strategy_facts_json(now() - interval '7 days', now()) -> 'settings') ?& array['addressChecks', 'addressMode'], 'The funnel says where strong fits stopped short of an address');
 
 -- The Chief of Staff names the constraint before the scorecard, and the feature is declared.
 select ok((select at_local from private.agent_schedules where agent_key = 'chief_of_staff' and task_kind = 'strategy.weekly')
