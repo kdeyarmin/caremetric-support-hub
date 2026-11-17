@@ -252,7 +252,7 @@ try {
   }
   const welcomeAction = await actionFor('welcome');
   // The subject, then the headline of the branded email, then the greeting.
-  assert.ok(welcomeAction.preview.startsWith('Subject: Welcome to CareMetric CareBase\n\nWelcome to CareMetric CareBase\n\nHello,'));
+  assert.ok(welcomeAction.preview.startsWith('Subject: Welcome to CareMetric CareBase: your first three steps\n\nWelcome to CareMetric CareBase\n\nHello,'));
   assert.ok(!welcomeAction.preview.includes(booking) && !/pick a time/i.test(welcomeAction.preview), 'no booking link and no time to meet');
   assert.equal(welcomeAction.input.bookingUrl, null, 'the stored facts hold no booking link');
   assert.ok(welcomeAction.preview.includes(`${unsubscribeLabel}: a personal link is added when the email is sent\n${postal}`));
@@ -261,7 +261,7 @@ try {
   // The owner's screen reads them, and the card names the account and the subject.
   const overview = overviewSchema.shape.team.parse(await ownerCall('hub.get_agent_team'));
   const card = overview.approvals.find(approval => approval.id === welcomeAction.id);
-  assert.equal(approvalTitle(card), `Email to ${slugs.welcome}: Welcome to CareMetric CareBase`);
+  assert.equal(approvalTitle(card), `Email to ${slugs.welcome}: Welcome to CareMetric CareBase: your first three steps`);
 
   // The next run proposes only the email that waited, and never one that was proposed before.
   const second = await fire();
@@ -282,7 +282,7 @@ try {
   assert.equal(sent.length, 1);
   const [message] = sent;
   assert.equal(message.to, canary('welcome'), 'the database handed over the one address of that account');
-  assert.equal(message.subject, 'Welcome to CareMetric CareBase');
+  assert.equal(message.subject, 'Welcome to CareMetric CareBase: your first three steps');
   const token = new RegExp(`^${origin}/api/email/unsubscribe/([0-9a-f]{64})$`).exec(message.unsubscribeUrl)[1];
   tokens.push(token);
   assert.equal(`Subject: ${message.subject}\n\n${message.text}`, welcomeAction.preview.replace('a personal link is added when the email is sent', message.unsubscribeUrl), 'what went out is what was approved');

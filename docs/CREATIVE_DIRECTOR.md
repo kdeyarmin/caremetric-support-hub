@@ -53,7 +53,7 @@ playbook (the Sales Executive's fact source) and are cached. The answers are clo
 **What each product does** (`server/agents/content/features.mjs`, data in `intel-features.json` and `carebase-features.json`). Each brief's
 model calls carry its product's published catalog as a second cached block after the prompt:
 
-- **CareMetric Intel**, from https://www.caremetricintel.com/features and its home page: every feature (125 in 12 areas: the healthcare
+- **CareMetric Intel**, from https://www.caremetricintel.com/features and its home page: every feature (128 in 12 areas: the healthcare
   marketing CRM, daily field work, expenses, mileage and Stark-limit tracking, referral and admission tracking with EMR report imports,
   prospecting, market and territory research, the public data library, competitor intelligence, manager tools, email campaigns, reports,
   and administration) with the plan or role it needs; why each part matters (the site's twelve pillars; email campaigns, expenses and the

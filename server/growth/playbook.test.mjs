@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { productPages } from '../agents/content/facts.mjs';
+import { products, productPages, trialCardTerms, trialMention } from '../agents/content/facts.mjs';
 import { allowedNumbers, textProblems } from '../agents/content/validate.mjs';
 import {
-  discoveryPages, discoveryQueries, discoveryQueriesPerDay, discoveryQuery, discoveryQueryCount, intelSetting, lifecyclePlay, linkablePages, offersMeeting, operatorHost, playbookText, playbookVersion, salesPlaybook, sequencePlan, touchAngle,
+  discoveryPages, discoveryQueries, discoveryQueriesPerDay, discoveryQuery, discoveryQueryCount, inboundSequence, intelSetting, lifecyclePlay, linkablePages, offersMeeting, operatorHost, playbookText, playbookVersion, quietPlays, reaskAngle,
+  reportCloseAngle, reportTouchAngle, reviewFollowupAngle, reviewTouchAngle, salesPlaybook, sequencePlan, shortFormLimits, touchAngle, unviewedTouchAngle, viewedTouchAngle,
 } from './playbook.mjs';
 
 const day = 86_400_000;
@@ -100,6 +101,63 @@ describe('sales playbook', () => {
     expect(lifecyclePlay('trial')).toMatch(/Founders Sale .*applies automatically/);
     expect(lifecyclePlay('support')).toMatch(/No sales/);
     expect(lifecyclePlay('unknown')).toBe(lifecyclePlay('outreach'));
+  });
+
+  it('gives a CareMetric Intel agency three marketing emails around its market report, and asks the writer for the opening of each (owner direction 2026-11-17)', () => {
+    expect(playbookVersion).toBe('sales-playbook.6');
+    expect(shortFormLimits).toEqual({ words: 120, questions: 1 });
+    // Six plans, each its own job.
+    const plans = [reportTouchAngle, reviewTouchAngle, viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle, reportCloseAngle];
+    expect(new Set(plans).size).toBe(6);
+    // Every plan asks for the opening only and names what the email adds below it (campaign.mjs), so nothing is written twice.
+    for (const plan of plans) {
+      expect(plan).toMatch(/You write only the opening of this email, as its first words under the greeting\./);
+      expect(plan).toMatch(/The email adds: /);
+    }
+    // The first: the report for this agency, its one link, at most one question; the email itself tells the story and offers the trial.
+    for (const first of [reportTouchAngle, reviewTouchAngle]) {
+      expect(first).toMatch(/^First email, built around /);
+      expect(first).toMatch(/Never state or hint at the agency's own figure, rank or rating: the reader opens the report to see them\./);
+      expect(first).toMatch(/what CareMetric Intel does in five points, your story as the founder in your own words, and the free trial with its link/);
+      expect(first).toMatch(/No other link, no free trial, no price and no story about yourself in your words\./);
+      expect(first).not.toMatch(/Founders Sale|risk-free|three questions|two links/);
+    }
+    // The second email's sections carry the Founders Sale and the trial; the third's, the report and the trial's link.
+    for (const second of [viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle]) expect(second).toMatch(/the Founders Sale, the 30-day free trial with its link, and the market report's link again/);
+    expect(reportCloseAngle).toMatch(/^Third and last email: a short close\./);
+    expect(reportCloseAngle).toMatch(/No link in your words, no new pitch and no question\./);
+    // None tells the writer to call or meet, and the words each uses for the report's physicians pass the standing check (standing.mjs).
+    for (const plan of plans) {
+      expect(offersMeeting(plan)).toBe(false);
+      expect(plan).not.toMatch(/ranks? highest|ranked highest/);
+    }
+  });
+
+  it('never tells a writer to volunteer the card a CareMetric Intel trial needs, and answers plainly when a reader asks (owner direction 2026-11-17)', () => {
+    const book = salesPlaybook['caremetric-intel'];
+    // What a writer may say about the trial, and the answers that mention it, no longer carry the card.
+    expect(book.valuePoints).toContain(`A ${products.intel.trialDays}-day free trial on one county, started online.`);
+    for (const line of [...book.valuePoints, ...book.qualifyingQuestions, ...book.pains, ...book.triggers]) expect(line, line).not.toMatch(/credit card|\bcard\b|canceling before/i);
+    for (const key of ['timing', 'demo', 'price', 'results']) expect(book.objections.find(objection => objection.key === key).answer, key).not.toMatch(/credit card|canceling before/i);
+    expect(book.objections.find(objection => objection.key === 'timing').answer).toMatch(/30-day free trial can start whenever suits them/);
+    expect(book.objections.find(objection => objection.key === 'demo').answer).toMatch(/the 30-day free trial on one county, and answers to any question by email\.$/);
+    // One answer holds the terms, as the fact sheet words them, for a reader who asks; it never denies the card.
+    const asked = book.objections.find(objection => objection.key === 'trial_terms');
+    expect(asked.when).toBe('They ask what the trial needs, whether it needs a card, or what happens when it ends.');
+    expect(asked.answer.toLowerCase()).toContain(trialCardTerms.toLowerCase().replace(/\.$/, ''));
+    expect(asked.answer).toMatch(/Say this only when they ask\. Never bring it up unasked, and never say a card is not needed\.$/);
+    expect(book.objections.filter(objection => /credit card/i.test(objection.answer)).map(objection => objection.key)).toEqual(['trial_terms']);
+    expect(playbookText()).toContain('- trial_terms (They ask what the trial needs, whether it needs a card, or what happens when it ends.)');
+    // No outreach plan of any kind asks for the terms: the first three emails, a website lead's, a re-ask and the quiet follow-ups.
+    const plans = [reportTouchAngle, reviewTouchAngle, viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle, reportCloseAngle, ...sequencePlan.map(step => step.angle),
+      ...inboundSequence.map(step => step.angle), reaskAngle, ...Object.values(quietPlays)];
+    for (const plan of plans) expect(plan, plan.slice(0, 40)).not.toMatch(/credit card is required|canceling before it ends|card terms|say (?:in one plain clause )?that a credit card/i);
+    // The fact sheet carries the rule for every writer, beside the terms it still states.
+    expect(trialMention).toBe('Offer the free trial in plain words: its length and what it covers. Do not bring up the credit card or how billing starts. State those terms, exactly as written above, only when the reader asks what the trial needs or what happens when it ends. Never say that no card is needed, and never call the trial risk-free.');
+    expect(products.intel.trialMention).toBe(trialMention);
+    expect(products.carebase.trialMention).toBeUndefined();
+    // CareBase's trial needs no card, and its playbook never spoke of one.
+    expect(JSON.stringify(salesPlaybook.carebase)).not.toMatch(/credit card/i);
   });
 
   it('renders a constant, versioned text for the model with every product and objection', () => {

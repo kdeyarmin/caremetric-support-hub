@@ -108,6 +108,28 @@ describe('bulk email messages', () => {
     expect(sendgridBulkMail({ apiKey: 'not-a-key' }).configured).toBe(false);
     expect(sendgridBulkMail({ apiKey: 'SG.key', from: 'not an address' }).configured).toBe(false);
   });
+  it('uses one message\'s own display name unless a name is saved in Settings or the name is not one a mail service accepts', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 202 }));
+    const name = async (options, fromName) => {
+      await sendgridBulkMail({ apiKey: 'SG.key', from: 'hello@go.caremetric.ai', replyTo: 'support@caremetric.ai', fetchImpl, ...options })
+        .send({ to: 'a@agency.test', subject: 'S', text: 'T', unsubscribeUrl: 'https://hub.example/u', ...(fromName === undefined ? {} : { fromName }) });
+      return JSON.parse(fetchImpl.mock.calls.at(-1)[1].body).from;
+    };
+    // A founder-signed growth email (growth/worker.mjs) names its sender; nothing else does.
+    expect(await name({}, 'Dr. Kevin Deyarmin, CareMetric')).toEqual({ email: 'hello@go.caremetric.ai', name: 'Dr. Kevin Deyarmin, CareMetric' });
+    expect(await name({}, '  Dr. Kevin Deyarmin, CareMetric  ')).toEqual({ email: 'hello@go.caremetric.ai', name: 'Dr. Kevin Deyarmin, CareMetric' });
+    expect((await name({})).name).toBe('CareMetric');
+    expect((await name({ fromName: () => 'CareMetric Intel' })).name).toBe('CareMetric Intel');
+    // Locked: the owner saved a display name (Settings → Email), read on each send, so it wins.
+    let locked = true;
+    expect((await name({ fromName: () => 'CareMetric Sales', fromNameLocked: () => locked }, 'Dr. Kevin Deyarmin, CareMetric')).name).toBe('CareMetric Sales');
+    expect((await name({ fromName: 'CareMetric Sales', fromNameLocked: true }, 'Dr. Kevin Deyarmin, CareMetric')).name).toBe('CareMetric Sales');
+    locked = false;
+    expect((await name({ fromName: () => 'CareMetric', fromNameLocked: () => locked }, 'Dr. Kevin Deyarmin, CareMetric')).name).toBe('Dr. Kevin Deyarmin, CareMetric');
+    // Not a usable display name: quotes, angle brackets, a line break, too long, blank or not text.
+    for (const bad of ['Kevin "K" Deyarmin', 'Kevin <founder@caremetric.ai>', 'Kevin\r\nBcc: x@example.org', 'x'.repeat(65), '   ', '', null, 7])
+      expect((await name({}, bad)).name, String(bad)).toBe('CareMetric');
+  });
   it('files bulk email under its own SendGrid category, and the Account Manager\'s customer emails under theirs', async () => {
     const fetchImpl = vi.fn(async () => new Response(null, { status: 202 }));
     await sendgridBulkMail({ apiKey: 'SG.key', fetchImpl }).send({ to: 'a@agency.test', subject: 'S', text: 'T', unsubscribeUrl: 'https://hub.example/u' });

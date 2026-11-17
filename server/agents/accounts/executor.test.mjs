@@ -42,7 +42,7 @@ describe('sending an approved customer email', () => {
     expect(mail.send).toHaveBeenCalledTimes(1);
     const [message] = sent;
     expect(message.to).toBe(canary);
-    expect(message.subject).toBe('Welcome to CareMetric CareBase');
+    expect(message.subject).toBe('Welcome to CareMetric CareBase: your first three steps');
     const token = /\/api\/email\/unsubscribe\/([0-9a-f]{64})$/.exec(message.unsubscribeUrl)[1];
     expect(message.unsubscribeUrl).toBe(`${origin}/api/email/unsubscribe/${token}`);
     expect(unsubscribeHash).toBe(createHash('sha256').update(token).digest('hex'));
@@ -180,7 +180,7 @@ describe('sending an approved customer email', () => {
       outcomes.push(await send(execution()).then(result => result, error => ({ code: error.code, message: error.message })), logs);
     }
     const kept = JSON.stringify(outcomes);
-    for (const secret of [canary, 'Thank you for starting', 'unsubscribe/']) expect(kept, secret).not.toContain(secret);
+    for (const secret of [canary, 'Thanks for starting', 'unsubscribe/']) expect(kept, secret).not.toContain(secret);
   });
 });
 

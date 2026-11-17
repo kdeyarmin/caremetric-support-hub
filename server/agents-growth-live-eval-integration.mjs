@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { growthStore } from './growth/store.mjs';
 import { liveEvaluationHandlers, liveEvaluationNote } from './growth/live-evaluation.mjs';
+import { criticPromptVersion } from './growth/draft.mjs';
 import { growthReachFeature } from './growth/reach.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
@@ -23,13 +24,15 @@ const refused = code => error => error?.code === code;
 const seedPolicy = await row("select approved_claim from private.growth_policies where product = 'caremetric-intel'");
 const runs = [];
 
-// A stand-in writer and reader: a short report-led first email citing the agency's own record, and the score it is told to give.
+// A stand-in writer and reader: a first email in the form every agency gets (its market report and one question, citing the agency's own
+// record), and the score it is told to give. Half of the cases carry the agency's own report; the rest have none, and are pointed to the
+// market report page.
 const stand = score => ({ configured: true, run: async (_task, request) => {
-  if (request.promptVersion === 'critic.2') return { outcome: 'completed', output: { specific: 4, relevant: 4, clearAsk: 4, wouldReply: score, weakness: score < 4 ? 'generic_opening' : 'none', weakestSentence: '' } };
+  if (request.promptVersion === criticPromptVersion) return { outcome: 'completed', output: { specific: 4, relevant: 4, clearAsk: 4, wouldReply: score, weakness: score < 4 ? 'generic_opening' : 'none', weakestSentence: '' } };
   const input = JSON.parse(request.user);
-  const report = input.links.find(link => link.url.includes('/report/')).url;
-  return { outcome: 'completed', output: { subject: 'Your county\'s referral sources', citations: [input.sources.find(source => source.id !== 'county').id], needsHuman: false,
-    body: `Are you getting your share of the referrals in your county?\n\nI put together a free market report for your agency from public Medicare data.\n${report}` } };
+  const report = (input.links.find(link => link.url.includes('/report/')) ?? input.links.find(link => link.url.endsWith('/market-review'))).url;
+  return { outcome: 'completed', output: { subject: 'A market report for your agency', citations: [input.sources.find(source => source.id !== 'county').id], needsHuman: false,
+    body: `I put together a free market report for your agency from Medicare data.\n${report}\n\nDoes it match what your team sees in the field?` } };
 } });
 // A clock a minute on at each reading: a try writes one batch and then finds its time for starting new batches spent, as a real run
 // with a slow model would, so the twelve cases take several tries without the test waiting minutes.
@@ -53,12 +56,12 @@ try {
     assert.deepEqual(access, { server: true, signed_in: false, anonymous: false }, `only the server may run ${fn}`);
   }
   assert.equal((await row("select has_table_privilege('hub_app_server', 'private.growth_live_eval_cases', 'select') as allowed")).allowed, false, 'the grades are closed');
-  await assert.rejects(store.liveEvalRecord('week:soon', 'web.brief.short', {}), refused('22023'));
+  await assert.rejects(store.liveEvalRecord('week:soon', 'web.brief.report', {}), refused('22023'));
   assert.equal((await row("select count(*)::int as n from private.agent_schedules where agent_key = 'marketing_manager' and task_kind = 'growth.evaluate_live'")).n, 1);
 
   // ---- 2. Twelve cases over several tries, recorded as growth.live.1 ----------------------------------------------------------------------
   await admin.query("update private.growth_policies set approved_claim = $1 where product = 'caremetric-intel'",
-    ['CareMetric Intel shows home health and hospice agencies where their referrals come from, from public Medicare data.']);
+    ['CareMetric Intel shows home health and hospice agencies where their referrals come from, from Medicare data.']);
   const gateBefore = (await row("select count(*)::int as n from private.agent_evaluations where version = 'growth.1'")).n;
   const quiet = { send: async () => { throw new Error('a passing run tells nobody'); } };
   const passing = await finish(evaluateWith(4, quiet));
@@ -69,7 +72,7 @@ try {
   assert.equal(passing.outcome.result.average, 4);
   const graded = await store.liveEvalState(runs[0]);
   assert.equal(graded.cases.length, 13, 'twelve grades and the finished mark');
-  assert.ok(graded.cases.every(entry => !JSON.stringify(entry).includes('referrals in your county')), 'grades only, never an email\'s words');
+  assert.ok(graded.cases.every(entry => !/free market report|what your team sees/.test(JSON.stringify(entry))), 'grades only, never an email\'s words');
   const recorded = await row("select passed, version, results from private.agent_evaluations where version = 'growth.live.1' and results ->> 'run' = $1", [runs[0]]);
   assert.equal(recorded.passed, true);
   assert.equal(recorded.results.results.length, 12);
@@ -80,7 +83,7 @@ try {
   const again = await evaluateWith(4, quiet)({ id: runs[0].slice(4), agentKey: 'marketing_manager', kind: 'growth.evaluate_live', sourceKind: 'owner', attempts: 2, agent: { autonomy: 'act' } }, { now: () => new Date() });
   assert.deepEqual(again.result, { skipped: 'already_done', run: runs[0] });
   // A grade already kept for the run is kept: the first one stands.
-  assert.equal(await store.liveEvalRecord(runs[0], 'web.brief.short', { ok: false }), false);
+  assert.equal(await store.liveEvalRecord(runs[0], 'web.brief.report', { ok: false }), false);
 
   // ---- 3. A week that does not pass tells the owner once ---------------------------------------------------------------------------
   const notices = [];

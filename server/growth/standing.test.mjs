@@ -24,6 +24,21 @@ describe('an agency\'s own standing', () => {
     }
   });
 
+  // Email review 2026-11-17: the writer was told to say "the physicians Intel ranks highest as referral sources", and this check
+  // refused it as a rank.
+  it('lets a rank that is plainly about physicians or referral sources pass, and still refuses an agency\'s', () => {
+    for (const text of ['It shows the hospitals its residents use and the physicians Intel ranks highest as referral sources.',
+      'the physicians ranked highest as referral sources', 'The clinicians Intel ranks highest are listed with their practice locations.',
+      'It lists the physicians in your county that Intel ranks highest as referral sources.', 'The doctors ranked highest for home health outreach are on page two.',
+      'the highest-ranked physicians for outreach']) {
+      expect(emailStatesStanding(text), text).toBe(false);
+    }
+    for (const text of ['Your agency ranks highest in Erie County.', 'Valley Home Health ranked top in the county last year.', 'It ranks lowest of the agencies there.',
+      'Physicians know that your agency ranks highest in the county.', 'Your agency ranks among the top agencies in the county.', 'You rank near the bottom.']) {
+      expect(emailStatesStanding(text), text).toBe(true);
+    }
+  });
+
   it('lets Intel describe the physicians it ranks highest, and still refuses an agency\'s rank (2026-11-17)', () => {
     // The writer is told to describe the report this way; the check refused it 35 times in a day.
     for (const text of ['The report shows the physicians Intel ranks highest as referral sources in Erie County.',

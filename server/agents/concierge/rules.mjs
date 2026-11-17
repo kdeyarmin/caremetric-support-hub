@@ -126,7 +126,9 @@ export function withoutTrialPhrase(text) {
     const noCard = /\b(?:trial(?: with| needs)?|free for 30 days[,]?) no $/.test(prefix)
       && /^(?: needed|required)?\s*(?:$|[,;)])/.test(suffix);
     const cardRequired = /\btrial(?: on one county)?\s*[(,;]\s*(?:a )?$/.test(prefix) && /^ (?:is )?required\b/.test(suffix);
-    const startTrial = /(?:^\s*>?\s*|\bthat )a $/.test(prefix) && /^ is required to start the trial\b/.test(suffix);
+    // The fact sheet's terms open a sentence; an answer to a prospect who asked what the trial needs (the playbook's `trial_terms`
+    // objection, 2026-11-17) may lead into them with a colon or a "yes".
+    const startTrial = /(?:^\s*>?\s*|\bthat |:\s*|\byes[,:]?\s+)a $/.test(prefix) && /^ is required to start the trial\b/.test(suffix);
     // The documented trial summary uses "it" in the next sentence; require that specific trial-summary context.
     const startIt = /\bfree trial, [^.!?\n]{0,70}\. a $/.test(before) && /^ is required to start it(?:,|$)/.test(suffix);
     const siteTerms = /^\s*>?\s*$/.test(prefix) && /^ required · cancel before trial end to avoid charges(?:$|[;,])/.test(suffix);

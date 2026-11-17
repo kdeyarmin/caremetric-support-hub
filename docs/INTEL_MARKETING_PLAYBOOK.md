@@ -232,8 +232,17 @@ Each agent keeps its existing controls and approval steps. This section only say
 - **Who to prioritize while new enrollments are frozen:** established agencies in counties with several competitors, agencies hiring
   marketers or liaisons, and any newly certified agency or new owner the roster shows. The last two are rare now but are the strongest
   signals.
-- **Touch 1:** the founder's story in one or two sentences, one likely problem as a question, one sentence on how Intel helps, then the
-  free trial. No price.
+- **The three touches to a home health agency or hospice** (owner direction 2026-11-17) are designed marketing emails in Intel's
+  look. The writer writes only each one's short opening for that agency; the rest is written for its kind of business (a home health
+  agency reads about home health agencies, a hospice about hospices) and comes from the fact sheet. Touch 1: the agency's free market report first, then what Intel does in five points, the founder's story and the
+  free trial. Touch 2: a week of the work in Intel, the Founders Sale and the trial. Touch 3: a short close that leaves the report
+  with them. No price in any of them, and no card terms. [Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report) has
+  the form and its checks.
+- **The three touches to a nursing home** are the same designed emails in a nursing home's words: its hospital sources, the homes
+  it competes with (ranked by Medicare share, with alerts, since Intel began ranking nursing homes on 2026-11-17), its county, and
+  the free trial. No market report: Intel's free reports cover home health and hospice only.
+- **Touch 1 to a CareBase prospect** keeps the general plan (`touchAngle`): one likely problem as a question, one sentence on how
+  the product helps, then the free trial. No price.
 - **Rotate the lead pillar** across prospects. The experiment angles are referral sources, territory, competitors, visit prep, hospital
   outcomes and slipping sources (`experimentAngles` in `server/growth/playbook.mjs`).
 - **Numbers:** only the agency's own facts, in a sentence about the agency ("Your agency serves six counties."). Never a county statistic
@@ -347,6 +356,10 @@ Most items are already enforced in code; the rest depend on judgment.
 - Say something concrete: who it is for, and what they can do, see or stop doing.
 - Show Intel as one marketing workspace, even when leading with one feature.
 - Quote prices, the trial and the Founders Sale exactly as the fact sheet words them.
+- Offer the trial in plain words. Do not bring up the credit card unless the reader asks what the trial needs or what happens when
+  it ends (owner direction 2026-11-17); never say that no card is needed.
+- In email, name the data by its source ("Medicare data", "CMS and Census data") without the word "public" (owner direction
+  2026-11-17). Never call it proprietary, exclusive or licensed, and answer plainly when a reader asks where it comes from.
 - Label public figures as research signals, and say referrals come from the agency's own records.
 - Carry the plan condition when a feature needs one (Growth and Pro, Pro, agency admins and managers).
 - Point to the trial, the walkthrough, the free county report or a written answer as the next step.

@@ -99,8 +99,11 @@ describe('report opens and the reader\'s weaknesses (2026-11-17)', () => {
     // A lead under ten points.
     expect(composeMemo('caremetric-intel', facts({ arms: [linked('subject', 'question', 30, 0, 20, 5), linked('subject', 'plain', 30, 0, 20, 4)] })).text).toBeNull();
     // An opens comparison needs no minimum of sends, only of linked reports.
-    expect(composeMemo('caremetric-intel', facts({ arms: [linked('form', 'short', 16, 0, 16, 6), linked('form', 'standard', 15, 0, 15, 1)] })).text)
-      .toContain('after 6 of 16 short first emails (about 70 words) (38%) and after 1 of 15 standard first emails (7%)');
+    expect(composeMemo('caremetric-intel', facts({ arms: [linked('subject', 'question', 16, 0, 16, 6), linked('subject', 'plain', 15, 0, 15, 1)] })).text)
+      .toContain('after 6 of 16 subjects phrased as a question (38%) and after 1 of 15 plain subjects (7%)');
+    // The first email's form is not compared, on opens or on replies: every first email built around a market report is the report and
+    // nothing else since 2026-11-17, so "short" against "standard" would set emails written under different instructions side by side.
+    expect(composeMemo('caremetric-intel', facts({ arms: [linked('form', 'short', 16, 0, 16, 6), linked('form', 'standard', 15, 0, 15, 1)] })).text).toBeNull();
   });
 
   it('never lets opens override a reply comparison, nor compares the send order or an earlier open on opens', () => {
@@ -115,11 +118,12 @@ describe('report opens and the reader\'s weaknesses (2026-11-17)', () => {
       linked('subject', 'odd', 30, 0, 20, 0)] })).text).toBeNull();
   });
 
-  it('names the send bands and the short form when replies compare them', () => {
+  it('names the send bands when replies compare them, and no longer compares the first email\'s form', () => {
     const memo = composeMemo('caremetric-intel', facts({ arms: [arm('band', '2', 25, 4), arm('band', '4', 40, 1), arm('form', 'short', 30, 5), arm('form', 'standard', 30, 1)] }));
-    expect(memo.text).toContain('short first emails (about 70 words) drew replies to 5 of 30 emails (17%); standard first emails drew 1 of 30 (3%)');
+    expect(memo.lines).toHaveLength(1);
     expect(memo.text).toContain('first emails with a brief and a checked named person drew replies to 4 of 25 emails (16%); other emails drew 1 of 40 (3%)');
-    expect(memo.lines[0]).toContain('short first emails');
+    expect(memo.text).not.toMatch(/short first emails|standard first emails/);
+    expect(composeMemo('caremetric-intel', facts({ arms: [arm('form', 'short', 30, 5), arm('form', 'standard', 30, 1)] })).text).toBeNull();
   });
 
   it('names the reader\'s commonest weakness after three drafts, with what to do about it', () => {

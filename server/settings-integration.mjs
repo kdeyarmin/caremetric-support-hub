@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { digest } from './sms-auth.mjs';
-import { hubSettings, settingsCatalog, settingsFeature } from './hub-settings.mjs';
+import { hubSettings, retiredSettings, settingsCatalog, settingsFeature } from './hub-settings.mjs';
 import { testPhones } from './test-phones.mjs';
 const phones = testPhones(import.meta.url);
 
@@ -26,7 +26,7 @@ const started = [];
 const server = env => { const settings = hubSettings({ pool, features, env, log: quiet, refreshMs: 3_600_000 }); started.push(settings); return settings; };
 
 try {
-  assert.equal(seed.length, settingsCatalog.length, 'Every setting the server knows has a row');
+  assert.equal(seed.length, settingsCatalog.length + retiredSettings.length, 'Every setting the server knows, and every retired one, has a row');
   await admin.query('update private.hub_settings set value = null, imported_from = null, changed_by = null');
   await admin.query('insert into auth.users(id,email,is_anonymous) values($1,$2,false)', [owner, `settings-owner-${run}@test.invalid`]);
   await admin.query("insert into private.staff_permissions(user_id,permission) values($1,'platform.admin')", [owner]);

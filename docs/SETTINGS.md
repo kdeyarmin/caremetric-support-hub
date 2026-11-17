@@ -99,7 +99,6 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Customer growth | Write first emails on the top model; Have a reader review each first email | The first email written from the brief on the top model, and a second model's 1-to-5 review with one rewrite below 4 |
 | Customer growth | Send to the best prospects first | The day's cold emails go to the most promising prospects first; an email over the cap waits for the next day; an opened report brings its follow-up forward ([review](AI_WORKFORCE_REVIEW_2026-11-17.md)) |
 | Customer growth | Send cold email from this hour; Send cold email until this hour | Eastern weekday hours for cold email (empty: any time); outside them it waits for the next opening |
-| Customer growth | Test a short first email | Half of the report-led Intel first emails are about 70 words; the trial moves to the second email |
 | Customer growth | Follow up when a prospect who replied goes quiet | At most two short follow-ups after a reply that was not answered by the prospect again |
 | Customer growth | Give the Sales Executive the account brief | Replies to prospects are drafted with the brief's writer part, the email that was answered and whether the report was opened |
 | Customer growth | Search the web for roster agencies not found; Most agencies to search the web for a day; Most to spend on one website search | A web search proposes sites for roster agencies the name and phone searches missed; only a site the usual checks confirm is used ([review](AI_WORKFORCE_REVIEW_2026-11-17.md), stage 3) |
@@ -122,6 +121,13 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 
 `HUB_BULK_EMAIL_FROM` and `HUB_BOOKING_URL` are no longer used at all (CareMetric offers no demos, calls or meetings), nor is
 `HUB_APOLLO_API_KEY` (the Hub finds people and their addresses itself); the Hub warns at start while any of them is set. Delete them.
+
+**Retired settings.** "Test a short first email" (Customer growth) left the Settings page on 2026-11-17: every first email built around
+a market report has one form now, a short opening and the email's own sections ([Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report)). Its row stays in the database,
+because the release gate that created it checks for it, and nothing reads it (`retiredSettings` in `server/hub-settings.mjs`).
+
+**Growth email display name**, when empty: a founder-signed email to a prospect arrives from "Dr. Kevin Deyarmin, CareMetric", and
+every other growth email from "CareMetric". A name set there is used for all of them.
 
 ## What stays in Railway
 

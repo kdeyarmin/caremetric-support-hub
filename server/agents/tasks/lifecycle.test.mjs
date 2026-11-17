@@ -65,7 +65,7 @@ describe('the customer email run', () => {
     const [first, second] = store.proposeAction.mock.calls.map(call => call[0]);
     const expected = lifecycleInput(fact('alpha'), 'welcome');
     expect(first).toEqual({ taskId: 't1', kind: 'email.send', targetKind: 'billing_account', targetId: 'alpha', input: expected, preview: lifecyclePreview(expected, { postalAddress: postal }) });
-    expect(first.preview.startsWith('Subject: Welcome to CareMetric CareBase\n\nWelcome to CareMetric CareBase\n\nHello,')).toBe(true);
+    expect(first.preview.startsWith('Subject: Welcome to CareMetric CareBase: your first three steps\n\nWelcome to CareMetric CareBase\n\nHello,')).toBe(true);
     expect(parseLifecycleInput(first.input)).toEqual(first.input);
     expect(first.input.textHash).toBe(wordingHash(first.input));
     expect([second.targetId, second.input.template, second.input.periodKey]).toEqual(['beta', 'trial_checkin', 'account:trial_checkin:beta:carebase']);

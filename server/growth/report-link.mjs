@@ -2,7 +2,7 @@
  * A link to one agency's free market report on Intel (`https://www.caremetricintel.com/report/<token>`), for the Marketing Manager's
  * outreach (owner decision 2026-11-15: send each agency a really good report of its own). Intel draws the report from public CMS and
  * Census data: where the agency stands among the agencies in its county, the county's largest agencies and its demand, the hospitals
- * its residents use, the physicians Intel ranks highest as referral sources, its public ratings and three moves the figures point to.
+ * its residents use, the highest-ranked physicians for outreach, its public ratings and up to three moves the figures point to.
  *
  * The link names the agency by its CMS certification number, which the Medicare roster's public record on the opportunity carries
  * (roster.mjs `rosterClaim`: "... (CCN 397001) is a Medicare-certified home health agency ..."). A prospect found on the web gets the

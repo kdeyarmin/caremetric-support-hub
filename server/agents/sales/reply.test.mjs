@@ -62,7 +62,7 @@ describe('the Sales Executive answering a prospect', () => {
     const harness = fixture({ model });
     const outcome = await harness.run();
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('sales.6');
+    expect(request.promptVersion).toBe('sales.7');
     expect(request.user).toContain(`How much is CareBase? ${canary}`);
     expect(request.system[0].text).not.toContain(canary);
     // The prompt, then the product's own published catalog, each cached (content/features.mjs).

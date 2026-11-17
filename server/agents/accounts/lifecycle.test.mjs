@@ -102,8 +102,8 @@ describe('the cancellation and win-back emails', () => {
   });
   it('asks what got in the way, by reply, with no price, offer or call', () => {
     const words = template => lifecycleWording(lifecycleInput(trial({ product: 'caremetric-intel', productName: 'CareMetric Intel' }), template));
-    expect(words('cancel_save')).toContain('has chosen to end its CareMetric Intel plan');
-    expect(words('cancel_save')).toContain('would you tell us what did not work?');
+    expect(words('cancel_save')).toContain('is ending its CareMetric Intel plan');
+    expect(words('cancel_save')).toContain('would you tell us what didn\'t work?');
     expect(words('trial_ended')).toContain('Your CareMetric Intel trial for Maple Grove Senior Living has ended.');
     expect(words('trial_ended')).toContain('Would you tell us what got in the way?');
     for (const template of ['cancel_save', 'trial_ended']) {
@@ -163,17 +163,17 @@ describe('the emails', () => {
   it('greets, says one thing, offers help by reply and signs off as the product team, with the subject and headline first', () => {
     const preview = lifecyclePreview(lifecycleInput(trial(), 'welcome'), { postalAddress: postal });
     expect(preview).toBe([
-      'Subject: Welcome to CareMetric CareBase', '',
+      'Subject: Welcome to CareMetric CareBase: your first three steps', '',
       'Welcome to CareMetric CareBase', '',
       'Hello,', '',
-      'Thank you for starting a CareMetric CareBase trial for Maple Grove Senior Living. Here is the quickest way to see it working with your own team:', '',
+      'Thanks for starting a CareMetric CareBase trial for Maple Grove Senior Living. These three steps get you to the first result worth seeing: each role\'s training assigned, with its records kept in one place for when a surveyor asks to see them.', '',
       '1. Add your facility, whether it is a personal care home or an Assisted Living Facility (ALF).',
       '2. Import your staff roster from a spreadsheet, or add a few people by hand.',
       '3. Choose the training each role needs and assign it.', '',
       'Open the help center:', 'https://cmcarebase.com/app/help', '',
-      'Each step has a short guide. If anything is unclear, reply to this email and we will help you through it.', '',
+      'Each step has a short guide. If anything\'s unclear, just reply and we\'ll help you through it.', '',
       'The CareMetric CareBase team', 'https://cmcarebase.com', '',
-      'You are receiving this email because Maple Grove Senior Living has a CareMetric CareBase account.',
+      'You\'re getting this email because Maple Grove Senior Living has a CareMetric CareBase account.',
       `${unsubscribeLabel}: a personal link is added when the email is sent`,
       postal,
       // The CareBase theme's own footer lines.
@@ -185,17 +185,22 @@ describe('the emails', () => {
   it('has a subject and a purpose for each template', () => {
     const subjects = Object.fromEntries(offered('carebase').map(template => [template, lifecycleEmail(lifecycleInput(trial(), template)).subject]));
     expect(subjects).toEqual({
-      welcome: 'Welcome to CareMetric CareBase', setup_nudge: 'Need a hand getting set up in CareMetric CareBase?',
-      trial_checkin: 'How is your CareMetric CareBase trial going?', testimonial_ask: 'Would you share a sentence about CareMetric CareBase?',
+      welcome: 'Welcome to CareMetric CareBase: your first three steps', setup_nudge: 'Need a hand getting set up in CareMetric CareBase?',
+      trial_checkin: 'Before your CareMetric CareBase trial ends', testimonial_ask: 'Would you share a sentence about CareMetric CareBase?',
       cancel_save: 'Before your CareMetric CareBase plan ends', trial_ended: 'Thank you for trying CareMetric CareBase',
-      card_reminder: 'Finish starting your CareMetric CareBase trial', midtrial_nudge: 'A next step for your CareMetric CareBase trial',
+      card_reminder: 'One step left to start your CareMetric CareBase trial', midtrial_nudge: 'The one step that shows what CareMetric CareBase can do',
     });
     expect(() => lifecycleEmail(lifecycleInput(trial(), 'value_followup'))).toThrow('Unknown customer email.');
     const words = template => lifecycleWording(lifecycleInput(trial({ product: 'caremetric-intel', productName: 'CareMetric Intel' }), template));
     expect(words('welcome')).toContain('1. Open Setup from the Dashboard and name your agency.');
+    // Each email says what the customer gets (email review 2026-11-17): where the first steps lead, and what stays when the plan starts.
+    expect(lifecycleEmail(lifecycleInput(trial({ product: 'caremetric-intel', productName: 'CareMetric Intel' }), 'welcome')).subject).toBe('Welcome to CareMetric Intel: your first three steps');
+    expect(words('welcome')).toContain('These three steps get you to the first result worth seeing: a list of the highest-ranked physicians for outreach in the county your trial covers.');
+    expect(words('setup_nudge')).toContain('Setup ends with the first result worth seeing: a list of the highest-ranked physicians for outreach in the county your trial covers.');
+    expect(words('trial_checkin')).toContain('Everything you\'ve built stays in place when your plan starts: your lists, your accounts and every visit you\'ve logged.');
     expect(words('welcome')).toContain('https://www.caremetricintel.com/Help');
     expect(words('setup_nudge')).toContain('offer a hand with setup');
-    expect(words('setup_nudge')).toContain('reply to this email and tell us what you would like to get done first');
+    expect(words('setup_nudge')).toContain('just reply and tell us what you\'d like to get done first');
     expect(words('trial_checkin')).toContain('This is a personal check-in, not a billing notice.');
     expect(words('trial_checkin')).toContain('Is anything getting in the way');
     expect(words('trial_checkin')).toContain('If you decide to keep CareMetric Intel, the Founders Sale applies on its own: eligible subscription charges are 50% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.');
@@ -204,11 +209,11 @@ describe('the emails', () => {
 
   it('asks for a testimonial with consent wording, and a reply is how a customer says yes', () => {
     const words = lifecycleWording(lifecycleInput(paying(), 'testimonial_ask'));
-    expect(words).toContain('Would you be willing to share a sentence or two about your experience?');
-    expect(words).toContain('reply to this email to say yes');
-    expect(words).toContain('We would use your words only with your permission, only in the form you approve');
+    expect(words).toContain('Would you share a sentence or two about how it\'s going?');
+    expect(words).toContain('just reply to say yes');
+    expect(words).toContain('We\'d use your words only with your permission, only in the form you approve');
     expect(words).toContain('with or without your name and organization, as you prefer');
-    expect(words).toContain('If you would rather not, there is no need to reply.');
+    expect(words).toContain('If you\'d rather not, there\'s no need to reply.');
   });
 
   it('uses the company vocabulary for CareBase and never the regulation\'s own facility name or an auditor', () => {
@@ -438,9 +443,14 @@ describe('the trial path (team review 2026-11-17, stage 4)', () => {
     expect(input.helpUrl).toBe('https://www.caremetricintel.com/Billing');
     const words = lifecycleWording(input);
     expect(words).toContain(cardTermsWords);
+    expect(words).toContain('Once it starts, you pick the county your trial covers and build a list of its highest-ranked physicians for outreach.');
     expect(words).not.toMatch(/no credit card|no card/i);
+    // The card reminder is the one customer email that names the card: its card is the email's subject (owner direction 2026-11-17).
+    for (const template of ['welcome', 'setup_nudge', 'midtrial_nudge', 'value_followup', 'trial_checkin', 'trial_ended', 'cancel_save']) {
+      expect(lifecycleWording(lifecycleInput(intel(), template)), template).not.toMatch(/credit card|\bcard\b/i);
+    }
     expect(lifecycleInput(intel(), 'midtrial_nudge').helpUrl).toBe('https://www.caremetricintel.com/Help');
-    expect(lifecycleWording(lifecycleInput(intel(), 'midtrial_nudge'))).toContain('the physicians in that county that Intel ranks highest as referral sources');
+    expect(lifecycleWording(lifecycleInput(intel(), 'midtrial_nudge'))).toContain('build a first list: the highest-ranked physicians for outreach in that county');
     expect(lifecycleWording(lifecycleInput(intel(), 'value_followup'))).toContain('When your trial ends, the plan you chose starts on its own');
   });
 });

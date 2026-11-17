@@ -97,6 +97,27 @@ describe('sending through SES', () => {
     expect(body.EmailTags).toEqual([{ Name: 'category', Value: 'hub-bulk-email' }, { Name: 'growth_message_id', Value: '11111111-1111-4111-8111-111111111111' }]);
     expect(body.ConfigurationSetName).toBeUndefined();
   });
+
+  it('uses one message\'s own display name unless a name is saved in Settings or the name is not one a mail service accepts', async () => {
+    const fetchImpl = vi.fn(async () => ok());
+    const from = async (options, fromName) => {
+      await sesBulkMail({ ...access, from: 'hello@go.caremetric.ai', replyTo: 'support@caremetric.ai', fetchImpl, ...options })
+        .send({ to: 'office@agency.example', subject: 'Referral sources', text: 'Text', unsubscribeUrl: 'https://help.caremetric.ai/api/growth/preferences/abc',
+          ...(fromName === undefined ? {} : { fromName }) });
+      return /^From: (.*)$/m.exec(sentRequest(fetchImpl).raw)[1].trim();
+    };
+    // A founder-signed growth email names its sender (growth/worker.mjs); its comma is quoted in the header.
+    expect(await from({}, 'Dr. Kevin Deyarmin, CareMetric')).toBe('"Dr. Kevin Deyarmin, CareMetric" <hello@go.caremetric.ai>');
+    expect(await from({})).toBe('"CareMetric" <hello@go.caremetric.ai>');
+    // A display name saved in Settings (locked, read on each send) wins.
+    let locked = true;
+    expect(await from({ fromName: () => 'CareMetric Sales', fromNameLocked: () => locked }, 'Dr. Kevin Deyarmin, CareMetric')).toBe('"CareMetric Sales" <hello@go.caremetric.ai>');
+    locked = false;
+    expect(await from({ fromName: () => 'CareMetric', fromNameLocked: () => locked }, 'Dr. Kevin Deyarmin, CareMetric')).toBe('"Dr. Kevin Deyarmin, CareMetric" <hello@go.caremetric.ai>');
+    // A name with quotes, angle brackets or a line break, one too long, a blank or something that is not text never reaches the header.
+    for (const bad of ['Kevin "K" Deyarmin', 'Kevin <founder@caremetric.ai>', 'Kevin\r\nBcc: x@example.org', 'x'.repeat(65), '   ', '', null, 7])
+      expect(await from({}, bad), String(bad)).toBe('"CareMetric" <hello@go.caremetric.ai>');
+  });
 });
 
 describe('choosing the email service', () => {

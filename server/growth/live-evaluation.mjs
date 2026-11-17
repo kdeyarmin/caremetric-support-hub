@@ -5,10 +5,12 @@
  *
  * 1. Twelve made-up CareMetric Intel agencies (`liveEvaluationCases`): the four triggers the sweep writes from (newly certified, a new
  *    owner, the CMS record alone, the agency's own website), each three times, so every pairing of with or without an account brief and
- *    the short or standard first email comes up three times. Invented names, places, numbers and sites; no person, address or phone.
+ *    the agency's own report or the market report page comes up three times. (Until 2026-11-17 the second half of each pairing was the
+ *    short or the standard first email; every first email built around a report now has one form, so the link it carries took its place.)
+ *    Invented names, places, numbers and sites; no person, address or phone.
  * 2. Each is written on the real writer path (draft.mjs `draftMessage`, the real model, the top model where the sweep would use it, the
- *    approved learning memo where the sweep would use it) and read by the real reader (critic.2), as a first email linking the agency's
- *    own report. Nothing is saved as a message and nothing is sent.
+ *    approved learning memo where the sweep would use it) and read by the real reader (draft.mjs `criticPromptVersion`), as a first
+ *    email built around a market report. Nothing is saved as a message and nothing is sent.
  * 3. It passes when every draft passed the code checks, the reader scored every one, their average "would reply" is at least 3.5 and
  *    none is below 2 (`gradeLiveEvaluation`). Recorded as private.agent_evaluations version 'growth.live.1' (reach.mjs
  *    `liveEvaluationVersion`), which the send claim never reads (it reads 'growth.1'): a weak week never holds up sending. The Monday
@@ -23,7 +25,7 @@ import { live } from '../live.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
 import { weekStart } from '../agents/accounts/week.mjs';
 import { dueMoment } from '../agents/tasks/shared.mjs';
-import { draftMessage, messageArms, weaknessMeanings } from './draft.mjs';
+import { draftMessage, weaknessMeanings } from './draft.mjs';
 import { hasGrowthReach, liveEvaluationVersion } from './reach.mjs';
 
 const product = 'caremetric-intel';
@@ -39,8 +41,9 @@ export const liveDeadlineMs = 200_000;
 export const liveRetryMs = 60_000;
 
 export const liveTriggers = Object.freeze(['new_agency', 'new_owner', 'cms_record', 'web']);
-// Every pairing of a brief and a form; each trigger leaves out one pairing, so each pairing comes up three times in twelve cases.
-const pairings = Object.freeze([{ brief: true, form: 'short' }, { brief: true, form: 'standard' }, { brief: false, form: 'short' }, { brief: false, form: 'standard' }]);
+// Every pairing of a brief and the link the first email carries (the agency's own report, or the market report page for an agency with
+// no roster record); each trigger leaves out one pairing, so each pairing comes up three times in twelve cases.
+const pairings = Object.freeze([{ brief: true, link: 'report' }, { brief: true, link: 'review' }, { brief: false, link: 'report' }, { brief: false, link: 'review' }]);
 
 // Invented agencies: no real business, person, address or phone. The county figure is invented too, and stated as a county fact.
 const agencies = Object.freeze({
@@ -83,27 +86,23 @@ function briefFor(trigger, agency, evidence) {
 }
 
 /**
- * The twelve cases. Each one's agency id is chosen so the short-email test (draft.mjs `messageArms`, a byte of a hash of the id) gives
- * the form the case asks for, as it would give a real agency while "Test a short first email" is on.
+ * The twelve cases. A `report` case carries the agency's own report link, as the sweep gives an agency on the roster; a `review` case
+ * carries none, so its email points to the market report page.
  */
 export function liveEvaluationCases(now = new Date(), policy = {}) {
   const cases = [];
   liveTriggers.forEach((trigger, index) => {
     const agency = agencies[trigger];
-    pairings.filter((_, i) => i !== index).forEach(({ brief, form }) => {
+    pairings.filter((_, i) => i !== index).forEach(({ brief, link }) => {
       const evidence = evidenceFor(trigger, agency, now);
       const base = { product, version: 1, stage: 'qualified', owner_agent: 'marketing_manager', contact_id: 'live-eval-contact', name: agency.name,
         domain: agency.domain, goal: 'A reply or a trial', memory: {}, events: [], touches: 0, evidence, next_at: new Date(now.getTime() - day).toISOString(),
         policy: { approved_claim: policy.approvedClaim, max_touches: Number(policy.maxTouches) || 3, experiment_enabled: policy.experiment === true, version: policy.version ?? 1 } };
-      let opportunity = null;
-      for (let n = 0; n < 64 && !opportunity; n += 1) {
-        const id = `live-eval-${trigger}-${brief ? 'brief' : 'plain'}-${form}-${n}`;
-        const candidate = { ...base, id, organization_id: id };
-        if (messageArms(candidate, evidence, { reportLed: true, shortTest: true }).form === form) opportunity = candidate;
-      }
-      const token = createHash('sha256').update(opportunity.id).digest('hex').slice(0, 16);
-      cases.push({ key: `${trigger}.${brief ? 'brief' : 'plain'}.${form}`, trigger, brief, form, opportunity,
-        report: { label: `Free market report for ${agency.name}`, url: `https://www.caremetricintel.com/report/live-eval.${token}` },
+      const id = `live-eval-${trigger}-${brief ? 'brief' : 'plain'}-${link}`;
+      const opportunity = { ...base, id, organization_id: id };
+      const token = createHash('sha256').update(id).digest('hex').slice(0, 16);
+      cases.push({ key: `${trigger}.${brief ? 'brief' : 'plain'}.${link}`, trigger, brief, link, opportunity,
+        report: link === 'report' ? { label: `Free market report for ${agency.name}`, url: `https://www.caremetricintel.com/report/live-eval.${token}` } : null,
         briefPart: brief ? briefFor(trigger, agency, evidence) : null });
     });
   });
@@ -115,7 +114,7 @@ export function gradeCase(item, draft, problems = []) {
   const score = Number(draft?.arms?.critic);
   const ok = Boolean(draft) && draft.modelGenerated === true;
   return {
-    kind: item.trigger, brief: item.brief, form: item.form, ok,
+    kind: item.trigger, brief: item.brief, link: item.link, ok,
     wouldReply: ok && Number.isInteger(score) && score >= 1 && score <= 5 ? score : null,
     ...(ok && typeof draft.arms?.weakness === 'string' ? { weakness: draft.arms.weakness } : {}),
     ...(ok && draft.arms?.form ? { formWritten: draft.arms.form } : {}),
@@ -171,7 +170,7 @@ export function liveEvaluationHandlers({ growth, model, notifier = null, feature
     const problems = [];
     const draft = await draftMessage({ opportunity: item.opportunity, work: { kind: 'outreach', key: 'outreach:0', action: 'Offer one relevant next step based on verified product fit.',
       success: 'A qualified reply, trial or explicit disposition is recorded.' }, task, model: watched, signal, memo, report: item.report,
-      brief: item.briefPart, quality: Boolean(item.briefPart) && quality, critic: true, short: true, onReject: code => problems.push(code) });
+      brief: item.briefPart, quality: Boolean(item.briefPart) && quality, critic: true, onReject: code => problems.push(code) });
     return { exhausted, grade: gradeCase(item, draft, problems) };
   }
 
@@ -212,7 +211,7 @@ export function liveEvaluationHandlers({ growth, model, notifier = null, feature
           if (error) {
             // Stopped at the deadline, or a passing fault (a rate limit, an outage): written again on the next try.
             if (deadline.signal.aborted || error?.transient === true) { retry = true; continue; }
-            const grade = { kind: item.trigger, brief: item.brief, form: item.form, ok: false, wouldReply: null,
+            const grade = { kind: item.trigger, brief: item.brief, link: item.link, ok: false, wouldReply: null,
               problem: /^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'error' };
             await growth.store.liveEvalRecord(run, item.key, grade); graded.set(item.key, grade); written += 1;
             continue;

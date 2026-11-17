@@ -25,7 +25,7 @@
  * its home page), which the features catalog carries.
  */
 
-export const factsVersion = '2026-11-16.4';
+export const factsVersion = '2026-11-17.2';
 
 /**
  * Where public help articles live. An article's help-center address is `${helpCenterOrigin}/help/articles/<slug>`; that is its
@@ -45,6 +45,13 @@ const deepFreeze = value => {
  * trial signup"; Intel's own site says "Credit card required · Cancel before trial end to avoid charges"). Never "no credit card".
  */
 export const trialCardTerms = 'A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.';
+/**
+ * How the Intel trial is offered (owner direction 2026-11-17): a card at sign-up is ordinary for a trial, so nothing CareMetric writes
+ * brings it up unasked. The terms above stay on the sheet for a reader who asks, and for the email that asks a sign-up to finish adding
+ * its card (accounts/lifecycle.mjs `cardTermsWords`); Intel's own sign-up and Billing pages state them where the card is entered.
+ * Saying that no card is needed is still refused in code (validate.mjs `trial_terms`).
+ */
+export const trialMention = 'Offer the free trial in plain words: its length and what it covers. Do not bring up the credit card or how billing starts. State those terms, exactly as written above, only when the reader asks what the trial needs or what happens when it ends. Never say that no card is needed, and never call the trial risk-free.';
 const foundersSaleTerms = 'Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service on new paid product subscriptions, including existing free-trial users. The discount is applied automatically to eligible subscriptions after the trial, when paid service starts. No code or activation request is needed. Monthly billing receives 50% off the regular monthly rate; annual billing receives 50% off the published annual price paid upfront. Standard pricing resumes after the introductory year. Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization and product; plan eligibility and capacity limits still apply. No enrollment deadline or cap has been set. Source: live Stripe offer verified 2026-11-08; docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md.';
 
 const usd = cents => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
@@ -191,7 +198,7 @@ export const products = deepFreeze({
       'Daily field work: a Today page with tasks, progress on goals and the accounts to visit this week, each with a reason; a weekly schedule and call plan; a suggested route built from due follow-ups, slipping sources and key accounts not visited lately; a visit log built for a phone, with check-in, visit templates and a dated next step; a pre-visit card; directions to each account; business card scanning; county call sheets; follow-up emails that book the next visit; calendar sync; and a weekly digest for each marketer.',
       'Expenses, mileage and reimbursement: spend logged against the referral source it was for, receipt capture, per-person value for shared meals, each physician\'s running total against the Stark nonmonetary-compensation limit, policy totals for discharge planners and other non-physician sources, policy checks and flags, an approval workflow, reimbursement tracking, budgets, register, compliance and payroll exports, and a mileage log built from visit check-ins. These tools support the organization\'s compliance program; they are not legal advice. A small part of the workspace, never the point of it.',
       'Referral and admission tracking: referrals logged on the account they came from, with the service, payer and outcome; response time from arrival to first answer and decision; referral and admission reports imported from EMR exports as CSV files, with patient-identifying columns dropped; a referral funnel by account and marketer; drop-off alerts when a top source slips, and what the book shows about why, with the next step as a task; a quarterly outcomes packet to share with a hospital or facility; a shareable profile page for referral sources with intake details, current availability and public ratings; lost reasons; an admissions forecast [Pro]; and dated confirmations of what new referrals the organization can take.',
-      'Competitor intelligence: the home health agencies and hospices in the territory ranked by Medicare share, with star ratings; a watchlist with alerts when a rating, owner or service area changes or a new provider opens nearby; side-by-side comparison and trends; a county roll-up and a scheduled leadership brief; a plain-language card on how the agency compares with the largest in its county; and a free agency market review anyone can request on Intel\'s site.',
+      'Competitor intelligence: the home health agencies, hospices and nursing homes in the territory ranked by Medicare share, with star ratings; a watchlist with alerts when a rating, owner or service area changes or a new provider opens nearby; side-by-side comparison and trends; a county roll-up and a scheduled leadership brief; a plain-language card on how the agency compares with the largest in its county; and a free agency market review anyone can request on Intel\'s site.',
       'Manager and team tools: monthly visit and referral goals with a leaderboard [setting targets: Growth and Pro]; a review of each marketer\'s week; activity reports and a weekly email; ride-along notes and coaching; locations [Growth and Pro]; book balance across marketers [Pro]; account briefs and decision briefs; Ask the book for supported questions about the book; an AI Assistant that answers typed questions about the market, the book and the day and proposes lists, visits, tasks and drafts that are saved only when someone confirms [Growth and Pro]; an AI playbook of pitch pillars, service lines and words to avoid; connecting an AI app that supports MCP to read Intel [Growth and Pro]; friendly activity challenges and a monthly report card, never on referrals or admissions; a calendar of healthcare observances; and a materials library that shows who opened each file.',
       'Reports and analytics: results reports (performance scorecard, field activity, follow-up, mileage, referrals and admissions, top sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment), filtered and grouped by person, location, line of business, county, payer or period, each person seeing their own scope, downloaded as PDF, Excel or CSV; source quality after admission, by referral source, marketer or location (how long patients stay, short stays, hospice live discharges and revocations, home health returns to the hospital, and average daily census against each location\'s budget) [loading reports: owners]; and a custom report builder with scheduled email.',
       'Email campaigns [Growth and Pro]: campaigns to a lead list or the contacts on the book, with delivery tracking, sender settings and automatic unsubscribe handling. Nurture sequences of calls, visits, emails and tasks on an account, which stop on a referral, a contact leaving or a marked reply, are on every plan. One part of the workspace, never the point of it.',
@@ -203,12 +210,13 @@ export const products = deepFreeze({
       'Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.',
     ],
     // Owner-requested industry priorities, checked against kdeyarmin/intel@393b9b3: featureCatalog.json, businessLine.ts,
-    // planCatalog.ts and marketingCopy.json; service-line access rechecked 2026-11-16 against kdeyarmin/intel@8abe4c6. Keep the
+    // planCatalog.ts and marketingCopy.json; service-line access rechecked 2026-11-16 against kdeyarmin/intel@8abe4c6. Nursing homes
+    // joined the competitor rankings and alerts on 2026-11-17 (kdeyarmin/intel@0236062 and its live features page). Keep the
     // matching table and conditions in docs/GTM_FACTS.md together.
     industryGuidance: [
       'These industries are ordered by fit with the current product. The feature priorities describe likely uses, not measured customer usage or proven demand.',
       'Home health and hospice have the strongest combination of daily CRM use and market intelligence. Standard plans offer CRM workflows for every healthcare service line, within each plan\'s allowance of service lines the organization chooses; Enterprise covers every line.',
-      'Every care setting can use market and territory research within the subscribed territory. Public datasets and specialized analyses cover particular settings and geographies, so research depth varies by industry: specialized Medicare share rankings and competitor alerts cover home health and hospice.',
+      'Every care setting can use market and territory research within the subscribed territory. Public datasets and specialized analyses cover particular settings and geographies, so research depth varies by industry: specialized Medicare share rankings and competitor alerts cover home health agencies, hospices and nursing homes.',
       'Research coverage varies by dataset, geography and reporting period. State-licensed residential coverage depends on which state files are loaded. Feature access also depends on the plan, role and configured services.',
       'Public provider and market data supports research and planning; it does not establish confirmed referral relationships. Referral and admission results come from what the organization records or imports.',
       'For each audience, lead with its relevant features and main purpose below, within these conditions. This guidance does not change prospecting eligibility, campaign audiences or outreach permissions.',
@@ -228,7 +236,7 @@ export const products = deepFreeze({
       },
       {
         industry: 'Skilled nursing facilities and nursing homes',
-        priorityFeatures: 'Hospital-source research; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking on the nursing home service line.',
+        priorityFeatures: 'Hospital-source research; nursing home rankings by Medicare share and competitor alerts; facility profiles covering ratings, staffing, inspections and ownership; county utilization and supply analysis; account and outreach tracking on the nursing home service line.',
         purpose: 'Prioritize hospital relationships and understand the facility\'s competitive position.',
       },
       {
@@ -301,6 +309,7 @@ export const products = deepFreeze({
       'Bring market changes and team priorities into management reviews. Competitor alerts, goals, coaching, scoped reports and scheduled briefs support decisions across people and locations, subject to plan and role.',
       'Reduce repeated research and report assembly. Saved lists, account history, supported reporting questions, file imports and reusable reports bring the work together. Any time or cost benefit depends on use.',
     ],
+    trialMention,
     // Prices, the trial and Intel's offers come from Intel's own catalog once the Hub has read it.
     get trialDays() { return intelFacts().trialDays; },
     get pricing() { return intelFacts().pricing; },
@@ -442,6 +451,8 @@ export const founder = deepFreeze({
   name: 'Dr. Kevin C. Deyarmin',
   credentials: 'ND, MSW, CHPCA, NCG',
   signOff: ['Dr. Kevin C. Deyarmin', 'Founder, CareMetric'],
+  // The name a founder-signed email arrives from, when Settings → Email → Growth email display name is empty (owner decision 2026-11-17).
+  fromName: 'Dr. Kevin Deyarmin, CareMetric',
   story: [
     'I run a home health and hospice agency and a healthcare consulting company.',
     'I needed a way to do business intelligence research on my competitors and to find every potential referral source in my market.',
@@ -571,6 +582,7 @@ export function factSheetText() {
     if (product.boundaries?.length) lines.push('What it is not, and how to say so:', ...product.boundaries.map(line => `- ${line}`));
     if (product.trialDays) lines.push(`Free trial: ${product.trialDays} days.`);
     lines.push('Pricing:', ...product.pricing.map(line => `- ${line}`), 'Offers:', ...product.offers.map(line => `- ${line}`));
+    if (product.trialMention) lines.push(`How to offer the trial: ${product.trialMention}`);
   }
   lines.push('', 'You may say:', ...claims.may.map(line => `- ${line}`));
   lines.push('', 'You may never say:', ...claims.mayNot.map(line => `- ${line}`));
