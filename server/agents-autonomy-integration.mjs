@@ -92,7 +92,7 @@ try {
   const graduated = (await handler(task)).result;
   assert.deepEqual([graduated.graduated, graduated.waiting], [['account_emails'], ['offers:code_missing']]);
   assert.equal(sent.at(-1).subject, 'Account emails: now on their own');
-  assert.deepEqual(await agent('account_manager').then(a => [a.autonomy, a.config.auto_send_templates]), ['act', ['setup_nudge', 'testimonial_ask', 'trial_checkin', 'welcome']]);
+  assert.deepEqual(await agent('account_manager').then(a => [a.autonomy, a.config.auto_send_templates]), ['act', ['card_reminder', 'midtrial_nudge', 'setup_nudge', 'testimonial_ask', 'trial_checkin', 'value_followup', 'welcome']]);
   assert.equal((await step('account_emails')).status, 'automatic');
   assert.equal((await row("select announce_pending from private.agent_autonomy_steps where category = 'account_emails'")).announce_pending, false, 'the owner was told, and that is recorded');
   assert.equal((await step('offers')).status, 'supervised');

@@ -121,7 +121,7 @@ metadata, run summaries or task payloads.
 ### Autonomy steps: a supervised week, then on its own
 
 The owner hands kinds of work over to the team one at a time (`supabase/migrations/20261104220000_agent_autonomy.sql`,
-`private.agent_autonomy_steps`). Four ship, all off: **Account emails** (the Account Manager's first four templates; never the cancellation or ended-trial check-in), **Support
+`private.agent_autonomy_steps`). Four ship, all off: **Account emails** (the Account Manager's welcome, setup help, trial check-in and testimonial request, and since November 17 the trial path's card reminder, mid-trial next step and "what to do next", `20261117245000_trial_emails_auto_send.sql`; never the cancellation or ended-trial check-in), **Support
 answers**, **Article publishing** and **Offers**; **Sales follow-ups** and **Cold email** (the Marketing Manager's, see
 [Customer growth](CUSTOMER_GROWTH.md#sales-follow-ups-and-capped-cold-email)) are added, also off, by
 `20261105150000_growth_autonomy.sql`; later agents add their own, and the four the owner handed over on 2026-11-15 ship held
@@ -926,8 +926,9 @@ approves the exact text on the Team screen, or, for an agent on **Act**, when th
 - **A trial that ends unpaid is lost**, once (`churned`), so the Sales review stops listing it; an extension moves the end date the
   review reads.
 
-The three new emails follow the same approval as the others: proposed for your approval unless their template is on the Account
-emails step's list.
+The three new emails are on the Account emails step's list (owner decision of November 17,
+`20261117245000_trial_emails_auto_send.sql`), so with that step automatic they go out on their own like the welcome; the executor still
+checks each against the account when it is sent.
 
 The last two are proposed only while **Settings → Customer growth → Win-back and cancellation emails** is on (off until
 you turn it on) and the database declares `platform.agents.lifecycle-save.v1` (`20261113300000_lifecycle_save.sql`). They
