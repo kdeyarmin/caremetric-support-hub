@@ -98,6 +98,9 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   if(!growth)return {};
   const autonomy=declared(features);
   const reengaging=features instanceof Set?features.has(growthReengageFeature):Array.isArray(features)&&features.includes(growthReengageFeature);
+  // Team review 2026-11-17, stage 5 (platform.agents.support-truth.v1): a self-service trial nobody may write to is covered by the
+  // Account Manager's customer emails, so its onboarding, activation and trial work is not planned to pile up open.
+  const supportTruth=features instanceof Set?features.has('platform.agents.support-truth.v1'):Array.isArray(features)&&features.includes('platform.agents.support-truth.v1');
   const colleagues=(features instanceof Set?features.has(growthColleaguesFeature):Array.isArray(features)&&features.includes(growthColleaguesFeature))
     &&typeof growth.store.colleagueCandidates==='function';
   // The owner-approved learning memo (learning.mjs), while Settings → Customer growth → "Write from what is working" is on.
@@ -220,6 +223,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
         }
         for(const work of plans) {
           signal?.throwIfAborted(); const existing=(o.work??[]).find(w=>w.trigger_key===work.key);
+          if(supportTruth&&!existing&&o.owner_agent==='account_manager'&&o.eligibility!=='permitted'&&['onboarding','activation','trial'].includes(work.kind))continue;
           if(existing?.status==='resolved'||existing?.status==='cancelled')continue;
           const id=await growth.store.plan(o.id,work);planned++;
           if(!['outreach','onboarding','activation','trial','adoption','renewal','expansion','support','recovery'].includes(work.kind)||o.eligibility!=='permitted'||!growth.signingReady)continue;

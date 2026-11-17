@@ -234,6 +234,18 @@ export function communications({ pool, delegations, publicOrigin = defaultPublic
       if (started?.state === 'replay') return { delivery: started.delivery, deliveryChannel: started.deliveryChannel, replay: true };
       return deliver({ ...started, replay: false }, started.body, subject);
     },
+    /**
+     * The Support Concierge's standard acknowledgment sent without the owner's session (platform.agents.support-truth.v1): recorded as
+     * written by the CareMetric AI Assistant before it is sent (private.agent_acknowledge_begin), which checks again that the owner's
+     * switch is on, the Concierge is trusted with it, the sender is a person and the conversation has not moved; then delivered as a
+     * staff reply is. Returns `{ refused: code }` when the database says no, else `{ delivery, deliveryChannel, replay }`.
+     */
+    async acknowledge({ actionId, execution = null, subject = null }) {
+      const started = await server('select private.agent_acknowledge_begin($1,$2,$3) as result', [actionId, execution, available()]);
+      if (started?.state === 'refused') return { refused: started.code };
+      if (started?.state === 'replay') return { delivery: started.delivery, deliveryChannel: started.deliveryChannel, replay: true };
+      return deliver({ ...started, replay: false }, started.body, subject);
+    },
     /** Inbound SMS from Twilio. Returns an empty TwiML response; staff reply from the Hub. */
     async smsWebhook(req) {
       if (!twilioAuthToken) throw new HttpError(503, 'Text messaging is not configured.');

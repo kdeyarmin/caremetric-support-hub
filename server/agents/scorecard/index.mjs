@@ -61,8 +61,15 @@ const shift = (date, days) => { const [year, month, day] = date.split('-').map(N
  */
 export function scorecardHandlers({
   store, notifier, publicOrigin = null, features = null, growth = null, ads = null, searchConsole = undefined, searchConsoleSites = undefined, env = process.env, fetchImpl = fetch,
-  sites = defaultSites, audit = auditSite, visitors = null, log = line => console.warn(line), strategist = false,
+  sites = defaultSites, audit = auditSite, visitors = null, log = line => console.warn(line), strategist = false, toolkit = null, watchdogIdleDays = 3,
 }) {
+  // Team review 2026-11-17, stage 5 (platform.agents.support-truth.v1): the watchdog read with the brief's options, cost per trial from
+  // the Marketing Manager's spend and the ads, and CareBase (not marketed) as one pilot line.
+  const truth = features instanceof Set ? features.has('platform.agents.support-truth.v1') : Array.isArray(features) && features.includes('platform.agents.support-truth.v1');
+  const watchOptions = moment => {
+    const days = Number(live(watchdogIdleDays));
+    return { now: moment, ...(truth ? { idleDays: Number.isInteger(days) && days >= 1 ? days : 3, toolkit: typeof toolkit === 'function' ? toolkit() : [] } : {}) };
+  };
   if (!scorecardDeclared(features) || typeof store?.scorecardFacts !== 'function') return {};
   const reader = searchConsole === undefined
     // The properties are a Hub setting (`searchConsoleSites`, Settings → Search) read on each run; the key stays in Railway.
@@ -168,7 +175,7 @@ export function scorecardHandlers({
     const evaluated = hasGrowthReach(features) && typeof growth?.store?.liveEvaluationLatest === 'function'
       ? await optional('live_evaluation', () => growth.store.liveEvaluationLatest(new Date(moment.getTime() - 8 * 86_400_000)), signal) : null;
     // The watchdog's findings for the week (watchdog.mjs), as notes; none when they cannot be read.
-    const watched = typeof store.watchdogFacts === 'function' ? watchdogFindings(await optional('watchdog', () => store.watchdogFacts(), signal), { now: moment }) : [];
+    const watched = typeof store.watchdogFacts === 'function' ? watchdogFindings(await optional('watchdog', () => store.watchdogFacts(), signal), watchOptions(moment)) : [];
     // The scheduler may have stopped waiting while the figures were read: the scorecard is not sent after that.
     if (signal?.aborted) throw stopped();
 
@@ -184,6 +191,7 @@ export function scorecardHandlers({
     ].filter(Boolean);
     const card = composeScorecard({
       week, facts: { current, previous }, billing: billingFigures(snapshot, { now: moment }), search, ads: adFigures, visitors: seen, publicOrigin, notes, strategy,
+      ...(truth ? { marketingCost: true, pilots: ['carebase'] } : {}),
       verifiedLifecycle: features instanceof Set ? features.has('platform.agents.app-growth.v1') : Array.isArray(features) && features.includes('platform.agents.app-growth.v1'),
       needs: {
         incidents: Array.isArray(brief?.incidents) ? brief.incidents.length : 0, approvals: brief?.approvals ?? null,

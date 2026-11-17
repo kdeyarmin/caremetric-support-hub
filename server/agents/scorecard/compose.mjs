@@ -197,7 +197,8 @@ function campaignWords(list) {
   return `${total} (${kept.slice(0, 5).map(item => `${item.campaign} ${item.sessions}`).join(', ')}${kept.length > 5 ? ', and others' : ''})`;
 }
 
-export function composeScorecard({ week, facts, billing = null, search = null, ads = null, visitors = null, verifiedLifecycle = false, needs = {}, publicOrigin = null, notes = [], strategy = null }) {
+export function composeScorecard({ week, facts, billing = null, search = null, ads = null, visitors = null, verifiedLifecycle = false, needs = {}, publicOrigin = null, notes = [], strategy = null,
+  marketingCost = false, pilots = [] }) {
   const byProduct = list => Object.fromEntries((list ?? []).map(entry => [entry.product, entry]));
   const current = byProduct(facts?.current?.products);
   const previous = byProduct(facts?.previous?.products);
@@ -233,8 +234,12 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
   const paid = knownTotal('newPaying', 0);
   const nullablePair = values => `${values[0] ?? 'Unavailable'} (last week ${values[1] ?? 'unavailable'})`;
   const adsRead = ads && ads.unavailable !== true;
-  const spend = index => count(index === 0 ? facts?.current?.aiSpendCents : facts?.previous?.aiSpendCents)
-    + (adsRead ? count(index === 0 ? ads.spendCents : ads.previousSpendCents) : 0);
+  // Cost per trial counts what was spent winning customers (team review 2026-11-17, stage 5): with `marketingCost` and verified trials,
+  // the Marketing Manager's AI spend (the facts' marketingSpendCents) and the ads, not support, SEO or creative work; otherwise all AI spend.
+  const marketing = marketingCost && verifiedLifecycle && Number.isFinite(Number(facts?.current?.marketingSpendCents));
+  const aiSpend = index => count(index === 0 ? (marketing ? facts?.current?.marketingSpendCents : facts?.current?.aiSpendCents)
+    : (marketing ? facts?.previous?.marketingSpendCents : facts?.previous?.aiSpendCents));
+  const spend = index => aiSpend(index) + (adsRead ? count(index === 0 ? ads.spendCents : ads.previousSpendCents) : 0);
 
   const ranked = rankNeeds(needs);
   const headline = ranked.kept.length === 0 ? 'Nothing needs you this week.'
@@ -246,6 +251,11 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
   const productBlocks = products.flatMap(({ key, label }) => {
     const f = figures[key];
     const money = billing?.products?.[key];
+    // A product in `pilots` (CareBase, not marketed: team review 2026-11-17, stage 5) is one line, not a block of figures that cannot move.
+    if (pilots.includes(key)) {
+      return [{ type: 'paragraph', text: `${label} (pilot, not marketed): ${f.trialStarts[0] ?? 'unavailable'} ${trialLabel.toLowerCase()}, ${f.activated[0]} activated, `
+        + `${f.newPaying ? `${f.newPaying[0] ?? 'unavailable'} new paying` : 'new paying unavailable'}, MRR ${money ? dollars(money.mrrCents) : 'unavailable'}.` }];
+    }
     const rows = [
       [visitors?.metric === 'anonymous_sessions' && key === 'caremetric-intel' ? 'Website sessions (anonymous tabs)' : 'Website visitors', visitorWords(seen.byProduct[key])],
       ['County reports', beside(...f.countyReports)],
@@ -264,7 +274,7 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
     return [{ type: 'paragraph', text: label }, { type: 'details', rows }];
   });
 
-  const spendWords = index => `AI ${dollars(count(index === 0 ? facts?.current?.aiSpendCents : facts?.previous?.aiSpendCents))}`
+  const spendWords = index => `${marketing ? 'Marketing Manager AI' : 'AI'} ${dollars(aiSpend(index))}`
     + (adsRead ? ` and ads ${dollars(count(index === 0 ? ads.spendCents : ads.previousSpendCents))}` : '');
   const sourceNotes = [
     verifiedLifecycle ? 'Verified trial starts and new paying customers use processed billing events, one first event per organization and product. A paid event requires a confirmed positive invoice payment; subscription status alone is not a purchase. Measurement is prospective; periods before lifecycle coverage begins are unavailable, and renewals are not counted as new customers.'

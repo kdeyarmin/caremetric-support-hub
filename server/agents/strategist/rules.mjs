@@ -11,7 +11,7 @@
  * things can hold any stage: the Marketing Manager's daily budget and the owner's own approvals.
  */
 
-export const strategistVersion = 'strategist.2';
+export const strategistVersion = 'strategist.3';
 
 /** The constraints the strategist can name, in funnel order, with the label the scorecard shows. */
 export const constraintLabels = Object.freeze({
@@ -23,6 +23,8 @@ export const constraintLabels = Object.freeze({
   engagement: 'First emails are not read or answered',
   conversion: 'Interest is not becoming trials',
   activation: 'Trials are not reaching first value',
+  // Team review 2026-11-17, stage 5 (20261117240000_support_truth.sql: the notes accept it).
+  paying: 'Trials are ending unpaid',
   budget: 'The Marketing Manager\'s daily budget',
   approvals: 'Proposals waiting for you',
 });
@@ -38,6 +40,7 @@ export const watchLabels = Object.freeze({
   replies: 'replies',
   trialStarts: 'trial starts',
   activated: 'activated trials',
+  paid: 'new paying customers',
   budgetDays: 'days the Marketing Manager ran out of budget',
   approvals: 'proposals waiting for you',
 });
@@ -66,6 +69,8 @@ export function weekFigures(facts) {
     capDays: n(e.capDays), cap: n(facts?.settings?.coldEmailCap), waiting: n(e.approvedWaiting ?? e.waiting),
     limitDays: n(e.limitDays), productLimit: n(facts?.settings?.productDailyLimit),
     trialStarts: n(c.trialStarts), activated: n(c.activated), paid: n(c.paid),
+    // Intel sign-ups that never added their card, and counted trials that ended with nothing paid (platform.agents.support-truth.v1).
+    noCard: n(c.noCard), trialsLost: n(c.trialsLost),
     spendDollars: Math.round(n(s.marketingCents) / 100), budgetDollars: Math.round(n(s.budgetCents) / 100), budgetDays: n(s.budgetDays),
     approvals: n(facts?.approvals),
     // The bounce guard's own window (since the owner last saved it or resumed): cold emails sent and hard bounces.
@@ -159,8 +164,15 @@ export function candidates(facts, previous = null) {
       opensKnown ? 'Read the reader\'s weakest sentences on Growth and change the first email\'s offer, not its wording.'
         : 'Turn on recording report opens (Settings → Customer growth), and read the reader\'s weakest sentences on Growth.', opensKnown ? 'openRate' : 'replies');
   }
+  // Sign-ups that stop at the card: interest that never becomes a trial, the most specific case of it.
+  const noCardTwoWeeks = f.noCard + (before?.noCard ?? 0);
+  if (noCardTwoWeeks >= 2) {
+    add('conversion', 60 + Math.min(noCardTwoWeeks * 5, 30), { noCardTwoWeeks },
+      `${noCardTwoWeeks} people began an Intel trial in two weeks and never added their card, so their trials never started.`,
+      'Let the Account Manager\'s card reminder go out on its own (AI team → Account emails), and look at Intel\'s Billing page for what stops people at the card.', 'trialStarts');
+  }
   // Interest without trials.
-  if ((f.replies >= 2 || (opensKnown && f.reportViews >= 5)) && f.trialStarts === 0) {
+  if (!list.some(item => item.key === 'conversion') && (f.replies >= 2 || (opensKnown && f.reportViews >= 5)) && f.trialStarts === 0) {
     add('conversion', 55 + Math.min(f.replies * 5 + f.reportViews, 30), { replies: f.replies, reportViews: f.reportViews, trialStarts: 0 },
       `${f.replies} ${f.replies === 1 ? 'reply' : 'replies'} and ${f.reportViews} report ${f.reportViews === 1 ? 'open' : 'opens'} last week, and no trial started.`,
       'Make the second email to agencies that opened their report a direct trial offer with one step.', 'trialStarts');
@@ -169,7 +181,14 @@ export function candidates(facts, previous = null) {
   if (f.trialStarts + (before?.trialStarts ?? 0) >= 2 && f.activated + (before?.activated ?? 0) === 0) {
     add('activation', 70, { trialStarts: f.trialStarts + (before?.trialStarts ?? 0), activated: 0 },
       `${f.trialStarts + (before?.trialStarts ?? 0)} trials started in two weeks and none reached first value.`,
-      'Have the Account Manager call or email each new trial on day one with the one report that shows their county.', 'activated');
+      'Let the Account Manager\'s welcome and mid-trial emails go out on their own (AI team → Account emails): they point each trial to the one step that shows its own county.', 'activated');
+  }
+  // Trials that end with nothing paid.
+  const lostTwoWeeks = f.trialsLost + (before?.trialsLost ?? 0);
+  if (lostTwoWeeks >= 1) {
+    add('paying', 50 + Math.min(lostTwoWeeks * 10, 40), { trialsLostTwoWeeks: lostTwoWeeks },
+      `${lostTwoWeeks} ${lostTwoWeeks === 1 ? 'trial' : 'trials'} ended in two weeks with nothing paid.`,
+      'Turn on the ended-trial check-in (Settings → Customer growth → Win-back and cancellation emails) and read what the replies say got in the way.', 'paid');
   }
   if (f.budgetDays >= 3) {
     add('budget', 45 + f.budgetDays * 5, { budgetDays: f.budgetDays, budgetDollars: f.budgetDollars, spendDollars: f.spendDollars },
