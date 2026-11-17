@@ -1,7 +1,8 @@
 // The weekly strategist through the real roles (20261117170000_weekly_strategist.sql): the week's Intel funnel counts strong fits not
 // yet written to (and which of them the team may write to), first emails and later touches, deliveries, hard and soft bounces, agencies
 // that opened their report or replied, trials, roster agencies resolved, briefs, drafts waiting, days at the cap, the Marketing
-// Manager's spend and the days its budget ran out, never an internal organization; the read is the Hub server's and at most 31 days;
+// Manager's spend and the days its budget ran out, where the strong fits with no address stopped and the people finder's week, never an
+// internal organization; the read is the Hub server's and at most 31 days;
 // a week's note is saved and read back by the server only, replaced on a second save and refused when malformed; the strategist writes
 // a note end to end from these figures with a stand-in model; and the gate refuses drift. Disposable loopback database only; no model is
 // called and no email is sent.
@@ -30,7 +31,7 @@ const refused = code => error => error?.code === code;
 const gate = await readFile(new URL('../supabase/migrations/20261117170100_weekly_strategist_contract.sql', import.meta.url), 'utf8');
 const seedAgents = (await admin.query("select key,status,autonomy,config from private.agents where key='marketing_manager'")).rows;
 const seedPolicies = (await admin.query('select * from private.growth_policies')).rows;
-const seedSettings = (await admin.query("select key,value,changed_at from private.hub_settings where key in ('growth.cold_email_daily_cap','growth.presend_check','growth.bounce_guard_percent')")).rows;
+const seedSettings = (await admin.query("select key,value,changed_at from private.hub_settings where key in ('growth.cold_email_daily_cap','growth.presend_check','growth.bounce_guard_percent','growth.enrichment_daily_credits','growth.enrichment_provider')")).rows;
 const runStart = (await row('select now() as t')).t;
 const domains = [], tasks = [], ccns = [];
 const domainOf = label => { const value = `${label}-${run}.example.org`; domains.push(value); return value; };
@@ -134,6 +135,30 @@ try {
     sent: 3, approvedWaiting: ['approved', 'auto_approved'].includes((await row('select status from private.agent_actions where id=$1', [held.action])).status) ? 1 : 0,
   }, 'the week\'s funnel counts Intel\'s outside agencies only, and a bounce as hard only once the address is suppressed');
   assert.ok(after.spend.budgetDays >= 1, 'a day the Marketing Manager ran out of budget is counted');
+  // Where the strong fit with no address stopped (20261117200000_strategist_reach.sql): not searched by the people finder yet; searched
+  // with nobody named (it is matched to its Medicare record, so it is not counted as unmatched); then someone named and no address.
+  const steps = later => Object.fromEntries(Object.keys(before.prospects.noContactSteps).map(key => [key, later.prospects.noContactSteps[key] - before.prospects.noContactSteps[key]]));
+  assert.deepEqual(steps(after), { noWebsite: 0, notSearched: 1, unnamed: 0, unnamedUnmatched: 0, namedNoAddress: 0 }, 'a strong fit the finder has not searched');
+  await admin.query('update private.growth_organizations set people_searched_at=now() where id=$1', [unreachable.org]);
+  assert.deepEqual(steps(await facts()), { noWebsite: 0, notSearched: 0, unnamed: 1, unnamedUnmatched: 0, namedNoAddress: 0 }, 'searched, nobody named');
+  await admin.query("insert into private.growth_people(organization_id,name,title,source) values($1,'Synthetic Leader','Administrator','cms_owners')", [unreachable.org]);
+  assert.deepEqual(steps(await facts()), { noWebsite: 0, notSearched: 0, unnamed: 0, unnamedUnmatched: 0, namedNoAddress: 1 }, 'someone named, no address');
+  // The people finder's week, from its runs' own counts; a day it ran out of address checks is counted.
+  const finderBefore = (await facts()).addresses.finder;
+  const peopleRun = await task('growth.people');
+  await admin.query("update private.agent_tasks set status='done',finished_at=now(),lease_until=null,result=$2 where id=$1",
+    [peopleRun, JSON.stringify({ searched: 3, found: 1, noCredit: 1, answers: { verified: 1, rejected: 1, catch_all: 2, unknown: 1, unreachable: 1 } })]);
+  const finderAfter = (await facts()).addresses.finder;
+  assert.deepEqual(Object.fromEntries(['searched', 'found', 'confirmed', 'refused', 'acceptsAll', 'noAnswer'].map(key => [key, finderAfter[key] - finderBefore[key]])),
+    { searched: 3, found: 1, confirmed: 1, refused: 1, acceptsAll: 2, noAnswer: 2 }, 'the people finder\'s runs are added up');
+  assert.ok(finderAfter.ranOutDays >= 1, 'a day the finder ran out of address checks is counted');
+  // The two settings the reach move can name, as the people finder reads them.
+  await setting('growth.enrichment_daily_credits', 37);
+  await setting('growth.enrichment_provider', 'published');
+  assert.deepEqual([(await facts()).settings.addressChecks, (await facts()).settings.addressMode], [37, 'published']);
+  await setting('growth.enrichment_daily_credits', null);
+  await setting('growth.enrichment_provider', null);
+  assert.deepEqual([(await facts()).settings.addressChecks, (await facts()).settings.addressMode], [10, 'verify'], 'unset: ten checks, guess and check');
   // A draft whose action still waits for the owner is waiting, but not approved.
   await admin.query("update private.agent_actions set status='proposed' where id=$1", [held.action]);
   const proposedOnly = await facts();
@@ -249,6 +274,7 @@ try {
     await admin.query('delete from private.growth_opportunities where organization_id=$1', [org]);
     const emails = (await admin.query('select email from private.growth_contacts where organization_id=$1', [org])).rows.map(r => digest(r.email));
     await admin.query('delete from private.email_suppressions where email_hash=any($1::text[])', [emails]);
+    await admin.query('delete from private.growth_people where organization_id=$1', [org]);
     await admin.query('delete from private.growth_contacts where organization_id=$1', [org]);
     await admin.query("delete from private.audit_events where action like 'growth.%' and entity_id=$1", [org]);
     await admin.query('delete from private.growth_organizations where id=$1', [org]);

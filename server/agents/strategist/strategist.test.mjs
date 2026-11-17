@@ -63,6 +63,51 @@ describe('the strategist\'s rules', () => {
     expect(shared[0].headline).toMatch(/^The cold-email cap of 50 a day was reached on 5 of 7 days/);
   });
 
+  it('raises the address checks only when the people finder ran out of them, and otherwise names where the strong fits stopped', () => {
+    // The first note (2026-11-16): the limit was 100 and never reached; nobody was named at 68 (53 not matched to a Medicare record),
+    // someone at 24.
+    const stopped = { prospects: { strong: 110, strongNoContact: 92, noContactSteps: { noWebsite: 0, notSearched: 0, unnamed: 68, unnamedUnmatched: 53, namedNoAddress: 24 } },
+      addresses: { finder: { searched: 110, found: 5, ranOutDays: 0 } }, settings: { addressChecks: 100, addressMode: 'verify' } };
+    const unnamed = candidates(week(stopped)).find(c => c.key === 'reach');
+    expect(unnamed.headline).toBe('92 of 110 strong-fit agencies (84%) have no address the team may write to; the people finder named nobody at 68 of them, 53 not matched to a Medicare record.');
+    expect(unnamed.move).toMatch(/^Import the owner's or administrator's work address you know for the highest-fit of them on Growth/);
+    expect(unnamed.move).not.toMatch(/Most address checks a day/);
+    expect(unnamed.evidence).toMatchObject({ unnamed: 68, unmatched: 53, namedNoAddress: 24, checksRanOutDays: 0, addressChecks: 100 });
+    // Ran out on two or more days: the limit is raised, doubled, within the setting's 500.
+    const ranOut = candidates(week({ ...stopped, addresses: { finder: { ranOutDays: 3 } } })).find(c => c.key === 'reach');
+    expect(ranOut.move).toBe('Raise "Most address checks a day" (Settings → Customer growth) from 100 to 200.');
+    expect(ranOut.evidence).toMatchObject({ checksRanOutDays: 3, suggestedChecks: 200 });
+    expect(candidates(week({ ...stopped, addresses: { finder: { ranOutDays: 1 } } })).find(c => c.key === 'reach').move).not.toMatch(/Most address checks/);
+    expect(candidates(week({ ...stopped, addresses: { finder: { ranOutDays: 5 } }, settings: { addressChecks: 400 } })).find(c => c.key === 'reach').move).toMatch(/from 400 to 500\.$/);
+    expect(candidates(week({ ...stopped, addresses: { finder: { ranOutDays: 5 } }, settings: { addressChecks: 500 } })).find(c => c.key === 'reach').move).not.toMatch(/Most address checks/);
+    // Named but no address: guessing off, it is turned on; on, the mail servers are named and the addresses asked of the owner.
+    const named = { ...stopped, prospects: { ...stopped.prospects, noContactSteps: { unnamed: 10, namedNoAddress: 70 } }, addresses: { finder: { acceptsAll: 12, noAnswer: 9 } } };
+    expect(candidates(week({ ...named, settings: { addressMode: 'published' } })).find(c => c.key === 'reach').move)
+      .toBe('Set "Finding people\'s addresses" (Settings → Customer growth) to also guess and check addresses with the business\'s mail server.');
+    const servers = candidates(week(named)).find(c => c.key === 'reach');
+    expect(servers.headline).toMatch(/at 70 the finder named someone but no mail server confirmed an address \(12 accept any, 9 no answer\)\.$/);
+    expect(servers.move).toMatch(/^Import the named people's work addresses you know/);
+    // No website, or not reached yet.
+    expect(candidates(week({ ...stopped, prospects: { ...stopped.prospects, noContactSteps: { noWebsite: 80, unnamed: 12 } } })).find(c => c.key === 'reach').move)
+      .toMatch(/^Raise "Most roster agencies to look up a day"/);
+    expect(candidates(week({ ...stopped, prospects: { ...stopped.prospects, noContactSteps: { notSearched: 80 } } })).find(c => c.key === 'reach').move)
+      .toMatch(/^Leave the people finder running/);
+    // Facts from before the steps were counted never suggest a raise.
+    const legacy = candidates(week()).find(c => c.key === 'reach');
+    expect(legacy.headline).toBe('66 of 94 strong-fit agencies (70%) have no address the team may write to.');
+    expect(legacy.move).not.toMatch(/Most address checks/);
+    // Every number a reach headline or move writes is one the model may write too.
+    for (const candidate of [unnamed, ranOut, servers, legacy]) {
+      expect(textProblem(`${candidate.headline} ${candidate.move}`, allowedNumbers(week(stopped), null, [candidate]))).toBeNull();
+    }
+  });
+
+  it('names the settings as Settings shows them', () => {
+    expect(candidates(week({ prospects: { strongReachable: 2, strongNoContact: 10 }, email: { waiting: 0, approvedWaiting: 0 } })).find(c => c.key === 'supply').move)
+      .toBe('Raise "Most roster agencies to look up a day" (Settings → Customer growth): 535 roster agencies still have no confirmed website.');
+    expect(candidates(week({ spend: { budgetDays: 4 } })).find(c => c.key === 'budget').move).toMatch(/"Most account briefs a day" \(Settings → Customer growth\)/);
+  });
+
   it('tells addresses waiting for your permission from missing ones, and never counts unrecorded report opens as zero', () => {
     const waiting = candidates(week({ prospects: { strongNoContact: 6, strongAwaitingPermission: 60 } }));
     expect(waiting[0]).toMatchObject({ key: 'permission', evidence: { awaitingPermission: 60, share: 64 }, watch: 'awaitingPermission' });
@@ -136,7 +181,7 @@ describe('the weekly strategist', () => {
     // Two quiet weeks of 56 cold emails make the message a candidate too; the model chose among both.
     expect(outcome.result).toEqual({ week: '2026-11-09', constraint: 'reach', chosenBy: 'model', candidates: ['reach', 'engagement'] });
     const request = model.run.mock.calls[0][1];
-    expect(request).toMatchObject({ tier: 'quality', effort: 'high', promptVersion: 'strategist.1' });
+    expect(request).toMatchObject({ tier: 'quality', effort: 'high', promptVersion: 'strategist.2' });
     const user = JSON.parse(request.user);
     expect(user.week).toEqual({ from: '2026-11-09', to: '2026-11-15' });
     expect(user.candidates.map(c => c.key)).toEqual(['reach', 'engagement']);

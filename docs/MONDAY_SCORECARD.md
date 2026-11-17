@@ -78,11 +78,20 @@ figure to watch next Monday.
    replied or opened their report, trial starts, first value and paid, days the cold-email cap or Intel's own daily limit was reached
    (and both limits), drafts waiting and how many
    of them are approved, briefs written, the Marketing Manager's spend and the days its budget ran out,
-   proposals waiting for you, the bounce guard's own window and the current cap and address-check mode. Internal organizations never
-   count. Strong fits, waiting drafts and approvals are as of the read.
+   proposals waiting for you, the bounce guard's own window and the current cap and address-check mode. For the strong fits with no
+   address, where each stopped (`prospects.noContactSteps`: no website of its own, not searched by the people finder yet, searched with
+   nobody named and how many of those are not matched to a Medicare record, or someone named and no address), the people finder's week
+   (`addresses.finder`: agencies searched, addresses found, days it ran out of the day's address checks, what the mail servers
+   answered) and "Most address checks a day" and "Finding people's addresses" as the finder reads them
+   (20261117200000_strategist_reach.sql). Internal organizations never count. Strong fits, where they stopped, waiting drafts and
+   approvals are as of the read.
 2. **The candidates** (`server/agents/strategist/rules.mjs`), scored 0 to 100 from the figures alone: email bouncing (a complaint, or
    2% or more hard bounces of at least 10 sent; half weight when the bounce guard's window since shows 10 clean sends), too few agencies
-   ready, strong fits with no address found (half or more), strong fits whose address waits for your permission (5 or more; the move
+   ready, strong fits with no address found (half or more; the move raises "Most address checks a day", doubled, at most 500, only when
+   the people finder ran out of checks on 2 or more days, and otherwise names the step that lost the most of them: nobody named, so
+   import the addresses you know on Growth; someone named and no mail server confirmed an address, so turn on guessing and checking
+   or import them; no website, so look up more roster agencies; not reached yet, so leave the finder running. The first note, on
+   2026-11-16, asked to double a limit of 100 that was never reached), strong fits whose address waits for your permission (5 or more; the move
    is your decision on Growth, since more address checks cannot reach them), a daily limit (the cold-email cap or Intel's own "Maximum messages per day" on
    Growth, which the send claim checks first, reached on 4 or more days with 5 or more approved drafts waiting and bounces under 2%;
    the move raises whichever limits sit below the new number, at most 100), first emails not read or answered (30 sent over two weeks, no reply, under 10%
