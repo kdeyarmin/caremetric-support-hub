@@ -222,9 +222,9 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   content or ads are aimed at them until the primary audience has been thoroughly marketed to.
 - **Prospect discovery** (`discoveryGrid` in `server/growth/playbook.mjs`) searches for home health and hospice agencies and, since
   2026-11-16 (owner decision), nursing homes. Intel's free reports (an agency's own market report, the market review and the county
-  report) cover home health and hospice agencies only, so a prospect whose own name or research shows it is a nursing home gets the
-  standard first email instead (founder's story, a likely problem, how Intel helps, the free trial), and is never offered those
-  report pages (`intelSetting` and `draft.mjs`). Hospitals and personal care homes are not searched yet: widening discovery to them
+  report) cover home health and hospice agencies only, so a prospect whose own name or research shows it is a nursing home gets emails
+  written for a nursing home instead (its hospital sources, the homes around it, its county, the free trial), and is never offered those
+  report pages (`intelSetting`, `nursingHomeAngles` and `campaign.mjs`). Hospitals and personal care homes are not searched yet: widening discovery to them
   is a separate owner decision.
 - **What it does:** targeted marketing, marketing analysis and territory analysis from public healthcare and demographic data,
   plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place. Its AI features

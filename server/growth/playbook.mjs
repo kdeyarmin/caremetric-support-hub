@@ -239,7 +239,7 @@ export const touchAngle = touch => sequencePlan[Math.min(Math.max(Number(touch) 
  * link (draft.mjs `shortFormProblem`).
  */
 export const shortFormLimits = Object.freeze({ words: 120, questions: 1 });
-const openingOnly = 'You write only the opening of this email, as its first words under the greeting. Below your words the email itself goes on, the same for every agency, so write none of what it adds.';
+const openingOnly = 'You write only the opening of this email, as its first words under the greeting. Below your words the email itself goes on, in words written for this kind of organization, so write none of what it adds.';
 const reportOpening = `Open with the county: when a source with the id "county" gives a figure about the county, state it first, its number and what it counts exactly as written, as a fact about the county, without the file or year that follows it in brackets. Never state or hint at the agency's own figure, rank or rating: the reader opens the report to see them. You may end with one short question the reader can answer by reply; when "brief" gives a pain, ask about that. Never claim to know the answer.`;
 const firstAdds = 'The email adds: a card that previews the report, its button, what CareMetric Intel does in five points, your story as the founder in your own words, and the free trial with its link.';
 const firstLimits = `No other link, no free trial, no price and no story about yourself in your words. Two or three sentences, never more than ${shortFormLimits.words} words, at most one question and exactly one link.`;
@@ -257,6 +257,19 @@ const secondAdds = `The email adds: a week of the work in CareMetric Intel in fo
 export const viewedTouchAngle = `Second email to an agency whose market report was sent with the first. Do not say or hint that you know whether anyone opened it. ${openingOnly} ${secondAdds} Pick up where a report leaves an agency: it shows where they stand, and the next step is deciding who the team visits each week. Do not repeat touch 1's opening or tell your story.`;
 export const unviewedTouchAngle = `Second email to an agency whose market report was sent with the first. Do not say or hint that you know whether anyone opened it. ${openingOnly} ${secondAdds} Bring a new subject and a different angle from touch 1: lead with one page of the report (the hospitals the county's residents use, the highest-ranked physicians for outreach, or the agencies that lead the county) and what a marketing team does with that page. Do not repeat touch 1's opening.`;
 export const reviewFollowupAngle = `Second email to an agency whose first email offered a free market report it can get for itself. ${openingOnly} ${secondAdds} Bring a new subject and a different angle from touch 1: one concrete thing a marketing team does with a market report (plan visits around the hospitals the county's residents use, or around the highest-ranked physicians for outreach). Do not repeat touch 1's opening.`;
+/**
+ * The three emails to a nursing home (owner direction 2026-11-17: every email is written for the reader's own kind of business, and
+ * none is a plain letter). Intel's market reports cover home health and hospice agencies only, so a nursing home is offered none:
+ * its emails open on its own work, admissions from hospitals, and the email's sections say what Intel does for a nursing home
+ * (campaign.mjs). Never home health or hospice rankings: a nursing home does not compete with them.
+ */
+const nursingHomeOnly = 'This is a nursing home: write about its own work, bringing in patients from hospitals and filling beds. Never mention a market report, home health or hospice agencies, or how any of them rank.';
+const nursingHomeLimits = `No link in your words, no free trial, no price and no story about yourself. Two or three sentences, never more than ${shortFormLimits.words} words, and at most one question.`;
+export const nursingHomeAngles = Object.freeze([
+  `First email to a nursing home. ${openingOnly} The email adds: what CareMetric Intel does for a nursing home in five points, your story as the founder in your own words, and the ${facts.intel.trialDays}-day free trial with its link. ${nursingHomeOnly} Open with one specific, true sentence about the nursing home or its county: when a source with the id "county" gives a figure about the county, state its number and what it counts exactly as written, as a fact about the county, without the file or year that follows it in brackets. Then say in one sentence why you are writing: CareMetric Intel shows an admissions and marketing team which hospitals its county's residents use, and plans who to visit each week. You may end with one short question the reader can answer by reply; when "brief" gives a pain, ask about that. ${nursingHomeLimits}`,
+  `Second email to a nursing home. ${openingOnly} The email adds: a week of the work in CareMetric Intel in four steps, the Founders Sale and the ${facts.intel.trialDays}-day free trial with its link. ${nursingHomeOnly} Bring a new subject and a different angle from touch 1: one concrete thing an admissions or marketing team decides each week (which hospitals to visit, and who to see there). Write two or three sentences and end with one qualifying question. Do not repeat touch 1's opening or tell your story. No link in your words, and nothing about the credit card or billing.`,
+  `Third and last email to a nursing home: a short close. ${openingOnly} The email adds: three lines on what CareMetric Intel does for a nursing home, and the ${facts.intel.trialDays}-day free trial's link. ${nursingHomeOnly} Write two or three sentences, about fifty words: say this is your last note, and that if someone else handles admissions or marketing there they can forward this, or reply saying who. Make it easy to say "not now". No link in your words, no new pitch and no question.`,
+]);
 /** The third and last email to a CareMetric Intel agency: a short close that leaves the report with them. */
 export const reportCloseAngle = `Third and last email: a short close. ${openingOnly} The email adds: the market report's button, three lines on what CareMetric Intel does, and the ${facts.intel.trialDays}-day free trial's link. Write two or three sentences, about fifty words: say this is your last note, that the market report stays where it is, and that if someone else handles marketing there they can forward this, or reply saying who, so the report reaches the right person. Make it easy to say "not now". No link in your words, no new pitch and no question.`;
 
@@ -343,8 +356,8 @@ const agencyWords = /\b(home health|home healthcare|hospice)\b/i;
 /**
  * Which kind of Intel prospect an organization is, as far as its name and its research say: 'nursing_home', or null for a home health or
  * hospice agency and for anything not clearly a nursing home. The name decides first; otherwise the research must name a nursing home and
- * say nothing of home health or hospice. Intel's reports cover home health and hospice agencies only, so a nursing home's first email is the
- * standard one (draft.mjs); anything doubtful keeps the agency's report-led email.
+ * say nothing of home health or hospice. Intel's reports cover home health and hospice agencies only, so a nursing home's emails are its
+ * own (`nursingHomeAngles`); anything doubtful keeps the agency's report-led email.
  */
 export function intelSetting({ name = '', evidence = [] } = {}) {
   const named = String(name ?? '');
@@ -353,6 +366,28 @@ export function intelSetting({ name = '', evidence = [] } = {}) {
   const said = (evidence ?? []).map(item => String(item?.claim ?? '')).join('\n');
   return nursingHomeWords.test(said) && !agencyWords.test(said) ? 'nursing_home' : null;
 }
+// The agency's Medicare roster record, as roster.mjs writes it: the one place its kind is stated as a fact.
+const rosterKind = /CMS Provider of Services file[^:]*:.*? is a Medicare-certified (home health agency|hospice)\b/;
+const kindSaid = text => {
+  const hospice = /\bhospice\b/i.test(text), home = /\bhome\s*health(?:care)?\b|\bhome\s*care\b|\bhomecare\b/i.test(text);
+  return hospice && home ? 'both' : hospice ? 'hospice' : home ? 'home_health' : null;
+};
+/**
+ * Which kind of organization an Intel prospect is, for the words its emails are written in (campaign.mjs `campaignSettings`; owner
+ * direction 2026-11-17: a hospice does not care how home health agencies rank). The agency's Medicare record decides first; then
+ * `nursing_home` as `intelSetting` reads it, then its own name, then a brief written for a hospice, then what its research says. `both` is
+ * an organization that runs home health and hospice under one name, and `agency` one whose kind nothing states: its emails name
+ * neither kind.
+ */
+export function prospectKind({ name = '', evidence = [], briefSetting = null } = {}) {
+  const said = (evidence ?? []).map(item => String(item?.claim ?? '')).join('\n');
+  const record = rosterKind.exec(said);
+  if (record) return record[1] === 'hospice' ? 'hospice' : 'home_health';
+  if (intelSetting({ name, evidence }) === 'nursing_home') return 'nursing_home';
+  return kindSaid(String(name ?? '')) ?? (briefSetting === 'hospice' ? 'hospice' : null) ?? kindSaid(said) ?? 'agency';
+}
+/** The kind of organization as the writer is told it, or null when nothing states it. */
+export const kindLabels = Object.freeze({ home_health: 'home health agency', hospice: 'hospice', both: 'home health and hospice agency', nursing_home: 'nursing home' });
 /** The places a product's discovery searches ("Cleveland Ohio"), in grid order: where a web-found prospect was most likely found. */
 export const discoveryPlaces = product => [...(discoveryGrid[product]?.places ?? [])];
 /** Searches per product per day. Each is one call to the search provider; the daily discovery run paces them a second apart. */

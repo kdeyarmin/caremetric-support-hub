@@ -649,7 +649,9 @@ it('takes the inbox preview from the first real sentence, past an abbreviation i
 // what else the software does". The three emails to an agency are laid out in Intel's own look, with what the software does and the trial.
 it('lays a marketing email to an Intel agency out in Intel\'s look, with what the software does and the trial, and keeps the text part the approved words',async()=>{
  const {reportLinks}=await import('./report-link.mjs');
- const {withCampaign,founderQuote,featurePoints,weekSteps,shortPoints}=await import('./campaign.mjs');
+ const {withCampaign,founderQuote,campaignCopy}=await import('./campaign.mjs');
+ // Riverbend is a home health agency, so its emails are a home health agency's.
+ const {featurePoints,weekSteps,shortPoints}=campaignCopy('home_health');
  const reports=reportLinks({key:'k'.repeat(40)});
  const link=reports.linkFor({id:'o1',product:'caremetric-intel',name:'Riverbend Home Health',evidence:[rosterLine]});
  const trialOf=touch=>`https://www.caremetricintel.com/?${tagsOf(touch)}`;
@@ -660,7 +662,7 @@ it('lays a marketing email to an Intel agency out in Intel\'s look, with what th
 
  // The first email: the report, then what the software does, the founder's words and the trial.
  const opening=`I put together a free market report for Riverbend Home Health from Medicare data. It shows where the agency stands in its county and who to call on next.\n${link.url}`;
- const body=withCampaign(opening,1,{trialUrl:trialOf(1),reportUrl:link.url,ownReport:true});
+ const body=withCampaign(opening,1,{trialUrl:trialOf(1),reportUrl:link.url,ownReport:true,setting:'home_health'});
  const first=send(body);
  expect(first.html).toContain('data-caremetric-email="branded"');
  expect(first.html).toContain('>YOUR FREE MARKET REPORT IS READY</p>');
@@ -687,7 +689,7 @@ it('lays a marketing email to an Intel agency out in Intel\'s look, with what th
 
  // The second email: a week of the work, the offer and the trial, with the report still one click away.
  const second=send(withCampaign('The market report I sent for Riverbend Home Health lists the hospitals its county\'s residents use.\n\nHow does your team decide who to visit each week?',2,
-  {trialUrl:trialOf(2),reportUrl:link.url,ownReport:true}),{subject:'From the report to a week\'s plan'});
+  {trialUrl:trialOf(2),reportUrl:link.url,ownReport:true,setting:'home_health'}),{subject:'From the report to a week\'s plan'});
  expect(second.html).toContain('>FROM YOUR MARKET REPORT TO A PLAN</p>');
  for(const step of weekSteps){expect(second.html).toContain(step.tag.toUpperCase());expect(second.html).toContain(escaped(step.title));}
  expect(second.html).toContain('>FOUNDERS SALE</p>');
@@ -698,7 +700,7 @@ it('lays a marketing email to an Intel agency out in Intel\'s look, with what th
  expect(second.html).not.toMatch(/opened|clicked|noticed/i);
 
  // The third email: short, with the report, three lines on the software and the trial as a link.
- const third=send(withCampaign('This is my last note. The market report for Riverbend Home Health stays where it is.',3,{trialUrl:trialOf(3),reportUrl:link.url,ownReport:true}),{subject:'A last note'});
+ const third=send(withCampaign('This is my last note. The market report for Riverbend Home Health stays where it is.',3,{trialUrl:trialOf(3),reportUrl:link.url,ownReport:true,setting:'home_health'}),{subject:'A last note'});
  expect(third.html).toContain('>A LAST NOTE</p>');
  expect(anchorOf(third.html,link.url)).toBe('Open your market report →');
  for(const [lead] of shortPoints)expect(third.html).toContain(escaped(lead));
@@ -708,6 +710,25 @@ it('lays a marketing email to an Intel agency out in Intel\'s look, with what th
  const page='https://www.caremetricintel.com/market-review';
  const review=send(withCampaign(`I can put together a free market report for Riverbend Home Health from Medicare data.\n${page}`,1,{trialUrl:trialOf(1),reportUrl:page,ownReport:false}));
  expect(anchorOf(review.html,page)).toBe('Get your free market report →');
+
+ // Each kind of business reads about its own: a home health agency about home health agencies, a hospice about hospices.
+ expect(first.html).toContain('What CareMetric Intel does for your home health agency, every day');
+ expect(first.html).toContain('>HOME HEALTH MARKET REPORT</p>');
+ expect(first.html).toContain('Every home health agency in your territory, ranked by Medicare share.');
+ const hospice=send(withCampaign(opening.replace('Riverbend Home Health','Riverbend Hospice'),1,{trialUrl:trialOf(1),reportUrl:link.url,ownReport:true,setting:'hospice'}));
+ expect(hospice.html).toContain('What CareMetric Intel does for your hospice, every day');
+ expect(hospice.html).toContain('>HOSPICE MARKET REPORT</p>');
+ expect(hospice.html).toContain('Every hospice in your territory, ranked by Medicare share.');
+ expect(hospice.html).not.toMatch(/home health agenc/i);
+ // A nursing home's email has no report card or report button; the trial is its one bright button.
+ const nursing=send(withCampaign('CareMetric Intel shows an admissions team which hospitals its county\'s residents use.\n\nHow does your team decide which hospitals to visit?',1,
+  {trialUrl:trialOf(1),setting:'nursing_home'}),{subject:'Hospital sources for Sunrise Nursing Center'});
+ expect(nursing.html).toContain('data-caremetric-email="branded"');
+ expect(nursing.html).toContain('>FOR YOUR ADMISSIONS AND MARKETING TEAM</p>');
+ expect(nursing.html).toContain('What CareMetric Intel does for your nursing home, every day');
+ expect(nursing.html).toContain('Finds your hospital sources');
+ expect(nursing.html).not.toMatch(/market report|MARKET REPORT|ranked by Medicare share|hospices? in your territory|home health agenc/);
+ expect(anchorOf(nursing.html,trialOf(1))).toBe('Start your free trial \u2192');
 
  // Anything else stays the plain letter: sections someone edited, an email that is not marketing, another product, and a letter with no sections.
  const letterOf=email=>expect(email.html).toContain('data-caremetric-email="letter"');

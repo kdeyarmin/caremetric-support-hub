@@ -191,7 +191,7 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   104 markets across the country for Intel: six for home health and hospice agencies and, since 2026-11-16, two for nursing homes,
   the first of them right after the first agency segment). No search repeats until the whole grid has been searched; the next pass
   reads the next page of each search. Intel's free reports serve home health and hospice agencies only, so a prospect that is clearly a
-  nursing home gets the standard first email and no report page (`intelSetting` in `playbook.mjs`). Calls to the search provider are paced a second apart. If a later search fails, the day's searching stops and
+  nursing home gets its own emails, in a nursing home's words, and no report page (`intelSetting` and `nursingHomeAngles` in `playbook.mjs`). Calls to the search provider are paced a second apart. If a later search fails, the day's searching stops and
   what was found is kept; only a failure of the first search fails the run. Discovery drops directories, listing and review sites,
   provider-number and company-data lookups, trade associations and trade press, social networks, job boards and government or school
   sites, and any host that names itself a directory, a listing, a review or a jobs site, so the contact finder never writes to a
@@ -304,8 +304,8 @@ this link".
 **The first email leads with the report, then says what the software does and offers the trial** (owner direction 2026-11-15 for
 the report; owner direction 2026-11-17 for the rest: a first email that was the report and nothing else, which this section
 described for a few hours that day, was "the worst marketing email that I've ever seen", with "no explanation of what else the
-software does"). A prospect that is clearly a nursing home gets the general first email instead, as Intel's reports serve home
-health and hospice agencies only. The email goes to the agency's best contact: a named owner, administrator or marketing leader
+software does"). A prospect that is clearly a nursing home gets the same designed email without a report, as Intel's reports
+serve home health and hospice agencies only (see "Written for the reader's kind of business" below). The email goes to the agency's best contact: a named owner, administrator or marketing leader
 when the team found one, else the role address, and, as separate emails, the other decision-makers there (see
 [Several decision-makers at one organization](#several-decision-makers-at-one-organization)).
 
@@ -313,18 +313,39 @@ when the team found one, else the role address, and, as separate emails, the oth
 `playbook.mjs`, `growth.17`): two or three sentences that say a free market report was made for the agency, by name, from Medicare
 data, with the report's link on its own line and at most one question. A county figure from the brief comes first, about the county.
 Code holds the opening to that (`shortFormProblem`): at most 120 words, at most one question, the report's link and no other, no
-trial and no price. Everything after the opening is the same for every agency, written once in `server/growth/campaign.mjs` from
+trial and no price. Everything after the opening is written once, for each kind of business, in `server/growth/campaign.mjs` from
 the fact sheet, and added to the email when it is drafted (`withCampaign`). So **the email you approve on the Growth page is the
 whole email**, sections included, and the sent text part is those words. `campaign.test.mjs` runs every section through the checks
 a written email passes (the fact sheet's numbers, no card, no "public", no rank or rating of an agency, no demo, nothing about opens).
 
 What the three emails hold, in order:
 
-| Email | Line above the headline | The writer's opening | Then, the same for every agency |
+| Email | Line above the headline | The writer's opening | Then, the sections for that kind of agency |
 | --- | --- | --- | --- |
 | First | Your free market report is ready | The report made for this agency, and its link | A card that previews the report (where you stand, who leads the county, top hospitals, top physicians for outreach; the values stay in the report) with the button "Open your market report". What CareMetric Intel does, in five numbered points. Four figures about its data. The founder's story as a signed quote. A closing panel with the 30-day free trial's button. |
 | Second, four days later | From your market report to a plan | What a team does with a report, and one question | A week in CareMetric Intel in four cards (Monday, every day, after each visit, Friday). The Founders Sale, in its approved words. The free trial's button, and the report's link again. |
 | Third | A last note | A short close: the report stays, forward it to whoever handles marketing | The report's button, three lines on what Intel does, and the trial as a link. |
+
+**Written for the reader's kind of business** (owner direction 2026-11-17, on a block that told every reader about home health
+agencies and hospices alike: "they don't care what the ranking is. Make the email customized to the recipient's business
+industry").
+
+| The reader | Who it reads about | Its referral sources | Report |
+| --- | --- | --- | --- |
+| Home health agency | Every home health agency in its territory, ranked by Medicare share, with alerts | The physicians who certify home health, plus hospitals and facilities | Yes |
+| Hospice | Every hospice in its territory, ranked by Medicare share, with alerts; its "liaisons", not "marketers" | Physicians ranked for hospice outreach, plus hospitals and nursing homes | Yes |
+| Home health and hospice under one name | Both kinds | Physicians, hospitals and facilities | Yes |
+| An agency whose kind nothing states | "Every agency like yours": neither kind is named | Physicians, hospitals and facilities | Yes |
+| Nursing home | Every nursing home near it, with ratings, staffing, inspections and owner. No ranking and no alerts: Intel's share rankings and competitor alerts cover home health and hospice only | The hospitals its county's residents use, plus physicians and facilities; its county's use and supply of skilled nursing | No |
+
+- **How the kind is told** (`prospectKind` in `playbook.mjs`): the agency's Medicare record first, then a nursing home by its name
+  or research (`intelSetting`), then the name ("hospice", "home health"), then a brief written for a hospice, then what its
+  research says.
+- **The writer is told the kind too** (`organization.setting`), and to name only that kind's competitors and referral sources.
+- **A nursing home gets the same three designed emails** (`nursingHomeAngles`): what Intel does for a nursing home, a week of the
+  work, and a short close, each with the trial. No market report is offered or mentioned. Until 2026-11-17 a nursing home got the
+  plain letter.
+- **Intel's own email** for a requested market report lists what Intel does the same way, for a home health agency or a hospice.
 
 - **The headline is the subject.** The subject names the agency or its county and the report, or asks the question the report
   answers.

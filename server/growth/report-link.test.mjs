@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { reportLinkDays, reportLinks, reportMissingMs, reportOpensMs, reportToken, rosterAgency } from './report-link.mjs';
 import { growthEmail, growthExecutors } from './worker.mjs';
 import { draftMessage, draftProblem } from './draft.mjs';
-import { reportTouchAngle, reviewFollowupAngle, reviewTouchAngle, touchAngle } from './playbook.mjs';
+import { nursingHomeAngles, reportTouchAngle, reviewFollowupAngle, reviewTouchAngle } from './playbook.mjs';
 
 const key = 'k'.repeat(40);
 const roster = (ccn = '397001', setting = 'home health agency') => ({
@@ -124,7 +124,7 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     expect(input.style).toBe('Write two or three sentences, never more than 120 words.');
     // The stored email is the writer's opening, then the sections every agency gets: what the software does and the trial.
     expect(draft.body.startsWith(body)).toBe(true);
-    expect(draft.body).toContain('What CareMetric Intel does for your agency, every day');
+    expect(draft.body).toContain('What CareMetric Intel does for your home health agency, every day');
     expect(draft.body).toMatch(/Try CareMetric Intel free for 30 days on one county, with your own team\..*\nhttps:\/\/www\.caremetricintel\.com\/\?utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch1/);
     expect(draft.arms).toMatchObject({ length: 'report', form: 'short' });
     expect(draft.variant).toBe('report');
@@ -165,15 +165,24 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     expect(reviewFollowupAngle).toMatch(/different angle/);
   });
 
-  it('gives a nursing home the standard first email, without the agency-only report pages (owner decision 2026-11-16)', async () => {
+  it('gives a nursing home an email in a nursing home\'s own words, with no market report and none of the agency-only report pages (owner decisions 2026-11-16 and 2026-11-17)', async () => {
     const home = { ...opportunity, name: 'Sunrise Nursing & Rehabilitation Center',
       evidence: [{ id: 'web-1', source_url: 'https://sunrise.example', observed_at: new Date().toISOString(), confidence: 'medium', claim: 'Sunrise is a 120-bed nursing home in Riverton County.' }] };
-    const model = reply('Are your hospital relationships bringing the admissions you need?\n\nhttps://www.caremetricintel.com/', ['web-1']);
+    const opening = 'CareMetric Intel shows an admissions team which hospitals its county\'s residents use.\n\nAre your hospital relationships bringing the admissions you need?';
+    const model = reply(opening, ['web-1']);
     const draft = await draftMessage({ opportunity: home, work, task: {}, model });
     expect(draft).toMatchObject({ modelGenerated: true });
     const input = JSON.parse(model.run.mock.calls[0][1].user);
-    expect(input.touchPlan).toBe(touchAngle(1));
-    expect(input.touchPlan).not.toMatch(/market report/);
+    // The writer writes the opening; the email adds what Intel does for a nursing home, and the trial.
+    expect(input.touchPlan).toBe(nursingHomeAngles[0]);
+    expect(input.touchPlan).toContain('Never mention a market report, home health or hospice agencies, or how any of them rank.');
+    expect(draft.body.startsWith(`${opening}\n\nWhat CareMetric Intel does for your nursing home, every day\n`)).toBe(true);
+    expect(draft.body).toContain('1. Finds your hospital sources');
+    expect(draft.body).toMatch(/Try CareMetric Intel free for 30 days on one county, with your own team\..*\nhttps:\/\/www\.caremetricintel\.com\/\?utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch1/);
+    expect(draft.body).not.toMatch(/market report|home health agenc|hospices? in your|ranked by Medicare share/i);
+    expect(draft.arms.form).toBeUndefined();
+    // An opening that carries a link, or offers the trial itself, is not the opening: the email adds both.
+    expect(await draftMessage({ opportunity: home, work, task: {}, model: reply(`${opening}\n\nhttps://www.caremetricintel.com/`, ['web-1']) })).toBeNull();
     expect(input.organization).toMatchObject({ name: 'Sunrise Nursing & Rehabilitation Center', setting: 'nursing home' });
     const offered = input.links.map(item => item.url);
     expect(offered).not.toContain('https://www.caremetricintel.com/market-review');

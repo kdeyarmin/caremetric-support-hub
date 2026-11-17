@@ -616,7 +616,7 @@ export function growthEmail({product,purpose=null,quiet=false,subject,body,posta
   const campaign=product===campaignProduct&&purpose==='marketing'?readCampaign(words,{reports}):null;
   if(!campaign)return letter;
   const designed=renderEmail({layout:'branded',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
-    eyebrow:campaignEyebrow(campaign.touch),heading:subject,greeting:`Hello${greeting?` ${greeting}`:''},`,
+    eyebrow:campaignEyebrow(campaign.touch,campaign.setting),heading:subject,greeting:`Hello${greeting?` ${greeting}`:''},`,
     blocks:campaignBlocks(campaign,{links:messageLinks(product,campaign.opening,reports)}).filter(Boolean),
     // The first email carries the founder's words as a signed quote, so it needs no second sign-off under its closing panel.
     signature:campaign.touch===1?[]:signature,footer});

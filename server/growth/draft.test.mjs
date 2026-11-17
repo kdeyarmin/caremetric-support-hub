@@ -1,7 +1,7 @@
 import {it,expect,vi} from 'vitest';
 import {callsDataPublic,citesDataFile,criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,namesCard,outdatedWords,problemHints,shortFormProblem,weaknessMeanings} from './draft.mjs';
-import {playbookFor,quietPlays,reportCloseAngle,reportTouchAngle,reviewFollowupAngle,reviewTouchAngle,shortFormLimits,touchAngle,unviewedTouchAngle,viewedTouchAngle} from './playbook.mjs';
-import {readCampaign} from './campaign.mjs';
+import {nursingHomeAngles,playbookFor,prospectKind,quietPlays,reportCloseAngle,reportTouchAngle,reviewFollowupAngle,reviewTouchAngle,shortFormLimits,touchAngle,unviewedTouchAngle,viewedTouchAngle} from './playbook.mjs';
+import {readCampaign,founderQuote} from './campaign.mjs';
 import {assessProspect} from './assessment.mjs';
 const now=new Date().toISOString();
 const opportunity={id:'o',product:'carebase',version:1,contact_id:'c',goal:'Staff training',policy:{approved_claim:'CareBase supports facility training.',booking_url:'https://example.org/book'},evidence:[{id:'source-1',source_url:'https://example.org',observed_at:now,claim:'A personal-care facility',confidence:'high'}],events:[]};
@@ -459,11 +459,14 @@ it('keeps the report-first shape without a model, in an email that passes the ch
    :'A free market report for Valley Home Health, built from Medicare data, is one step away. It shows where your agency stands among the agencies in its county, and who to call on next.');
   expect(draft.body.split('\n')[1].startsWith(link)).toBe(true);
   // The email's own sections follow the opening: what the software does, the founder's words and the trial (campaign.mjs).
-  const [opening,sections]=draft.body.split('\n\nWhat CareMetric Intel does for your agency, every day\n');
+  // Written for this reader's kind of business: Valley Home Health is a home health agency.
+  const [opening,sections]=draft.body.split('\n\nWhat CareMetric Intel does for your home health agency, every day\n');
   expect(sections).toContain('1. Finds every referral source');
   expect(sections).toContain('Try CareMetric Intel free for 30 days on one county, with your own team.');
   expect(draft.body).not.toMatch(/credit card|ranks? highest|ranked highest|Any question, just reply|\bpublic\b/i);
-  expect(readCampaign(draft.body,{reports:{accepts:url=>url===report.url}})).toMatchObject({touch:1,ownReport:Boolean(offered),opening});
+  expect(sections).toContain('Every home health agency in your territory, ranked by Medicare share.');
+  expect(sections).not.toMatch(/\bhospices?\b in your territory/);
+  expect(readCampaign(draft.body,{reports:{accepts:url=>url===report.url}})).toMatchObject({touch:1,setting:'home_health',ownReport:Boolean(offered),opening});
   // The opening is held to the checks a written one gets.
   expect(draftProblem({subject:draft.subject,body:opening,citations:draft.citations,needsHuman:false},
    {product:'caremetric-intel',sources:intel.evidence,outreach:true,organization:intel.name,extraLinks:offered?[offered.url]:[],form:'short',formLinks:[link]})).toBeNull();
@@ -487,17 +490,21 @@ it('gives the reader the whole email, and tells it which part the writer wrote',
  const {result}=await firstEmail(intel,{critic:true,run});
  expect(result.arms).toMatchObject({form:'short',critic:'4',weakness:'none'});
  const read=JSON.parse(run.mock.calls.find(([,request])=>request.promptVersion===criticPromptVersion)[1].user);
- expect(read.rules.at(-1)).toMatch(/^The writer wrote only this email's opening, on purpose: a few sentences for this one agency, with its report's link\. Everything from "What CareMetric Intel does for your agency, every day" on is the same for every agency/);
+ expect(read.rules.at(-1)).toMatch(/^The writer wrote only this email's opening, on purpose: a few sentences for this one organization, with its report's link when it has a report\. Everything from the line that begins "What CareMetric Intel does for your" on is written once for every organization of its kind/);
  // The reader reads the email as the agency would: the opening and the sections the email adds.
  expect(read.email.body.startsWith(firstDraft.body)).toBe(true);
- expect(read.email.body).toContain('What CareMetric Intel does for your agency, every day');
+ expect(read.email.body).toContain('What CareMetric Intel does for your home health agency, every day');
  expect(result.body).toBe(read.email.body);
- // A first email that is not built around a report (a nursing home's) is read under the writer's rules alone.
+ // A nursing home's first email is written the same way, in a nursing home's own words: the reader is told so and reads its sections.
  const plain=vi.fn(async(_task,request)=>request.promptVersion===criticPromptVersion
   ?{outcome:'completed',output:{specific:4,relevant:4,clearAsk:5,wouldReply:4,weakness:'none',weakestSentence:''}}
   :{outcome:'completed',output:general});
  await firstEmail({...intel,name:'Maple Grove Nursing and Rehabilitation Center'},{offered:null,critic:true,run:plain});
- expect(JSON.parse(plain.mock.calls.find(([,request])=>request.promptVersion===criticPromptVersion)[1].user).rules).toEqual([...criticRules]);
+ const nursingRead=JSON.parse(plain.mock.calls.find(([,request])=>request.promptVersion===criticPromptVersion)[1].user);
+ expect(nursingRead.rules.slice(0,-1)).toEqual([...criticRules]);
+ expect(nursingRead.rules.at(-1)).toMatch(/^The writer wrote only this email's opening, on purpose/);
+ expect(nursingRead.email.body).toContain('What CareMetric Intel does for your nursing home, every day');
+ expect(nursingRead.email.body).not.toMatch(/market report|ranked by Medicare share/);
 });
 
 it('offers the trial in an agency\'s second email and leaves the report with it in the third, on every path',async()=>{
@@ -531,11 +538,20 @@ it('offers the trial in an agency\'s second email and leaves the report with it 
  expect(reportCloseAngle).toMatch(/if someone else handles marketing there they can forward this, or reply saying who, so the report reaches the right person/);
  expect(reportCloseAngle).toMatch(/The email adds: the market report's button, three lines on what CareMetric Intel does, and the 30-day free trial's link\./);
  expect(reportCloseAngle).toMatch(/No link in your words, no new pitch and no question\./);
- // A nursing home, which Intel's reports do not cover, and CareBase keep the general plan for each touch.
+ // A nursing home, which Intel's reports do not cover, has its own three plans (owner direction 2026-11-17: every email is written for
+ // the reader's kind of business); CareBase keeps the general plan for each touch.
  const home={...intel,name:'Maple Grove Nursing and Rehabilitation Center'};
  for(const touches of [0,1,2]) {
-  expect((await later({...home,touches},{offered:null})).touchPlan).toBe(touchAngle(touches+1));
+  const nursing=await later({...home,touches},{offered:null});
+  expect(nursing.touchPlan).toBe(nursingHomeAngles[touches]);
+  expect(nursing.organization.setting).toBe('nursing home');
+  expect(nursing.style).toBe(touches<2?'Write two or three sentences, never more than 120 words.':'Keep the body under seventy words.');
   expect((await later({...intel,product:'carebase',touches})).touchPlan).toBe(touchAngle(touches+1));
+ }
+ for(const plan of nursingHomeAngles) {
+  expect(plan).toContain('You write only the opening of this email');
+  expect(plan).toContain('Never mention a market report, home health or hospice agencies, or how any of them rank.');
+  expect(plan).toMatch(/No link in your words/);
  }
 });
 
@@ -565,6 +581,55 @@ it('names where Intel\'s data comes from without calling it public, in every pro
  expect(outdatedWords({...waiting,purpose:'marketing'})).toBe('public_data');
  expect(outdatedWords({...waiting,purpose:'success'})).toBeNull();
  expect(outdatedWords({...waiting,product:'carebase',purpose:'marketing'})).toBeNull();
+});
+
+// The owner, 2026-11-17, on a block that told every reader about home health agencies and hospices alike: "Was this for a home health
+// agency? If not, they don't care what the ranking is. Make the email customized to the recipient's business industry."
+it('tells a prospect\'s kind of business from its Medicare record, its name, its brief and its research, in that order',()=>{
+ const record=kind=>({claim:`CMS Provider of Services file, 2026Q3: Riverbend (CCN 397001) is a Medicare-certified ${kind} in Riverton, PA; certified June 27, 2024.`});
+ // The Medicare record is a fact about the agency, so it decides, whatever the name says.
+ expect(prospectKind({name:'Riverbend Care',evidence:[record('hospice')]})).toBe('hospice');
+ expect(prospectKind({name:'Riverbend Home Health and Hospice',evidence:[record('home health agency')]})).toBe('home_health');
+ expect(prospectKind({name:'Riverbend Nursing and Rehab',evidence:[record('home health agency')]})).toBe('home_health');
+ // Then the name: one kind, both, or a nursing home.
+ expect(prospectKind({name:'Valley Home Health'})).toBe('home_health');
+ expect(prospectKind({name:'Valley Homecare'})).toBe('home_health');
+ expect(prospectKind({name:'Valley Hospice'})).toBe('hospice');
+ expect(prospectKind({name:'Valley Hospice & Home Health'})).toBe('both');
+ expect(prospectKind({name:'Sunrise Nursing and Rehabilitation Center'})).toBe('nursing_home');
+ // Then a brief written for a hospice, then what its research says; with nothing to go on, an agency of no named kind.
+ expect(prospectKind({name:'Valley Care',briefSetting:'hospice'})).toBe('hospice');
+ expect(prospectKind({name:'Valley Care',evidence:[{claim:'Valley Care provides hospice care in Erie County.'}]})).toBe('hospice');
+ expect(prospectKind({name:'Valley Care',evidence:[{claim:'Valley Care is a skilled nursing facility in Erie County.'}]})).toBe('nursing_home');
+ expect(prospectKind({name:'Valley Care',briefSetting:'home_health'})).toBe('agency');
+ expect(prospectKind({name:'Valley Care'})).toBe('agency');
+ expect(prospectKind()).toBe('agency');
+ // The writer is told the kind, and to write only about it.
+ expect(growthSystem).toContain('a hospice does not care how home health agencies rank, a home health agency does not care about hospices, and a nursing home competes with neither');
+});
+it('writes a hospice\'s email about hospices and a home health agency\'s about home health, with or without a model',async()=>{
+ const base={...intel,evidence:[{id:'e1',source_url:'https://valley.example/about',observed_at:now,claim:'Valley serves Allegheny County.',confidence:'high'}]};
+ const outreach=work;
+ const hospice=await draftMessage({opportunity:{...base,name:'Valley Hospice'},work:outreach,task:{}});
+ expect(hospice.body).toContain('What CareMetric Intel does for your hospice, every day');
+ expect(hospice.body).toContain('Every hospice in your territory, ranked by Medicare share.');
+ expect(hospice.body).not.toMatch(/home health agenc/i);
+ const home=await draftMessage({opportunity:{...base,name:'Valley Home Health'},work:outreach,task:{}});
+ expect(home.body).toContain('Every home health agency in your territory, ranked by Medicare share.');
+ expect(home.body).not.toMatch(/\bhospices?\b in your territory|for your hospice/i);
+ // A nursing home gets the same designed email in its own words, with no report and no ranking, on each of its three emails.
+ for(const touches of [0,1,2]) {
+  const nursing=await draftMessage({opportunity:{...base,name:'Sunrise Nursing and Rehabilitation Center',touches},work:outreach,task:{}});
+  expect(readCampaign(nursing.body),`touch ${touches+1}`).toMatchObject({touch:touches+1,setting:'nursing_home',reportUrl:null});
+  // The founder's own words name his agency; nothing else in a nursing home's email is about home health or hospice.
+  expect(nursing.body.replace(founderQuote,''),`touch ${touches+1}`).not.toMatch(/market report|home health|hospice|ranked by Medicare share/i);
+  expect(outdatedWords({product:'caremetric-intel',subject:nursing.subject,body:nursing.body,purpose:'marketing'}),`touch ${touches+1}`).toBeNull();
+ }
+ // The model is told the reader's kind of business.
+ const run=vi.fn(async()=>({outcome:'completed',output:{subject:'Hospice referral sources in Erie County',body:'I can put together a free market report for Valley Hospice from Medicare data.\nhttps://www.caremetricintel.com/market-review',citations:['e1'],needsHuman:false}}));
+ const written=await draftMessage({opportunity:{...base,name:'Valley Hospice'},work:outreach,task:{},model:{configured:true,run}});
+ expect(JSON.parse(run.mock.calls[0][1].user).organization).toMatchObject({name:'Valley Hospice',setting:'hospice'});
+ expect(written.body).toContain('What CareMetric Intel does for your hospice, every day');
 });
 
 // The owner on the emails, 2026-11-17: "I want this easy to read. I don't need full file names, years cited, or super formal sentences."

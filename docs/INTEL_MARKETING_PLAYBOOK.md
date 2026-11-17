@@ -233,13 +233,16 @@ Each agent keeps its existing controls and approval steps. This section only say
   marketers or liaisons, and any newly certified agency or new owner the roster shows. The last two are rare now but are the strongest
   signals.
 - **The three touches to a home health agency or hospice** (owner direction 2026-11-17) are designed marketing emails in Intel's
-  look. The writer writes only each one's short opening for that agency; the rest is the same for every agency and comes from the
-  fact sheet. Touch 1: the agency's free market report first, then what Intel does in five points, the founder's story and the
+  look. The writer writes only each one's short opening for that agency; the rest is written for its kind of business (a home health
+  agency reads about home health agencies, a hospice about hospices) and comes from the fact sheet. Touch 1: the agency's free market report first, then what Intel does in five points, the founder's story and the
   free trial. Touch 2: a week of the work in Intel, the Founders Sale and the trial. Touch 3: a short close that leaves the report
   with them. No price in any of them, and no card terms. [Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report) has
   the form and its checks.
-- **Touch 1 to anyone else** (a nursing home, a CareBase prospect): the founder's story in one or two sentences, one likely problem
-  as a question, one sentence on how Intel helps, then the free trial. No price.
+- **The three touches to a nursing home** are the same designed emails in a nursing home's words: its hospital sources, the homes
+  it competes with, its county, and the free trial. No market report (Intel's reports cover home health and hospice only), and no
+  rankings or competitor alerts, which Intel does not offer a nursing home.
+- **Touch 1 to a CareBase prospect** keeps the general plan (`touchAngle`): one likely problem as a question, one sentence on how
+  the product helps, then the free trial. No price.
 - **Rotate the lead pillar** across prospects. The experiment angles are referral sources, territory, competitors, visit prep, hospital
   outcomes and slipping sources (`experimentAngles` in `server/growth/playbook.mjs`).
 - **Numbers:** only the agency's own facts, in a sentence about the agency ("Your agency serves six counties."). Never a county statistic
