@@ -13,7 +13,7 @@ const version = "2026-11-09T10:00:00.000001+00:00";
 const base = { default: null, value: null, effective: null, source: "default", variableSet: false, changedAt: version } as const;
 const chat: HubSetting = { ...base, key: "support.chat", label: "Website chat", help: "Shows the chat panel on every Help page.", input: "toggle", default: false, value: true, effective: true, source: "copied", variable: "HUB_CHAT_ENABLED", variableSet: true };
 const agents: HubSetting = { ...base, key: "agents.enabled", label: "Run the AI team", help: "Runs the scheduler.", input: "toggle", default: false, effective: false, variable: "HUB_AGENTS_ENABLED" };
-const owner: HubSetting = { ...base, key: "agents.owner_email", label: "Your email for alerts and the morning brief", help: "Where the AI team emails alerts.", input: "email", variable: "HUB_OWNER_EMAIL" };
+const owner: HubSetting = { ...base, key: "agents.owner_email", label: "Your email for alerts and the daily summary", help: "Where the AI team emails alerts.", input: "email", variable: "HUB_OWNER_EMAIL" };
 const tier: HubSetting = { ...base, key: "support.ai_draft_tier", label: "AI answer quality", help: "Which model drafts answers.", input: "choice", default: "draft", effective: "draft", variable: "HUB_AI_DRAFT_TIER",
   choices: [{ value: "draft", label: "Standard (faster, lower cost)" }, { value: "quality", label: "Best quality (slower, higher cost)" }] };
 const budget: HubSetting = { ...base, key: "social.max_daily_budget_cents", label: "Most any ad may spend per day", help: "The cap.", input: "cents", min: 1, max: 10000000, variable: "HUB_SOCIAL_AD_MAX_DAILY_BUDGET_CENTS" };
@@ -58,13 +58,13 @@ describe("the Settings page", () => {
   it("saves a typed value, and clears one back to its default", async () => {
     const client = fakeClient();
     show(client);
-    const email = await screen.findByLabelText("Your email for alerts and the morning brief");
+    const email = await screen.findByLabelText("Your email for alerts and the daily summary");
     const row = email.closest("li")!;
     expect((within(row).getByRole("button", { name: /^Save/ }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(email, { target: { value: " owner@caremetric.test " } });
     fireEvent.click(within(row).getByRole("button", { name: /^Save/ }));
     await waitFor(() => expect(client.save).toHaveBeenCalledWith({ key: "agents.owner_email", value: "owner@caremetric.test", expectedChangedAt: version }));
-    expect(await screen.findByText("Your email for alerts and the morning brief is saved. It applies within a minute.")).toBeTruthy();
+    expect(await screen.findByText("Your email for alerts and the daily summary is saved. It applies within a minute.")).toBeTruthy();
     const list = screen.getByLabelText("Approved brand images").closest("li")!;
     fireEvent.click(within(list).getByRole("button", { name: /^Use default/ }));
     await waitFor(() => expect(client.save).toHaveBeenLastCalledWith({ key: "social.image_urls", value: null, expectedChangedAt: version }));
@@ -84,7 +84,7 @@ describe("the Settings page", () => {
     show(client);
     expect(await screen.findByText(/Read-only for now: apply the settings migration/)).toBeTruthy();
     expect((screen.getByRole("switch", { name: "Website chat" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByLabelText("Your email for alerts and the morning brief") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Your email for alerts and the daily summary") as HTMLInputElement).disabled).toBe(true);
     expect(screen.getByText("Read from the Railway variable HUB_CHAT_ENABLED.")).toBeTruthy();
   });
 

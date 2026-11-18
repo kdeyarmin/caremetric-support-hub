@@ -233,7 +233,7 @@ export function liveEvaluationHandlers({ growth, model, notifier = null, feature
       const note = liveEvaluationNote({ passed: false, results: { summary } });
       await notifier.send({ severity: 'warning', subject: 'The live writing evaluation did not pass',
         body: `${note} Nothing was held up: sending does not depend on it. The Monday scorecard has the details.`,
-        dedupeKey: `growth:live-eval:${run}`, agentKey: task.agentKey, taskId: task.id });
+        dedupeKey: `growth:live-eval:${run}`, agentKey: task.agentKey, taskId: task.id, attention: 'update' });
     }
     return { result: { run, version: liveEvaluationVersion, ...summary } };
   }

@@ -31,7 +31,7 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | --- | --- | --- |
 | AI team | Run the AI team | `HUB_AGENTS_ENABLED` |
 | AI team | Let agents send customer messages to the AI | `HUB_AGENTS_CUSTOMER_TEXT_TO_AI` |
-| AI team | Your email for alerts and the morning brief | `HUB_OWNER_EMAIL` |
+| AI team | Your email for alerts and the daily summary | `HUB_OWNER_EMAIL` |
 | Customer support | Website chat | `HUB_CHAT_ENABLED` |
 | Customer support | AI answers on new support cases | `HUB_AI_AUTOMATION_ENABLED` |
 | Customer support | AI answer quality | `HUB_AI_DRAFT_TIER` |
@@ -77,6 +77,15 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Creative | How videos are made | none: a setting from the start |
 | Course distribution | Allow legacy opt-in distribution | `HUB_LEGACY_DISTRIBUTION_OPT_IN` |
 | Course distribution | Lesson video import hosts (one per line; empty: HeyGen's) | `HUB_MEDIA_IMPORT_HOSTS` (comma separated) |
+
+The end-of-day summary (owner decision 2026-11-18: one email a day instead of a stream of updates;
+[AI_TEAM.md](AI_TEAM.md#the-end-of-day-summary) says what is held and what still comes at once):
+
+| Settings group | Setting | What it does |
+| --- | --- | --- |
+| AI team | One end-of-day summary | One email a day with what needs your decision, what the team did, what came in and what went out. Reports and news wait for it, and it replaces the morning brief. A customer or prospect waiting on you, something only you can fix, and anything urgent still reach you at once (**on** by default) |
+| AI team | Summary time | The hour the summary is sent, Eastern, 12 to 23 on a 24-hour clock (default 17, 5 PM). Each summary covers the 24 hours since the one before |
+| AI team | Email approval requests right away | Each batch of work waiting for your approval (the week's posts, new creative, ad changes, prospect emails) is emailed as soon as it is ready instead of only in the summary (off by default) |
 
 Settings added with the AI workforce build-out (2026-11-13), all settings from the start and all off or empty until you choose
 ([AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md) has the order to turn them on):

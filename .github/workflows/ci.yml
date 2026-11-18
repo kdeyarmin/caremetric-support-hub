@@ -268,6 +268,9 @@ jobs:
           node server/agents-reach-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-reach-integration.mjs
+          node server/agents-summary-integration.mjs
+          # Repeat with fresh fixtures to prove complete teardown.
+          node server/agents-summary-integration.mjs
           node server/agents-growth-learning-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/agents-growth-learning-integration.mjs

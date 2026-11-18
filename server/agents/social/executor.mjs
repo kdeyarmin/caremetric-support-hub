@@ -47,7 +47,7 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
         try {
           await notifier?.send({ severity: 'warning', subject: `Check ${error.code === 'linkedin_unconfirmed' || execution.input?.platform === 'linkedin' ? 'LinkedIn' : 'Meta'} before trying a social action again`,
             body: 'Meta or LinkedIn did not confirm a post, reply or ad change the Social Media Manager made. It may or may not have happened: look at your Page, Instagram, LinkedIn or the ads manager before approving it again.',
-            dedupeKey: `social:unconfirmed:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId });
+            dedupeKey: `social:unconfirmed:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId, attention: 'now' });
         } catch { log(JSON.stringify({ event: 'hub_agent_social_warning_unsent', action_id: execution.id })); }
         throw failure('social_unconfirmed');
       }
@@ -98,7 +98,7 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
             await notifier.send({ severity: 'warning', subject: 'A LinkedIn post to paste: LinkedIn refused the team',
               body: `LinkedIn refused the team's connection (${error.code.replaceAll('_', ' ')}) when this approved post was due, so here it is to paste on the LinkedIn Page yourself. Reconnect LinkedIn (Settings → Social media) and the next posts go out on their own.`,
               blocks: [{ type: 'paragraph', text: 'Paste this on the LinkedIn Page:' }, { type: 'message', text }],
-              dedupeKey: `social:linkedin:paste:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId });
+              dedupeKey: `social:linkedin:paste:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId, attention: 'now' });
           } catch { log(JSON.stringify({ event: 'hub_social_linkedin_paste_unsent', action_id: execution.id })); }
         }
         throw error;

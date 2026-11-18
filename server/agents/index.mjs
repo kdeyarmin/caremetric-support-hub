@@ -32,6 +32,7 @@ import { creativeDeclared, creativeTeam } from './creative/index.mjs';
 import { creativeExecutors } from './creative/executor.mjs';
 import { scorecardDeclared, scorecardHandlers } from './scorecard/index.mjs';
 import { strategistDeclared, strategistHandlers } from './strategist/index.mjs';
+import { summaryFeature } from './tasks/summary.mjs';
 import { live } from '../live.mjs';
 import { marketingToolkit } from './toolkit.mjs';
 
@@ -59,13 +60,16 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * and the HeyGen key). Its work registers when the database declares platform.agents.creative.v1 and runs while "Turn on the Creative
  * Director" is on; its two executors (handing an approved asset over, retiring one) whenever the database declares it, so an approval the
  * owner gives is always carried out. The Social Media Manager uses approved creative whenever the database has it.
+ * `summary` is the owner's end-of-day summary (Settings → AI team): `{ enabled, hour, approvalsRightAway }`, each a value or a function
+ * read when used. Once the database declares platform.agents.owner-summary.v1 and `enabled` is true, news is held for the summary
+ * instead of emailed one at a time (notify.mjs), and so are approval requests unless `approvalsRightAway` is true.
  */
 export function agentTeam({
   pool, growth: givenGrowth = null, growthMail = null, postalAddress = '', store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,
   fetchImpl = fetch, enabled = false, log = line => console.warn(line), now = () => new Date(), communications = null, features = null,
   anthropicApiKey = null, record = null, model = null, guides = null, customerTextToAi = false, autoAcknowledge = false, contentCountyTopics = false, leadSecrets = {}, lifecycle = null, offerBilling = null,
   social = null, meta = null, marketed = null, searchConsoleSites = undefined, searchConsoleCredentials = '', creative = null, visitorMetrics = null,
-  inboundFollowup = false, concurrentTasks = 3, ads = null, watchdogIdleDays = 3, salesContext = false, strategist = false,
+  inboundFollowup = false, concurrentTasks = 3, ads = null, watchdogIdleDays = 3, salesContext = false, strategist = false, summary = null,
 }) {
   // Fenced operations (the attempt a task was claimed under, the execution an action started) exist once the database declares the hardening feature.
   const marketing = features?.has?.(marketingFeature) === true;
@@ -76,11 +80,14 @@ export function agentTeam({
     creativeReview: features?.has?.('platform.agents.creative-review.v1') === true,
     ads: features?.has?.('platform.agents.ads.v1') === true, watchdog: features?.has?.('platform.agents.watchdog.v1') === true,
     handover: features?.has?.(handoverFeature) === true, strategist: strategistDeclared(features), workRecovery: features?.has?.(workRecoveryFeature) === true,
-    reach: features?.has?.(reachFeature) === true });
+    reach: features?.has?.(reachFeature) === true, summary: features?.has?.(summaryFeature) === true });
   // What the team markets: the owner's switches on the AI team page, read when each marketing task starts (marketing.mjs). Until the
   // database declares them, CareMetric Intel only. A caller (a test) may pass its own list or reader.
   const marketedSource = marketed ?? (marketing && typeof store.marketedProducts === 'function' ? () => store.marketedProducts() : [...defaultMarketed]);
-  const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log });
+  // What waits for the end-of-day summary: news, and approval requests unless the owner wants those right away.
+  const summarySettings = summary ?? {};
+  const hold = attention => live(summarySettings.enabled) === true && (attention === 'update' || (attention === 'decision' && live(summarySettings.approvalsRightAway) !== true));
+  const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, hold, log });
   const runtime = model ?? modelRuntime({ apiKey: anthropicApiKey, store, record, notifier, log, now });
   const growth = features?.has?.('platform.agents.customer-growth.v1') ? givenGrowth : null;
   const shared = { store, notifier, model: runtime };
@@ -123,7 +130,7 @@ export function agentTeam({
     ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, visitors: visitorMetrics ? input => visitorMetrics.read(input) : null, log,
       strategist: strategistDeclared(features) ? strategist : false, toolkit: toolkitNow, watchdogIdleDays }),
     ...strategistHandlers({ store, model: runtime, features, enabled: strategist, log }), ...builtInHandlers(shared, { publicOrigin, fetchImpl, log, communications, features, guides, customerTextToAi, autoAcknowledge, leadSecrets, lifecycle: customerEmail, marketed: marketedSource, searchConsoleSites, inboundFollowup, toolkit: toolkitNow, watchdogIdleDays, services: senderServices(sms, email),
-      feed: growth?.roster?.feed ?? null, rosterStates: growth?.roster?.states ?? null, contentCountyTopics }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
+      feed: growth?.roster?.feed ?? null, rosterStates: growth?.roster?.states ?? null, contentCountyTopics, summary: summarySettings }), ...(typeof handlers === 'function' ? handlers({ ...shared, actions }) : handlers) };
   // Settings → AI team → Tasks at once: how many tasks may run side by side.
   const scheduler = agentScheduler({ store, handlers: registry, actions, enabled, log, now, claimLimit: concurrentTasks });
   const admin = agentAdmin({

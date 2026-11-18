@@ -190,7 +190,8 @@ export function contentHandlers({ store, notifier, model = null, features = null
     const email = composeOutreachEmail({ month, label, ...checked });
     const results = await notifier.send({
       severity: 'info', subject: email.subject, body: email.body, blocks: email.blocks,
-      dedupeKey: asked ? `content:outreach:run:${task.id}` : `content:outreach:${month}`, agentKey: task.agentKey, taskId: task.id,
+      // The drafts to send personally travel only in this email.
+      dedupeKey: asked ? `content:outreach:run:${task.id}` : `content:outreach:${month}`, agentKey: task.agentKey, taskId: task.id, attention: 'now',
     });
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);
     return {

@@ -150,7 +150,8 @@ export function growthHandlers({
         if (lead && lead.test !== true) {
           const words = trialAlert(lead, { publicOrigin });
           const results = await notifier.send({
-            severity: 'warning', subject: words.subject, body: words.body, blocks: words.blocks, dedupeKey: `growth:trial:${item.id}`, agentKey: task.agentKey, taskId: task.id,
+            // A new trial is news for the summary: its welcome email waits for approval like any other.
+            severity: 'warning', subject: words.subject, body: words.body, blocks: words.blocks, dedupeKey: `growth:trial:${item.id}`, agentKey: task.agentKey, taskId: task.id, attention: 'update',
           });
           delivery.push(...results.map(entry => `${entry.channel}:${entry.delivery}`));
           if (results.some(entry => entry.delivery === 'failed')) { refusals.push(...results); refused += 1; continue; }
@@ -213,7 +214,7 @@ export function growthHandlers({
       if (step === undefined) continue;
       const words = followupAlert(item, step);
       const results = await notifier.send({
-        severity: 'warning', subject: words.subject, body: words.body, dedupeKey: `growth:followup:${item.leadId}:${step}`, agentKey: task.agentKey, taskId: task.id,
+        severity: 'warning', subject: words.subject, body: words.body, dedupeKey: `growth:followup:${item.leadId}:${step}`, agentKey: task.agentKey, taskId: task.id, attention: 'now',
       });
       outcomes.push(...results);
       if (results.every(entry => entry.delivery === 'duplicate')) { repeats += 1; continue; }
@@ -254,7 +255,7 @@ export function growthHandlers({
     if (signal?.aborted) throw stopped();
     const results = await notifier.send({
       severity: 'info', subject: report.subject, body: report.body, blocks: report.blocks,
-      dedupeKey: asked ? `growth:run:${task.id}` : `growth:weekly:${week}`, agentKey: task.agentKey, taskId: task.id,
+      dedupeKey: asked ? `growth:run:${task.id}` : `growth:weekly:${week}`, agentKey: task.agentKey, taskId: task.id, attention: asked ? 'now' : 'update',
     });
     if (!asked && results.every(item => item.delivery === 'duplicate')) return { result: { skipped: results.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week } };
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);

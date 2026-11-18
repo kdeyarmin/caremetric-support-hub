@@ -8,6 +8,16 @@ import { live } from '../live.mjs';
  * that is not configured, or has nobody to send to, is recorded as suppressed rather than
  * failing the task that raised the alert.
  *
+ * Every message says how much of the owner's attention it asks for (owner decision 2026-11-18: "I only want emails when something
+ * needs my decision or for me to do something", with one summary at the end of the day):
+ * - `now`: something only the owner can fix, or a person (a customer, a prospect) waiting on the owner. Always sent at once.
+ * - `decision`: a routine batch waiting for approval (the week's posts, new creative, ad changes, prospect emails).
+ * - `update`: news and reports: nothing to do.
+ * While Settings → AI team → "One end-of-day summary" is on, `update` messages (and `decision` messages too, unless "Email approval
+ * requests right away" is on) are not emailed one at a time: each is recorded as held (`hold`, below) and the Chief of Staff's
+ * end-of-day summary (tasks/summary.mjs) lists them. An urgent message is never held. A held message counts as delivered: the task
+ * that raised it is done, and it is not tried again.
+ *
  * Bodies carry counts, names and references the team produced. They must never quote
  * inbound customer text: that is possible PHI and does not belong in a text or an inbox.
  */
@@ -56,11 +66,24 @@ export function renderOwnerEmail({ subject, body, severity = 'info', publicOrigi
   });
 }
 
-/** True when the owner has the message: it was sent now, or an earlier attempt under the same key was sent. */
-export const delivered = item => item.delivery === 'sent' || (item.delivery === 'duplicate' && item.original === 'sent');
+/** True when the owner has the message, or will in the end-of-day summary: it was sent or held now, or an earlier attempt under the same key was. */
+export const delivered = item => item.delivery === 'sent' || item.delivery === 'held' || (item.delivery === 'duplicate' && (item.original === 'sent' || item.original === 'held'));
 
-export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log = line => console.warn(line) }) {
+const attentions = new Set(['now', 'decision', 'update']);
+/** A message that does not say: a warning is something to look at now, anything else is news. */
+const attentionFor = (severity, attention) => (severity === 'urgent' ? 'now' : attentions.has(attention) ? attention : severity === 'warning' ? 'now' : 'update');
+
+/**
+ * `hold(attention)` says whether a message of that attention waits for the end-of-day summary instead of being emailed now; it is read
+ * for each message (the owner's settings apply within a minute). Without it, or when the store cannot record a held message (the
+ * database does not declare the summary yet), every message is sent as before.
+ */
+export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, hold = null, log = line => console.warn(line) }) {
   const channelsFor = severity => (severity === 'urgent' ? ['sms', 'email'] : ['email']);
+  const held = attention => {
+    if (attention === 'now' || typeof hold !== 'function' || typeof store?.notifyHold !== 'function') return false;
+    try { return hold(attention) === true; } catch { return false; }
+  };
 
   async function transport(channel, { subject, body, severity, blocks, communicationReference }) {
     if (channel === 'sms') {
@@ -82,6 +105,17 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log
     const begun = await store.notifyBegin({ ...input, channel });
     // A duplicate says what became of the original: a handler that is run again must not take "already recorded" for "already sent".
     if (begun.duplicate) return { channel, delivery: 'duplicate', original: begun.status ?? null };
+    // Held for the end-of-day summary: recorded, not sent. A failure to record it leaves the row pending, which housekeeping settles as
+    // unknown, so the task does not try again and send it twice; nothing went out.
+    if (input.hold) {
+      try {
+        await store.notifyHold(begun.id, input.attention);
+        return { channel, delivery: 'held' };
+      } catch {
+        log(JSON.stringify({ event: 'hub_agent_notification_unheld', channel }));
+        return { channel, delivery: 'unknown' };
+      }
+    }
     let outcome;
     try {
       outcome = await transport(channel, input);
@@ -99,12 +133,17 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, log
 
   return {
     channelsFor,
-    /** Returns one { channel, delivery } per channel; delivery is sent, failed, unknown, suppressed or duplicate (with `original`, the status of the earlier attempt). */
-    async send({ severity = 'info', subject, body, dedupeKey, agentKey = null, taskId = null, blocks = null, communicationReference = null }) {
+    /**
+     * Returns one { channel, delivery } per channel; delivery is sent, held (for the end-of-day summary), failed, unknown, suppressed or
+     * duplicate (with `original`, the status of the earlier attempt). `attention` is now, decision or update (see above).
+     */
+    async send({ severity = 'info', subject, body, dedupeKey, agentKey = null, taskId = null, blocks = null, communicationReference = null, attention = null }) {
       if (!severities.has(severity)) throw new TypeError('Unsupported notification severity.');
       if (!subject || !body || !dedupeKey) throw new TypeError('A notification needs a subject, a body and a dedupe key.');
       if (blocks !== null && (!Array.isArray(blocks) || blocks.length === 0)) throw new TypeError('Email blocks must be a non-empty list.');
-      const input = { severity, subject: clip(subject, 200), body: clip(body, 4000), dedupeKey, agentKey, taskId, blocks, communicationReference };
+      if (attention !== null && !attentions.has(attention)) throw new TypeError('Unsupported notification attention.');
+      const level = attentionFor(severity, attention);
+      const input = { severity, subject: clip(subject, 200), body: clip(body, 4000), dedupeKey, agentKey, taskId, blocks, communicationReference, attention: level, hold: held(level) };
       const results = [];
       for (const channel of channelsFor(severity)) results.push(await deliver(channel, input));
       return results;

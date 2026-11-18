@@ -303,7 +303,7 @@ export function modelRunner({
     const alert = failure && configurationAlerts[failure.code];
     if (alert && notifier) {
       try {
-        await notifier.send({ severity: 'warning', subject: alert.subject, body: alert.body, dedupeKey: `ai:${failure.code}:${easternDate.format(now())}`, agentKey: task.agentKey, taskId: task.id });
+        await notifier.send({ severity: 'warning', subject: alert.subject, body: alert.body, dedupeKey: `ai:${failure.code}:${easternDate.format(now())}`, agentKey: task.agentKey, taskId: task.id, attention: 'now' });
       } catch { log(JSON.stringify({ event: 'hub_agent_model_alert_failed', agent: task.agentKey, code: failure.code })); }
     }
   }

@@ -43,7 +43,8 @@ describe('triaging one message', () => {
       severity: 'info', subject: 'New email: CM-1042 for CareBase',
       body: 'An email for CareBase reached the Hub 5 minutes ago. It looks like a general question.\n\nOpen CM-1042 in Communications. Nothing has been sent to the customer.',
       dedupeKey: `concierge:new:${ids.message}`, agentKey: 'support_concierge', taskId: 't1',
-      communicationReference: 1042,
+      // A customer waiting on the business is never held for the end-of-day summary.
+      communicationReference: 1042, attention: 'now',
     }]);
     expect(outcome).toEqual({ status: 'awaiting_approval', result: {
       outcome: 'alerted', reference: 1042, channel: 'email', product: 'carebase', category: 'general', phi: false, severity: 'info', delivery: ['email:sent'],
@@ -267,7 +268,7 @@ describe('a website lead', () => {
       severity: 'warning', subject: 'New web form message: CM-1042 for CareBase, sales or consulting inquiry',
       body: 'A web form message for CareBase reached the Hub 5 minutes ago. It looks like a sales or consulting inquiry.\n\nOpen CM-1042 in Communications. Nothing has been sent to the customer.',
       dedupeKey: `concierge:warn:${ids.message}`, agentKey: 'support_concierge', taskId: 't1',
-      communicationReference: 1042,
+      communicationReference: 1042, attention: 'now',
     }]);
     expect(outcome).toEqual({ status: 'awaiting_approval', result: {
       outcome: 'alerted', reference: 1042, channel: 'web_form', product: 'carebase', category: 'sales', phi: false, severity: 'warning', delivery: ['email:sent'],

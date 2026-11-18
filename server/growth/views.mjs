@@ -35,7 +35,7 @@ export function viewsHandlers({ growth, features = null, notifier = null }) {
         const name = String(first.name ?? 'An agency').slice(0, 120);
         await notifier.send({ severity: 'info', subject: `${name} opened its market report`,
           body: `${name} opened the free market report from its CareMetric Intel email (${new Date(first.viewedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })} Eastern). Its second email will follow up on the report instead of starting a new angle. Open Growth to see the agency and its brief.`,
-          dedupeKey: `growth:report-viewed:${first.opportunity}`, agentKey: task.agentKey, taskId: task.id });
+          dedupeKey: `growth:report-viewed:${first.opportunity}`, agentKey: task.agentKey, taskId: task.id, attention: 'update' });
       }
       after = answer.next_after_id;
       if (answer.views.length < pageSize) break;

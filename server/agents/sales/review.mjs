@@ -118,7 +118,7 @@ export function salesReviewHandler({ store, growth, notifier, publicOrigin, log 
     const report = composeReview({ items, now: moment, publicOrigin });
     const results = await notifier.send({
       severity: 'info', subject: report.subject, body: report.body, blocks: report.blocks,
-      dedupeKey: asked ? `sales:review:run:${task.id}` : `sales:review:${week}`, agentKey: task.agentKey, taskId: task.id,
+      dedupeKey: asked ? `sales:review:run:${task.id}` : `sales:review:${week}`, agentKey: task.agentKey, taskId: task.id, attention: asked ? 'now' : 'update',
     });
     if (!asked && results.every(item => item.delivery === 'duplicate')) return { result: { skipped: results.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week } };
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);

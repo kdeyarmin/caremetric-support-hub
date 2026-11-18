@@ -135,6 +135,15 @@ states, lists images with a warning before they lapse, and nudges and rewrites t
 declared; it reads comments on ads and writes county topics only while their switches are on as well
 ([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 6).
 
+`20261118120100_owner_summary_contract.sql` declares `platform.agents.owner-summary.v1` once the settings and AI team hardening
+features are declared, the three summary settings (`agents.daily_summary`, `agents.summary_hour`, `agents.approvals_right_away`) have
+rows of their kinds, `private.owner_notifications` admits the `held` status and only a held row carries an `attention`,
+`private.agent_notify_hold` (which holds only a pending email that is not urgent) and `private.agent_summary_facts` are security
+definers with a pinned empty search path executable by `hub_app_server` alone, and the Chief of Staff's `summary.daily` task is
+scheduled. Each test fails closed. The Hub server holds news and approval requests for the end-of-day summary, sends the summary and
+leaves out the scheduled morning brief only when the feature is declared
+([owner decision, November 18](AI_TEAM.md#the-end-of-day-summary)).
+
 `20261102120100_agent_control_plane_contract.sql` declares `platform.agents.v1` only after
 verifying that the six AI team tables keep row level security and grant nothing to any
 browser, service or server role, that every server operation is a security definer with a

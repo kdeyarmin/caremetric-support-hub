@@ -145,7 +145,7 @@ export function scorecardHandlers({
     const dedupeKey = asked ? `scorecard:run:${task.id}` : `scorecard:${thisWeek}`;
     // A scheduled run whose week was already sent, is on its way, or was switched off does no work. A failed send is tried again.
     if (!asked && typeof store.notificationStatus === 'function'
-      && ['sent', 'unknown', 'pending', 'suppressed'].includes(await store.notificationStatus(dedupeKey))) {
+      && ['sent', 'held', 'unknown', 'pending', 'suppressed'].includes(await store.notificationStatus(dedupeKey))) {
       return { result: { skipped: 'already_attempted', week: thisWeek } };
     }
     // The week's constraint (strategist/index.mjs) is written at 07:35. When the Hub catches up after both morning times have passed,
@@ -203,7 +203,7 @@ export function scorecardHandlers({
 
     const results = await notifier.send({
       severity: card.needsYou ? 'warning' : 'info', subject: card.subject, body: card.body, blocks: card.blocks,
-      dedupeKey, agentKey: task.agentKey, taskId: task.id,
+      dedupeKey, agentKey: task.agentKey, taskId: task.id, attention: asked ? 'now' : 'update',
     });
     if (!asked && results.every(item => item.delivery === 'duplicate')) return { result: { skipped: results.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week: thisWeek } };
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);

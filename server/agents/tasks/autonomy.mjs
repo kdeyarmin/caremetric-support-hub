@@ -53,11 +53,11 @@ export function autonomyHandlers({ store, notifier, publicOrigin, features = nul
         if (outcome?.reason === 'too_many_rejections') {
           await notifier.send({ severity: 'warning', subject: `${step.label}: kept under your review`,
             body: `You turned down ${Number(evidence.rejected ?? 0)} of ${decided} on ${step.label.toLowerCase()} during the supervised week, more than the step allows, so it stays under your review. Look at what you turned down, then start another supervised week ${page} when you are ready.`,
-            dedupeKey: `autonomy:held:${step.category}:${step.automaticAt}`, agentKey: task.agentKey, taskId: task.id });
+            dedupeKey: `autonomy:held:${step.category}:${step.automaticAt}`, agentKey: task.agentKey, taskId: task.id, attention: 'update' });
         } else if (outcome?.reason === 'not_enough_reviews') {
           await notifier.send({ severity: 'info', subject: `${step.label}: one more supervised week`,
             body: `Only ${decided} on ${step.label.toLowerCase()} came to you during the supervised week, too few to judge it, so it stays supervised for another week ${page}.`,
-            dedupeKey: `autonomy:extended:${step.category}:${outcome?.step?.automaticAt ?? step.automaticAt}`, agentKey: task.agentKey, taskId: task.id });
+            dedupeKey: `autonomy:extended:${step.category}:${outcome?.step?.automaticAt ?? step.automaticAt}`, agentKey: task.agentKey, taskId: task.id, attention: 'update' });
         }
         continue;
       }
@@ -71,7 +71,7 @@ export function autonomyHandlers({ store, notifier, publicOrigin, features = nul
         severity: 'info', subject: `${step.label}: now on their own`,
         body: `Your supervised week for ${step.label.toLowerCase()} has ended. From now on ${words(step)} ${undo} ${page}.`,
         // One email per switch: the key names the moment it switched, so a retry finds what an earlier attempt sent.
-        dedupeKey: `autonomy:automatic:${step.category}:${step.automaticAt}`, agentKey: task.agentKey, taskId: task.id,
+        dedupeKey: `autonomy:automatic:${step.category}:${step.automaticAt}`, agentKey: task.agentKey, taskId: task.id, attention: 'update',
       });
       reached ||= results.some(delivered);
       delivery.push(...results.map(item => `${step.category}:${item.channel}:${item.delivery}`));
@@ -83,7 +83,7 @@ export function autonomyHandlers({ store, notifier, publicOrigin, features = nul
       const results = await notifier.send({
         severity: 'info', subject: `${step.label}: on their own from ${when(step.automaticAt)}`,
         body: `Your supervised week for ${step.label.toLowerCase()} ends ${when(step.automaticAt)}. From then on ${words(step)} ${undo} ${page}.`,
-        dedupeKey: `autonomy:soon:${step.category}:${step.automaticAt}`, agentKey: task.agentKey, taskId: task.id,
+        dedupeKey: `autonomy:soon:${step.category}:${step.automaticAt}`, agentKey: task.agentKey, taskId: task.id, attention: 'update',
       });
       delivery.push(...results.map(item => `${step.category}:${item.channel}:${item.delivery}`));
     }

@@ -58,7 +58,7 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
     if (guard?.tripped === true && notifier) {
       const alert = guardAlert(guard);
       await notifier.send({ severity: 'warning', subject: alert.subject, body: alert.body, dedupeKey: `growth:bounce-guard:${growthDay(now())}`,
-        agentKey: task.agentKey, taskId: task.id });
+        agentKey: task.agentKey, taskId: task.id, attention: 'now' });
       alerted = true;
     }
     const guardResult = guard?.on === true ? { guard: guard.tripped === true ? 'tripped' : 'clear', ...(alerted ? { alerted } : {}) } : {};
