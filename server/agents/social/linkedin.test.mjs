@@ -183,6 +183,14 @@ describe('the LinkedIn client', () => {
     await expect(lost.recentPosts()).rejects.toMatchObject({ code: 'linkedin_unavailable', transient: true });
   });
 
+  it('retains safe request diagnostics without response text, credentials or identifiers', async () => {
+    const fetchImpl = route([[/./, json({ message: `secret ${token}`, serviceErrorCode: 100, errorDetails: { token } }, 422)]]);
+    const error = await client(fetchImpl).createCampaign({ name: 'Test', dailyBudgetCents: 1000 }).catch(caught => caught);
+    expect(error).toMatchObject({ code: 'linkedin_invalid_request', linkedin: { status: 422, method: 'POST', resource: 'adCampaignGroups', serviceErrorCode: 100 } });
+    expect(JSON.stringify(error)).not.toMatch(/secret|AQX|5080001|errorDetails/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('renews an expired token once through LinkedIn\'s OAuth endpoint and sends the request again with it', async () => {
     const seen = [];
     const fetchImpl = vi.fn(async (url, init = {}) => {
@@ -437,6 +445,13 @@ describe('the founder\'s own profile', () => {
 });
 
 describe('new campaigns and lead reports on LinkedIn', () => {
+  it('requires the Sponsored Content beneficiary before any lookup or write', async () => {
+    const fetchImpl = vi.fn();
+    const li = linkedinClient({ adsToken: token, adAccountId: '5080001', fetchImpl });
+    await expect(li.createCampaign({ name: 'Test', dailyBudgetCents: 1000 })).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('creates a draft campaign group and campaign with the health care audience, and reports a lead by hash and click ID', async () => {
     const calls = [];
     const fetchImpl = vi.fn(async (url, init) => {
@@ -444,10 +459,11 @@ describe('new campaigns and lead reports on LinkedIn', () => {
       const id = url.endsWith('/adCampaignGroups') ? 'urn:li:sponsoredCampaignGroup:701' : url.endsWith('/adCampaigns') ? 'urn:li:sponsoredCampaign:702' : null;
       return new Response('{}', { status: 201, headers: id ? { 'x-restli-id': id } : {} });
     });
-    const li = linkedinClient({ adsToken: 'AQV-ads-token-0123456789abc', adAccountId: '5080001', fetchImpl });
+    const li = linkedinClient({ adsToken: 'AQV-ads-token-0123456789abc', organizationId: '5550001', adAccountId: '5080001', fetchImpl });
     expect(await li.createCampaign({ name: 'Intel prospecting', dailyBudgetCents: 3000, startAt: '2026-11-17T00:00:00Z' })).toEqual({ campaignGroupId: '701', campaignId: '702' });
     expect(calls[0][0]).toBe('https://api.linkedin.com/rest/adAccounts/5080001/adCampaignGroups');
     const campaign = JSON.parse(calls[1][1].body);
+    expect(campaign.associatedEntity).toBe(org);
     expect(campaign).toMatchObject({ campaignGroup: 'urn:li:sponsoredCampaignGroup:701', status: 'DRAFT', objectiveType: 'WEBSITE_VISIT', dailyBudget: { amount: '30.00', currencyCode: 'USD' } });
     expect(JSON.stringify(campaign.targetingCriteria)).toContain('urn:li:geo:103644278');
     await expect(li.createCampaign({ name: 'x', dailyBudgetCents: 500 })).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
@@ -465,7 +481,7 @@ describe('new campaigns and lead reports on LinkedIn', () => {
       const id = url.endsWith('/adCampaignGroups') ? 'urn:li:sponsoredCampaignGroup:701' : url.endsWith('/adCampaigns') ? 'urn:li:sponsoredCampaign:702' : null;
       return new Response(id ? '{}' : null, { status: id ? 201 : 204, headers: id ? { 'x-restli-id': id } : {} });
     });
-    const li = linkedinClient({ adsToken: 'AQV-ads-token-0123456789abc', adAccountId: '5080001', fetchImpl });
+    const li = linkedinClient({ adsToken: 'AQV-ads-token-0123456789abc', organizationId: '5550001', adAccountId: '5080001', fetchImpl });
     const startAt = '2026-11-16T15:20:00.000Z', endAt = '2026-12-01T04:59:59.000Z';
     expect(await li.createCampaign({ name: 'Intel prospecting', dailyBudgetCents: 1500, startAt, endAt })).toEqual({ campaignGroupId: '701', campaignId: '702' });
     const schedule = { start: Date.parse(startAt), end: Date.parse(endAt) };
@@ -518,7 +534,7 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
       const id = url.endsWith('/adCampaignGroups') ? 'urn:li:sponsoredCampaignGroup:701' : url.endsWith('/adCampaigns') ? 'urn:li:sponsoredCampaign:702' : null;
       return new Response('{}', { status: 201, headers: id ? { 'x-restli-id': id } : {} });
     });
-    const li = linkedinClient({ adsToken: 'AQV-ads-token-0123456789abc', adAccountId: '5080001', fetchImpl });
+    const li = linkedinClient({ adsToken: 'AQV-ads-token-0123456789abc', organizationId: '5550001', adAccountId: '5080001', fetchImpl });
     const states = [{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }];
     expect(await li.createCampaign({ name: 'Intel prospecting', dailyBudgetCents: 3000, startAt: '2026-11-17T00:00:00Z', states })).toEqual({ campaignGroupId: '701', campaignId: '702' });
     const lookup = decodeURIComponent(new URL(calls[0][0]).search);

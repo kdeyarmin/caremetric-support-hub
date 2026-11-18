@@ -18,6 +18,7 @@
  * rather than recorded as failed, so signing in again and pressing the button sends it. The owner's session
  * reaches only the executors marked with `sessionExecutor`.
  */
+import { linkedinFailureDetails } from './social/linkedin.mjs';
 const databaseCode = /^[a-z][a-z_]{0,59}$/;
 const codeOf = error => (databaseCode.test(error?.code ?? '') ? error.code : 'executor_error');
 
@@ -68,8 +69,8 @@ export function actionExecutor({ store, executors = {}, log = line => console.wa
           && await Promise.resolve(store.releaseExecution?.(execution.id, execution.execution ?? null)).catch(() => false) === true) {
           return { executed: false, failed: false, skipped: true, needsSession: true };
         }
-        result = { error: code };
-        log(JSON.stringify({ event: 'hub_agent_action_error', action_id: execution.id, agent: execution.agentKey, kind: execution.kind, code: result.error }));
+        result = { error: code, ...linkedinFailureDetails(error) };
+        log(JSON.stringify({ event: 'hub_agent_action_error', action_id: execution.id, agent: execution.agentKey, kind: execution.kind, code: result.error, ...linkedinFailureDetails(error) }));
       }
     }
     await store.completeExecution(execution.id, ok, result, execution.execution ?? null);

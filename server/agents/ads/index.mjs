@@ -43,6 +43,32 @@ const productNames = { carebase: 'CareBase', 'caremetric-intel': 'CareMetric Int
 // Where new campaigns send people (2026-11-16): Intel's free market report for the reader's own agency (its share and rank in its county,
 // the county's largest agencies and three moves; the strongest reason for an agency to raise its hand), CareBase's free trial.
 const landing = { 'caremetric-intel': 'intel-market-review', carebase: 'carebase-signup' };
+
+// Tracking tags may differ between the campaign and its approved creative; offer/query parameters may not.
+export function sameAdDestination(left, right) {
+  const destination = value => {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'https:' || url.username || url.password) return null;
+      for (const key of [...url.searchParams.keys()]) if (/^utm_/i.test(key)) url.searchParams.delete(key);
+      url.searchParams.sort();
+      url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+      return url.href;
+    } catch { return null; }
+  };
+  const target = destination(left);
+  return target !== null && target === destination(right);
+}
+
+function campaignCreative(asset, product, platform, origin) {
+  const page = productPage(landing[product]);
+  if (!page || !origin || asset?.product !== product || asset?.platform !== platform || asset.kind !== 'static'
+    || !adImagePlacements[platform]?.includes(asset.placement) || !/^[0-9a-f]{64}$/.test(asset.token ?? '')
+    || !/^[0-9a-f-]{36}$/.test(asset.id ?? '') || !sameAdDestination(asset.landingUrl, page.url)) return null;
+  const copy = adCopyFromCreative(asset, { product, linkedin: platform === 'linkedin' });
+  return copy ? { ...copy, imageUrl: `${origin}/api/creative/a/${asset.token}.png`, creativeAssetId: asset.id } : null;
+}
+
 const easternWeekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' });
 const failure = code => Object.assign(new Error('The ad action was not carried out.'), { code, transient: false });
 const codeOf = error => (/^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'ads_error');
@@ -190,21 +216,25 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
       // Approved Creative Director images are served from the Hub under each asset's public token, so Meta and LinkedIn can fetch them.
       const assetOrigin = /^https:\/\//i.test(publicOrigin ?? '') ? publicOrigin.replace(/\/+$/, '') : null;
 
-      /** The first ad for a campaign launched live: the first approved creative for its product and platform whose words pass that platform's checks. */
+      /** Keep the approved image, copy, offer and landing page together; never redirect article creative to a report. */
       async function firstAd(product, platform, campaignName) {
-        if (!creative?.approved || !assetOrigin) return null;
+        if ((!creative?.approved && !store?.creativeLiveAssets) || !assetOrigin) return null;
         let assets;
-        try { assets = await creative.approved({ product, platform, limit: 20 }); }
+        try {
+          // The approved list is capped at 20; older article/trial assets must not hide later report creative.
+          assets = typeof store?.creativeLiveAssets === 'function'
+            ? ((await store.creativeLiveAssets([product])) ?? []).filter(asset => asset.status === 'approved')
+            : await creative.approved({ product, platform, limit: 20 });
+        }
         catch (error) {
           if (error?.transient) throw error;
           log(JSON.stringify({ event: 'hub_ads_creative_unread', code: codeOf(error) }));
           return null;
         }
         for (const asset of assets ?? []) {
-          if (asset.kind !== 'static' || !adImagePlacements[platform].includes(asset.placement) || !/^[0-9a-f]{64}$/.test(asset.token ?? '') || !/^[0-9a-f-]{36}$/.test(asset.id ?? '')) continue;
-          const copy = adCopyFromCreative(asset, { product, linkedin: platform === 'linkedin' });
+          const copy = campaignCreative(asset, product, platform, assetOrigin);
           if (!copy) continue;
-          return { ...copy, name: `${campaignName} · creative ${asset.id.slice(0, 8)}`, imageUrl: `${assetOrigin}/api/creative/a/${asset.token}.png`, creativeAssetId: asset.id };
+          return { ...copy, name: `${campaignName} · creative ${asset.id.slice(0, 8)}` };
         }
         return null;
       }
@@ -417,13 +447,13 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         catch { log(JSON.stringify({ event: 'hub_ads_launch_notice_unsent', action_id: execution.id })); }
       };
       // The approved creative is still in use: approved, or live in another ad.
-      async function stillApproved(product, platform, assetId) {
+      async function approvedAsset(product, platform, assetId) {
         if (!/^[0-9a-f-]{36}$/.test(assetId ?? '')) return false;
         try {
           if (typeof store?.creativeLiveAssets === 'function') {
-            return ((await store.creativeLiveAssets([product])) ?? []).some(asset => asset.id === assetId && asset.platform === platform && ['approved', 'live'].includes(asset.status));
+            return ((await store.creativeLiveAssets([product])) ?? []).find(asset => asset.id === assetId && asset.platform === platform && ['approved', 'live'].includes(asset.status));
           }
-          return typeof creative?.approved === 'function' && ((await creative.approved({ product, platform, limit: 20 })) ?? []).some(asset => asset.id === assetId);
+          return typeof creative?.approved === 'function' && ((await creative.approved({ product, platform, limit: 20 })) ?? []).find(asset => asset.id === assetId);
         } catch (error) {
           if (error?.transient) throw error;
           return false;
@@ -442,9 +472,18 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           return { created: true, ...created, launched: false, reason };
         };
         if (!canReserve()) throw failure('approval_required');
-        if (typeof client.startCampaign !== 'function') return fallback('cannot_start');
         const ad = input.firstAd;
-        if (!ad || !(await stillApproved(input.product, platform, ad.creativeAssetId))) return fallback('no_approved_creative');
+        if (ad) {
+          const page = productPage(landing[input.product]);
+          if (!page || !sameAdDestination(input.link, page.url) || !sameAdDestination(ad.link, input.link)) throw failure('ad_destination_changed');
+        }
+        const asset = ad && await approvedAsset(input.product, platform, ad.creativeAssetId);
+        if (!asset) return fallback('no_approved_creative');
+        const origin = /^https:\/\//i.test(publicOrigin ?? '') ? publicOrigin.replace(/\/+$/, '') : null;
+        const current = campaignCreative(asset, input.product, platform, origin);
+        // An old proposal (including its image and CTA) must still be the approved creative. Fail before reserving or writing anything.
+        if (!current || Object.keys(current).some(key => current[key] !== ad[key])) throw failure('ad_creative_changed');
+        if (typeof client.startCampaign !== 'function') return fallback('cannot_start');
         const moment = now();
         // A flight runs its own days (never past the month); any other campaign to the month's end.
         const left = campaignWindow(moment, input.flightDays ?? null);

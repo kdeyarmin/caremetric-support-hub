@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { adsConfig, adsFeature, adsTeam, monthLeft } from './index.mjs';
+import { adsConfig, adsFeature, adsTeam, monthLeft, sameAdDestination } from './index.mjs';
 import { handoverFeature } from '../handover.mjs';
 
 // Ad campaign launch handed over (20261115200000_autonomy_handover.sql): campaigns approved by the database under the owner's step are
@@ -14,8 +14,8 @@ const metaAsset = '33333333-3333-4333-8333-333333333333';
 const linkedinAsset = '44444444-4444-4444-8444-444444444444';
 const asset = (platform, over = {}) => ({ id: platform === 'meta' ? metaAsset : linkedinAsset, token, product: 'caremetric-intel', platform,
   placement: platform === 'meta' ? 'meta.feed_square' : 'linkedin.single_image', kind: 'static', headline: 'Territory plans from Medicare data',
-  primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', description: 'Free trial', cta: 'Start free trial',
-  landingUrl: `https://www.caremetricintel.com/?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`, ...over });
+  primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', description: 'Free market report', cta: 'Get your report',
+  landingUrl: `https://www.caremetricintel.com/market-review?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`, ...over });
 const trusted = { autonomy: 'act', config: { auto_approve_kinds: ['social.campaign_create', 'social.google_campaign'] } };
 
 function setup({ values = {}, googleConfigured = false, approved = platform => [asset(platform)], reservation = (id, execution, daily) => ({ reserved: true, dailyBudgetCents: daily }),
@@ -23,7 +23,7 @@ function setup({ values = {}, googleConfigured = false, approved = platform => [
   const store = {
     socialCampaignProposed: vi.fn(async () => false), proposeAction: vi.fn(async input => ({ id: `a-${input.targetId}`, created: true, status: 'auto_approved' })),
     actionTrusted: vi.fn(async () => trust), adsLaunchReserve: vi.fn(async (...args) => reservation(...args)), adsLaunchRelease: vi.fn(async () => true),
-    creativeLiveAssets: vi.fn(async () => live.map(id => ({ id, platform: id === metaAsset ? 'meta' : 'linkedin', status: 'live' }))),
+    creativeLiveAssets: vi.fn(async () => live.flatMap(id => approved(id === metaAsset ? 'meta' : 'linkedin').map(item => ({ ...item, status: 'approved' })))),
   };
   const notifier = { send: vi.fn(async () => [{ channel: 'email', delivery: 'sent' }]) };
   const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: googlePlan })) };
@@ -43,14 +43,38 @@ function setup({ values = {}, googleConfigured = false, approved = platform => [
   return { store, notifier, meta, linkedin, googleClient, creative, handlers, executors };
 }
 
+describe('campaign destinations', () => {
+  it('ignores only tracking tags and trailing slashes, retaining offer parameters and anchors', () => {
+    const page = 'https://www.caremetricintel.com/market-review';
+    expect(sameAdDestination(`${page}/?utm_source=linkedin`, `${page}?utm_content=asset`)).toBe(true);
+    for (const other of [undefined, 'bad', page.replace('https:', 'http:'), `${page}?offer=trial`, `${page}#trial`,
+      page.replace('/market-review', '/resources/marketing-activity-referral-measurement'), page.replace('www.', ''),
+      page.replace('https://', 'https://user:password@')]) expect(sameAdDestination(page, other)).toBe(false);
+  });
+});
+
 describe('the monthly plan with ad campaign launch handed over', () => {
+  it('skips earlier article and trial creative and keeps the matching report creative intact', async () => {
+    const h = setup({ approved: platform => [asset(platform, { landingUrl: 'https://www.caremetricintel.com/resources/marketing-activity-referral-measurement' }),
+      asset(platform, { landingUrl: 'https://www.caremetricintel.com/' }), asset(platform)] });
+    await h.handlers['ads.plan'](task({ agent: trusted }), { now: monday });
+    for (const [{ input }] of h.store.proposeAction.mock.calls.slice(0, 2)) {
+      expect(input.firstAd.link).toBe(asset(input.platform).landingUrl);
+      expect(input.firstAd.message).toBe(asset(input.platform).primaryText);
+      expect(sameAdDestination(input.firstAd.link, input.link)).toBe(true);
+    }
+    const onlyArticle = setup({ approved: platform => [asset(platform, { landingUrl: 'https://www.caremetricintel.com/resources/marketing-activity-referral-measurement' })] });
+    await onlyArticle.handlers['ads.plan'](task({ agent: trusted }), { now: monday });
+    expect(onlyArticle.store.proposeAction.mock.calls.slice(0, 2).every(([item]) => !item.input.firstAd)).toBe(true);
+  });
+
   it('gives each campaign its first ad from approved creative and shares the month\'s number among those starting on their own', async () => {
     const h = setup();
     const done = await h.handlers['ads.plan'](task({ agent: trusted }), { now: monday });
     const proposals = h.store.proposeAction.mock.calls.map(([item]) => item);
     expect(proposals.map(item => item.targetId)).toEqual(['linkedin:caremetric-intel:2026-11', 'meta:caremetric-intel:2026-11', 'google:caremetric-intel:2026-11']);
     // LinkedIn and Meta launch live (approved creative fits both); Google is emailed as before (no API), so it takes no share.
-    expect(proposals[0].input).toMatchObject({ dailyBudgetCents: 1500, firstAd: { creativeAssetId: linkedinAsset, imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, callToAction: 'SIGN_UP' } });
+    expect(proposals[0].input).toMatchObject({ dailyBudgetCents: 1500, firstAd: { creativeAssetId: linkedinAsset, imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, callToAction: 'LEARN_MORE' } });
     expect(proposals[1].input).toMatchObject({ dailyBudgetCents: 1500, audienceId: '1234567', firstAd: { creativeAssetId: metaAsset } });
     expect(proposals[1].preview).toContain('You handed ad campaign launch over, so it starts on its own');
     expect(proposals[1].preview).toContain('runs until 2026-11-30');
@@ -63,6 +87,17 @@ describe('the monthly plan with ad campaign launch handed over', () => {
     const online = setup({ googleConfigured: true });
     await online.handlers['ads.plan'](task({ agent: trusted }), { now: monday });
     expect(online.store.proposeAction.mock.calls.map(([item]) => item.input.dailyBudgetCents)).toEqual([1000, 1000, 1000]);
+  });
+
+  it('finds report creative beyond the first 20 approved assets', async () => {
+    const h = setup({ approved: platform => [...Array.from({ length: 25 }, () => asset(platform, {
+      landingUrl: 'https://www.caremetricintel.com/resources/marketing-activity-referral-measurement',
+    })), asset(platform)] });
+    // The legacy approved endpoint would have hidden the report at position 26.
+    h.creative.approved.mockResolvedValue([]);
+    await h.handlers['ads.plan'](task({ agent: trusted }), { now: monday });
+    expect(h.store.proposeAction.mock.calls[0][0].input.firstAd.link).toBe(asset('linkedin').landingUrl);
+    expect(h.creative.approved).not.toHaveBeenCalled();
   });
 
   it('plans as before without approved creative that fits, without the hand-over in the database, or without the owner\'s trust', async () => {
@@ -86,11 +121,42 @@ describe('the monthly plan with ad campaign launch handed over', () => {
 });
 
 describe('launching a campaign approved under the hand-over', () => {
-  const metaInput = { platform: 'meta', product: 'caremetric-intel', name: 'CareMetric Intel retargeting 2026-11', dailyBudgetCents: 1500, audienceId: '1234567',
+  const metaInput = { link: 'https://www.caremetricintel.com/market-review', platform: 'meta', product: 'caremetric-intel', name: 'CareMetric Intel retargeting 2026-11', dailyBudgetCents: 1500, audienceId: '1234567',
     firstAd: { name: 'Intel retargeting · creative 33333333', message: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans from Medicare data',
-      description: 'Free trial', link: `https://www.caremetricintel.com/?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`,
-      callToAction: 'SIGN_UP', imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, creativeAssetId: metaAsset } };
+      description: 'Free market report', link: `https://www.caremetricintel.com/market-review?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`,
+      callToAction: 'LEARN_MORE', imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, creativeAssetId: metaAsset } };
   const auto = (input, over = {}) => ({ id: 'a9', kind: 'social.campaign_create', agentKey: 'social_manager', taskId: 't1', targetId: 'meta:caremetric-intel:2026-11', input, autoApproved: true, execution: 2, ...over });
+
+  it('revalidates already-live creative and fails closed against an older database snapshot', async () => {
+    const h = setup();
+    h.store.creativeLiveAssets.mockResolvedValue([{ ...asset('meta'), status: 'live' }]);
+    expect(await h.executors['social.campaign_create'](auto(metaInput))).toMatchObject({ launched: true });
+    const old = setup();
+    old.store.creativeLiveAssets.mockResolvedValue([{ id: metaAsset, product: 'caremetric-intel', platform: 'meta', status: 'approved' }]);
+    await expect(old.executors['social.campaign_create'](auto(metaInput))).rejects.toMatchObject({ code: 'ad_creative_changed' });
+    expect(old.store.adsLaunchReserve).not.toHaveBeenCalled();
+    expect(old.meta.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it('rejects stale destinations and changed approved content before any reservation or platform write', async () => {
+    for (const input of [
+      { ...metaInput, firstAd: { ...metaInput.firstAd, link: 'https://www.caremetricintel.com/resources/marketing-activity-referral-measurement' } },
+      { ...metaInput, link: 'https://www.caremetricintel.com/' },
+      { ...metaInput, link: undefined },
+      ...['message', 'headline', 'description', 'imageUrl', 'callToAction'].map(key => ({ ...metaInput, firstAd: { ...metaInput.firstAd, [key]: 'changed' } })),
+    ]) {
+      const h = setup();
+      await expect(h.executors['social.campaign_create'](auto(input))).rejects.toMatchObject({ code: expect.stringMatching(/^ad_(destination|creative)_changed$/) });
+      expect(h.store.adsLaunchReserve).not.toHaveBeenCalled();
+      expect(h.meta.createCampaign).not.toHaveBeenCalled();
+      expect(h.meta.createAd).not.toHaveBeenCalled();
+      expect(h.meta.startCampaign).not.toHaveBeenCalled();
+    }
+    const changed = setup();
+    changed.store.creativeLiveAssets.mockResolvedValue([{ ...asset('meta'), status: 'approved', landingUrl: 'https://www.caremetricintel.com/' }]);
+    await expect(changed.executors['social.campaign_create'](auto(metaInput))).rejects.toMatchObject({ code: 'ad_creative_changed' });
+    expect(changed.meta.createCampaign).not.toHaveBeenCalled();
+  });
 
   it('launches a Meta campaign live: reserved, created paused to its month\'s end, its first ad put in, then started', async () => {
     const h = setup();
@@ -99,7 +165,7 @@ describe('launching a campaign approved under the hand-over', () => {
     expect(h.store.actionTrusted).toHaveBeenCalledWith('a9', 2);
     expect(h.store.adsLaunchReserve).toHaveBeenCalledWith('a9', 2, 1500, 500, 15);
     expect(h.meta.createCampaign).toHaveBeenCalledWith({ name: metaInput.name, dailyBudgetCents: 1500, audienceId: '1234567', endAt: '2026-12-01T04:59:59.000Z' });
-    expect(h.meta.createAd.mock.calls[0][0]).toMatchObject({ adsetId: '602', message: metaInput.firstAd.message, imageUrl: metaInput.firstAd.imageUrl, callToAction: 'SIGN_UP' });
+    expect(h.meta.createAd.mock.calls[0][0]).toMatchObject({ adsetId: '602', message: metaInput.firstAd.message, imageUrl: metaInput.firstAd.imageUrl, callToAction: 'LEARN_MORE' });
     expect(h.creative.live).toHaveBeenCalledWith(metaAsset, '603');
     expect(h.meta.startCampaign).toHaveBeenCalledWith({ campaignId: '601', adsetId: '602' });
     expect(h.meta.createAd.mock.invocationCallOrder[0]).toBeLessThan(h.meta.startCampaign.mock.invocationCallOrder[0]);
@@ -133,7 +199,7 @@ describe('launching a campaign approved under the hand-over', () => {
   });
 
   it('keeps the share reserved and asks the owner to look when starting is not confirmed', async () => {
-    const linkedinInput = { platform: 'linkedin', product: 'caremetric-intel', name: 'Intel prospecting', dailyBudgetCents: 1500, firstAd: { ...metaInput.firstAd, creativeAssetId: linkedinAsset } };
+    const linkedinInput = { link: metaInput.link, platform: 'linkedin', product: 'caremetric-intel', name: 'Intel prospecting', dailyBudgetCents: 1500, firstAd: { ...metaInput.firstAd, creativeAssetId: linkedinAsset } };
     const h = setup({ startFails: true });
     expect(await h.executors['social.campaign_create'](auto(linkedinInput, { targetId: 'linkedin:caremetric-intel:2026-11' })))
       .toEqual({ created: true, campaignGroupId: '701', campaignId: '702', adId: '703', launched: false, reason: 'linkedin_unavailable' });
