@@ -123,3 +123,19 @@ export const linkTags = Object.freeze({
   listing: (directory, product) => ({ source: tagValue(directory), medium: 'directory', campaign: tagValue('outreach', campaignProduct(product)) }),
   pitch: (audience, product) => ({ source: 'caremetric', medium: 'email', campaign: tagValue('outreach', campaignProduct(product)), content: tagValue(audience) }),
 });
+
+// Tracking tags may differ between the campaign and its approved creative; offer/query parameters may not.
+export function sameAdDestination(left, right) {
+  const destination = value => {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'https:' || url.username || url.password) return null;
+      for (const key of [...url.searchParams.keys()]) if (/^utm_/i.test(key)) url.searchParams.delete(key);
+      url.searchParams.sort();
+      url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+      return url.href;
+    } catch { return null; }
+  };
+  const target = destination(left);
+  return target !== null && target === destination(right);
+}

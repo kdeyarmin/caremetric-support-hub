@@ -198,3 +198,27 @@ it('opens a LinkedIn connection saved before the personal token existed, reading
   expect(() => openConnection('linkedin', sealConnection('linkedin', noToken, key), key)).toThrow('Social connection storage is unavailable');
   expect(() => openConnection('linkedin', sealConnection('linkedin', { ...older, extra: 'x' }, key), key)).toThrow('Social connection storage is unavailable');
 });
+
+
+it('checks ad reads even when the Page token fails and reports advertising permissions separately', async () => {
+  const { service, state, fetchImpl } = harness({ environment: { HUB_LINKEDIN_ACCESS_TOKEN: token, HUB_LINKEDIN_ADS_ACCESS_TOKEN: 'separate-ad-test-token' } });
+  state.values.find(row => row.key === 'social.linkedin_ad_account_id').value = '559389115';
+  fetchImpl.mockImplementation(async url => new URL(url).pathname === '/rest/posts'
+    ? new Response(JSON.stringify({ status: 401 }), { status: 401 })
+    : new Response(JSON.stringify({ elements: [] }), { status: 200 }));
+  const result = await service.check('owner', 'linkedin');
+  expect(result.ok).toBe(false);
+  expect(result.message).toContain('Page: LinkedIn rejected the access token');
+  expect(result.message).toContain('Advertising data read access verified');
+  expect(result.message).toContain('campaign-write permission');
+  expect(fetchImpl.mock.calls.some(([url]) => new URL(url).pathname === '/rest/adAnalytics')).toBe(true);
+  expect(fetchImpl.mock.calls.every(([, options]) => options.method === 'GET')).toBe(true);
+  fetchImpl.mockImplementation(async url => new URL(url).pathname.startsWith('/rest/adAccounts/')
+    ? new Response(JSON.stringify({ status: 403 }), { status: 403 })
+    : new Response(JSON.stringify({ elements: [] }), { status: 200 }));
+  const denied = await service.check('owner', 'linkedin');
+  expect(denied.message).toContain('Page read access verified');
+  expect(denied.message).toContain('Advertising API approval');
+  expect(denied.message).toContain('rw_conversions');
+  expect(JSON.stringify(denied)).not.toContain(token);
+});

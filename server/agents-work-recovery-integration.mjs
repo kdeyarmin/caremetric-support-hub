@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
+import { assertAdvertisingRelease } from './advertising-release.mjs';
 
 const databaseUrl = process.env.HUB_TEST_DATABASE_URL;
 const local = new URL(databaseUrl);
@@ -48,6 +49,8 @@ const blockedBy = (rule, extra = {}) => ({ verdict: 'block', version: 'creative-
 const setting = (key, value) => admin.query('update private.hub_settings set value=$2, changed_at=now() where key=$1', [key, value === null ? null : JSON.stringify(value)]);
 
 try {
+  // Verify the actual release query and catalogue visibility through the production application role.
+  await assertAdvertisingRelease(pool);
   // ---- 1. A county counts as pictured only while its snapshot pictures it -------------------------------------------------------------
   const list = [{ countyFips: fips(1), state: 'PA' }, { countyFips: fips(2), state: 'PA' }, { countyFips: fips(3), state: 'PA' }];
   const week = new Date(Date.now() - 10 * 60_000).toISOString();
