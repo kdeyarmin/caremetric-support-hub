@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkVisual } from './compliance.mjs';
-import { drawStatic, frameOf, imageSize, layouts, smallPrint, support } from './layouts.mjs';
+import { drawStatic, frameOf, h, imageSize, layouts, smallPrint, support } from './layouts.mjs';
 import { pngSize, renderEngine, renderStatic } from './render.mjs';
 import { withThemeFiles } from './themes.mjs';
 import { placements } from './specs.mjs';
@@ -26,6 +26,41 @@ describe('static rendering', () => {
     expect(report.texts.some(run => run.role === 'headline')).toBe(true);
     expect(checkVisual(report).filter(item => item.rule === 'contrast')).toEqual([]);
   });
+
+  it('keeps complete county figures within their stat column in both bundled fonts at every stat placement', async () => {
+    const { satori, Resvg, fonts } = await renderEngine();
+    const findText = (node, value) => {
+      if (!node || typeof node !== 'object') return null;
+      if (node.props?.children === value) return node;
+      const children = Array.isArray(node.props?.children) ? node.props.children : [node.props?.children];
+      return children.map(child => findText(child, value)).find(Boolean) ?? null;
+    };
+    for (const product of ['caremetric-intel', 'carebase']) {
+      for (const spec of statics.filter(spec => spec.width >= 400)) {
+        for (const stat of ['194,028', '250,000', '1,234,567', '100%', '30 days']) {
+          const label = `${product} ${spec.key}: ${stat}`;
+          const { element } = drawStatic({ layout: 'stat', width: spec.width, height: spec.height, product,
+            content: { ...content, overlay: { ...content.overlay, stat } } });
+          const node = findText(element, stat);
+          expect(node, label).toBeTruthy();
+          // Measure the actual glyphs on an oversized transparent surface, so clipping to the ad canvas cannot hide an oversized number.
+          // The original defect drew "194,028" beyond the image edge while its one-word line estimate still reported a fit.
+          const width = spec.width * 2;
+          const height = node.props.style.fontSize * 2;
+          const picture = new Resvg(await satori(h('div', { width, height }, node), { width, height, fonts })).render();
+          const px = picture.pixels;
+          let right = -1;
+          for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+            if (px[(y * width + x) * 4 + 3] > 32) right = Math.max(right, x);
+          }
+          const frame = frameOf(spec.width, spec.height);
+          const columnWidth = frame.inner * (frame.shape === 'landscape' ? 0.45 : 1);
+          expect(right, label).toBeGreaterThan(0);
+          expect(right, label).toBeLessThan(columnWidth);
+        }
+      }
+    }
+  }, 60_000);
 
   it('draws a layout whose content is missing as a headline, and a screenshot layout only with an attested screenshot', () => {
     expect(drawStatic({ layout: 'stat', width: 1080, height: 1080, product: 'carebase', content: { ...content, overlay: {} }, kit }).report.layout).toBe('headline');

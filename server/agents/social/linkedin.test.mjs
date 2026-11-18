@@ -386,6 +386,21 @@ describe('the LinkedIn client', () => {
     expect(analytics[0]).toContain('dateRange=(start:(year:2026,month:11,day:1),end:(year:2026,month:11,day:7))');
   });
 
+  it.each([[403, 'linkedin_permission'], [401, 'linkedin_token_invalid'], [429, 'linkedin_rate_limited'], [503, 'linkedin_unavailable']])('surfaces a %s sponsored-post read failure instead of caching empty ad copy', async (status, code) => {
+    let failed = true;
+    const fetchImpl = route([
+      [/\/adCampaigns$/, { elements: [] }],
+      [/\/creatives$/, { elements: [{ id: 'urn:li:sponsoredCreative:820001', campaign: 'urn:li:sponsoredCampaign:610001', intendedStatus: 'ACTIVE', content: { reference: post } }] }],
+      [/\/adAnalytics$/, { elements: [] }],
+      [/\/posts\//, () => failed ? json({}, status) : json({ commentary: 'Recovered', content: { article: { source: 'https://cmcarebase.com/signup' } } })],
+    ]);
+    const li = client(fetchImpl);
+    const options = { now: new Date('2026-11-09T13:00:00Z') };
+    await expect(li.adsOverview(options)).rejects.toMatchObject({ code });
+    failed = false;
+    expect((await li.adsOverview(options)).ads[0].copy.link).toBe('https://cmcarebase.com/signup');
+  });
+
   it('pauses a creative and sets a campaign budget as partial updates, refusing an id that is not LinkedIn\'s before any call', async () => {
     const fetchImpl = route([
       [/^POST \/rest\/adAccounts\/5080001\/creatives\/urn:li:sponsoredCreative:820001$/, new Response(null, { status: 204 })],
@@ -420,6 +435,9 @@ describe('the LinkedIn client', () => {
     expect(bodyOf(fetchImpl.mock.calls[1])).toEqual({ campaign: 'urn:li:sponsoredCampaign:610001', content: { reference: dark }, intendedStatus: 'ACTIVE' });
     const unconfirmed = route([[/^POST \/rest\/posts$/, json({}, 201)]]);
     await expect(client(unconfirmed).createAd({ adsetId: '610001', message: 'x', headline: 'y', description: 'z', link: 'https://cmcarebase.com/signup' })).rejects.toMatchObject({ code: 'linkedin_unconfirmed' });
+    const missingCreative = route([[/^POST \/rest\/posts$/, json({}, 201, { 'x-restli-id': dark })], [/\/creatives$/, json({}, 201)]]);
+    await expect(client(missingCreative).createAd({ adsetId: '610001', message: 'x', headline: 'y', description: 'z', link: 'https://cmcarebase.com/signup' }))
+      .rejects.toMatchObject({ code: 'linkedin_unconfirmed' });
   });
 });
 
@@ -445,11 +463,24 @@ describe('the founder\'s own profile', () => {
 });
 
 describe('new campaigns and lead reports on LinkedIn', () => {
-  it('requires the Sponsored Content beneficiary before any lookup or write', async () => {
-    const fetchImpl = vi.fn();
-    const li = linkedinClient({ adsToken: token, adAccountId: '5080001', fetchImpl });
-    await expect(li.createCampaign({ name: 'Test', dailyBudgetCents: 1000 })).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+  it('requires the sponsored organization before making a campaign and rejects missing campaign receipts', async () => {
+    const fetchImpl = route([[/\/adCampaignGroups$/, json({}, 201, { 'x-restli-id': '701' })], [/\/adCampaigns$/, json({}, 201)]]);
+    const noOrg = linkedinClient({ adsToken: token, adAccountId: '5080001', fetchImpl });
+    await expect(noOrg.createCampaign({ name: 'Flight', dailyBudgetCents: 1000 })).rejects.toMatchObject({ code: 'linkedin_not_configured' });
     expect(fetchImpl).not.toHaveBeenCalled();
+    await expect(client(fetchImpl).createCampaign({ name: 'Flight', dailyBudgetCents: 1000 })).rejects.toMatchObject({ code: 'linkedin_unconfirmed' });
+  });
+
+  it('caps an automatic flight with a campaign-group total budget as well as its daily pacing', async () => {
+    const fetchImpl = route([[/\/adCampaignGroups$/, json({}, 201, { 'x-restli-id': '701' })], [/\/adCampaigns$/, json({}, 201, { 'x-restli-id': '702' })]]);
+    const li = client(fetchImpl);
+    const input = { name: 'Flight', dailyBudgetCents: 1000, totalBudgetCents: 5000, startAt: '2099-11-18T14:00:00Z', endAt: '2099-11-23T14:00:00Z' };
+    await li.createCampaign(input);
+    expect(bodyOf(fetchImpl.mock.calls[0])).toMatchObject({ totalBudget: { amount: '50.00', currencyCode: 'USD' } });
+    expect(bodyOf(fetchImpl.mock.calls[1])).toMatchObject({ dailyBudget: { amount: '10.00', currencyCode: 'USD' } });
+    await expect(li.createCampaign({ ...input, endAt: null })).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
+    await expect(li.createCampaign({ ...input, totalBudgetCents: 999 })).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it('creates a draft campaign group and campaign with the health care audience, and reports a lead by hash and click ID', async () => {
@@ -463,9 +494,9 @@ describe('new campaigns and lead reports on LinkedIn', () => {
     expect(await li.createCampaign({ name: 'Intel prospecting', dailyBudgetCents: 3000, startAt: '2026-11-17T00:00:00Z' })).toEqual({ campaignGroupId: '701', campaignId: '702' });
     expect(calls[0][0]).toBe('https://api.linkedin.com/rest/adAccounts/5080001/adCampaignGroups');
     const campaign = JSON.parse(calls[1][1].body);
-    expect(campaign.associatedEntity).toBe(org);
-    expect(campaign).toMatchObject({ campaignGroup: 'urn:li:sponsoredCampaignGroup:701', status: 'DRAFT', objectiveType: 'WEBSITE_VISIT', dailyBudget: { amount: '30.00', currencyCode: 'USD' } });
+    expect(campaign).toMatchObject({ associatedEntity: 'urn:li:organization:5550001', campaignGroup: 'urn:li:sponsoredCampaignGroup:701', status: 'DRAFT', objectiveType: 'WEBSITE_VISIT', dailyBudget: { amount: '30.00', currencyCode: 'USD' } });
     expect(JSON.stringify(campaign.targetingCriteria)).toContain('urn:li:geo:103644278');
+    expect(campaign.targetingCriteria.include.and).toContainEqual({ or: { 'urn:li:adTargetingFacet:interfaceLocales': ['urn:li:locale:en_US'] } });
     await expect(li.createCampaign({ name: 'x', dailyBudgetCents: 500 })).rejects.toMatchObject({ code: 'linkedin_invalid_request' });
     const hash = 'b'.repeat(64);
     await li.sendConversion({ conversionId: '123456', eventId: 'l2', happenedAt: 1794225600000, emailHash: hash, liFatId: '0f1e2d3c-1234-4abc-8def-001122334455' });

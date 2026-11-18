@@ -32,9 +32,8 @@ export async function evaluateGrowth(now = new Date()) {
     const work = { kind: 'outreach', action: 'Offer one useful next step.', success: 'A qualified reply.' };
     const draft = { subject: 'A useful next step', body: 'Would a free trial with your own team be useful?', citations: ['source-a'], needsHuman: false };
     const model = output => ({ configured: true, run: async () => ({ outcome: 'completed', output }) });
-    // The first email to a CareMetric Intel agency has a form of its own (its own cases, below), so the general cases
-    // are drafted as that agency's second email. CareBase's first email is the general one.
-    const general = product === 'caremetric-intel' ? { ...base, touches: 1 } : base;
+    // Agency outreach has its own cases below. Use an Intel website-lead follow-up for the general link and claim cases.
+    const general = product === 'caremetric-intel' ? { ...base, touches: 1, memory: { lead: { kind: 'county_report' } } } : base;
     const touch = product === 'caremetric-intel' ? 2 : 1;
     const invoke = output => draftMessage({ opportunity: general, work, task: {}, model: model(output) });
     check('cited output requires review', (await invoke(draft))?.modelGenerated === true);
@@ -78,19 +77,21 @@ export async function evaluateGrowth(now = new Date()) {
       check('first email over its length rejected', await first(`${firstBody}${' The report also lists the county\'s largest agencies and the hospitals its residents use.'.repeat(6)}`) === null);
       check('first email with a second question rejected', await first(`${firstBody} Which county matters most to you?`) === null);
       check('first email without its report link rejected', await first(firstBody.replace(`\n${report.url}`, '')) === null);
-      const review = await first(`A free market report for your agency, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\n${reviewPage}\n\n${inside}\n\n${close}`, {});
+      const review = await first(`A free market report for your agency, built from Medicare data, is one step away. Search by agency name and state to get it by email.\n${reviewPage}`, {});
       check('first email without a roster report points to the market report page', review?.modelGenerated === true && review.arms?.form === 'short' && seen.at(-1)?.touchPlan === reviewTouchAngle);
       const second = body => draftMessage({ opportunity: { ...base, touches: 1 }, work, task: {}, model: capture({ ...firstDraft, subject: 'The hospitals your county uses', body }), report });
       const trial = `You can try it free for 30 days on one county:\n${playbookFor(product).nextStep.url}`;
-      check('second email offers the trial', (await second(`One page of the report lists the hospitals your county's residents use. Does your team plan its week around them?\n${report.url}\n\n${trial}`))?.modelGenerated === true
-        && seen.at(-1)?.touchPlan === unviewedTouchAngle && /free trial/.test(unviewedTouchAngle));
+      const followup = await second(`One part of the report shows hospitals your county's residents use. Does your team plan its week around them?`);
+      check('second email offers the trial once', followup?.modelGenerated === true
+        && seen.at(-1)?.touchPlan === unviewedTouchAngle && followup.body.includes('Start your 30-day free trial')
+        && await second(`Does your team plan its week around these hospitals?\n\n${trial}`) === null);
       // Each of the agency's three emails carries its marketing sections after the writer's opening (campaign.mjs), and reads back whole.
       const whole = touches => draftMessage({ opportunity: { ...base, touches }, work, task: {}, report });
       const laid = async touches => readCampaign((await whole(touches))?.body, { reports: { accepts: url => url === report.url } });
-      check('agency email says what the software does and offers the trial', (await laid(0))?.touch === 1 && (await laid(1))?.touch === 2 && (await laid(2))?.touch === 3
-        && /What CareMetric Intel does for your agency, every day/.test(written.body) && /Try CareMetric Intel free for 30 days on one county/.test(written.body));
-      check('prospect email calling the data public rejected', await second(`One page of the report, built from public Medicare data, lists the hospitals your county's residents use. Does your team plan its week around them?\n${report.url}\n\n${trial}`) === null);
-      check('prospect email naming the card rejected', await second(`Does your team plan its week around the hospitals your county's residents use?\n\nA credit card is required to start the trial. ${trial}`) === null);
+      check('agency email says what the software does and offers the trial', (await laid(0))?.version === 2 && (await laid(1))?.touch === 2 && (await laid(2))?.touch === 3
+        && written.body.includes('Know your market') && written.body.includes('Start your 30-day free trial'));
+      check('prospect email calling the data public rejected', await second(`One page of the report, built from public Medicare data, lists the hospitals your county's residents use. Does your team plan its week around them?`) === null);
+      check('prospect email naming the card rejected', await second(`Does your team plan its week around the hospitals your county's residents use?\n\nA credit card is required to start the subscription.`) === null);
     } else {
       check('report-led first email never written for this product', (await draftMessage({ opportunity: base, work, task: {}, model: capture(draft), report }))?.arms?.form === undefined);
     }

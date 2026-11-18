@@ -447,14 +447,14 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  const on=await sweep(true);
  expect(on.store.learningActive).toHaveBeenCalledTimes(1);
  expect(on.store.learningActive).toHaveBeenCalledWith('caremetric-intel');
- expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.17-m5');
+ expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.18-m5');
  expect(on.store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({memoVersion:5}));
  // The report-only form needs no switch: the sweep hands the writer none, and the email records its form.
  expect(on.store.draft.mock.calls[0][2].arms).toMatchObject({form:'short',length:'report'});
  expect(JSON.parse(on.model.run.mock.calls[0][1].user).style).toBe('Write two or three sentences, never more than 120 words.');
  const off=await sweep(false);
  expect(off.store.learningActive).not.toHaveBeenCalled();
- expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.17');
+ expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.18');
  expect(off.store.draft.mock.calls[0][2].memoVersion).toBeUndefined();
 });
 

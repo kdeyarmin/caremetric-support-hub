@@ -19,7 +19,7 @@ const asset = (platform, over = {}) => ({ id: platform === 'meta' ? metaAsset : 
 const trusted = { autonomy: 'act', config: { auto_approve_kinds: ['social.campaign_create', 'social.google_campaign'] } };
 
 function setup({ values = {}, googleConfigured = false, approved = platform => [asset(platform)], reservation = (id, execution, daily) => ({ reserved: true, dailyBudgetCents: daily }),
-  trust = true, live = [metaAsset, linkedinAsset], adFails = false, startFails = false, googleRefuses = false, handover = true } = {}) {
+  trust = true, live = [metaAsset, linkedinAsset], adFails = false, startFails = false, googleRefuses = false, handover = true, now = monday } = {}) {
   const store = {
     socialCampaignProposed: vi.fn(async () => false), proposeAction: vi.fn(async input => ({ id: `a-${input.targetId}`, created: true, status: 'auto_approved' })),
     actionTrusted: vi.fn(async () => trust), adsLaunchReserve: vi.fn(async (...args) => reservation(...args)), adsLaunchRelease: vi.fn(async () => true),
@@ -39,7 +39,7 @@ function setup({ values = {}, googleConfigured = false, approved = platform => [
   const creative = { approved: vi.fn(async ({ platform }) => approved(platform)), live: vi.fn(async () => true) };
   const team = adsTeam({ ads: () => adsConfig({}, settingsOf(values)), features: new Set(handover ? [adsFeature, handoverFeature] : [adsFeature]), googleClient });
   const handlers = team.handlers({ store, notifier, model, meta, linkedin, social: { maxDailyBudgetCents: 0 }, marketed: ['caremetric-intel'], creative, publicOrigin: 'https://help.caremetric.ai', log: () => {} });
-  const executors = team.executors({ meta, linkedin, social: { maxDailyBudgetCents: 0 }, notifier, store, creative, publicOrigin: 'https://help.caremetric.ai', log: () => {}, now: monday });
+  const executors = team.executors({ meta, linkedin, social: { maxDailyBudgetCents: 0 }, notifier, store, creative, publicOrigin: 'https://help.caremetric.ai', log: () => {}, now });
   return { store, notifier, meta, linkedin, googleClient, creative, handlers, executors };
 }
 
@@ -164,7 +164,7 @@ describe('launching a campaign approved under the hand-over', () => {
     expect(result).toEqual({ created: true, campaignId: '601', adsetId: '602', adId: '603', launched: true, dailyBudgetCents: 1500, endsOn: '2026-11-30' });
     expect(h.store.actionTrusted).toHaveBeenCalledWith('a9', 2);
     expect(h.store.adsLaunchReserve).toHaveBeenCalledWith('a9', 2, 1500, 500, 15);
-    expect(h.meta.createCampaign).toHaveBeenCalledWith({ name: metaInput.name, dailyBudgetCents: 1500, audienceId: '1234567', endAt: '2026-12-01T04:59:59.000Z' });
+    expect(h.meta.createCampaign).toHaveBeenCalledWith({ name: metaInput.name, dailyBudgetCents: 1500, lifetimeBudgetCents: 22500, audienceId: '1234567', startAt: '2026-11-16T14:20:00.000Z', endAt: '2026-12-01T04:59:59.000Z' });
     expect(h.meta.createAd.mock.calls[0][0]).toMatchObject({ adsetId: '602', message: metaInput.firstAd.message, imageUrl: metaInput.firstAd.imageUrl, callToAction: 'LEARN_MORE' });
     expect(h.creative.live).toHaveBeenCalledWith(metaAsset, '603');
     expect(h.meta.startCampaign).toHaveBeenCalledWith({ campaignId: '601', adsetId: '602' });
@@ -175,7 +175,7 @@ describe('launching a campaign approved under the hand-over', () => {
   it('starts with less, or paused, when the month\'s number is nearly used, and never above the limits', async () => {
     const lowered = setup({ reservation: () => ({ reserved: true, dailyBudgetCents: 600 }) });
     expect((await lowered.executors['social.campaign_create'](auto(metaInput))).dailyBudgetCents).toBe(600);
-    expect(lowered.meta.createCampaign.mock.calls[0][0].dailyBudgetCents).toBe(600);
+    expect(lowered.meta.createCampaign.mock.calls[0][0]).toMatchObject({ dailyBudgetCents: 600, lifetimeBudgetCents: 9000 });
     const used = setup({ reservation: () => ({ reserved: false, reason: 'monthly_budget_used' }) });
     expect(await used.executors['social.campaign_create'](auto(metaInput))).toEqual({ created: true, campaignId: '601', adsetId: '602', launched: false, reason: 'monthly_budget_used' });
     expect(used.meta.createCampaign).toHaveBeenCalledWith({ name: metaInput.name, dailyBudgetCents: 1500, audienceId: '1234567' });
@@ -204,7 +204,7 @@ describe('launching a campaign approved under the hand-over', () => {
     expect(await h.executors['social.campaign_create'](auto(linkedinInput, { targetId: 'linkedin:caremetric-intel:2026-11' })))
       .toEqual({ created: true, campaignGroupId: '701', campaignId: '702', adId: '703', launched: false, reason: 'linkedin_unavailable' });
     expect(h.store.adsLaunchReserve).toHaveBeenCalledWith('a9', 2, 1500, 1000, 15);
-    expect(h.linkedin.createCampaign.mock.calls[0][0]).toMatchObject({ dailyBudgetCents: 1500, endAt: '2026-12-01T04:59:59.000Z', startAt: '2026-11-16T15:20:00.000Z' });
+    expect(h.linkedin.createCampaign.mock.calls[0][0]).toMatchObject({ dailyBudgetCents: 1500, totalBudgetCents: 22500, endAt: '2026-12-01T04:59:59.000Z', startAt: '2026-11-16T15:20:00.000Z' });
     expect(h.linkedin.createAd.mock.calls[0][0]).toMatchObject({ adsetId: '702', headline: metaInput.firstAd.headline });
     expect(h.meta.createAd).not.toHaveBeenCalled();
     expect(h.store.adsLaunchRelease).not.toHaveBeenCalled();
@@ -222,12 +222,36 @@ describe('launching a campaign approved under the hand-over', () => {
     expect(owner.store.adsLaunchReserve).not.toHaveBeenCalled();
   });
 
+  it('uses the committed reservation as the total cap and keeps a too-short Google window paused', async () => {
+    const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/market-review', plan: googlePlan };
+    const execution = { id: 'g1', kind: 'social.google_campaign', input, autoApproved: true, execution: 1 };
+    const bounded = setup({ googleConfigured: true, reservation: () => ({ reserved: true, dailyBudgetCents: 1000, days: 10, committedCents: 10000 }) });
+    await bounded.executors['social.google_campaign'](execution);
+    expect(bounded.googleClient.createSearchCampaign.mock.calls[0][0]).toMatchObject({ totalBudgetCents: 10000 });
+    const late = setup({ googleConfigured: true, now: () => new Date('2026-11-29T14:20:00Z') });
+    expect(await late.executors['social.google_campaign'](execution)).toMatchObject({ launched: false, reason: 'window_too_short' });
+    expect(late.store.adsLaunchReserve).not.toHaveBeenCalled();
+    expect(late.googleClient.createSearchCampaign.mock.calls[0][0].live).toBeUndefined();
+  });
+
+  it('alerts the owner and preserves the budget when Google creation is unconfirmed', async () => {
+    const h = setup({ googleConfigured: true });
+    h.googleClient.createSearchCampaign.mockRejectedValueOnce(Object.assign(new Error('unknown'), { code: 'google_unconfirmed' }));
+    const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/market-review', plan: googlePlan };
+    await expect(h.executors['social.google_campaign']({ id: 'g1', kind: 'social.google_campaign', input, autoApproved: true, execution: 1 })).rejects.toMatchObject({ code: 'google_unconfirmed' });
+    expect(h.googleClient.createSearchCampaign).toHaveBeenCalledTimes(1);
+    expect(h.store.adsLaunchRelease).not.toHaveBeenCalled();
+    expect(h.notifier.send).toHaveBeenCalledTimes(1);
+    expect(h.notifier.send.mock.calls[0][0]).toMatchObject({ severity: 'warning', subject: 'Check the new Google search campaign: Intel search' });
+    expect(h.notifier.send.mock.calls[0][0].body).toContain('may already be running');
+  });
+
   it('launches a Google search campaign running to its month\'s end through the API, and otherwise as before', async () => {
     const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/county-report', plan: googlePlan };
     const google = (over = {}) => ({ id: 'g1', kind: 'social.google_campaign', agentKey: 'social_manager', input, autoApproved: true, execution: 1, ...over });
     const online = setup({ googleConfigured: true });
     expect(await online.executors['social.google_campaign'](google())).toEqual({ created: true, campaign: 'customers/1/campaigns/5', launched: true, dailyBudgetCents: 1000, endsOn: '2026-11-30' });
-    expect(online.googleClient.createSearchCampaign.mock.calls[0][0]).toMatchObject({ dailyBudgetCents: 1000, live: true, endDate: '2026-11-30' });
+    expect(online.googleClient.createSearchCampaign.mock.calls[0][0]).toMatchObject({ dailyBudgetCents: 1000, totalBudgetCents: 15000, startDate: '2026-11-16', live: true, endDate: '2026-11-30' });
     const refused = setup({ googleConfigured: true, googleRefuses: true });
     expect(await refused.executors['social.google_campaign'](google())).toMatchObject({ created: true, launched: false, reason: 'google_refused_live' });
     expect(refused.store.adsLaunchRelease).toHaveBeenCalledWith('g1', 1);

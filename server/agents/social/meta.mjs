@@ -51,13 +51,17 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       });
     } catch (error) {
-      if (signal?.aborted) throw error;
+      if (signal?.aborted && method === 'GET') throw error;
       // A POST that may have reached Meta is not known to have failed: the caller says so instead of trying again.
       throw failure(method === 'POST' ? 'meta_unconfirmed' : 'meta_unavailable', method !== 'POST');
     }
-    const text = await readBounded(response);
+    let text;
+    try { text = await readBounded(response); }
+    catch (error) { if (method === 'POST') throw failure('meta_unconfirmed'); throw error; }
     let data = null;
     try { data = text ? JSON.parse(text) : {}; } catch { data = null; }
+    // A write can have reached Meta before its response fails. Never replay it as a transient read failure.
+    if (method === 'POST' && (response.status >= 500 || !data)) throw failure('meta_unconfirmed');
     if (!response.ok || !data || data.error) throw codeFor(response.status, data?.error);
     return data;
   }
@@ -346,19 +350,25 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
      * with the approved daily budget on the ad set. The owner starts it in Ads Manager or by approving an ad into it. `endAt` (a launch
      * the owner handed over) ends the ad set then, so it can never spend past its month.
      */
-    async createCampaign({ name, dailyBudgetCents, audienceId, endAt = null, states = [] }, { signal } = {}) {
+    async createCampaign({ name, dailyBudgetCents, lifetimeBudgetCents = null, audienceId, startAt = null, endAt = null, states = [] }, { signal } = {}) {
       if (!configured.ads) throw failure('meta_not_configured');
       if (!Number.isInteger(dailyBudgetCents) || dailyBudgetCents < 100 || !/^[0-9]{5,30}$/.test(String(audienceId ?? ''))) throw failure('meta_invalid_request');
       const end = endAt === null ? null : Date.parse(endAt);
       if (end !== null && !(Number.isFinite(end) && end > Date.now())) throw failure('meta_invalid_request');
+      const start = startAt === null ? null : Date.parse(startAt);
+      if (lifetimeBudgetCents !== null && (!Number.isInteger(lifetimeBudgetCents) || lifetimeBudgetCents < dailyBudgetCents
+        || !Number.isFinite(start) || !Number.isFinite(end) || end <= start)) throw failure('meta_invalid_request');
       // Limited to the roster's states (team review 2026-11-17, stage 6), each found through Meta's own location search before anything
       // is created: a state it cannot name stops the campaign rather than letting it run nationwide.
       const geo = states.length ? { regions: (await regionKeys(states, { signal })).map(key => ({ key })) } : { countries: ['US'] };
       const campaign = await post(`act_${account}/campaigns`, { name: name.slice(0, 100), objective: 'OUTCOME_TRAFFIC', status: 'PAUSED',
         special_ad_categories: [], is_adset_budget_sharing_enabled: false }, { signal });
-      const adset = await post(`act_${account}/adsets`, { name: name.slice(0, 100), campaign_id: campaign.id, status: 'PAUSED', daily_budget: dailyBudgetCents,
+      if (!metaId(campaign.id)) throw failure('meta_unconfirmed');
+      const adset = await post(`act_${account}/adsets`, { name: name.slice(0, 100), campaign_id: campaign.id, status: 'PAUSED',
+        ...(lifetimeBudgetCents === null ? { daily_budget: dailyBudgetCents } : { lifetime_budget: lifetimeBudgetCents, start_time: Math.floor(start / 1000) }),
         billing_event: 'IMPRESSIONS', optimization_goal: 'LINK_CLICKS', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', destination_type: 'WEBSITE',
         targeting: { custom_audiences: [{ id: String(audienceId) }], geo_locations: geo }, ...(end === null ? {} : { end_time: Math.floor(end / 1000) }) }, { signal });
+      if (!metaId(adset.id)) throw failure('meta_unconfirmed');
       return { campaignId: String(campaign.id ?? ''), adsetId: String(adset.id ?? '') };
     },
 
@@ -368,8 +378,8 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
     async startCampaign({ campaignId, adsetId }, { signal } = {}) {
       if (!configured.ads) throw failure('meta_not_configured');
       if (!metaId(String(campaignId ?? '')) || !metaId(String(adsetId ?? ''))) throw failure('meta_invalid_request');
-      await post(adsetId, { status: 'ACTIVE' }, { signal });
-      await post(campaignId, { status: 'ACTIVE' }, { signal });
+      if ((await post(adsetId, { status: 'ACTIVE' }, { signal })).success !== true) throw failure('meta_unconfirmed');
+      if ((await post(campaignId, { status: 'ACTIVE' }, { signal })).success !== true) throw failure('meta_unconfirmed');
       return { started: true };
     },
 
@@ -387,7 +397,9 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
         name: name.slice(0, 100),
         object_story_spec: { page_id: page, link_data: { link, message, name: headline, description, ...(imageHash ? { image_hash: imageHash } : imageUrl ? { picture: imageUrl } : {}), call_to_action: { type: callToAction, value: { link } } } },
       }, { signal });
+      if (!metaId(creative.id)) throw failure('meta_unconfirmed');
       const ad = await post(`act_${account}/ads`, { name: name.slice(0, 100), adset_id: adsetId, creative: { creative_id: creative.id }, status: 'ACTIVE' }, { signal });
+      if (!metaId(ad.id)) throw failure('meta_unconfirmed');
       return { id: String(ad.id ?? ''), creativeId: String(creative.id ?? '') };
     },
   };

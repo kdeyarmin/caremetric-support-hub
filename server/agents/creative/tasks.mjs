@@ -61,6 +61,11 @@ const nextBudgetDay = (task, moment) => {
 };
 const aborted = () => Object.assign(new Error('The agent task is no longer running.'), { code: 'task_cancelled' });
 
+// A brief has one drafting task. Temporary configuration or provider failures must keep that task
+// queued; completing it leaves the brief open forever because plan inputs already exclude it.
+export const deferCreativeRequest = (reason, briefId, moment = new Date()) => ({ status: 'queued',
+  retryAt: new Date(moment.getTime() + 30 * 60_000), result: { deferred: reason, ...(briefId ? { briefId } : {}) } });
+
 /**
  * The copy rules for one asset's words, the same when it is drafted and when it is rendered. A county snapshot (`facts`, data.mjs) is
  * read without its code-printed figure and alt text, and the figure is checked against the data instead.
@@ -248,8 +253,8 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     if (!context) return { result: { skipped: 'brief_missing' } };
     const brief = context.brief;
     if (['done', 'cancelled', 'skipped'].includes(brief.status)) return { result: { skipped: 'already_drafted', briefId } };
-    if (!model?.configured) return { result: { skipped: 'model_not_configured', briefId } };
-    if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only', briefId } };
+    if (!model?.configured) return deferCreativeRequest('model_not_configured', briefId, now());
+    if (task.agent?.autonomy === 'observe') return deferCreativeRequest('observe_only', briefId, now());
     if (!(await offeredNow()).includes(brief.product)) {
       await store.creativeBriefFinish(briefId, 'skipped', { reason: 'product_not_marketed' });
       return { result: { skipped: 'product_not_marketed', briefId } };
@@ -269,7 +274,13 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     const concept = await runModel(task, { promptVersion: conceptPromptVersion, tier: 'quality', system, user, schema: conceptSchema,
       maxTokens: 4000, effort: effort(task), describe: output => `Wrote a ${output.hero.hook} concept (${output.hero.layout} layout) for a ${productNames[brief.product]} brief.` }, signal);
     if (concept.outcome === 'budget_exhausted') { await store.creativeBriefFinish(briefId, 'open', null); return { status: 'queued', retryAt: nextBudgetDay(task, moment), result: { deferred: 'budget', briefId } }; }
-    if (concept.outcome !== 'completed') { await store.creativeBriefFinish(briefId, 'open', null); return { result: { skipped: concept.code ?? concept.outcome, briefId } }; }
+    if (concept.outcome !== 'completed') {
+      await store.creativeBriefFinish(briefId, 'open', null);
+      const reason = concept.code ?? concept.outcome;
+      if (concept.outcome === 'unavailable') return deferCreativeRequest(reason, briefId, moment);
+      // A refusal or invalid answer is visible as failed work, never a successfully completed brief.
+      return { status: 'failed', errorCode: reason, result: { skipped: reason, briefId } };
+    }
     if (signal?.aborted) throw aborted();
     // A county snapshot is drawn as its figure, whatever layout the model chose (data.mjs).
     const facts = brief.facts?.stat ? brief.facts : null;

@@ -67,20 +67,23 @@ export function reportLinks({ key = null, now = () => Date.now(), fetchImpl = gl
   const opened = new Map();
   async function opens(ccn, url, signal) {
     const known = opened.get(ccn);
-    if (known && now() - known.at < (known.ok ? reportOpensMs : reportMissingMs)) return known.ok;
-    let ok = false;
+    if (known && now() - known.at < (known.mode ? reportOpensMs : reportMissingMs)) return known.mode;
+    let mode = null;
     try {
       const timeout = AbortSignal.timeout(reportCheckTimeoutMs);
       const response = await fetchImpl(url, { method: 'GET', redirect: 'error', headers: { accept: 'application/pdf' },
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
-      ok = response.status === 200 && /application\/pdf/i.test(response.headers.get('content-type') ?? '');
+      if (response.status === 200 && /application\/pdf/i.test(response.headers.get('content-type') ?? '')) {
+        const alternate = `<${new URL(url).pathname}/view>; rel="alternate"; type="text/html"`;
+        mode = response.headers.get('link') === alternate ? 'web' : 'pdf';
+      }
       try { await response.body?.cancel(); } catch { /* The answer is already known. */ }
     } catch (error) {
       if (signal?.aborted) throw error;
-      ok = false;
+      mode = null;
     }
-    opened.set(ccn, { ok, at: now() });
-    return ok;
+    opened.set(ccn, { mode, at: now() });
+    return mode;
   }
   function linkFor(opportunity) {
     if (!configured || opportunity?.product !== 'caremetric-intel') return null;
@@ -99,7 +102,7 @@ export function reportLinks({ key = null, now = () => Date.now(), fetchImpl = gl
     // Rendering only: drafting still allows exactly the report issued for that opportunity.
     accepts(url) {
       if (!configured || typeof url !== 'string') return false;
-      const match = /^https:\/\/www\.caremetricintel\.com\/report\/([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{22})$/.exec(url);
+      const match = /^https:\/\/www\.caremetricintel\.com\/report\/([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{22})(?:\/view)?$/.exec(url);
       if (!match) return false;
       try {
         const claims = JSON.parse(Buffer.from(match[1], 'base64url').toString('utf8'));
@@ -117,7 +120,8 @@ export function reportLinks({ key = null, now = () => Date.now(), fetchImpl = gl
       // of the agency's report (Intel docs/HUB_MARKETING_FEED.md "Report views").
       const agency = rosterAgency(opportunity.evidence);
       const probe = `${reportOrigin}/report/${reportToken({ ...agency, expires: Math.floor(now() / 1000) + 3_600 }, key)}`;
-      return (await opens(agency.ccn, probe, signal)) ? link : null;
+      const mode = await opens(agency.ccn, probe, signal);
+      return mode === 'web' ? { ...link, url: `${link.url}/view` } : mode === 'pdf' ? link : null;
     },
   };
 }

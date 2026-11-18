@@ -41,6 +41,32 @@ describe('the Google search plan', () => {
     expect(lines.at(-1)).toContain('Referral sources in one place');
   });
 
+  it('keeps the roster states in the Editor import instead of silently targeting the whole country', () => {
+    const csv = editorCsv(checkGooglePlan(plan(), { factsKey: 'intel' }).plan, {
+      name: 'Intel search', finalUrl: 'https://www.caremetricintel.com/market-review', dailyBudgetCents: 500,
+      states: [{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }],
+    });
+    const lines = csv.split('\n');
+    expect(lines[1]).toContain('Search,Paused,5.00,Google search,"Pennsylvania, United States"');
+    expect(lines[2]).toMatch(/^Intel search,,,,,"New Jersey, United States",/);
+    expect(csv).not.toMatch(/,United States(?:,|$)/);
+    expect(csv).toContain('home health crm,Exact');
+    expect(lines.at(-1)).toContain('https://www.caremetricintel.com/market-review');
+  });
+
+  it('treats a successful response without a valid campaign receipt as unconfirmed, never as launched', async () => {
+    const campaign = { name: 'Intel search', dailyBudgetCents: 500, finalUrl: 'https://www.caremetricintel.com/market-review',
+      plan: checkGooglePlan(plan(), { factsKey: 'intel' }).plan, live: true, endDate: '2026-11-30' };
+    for (const response of [null, {}, { mutateOperationResponses: {} }, { mutateOperationResponses: [{}] },
+      { mutateOperationResponses: [{ campaignResult: { resourceName: 'customers/0987654321/campaigns/55' } }] },
+      { mutateOperationResponses: [{ campaignResult: { resourceName: 'customers/1234567890/campaigns/' } }] }]) {
+      const fetchImpl = vi.fn(async url => new Response(JSON.stringify(String(url).includes('oauth2') ? { access_token: 'ya29.token' } : response)));
+      const client = googleAdsClient({ clientId: 'client.apps', clientSecret: 'secret-0123456789', refreshToken: '1//refresh-token-0123456789', customerId: '1234567890', fetchImpl });
+      await expect(client.createSearchCampaign(campaign)).rejects.toMatchObject({ code: 'google_unconfirmed', transient: false });
+      expect(fetchImpl.mock.calls.filter(([url]) => String(url).endsWith('googleAds:mutate'))).toHaveLength(1);
+    }
+  });
+
   it('creates the campaign paused in one mutate, with the developer token, after renewing its access token', async () => {
     const fetchImpl = vi.fn(async url => (String(url).includes('oauth2') ? new Response(JSON.stringify({ access_token: 'ya29.token' }))
       : new Response(JSON.stringify({ mutateOperationResponses: [{}, { campaignResult: { resourceName: 'customers/1234567890/campaigns/55' } }] }))));
@@ -55,7 +81,8 @@ describe('the Google search plan', () => {
     expect(init.headers).toMatchObject({ Authorization: 'Bearer ya29.token', 'developer-token': 'dev-token-123', 'login-customer-id': '0987654321' });
     const operations = JSON.parse(init.body).mutateOperations;
     expect(operations[0].campaignBudgetOperation.create.amountMicros).toBe('15000000');
-    expect(operations[1].campaignOperation.create).toMatchObject({ status: 'PAUSED', advertisingChannelType: 'SEARCH' });
+    expect(operations[1].campaignOperation.create).toMatchObject({ status: 'PAUSED', advertisingChannelType: 'SEARCH', targetSpend: {} });
+    expect(operations[1].campaignOperation.create).not.toHaveProperty('maximizeClicks');
     expect(operations.filter(op => op.adGroupCriterionOperation)).toHaveLength(checked.keywords.length);
     expect(operations.at(-1).adGroupAdOperation.create.ad.responsiveSearchAd.headlines).toHaveLength(checked.headlines.length);
     expect(googleAdsClient({ customerId: '1234567890' }).configured).toBe(false);
@@ -69,7 +96,7 @@ describe('the Google search plan', () => {
     const campaign = { name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/county-report', plan: checked };
     expect(await client.createSearchCampaign({ ...campaign, live: true, endDate: '2026-11-30' })).toEqual({ campaign: 'customers/1234567890/campaigns/56' });
     const operations = JSON.parse(fetchImpl.mock.calls[1][1].body).mutateOperations;
-    expect(operations[1].campaignOperation.create).toMatchObject({ status: 'ENABLED', endDateTime: '2026-11-30 23:59:59' });
+    expect(operations[1].campaignOperation.create).toMatchObject({ status: 'ENABLED', endDateTime: '2026-11-30 23:59:59', targetSpend: {} });
     expect(operations[0].campaignBudgetOperation.create.amountMicros).toBe('10000000');
     await expect(client.createSearchCampaign({ ...campaign, live: true })).rejects.toMatchObject({ code: 'google_invalid_request' });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
@@ -107,6 +134,27 @@ describe('the Google search plan', () => {
     expect(googleAdsClient({ serviceAccount: '{"type":"service_account"}', customerId: '7579556529' }).configured).toBe(false);
     expect(googleAdsClient({ serviceAccount }).configured).toBe(false);
   });
+
+  it('enforces a bounded launch reservation with a campaign total budget and both dates', async () => {
+    const fetchImpl = vi.fn(async url => new Response(JSON.stringify(String(url).includes('oauth2') ? { access_token: 'ya29.token' }
+      : { mutateOperationResponses: [{ campaignResult: { resourceName: 'customers/1234567890/campaigns/55' } }] })));
+    const client = googleAdsClient({ clientId: 'client.apps', clientSecret: 'secret-0123456789', refreshToken: '1//refresh-token-0123456789', customerId: '1234567890', fetchImpl });
+    const campaign = { name: 'Intel flight', dailyBudgetCents: 500, totalBudgetCents: 5000, finalUrl: 'https://www.caremetricintel.com/market-review',
+      plan: checkGooglePlan(plan(), { factsKey: 'intel' }).plan, live: true, startDate: '2026-11-16', endDate: '2026-11-25' };
+    await client.createSearchCampaign(campaign);
+    const operations = JSON.parse(fetchImpl.mock.calls.at(-1)[1].body).mutateOperations;
+    expect(operations[0].campaignBudgetOperation.create).toMatchObject({ period: 'CUSTOM_PERIOD', totalAmountMicros: '50000000', explicitlyShared: false });
+    expect(operations[0].campaignBudgetOperation.create).not.toHaveProperty('amountMicros');
+    expect(operations[1].campaignOperation.create).toMatchObject({ status: 'ENABLED', targetSpend: {}, startDateTime: '2026-11-16 00:00:00', endDateTime: '2026-11-25 23:59:59' });
+    // No request can accidentally turn a missing/invalid total or time window into an unrestricted live campaign.
+    fetchImpl.mockClear();
+    for (const changed of [{ totalBudgetCents: 0 }, { totalBudgetCents: -1 }, { totalBudgetCents: 50.5 }, { totalBudgetCents: '5000' },
+      { startDate: null }, { endDate: null }, { startDate: '2026-11-26' }, { startDate: '2026-02-30' }, { endDate: '2026-11-31' },
+      { endDate: '2026-11-17' }, { endDate: '2027-02-14' }]) {
+      await expect(client.createSearchCampaign({ ...campaign, ...changed })).rejects.toMatchObject({ code: 'google_invalid_request' });
+    }
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });
 
 describe('a new campaign\'s daily budget', () => {
@@ -140,6 +188,8 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
     const mutate = fetchImpl.mock.calls.find(([url]) => String(url).endsWith('googleAds:mutate'));
     const places = JSON.parse(mutate[1].body).mutateOperations.filter(op => op.campaignCriterionOperation?.create?.location).map(op => op.campaignCriterionOperation.create.location.geoTargetConstant);
     expect(places).toEqual(['geoTargetConstants/21167', 'geoTargetConstants/21164']);
+    expect(JSON.parse(mutate[1].body).mutateOperations.find(op => op.campaignOperation).campaignOperation.create.geoTargetTypeSetting)
+      .toEqual({ positiveGeoTargetType: 'PRESENCE' });
     // Kept for the process: the next campaign asks Google only to create it.
     fetchImpl.mockClear();
     await client.createSearchCampaign({ name: 'Again', dailyBudgetCents: 1500, finalUrl: 'https://www.caremetricintel.com/county-report', plan: checked, states });

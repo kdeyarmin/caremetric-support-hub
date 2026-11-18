@@ -68,7 +68,7 @@ describe('the second email follows whether the report was opened', () => {
     evidence: [{ id: 'e1', claim: 'Valley Home Health serves Erie County.', source_url: 'https://valleyhh.org/about', confidence: 'high', observed_at: now }] });
   const report = { label: 'Free market report for Valley Home Health', url: 'https://www.caremetricintel.com/report/abc.def' };
   const draft = async (events, views = true) => {
-    const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: { subject: 'Turning a report into visits', body: 'Which physicians in Erie County certify the most patients?\n\nhttps://www.caremetricintel.com/', citations: ['e1'], needsHuman: false } })) };
+    const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: { subject: 'Turning a report into visits', body: 'Which physicians in Erie County certify the most patients?', citations: ['e1'], needsHuman: false } })) };
     const result = await draftMessage({ opportunity: o(events), work: { kind: 'outreach', action: 'a', success: 'b' }, task: { id: 't' }, model, report, views });
     return { result, input: JSON.parse(model.run.mock.calls[0][1].user) };
   };
@@ -95,12 +95,12 @@ describe('the second email follows whether the report was opened', () => {
     for (const plan of [viewedTouchAngle, unviewedTouchAngle]) {
       expect(plan).toMatch(/^Second email to an agency whose market report was sent with the first\. Do not say or hint that you know whether anyone opened it\./);
       // The writer writes the opening; the email's own sections offer the trial (campaign.mjs).
-      expect(plan).toMatch(/The email adds: a week of the work in CareMetric Intel in four steps, the Founders Sale, the 30-day free trial with its link, and the market report's link again\./);
+      expect(plan).toMatch(/The email adds: three steps for the week in CareMetric Intel, the Founders Sale, the 30-day free trial button, and a link back to the report\./);
       expect(plan).toMatch(/No link in your words, and nothing about the credit card or billing\./);
       expect(plan).not.toMatch(/credit card is required|canceling before it ends|card terms/);
     }
     // After an open the opening moves on from the report; otherwise it leads with a page of it.
     expect(viewedTouchAngle).toMatch(/Pick up where a report leaves an agency/);
-    expect(unviewedTouchAngle).toMatch(/lead with one page of the report/);
+    expect(unviewedTouchAngle).toMatch(/lead with one part of the report/);
   });
 });

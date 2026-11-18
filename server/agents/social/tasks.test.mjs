@@ -298,6 +298,18 @@ describe('the daily ad review', () => {
 });
 
 describe('the daily ad review on LinkedIn', () => {
+  it.each(['linkedin', 'meta'])('checks freshly written %s copy against that platform\'s lengths', async platform => {
+    const overview = { adsets: [{ id: '40', name: 'Operators', active: true, dailyBudget: 2000 }],
+      ads: [{ id: '50', adsetId: '40', active: true, copy: { link: 'https://cmcarebase.com/signup' } }], current: [], previous: [] };
+    const model = modelReturning({ variants: [{ angle: 'training', message: 'CareBase keeps staff training, resident records and survey documentation in one place.',
+      headline: 'Keep staff training and resident records together', description: 'Keep training records ready for review.', callToAction: 'SIGN_UP' }] });
+    const h = harness({ model, meta: metaOf({ adsOverview: vi.fn(async () => platform === 'meta' ? overview : { adsets: [], ads: [], current: [], previous: [] }) }),
+      ...(platform === 'linkedin' ? { linkedin: linkedinOf({ adsOverview: vi.fn(async () => overview) }) } : {}) });
+    const result = await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(result.result).toMatchObject(platform === 'linkedin' ? { create: 1, rejected: 0 } : { create: 0, rejected: 1 });
+    expect(model.run.mock.calls[0][1].system[0].text).toContain('For LinkedIn, headline and description each up to 70');
+  });
+
   it('reviews LinkedIn creatives with the same rules, under targets that never collide with Meta\'s', async () => {
     const overview = {
       adsets: [{ id: '610001', name: 'PA operators', active: true, dailyBudget: 2000, currency: 'USD', objective: 'WEBSITE_VISIT' }],
@@ -494,6 +506,18 @@ describe('approved creative from the Creative Director', () => {
     expect(creative.approved).toHaveBeenCalled();
     expect(store.proposeAction).not.toHaveBeenCalled();
     expect(outcome.result).toMatchObject({ create: 0, skipped: 1, skips: { model_not_configured: 1 } });
+  });
+
+  it('uses an untested asset when the first approved creative already ran in this ad set', async () => {
+    const used = approvedAsset();
+    const fresh = approvedAsset({ id: '33333333-3333-4333-8333-333333333333', landingUrl: used.landingUrl.replaceAll(used.id, '33333333-3333-4333-8333-333333333333') });
+    const meta = metaOf({ adsOverview: vi.fn(async () => ({
+      adsets: [{ id: '40', name: 'Intel', active: true, dailyBudget: 2000 }],
+      ads: [{ id: '1', adsetId: '40', active: true, copy: { link: used.landingUrl } }], current: [], previous: [],
+    })) });
+    const h = harness({ meta, creative: { approved: vi.fn(async () => [used, fresh]) } });
+    await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(h.store.proposeAction.mock.calls[0][0].input.creativeAssetId).toBe(fresh.id);
   });
 
   // Review 2026-11-17: the review skipped 18 of 18 recommendations every day, and nothing said why.
