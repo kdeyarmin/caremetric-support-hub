@@ -68,7 +68,10 @@ try {
   await admin.query('delete from private.owner_notifications where id = any($1::uuid[])', [[pending.id, text.id, fresh.id]]);
 
   // Into a window of their own, with a conversation: two messages in, one reply sent, and one message outside the window.
-  await admin.query('update private.owner_notifications set created_at = $2 where dedupe_key like $1', [`${prefix}%`, inside]);
+  // Each at its own minute, in the order they were raised, so the summary's order is the day's order.
+  for (const [key, at] of [['weekly', '2001-02-03T14:00:00Z'], ['plan', '2001-02-03T14:05:00Z'], ['waiting', '2001-02-03T14:10:00Z'], ['down', '2001-02-03T14:15:00Z']]) {
+    await admin.query('update private.owner_notifications set created_at = $2 where dedupe_key = $1', [`${prefix}${key}`, at]);
+  }
   const conversation = await row(`insert into private.communications(channel, source_system, source_key, product_id, status, subject, created_at, last_message_at)
     values ('email', 'hub.email', $1, (select id from hub.products where slug = 'carebase'), 'open', 'A question', $2, $3) returning id`, [`summary-${run}`, inside, '2001-02-04T15:00:00Z']);
   conversations.push(conversation.id);
@@ -81,7 +84,7 @@ try {
   assert.deepEqual(facts.outbound, { messages: 1, conversations: 1 });
   assert.equal(facts.notifications.heldCount, 2);
   assert.deepEqual(facts.notifications.held.map(item => [item.subject, item.attention, item.name]),
-    [['Subject plan', 'decision', 'Social Media Manager'], ['Subject weekly', 'update', 'Social Media Manager']]);
+    [['Subject weekly', 'update', 'Social Media Manager'], ['Subject plan', 'decision', 'Social Media Manager']]);
   assert.deepEqual(facts.notifications.sent.map(item => item.subject).sort(), ['Subject down', 'Subject waiting']);
   assert.equal(facts.notifications.sentCount, 2);
   for (const key of ['day', 'work', 'executed', 'waiting']) assert.ok(key in facts, key);

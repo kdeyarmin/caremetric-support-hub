@@ -130,17 +130,17 @@ begin
     'outbound', v_outbound,
     'notifications', jsonb_build_object(
       'held', (select coalesce(jsonb_agg(jsonb_build_object('subject', n.subject, 'attention', n.attention, 'agent', n.agent_key, 'name', a.display_name, 'at', n.created_at)
-                                         order by n.created_at), '[]'::jsonb)
+                                         order by n.created_at, n.id), '[]'::jsonb)
                from (select * from private.owner_notifications
-                     where status = 'held' and created_at >= p_since and created_at < p_until order by created_at desc limit 25) n
+                     where status = 'held' and created_at >= p_since and created_at < p_until order by created_at desc, id desc limit 25) n
                left join private.agents a on a.key = n.agent_key),
       'heldCount', (select count(*) from private.owner_notifications where status = 'held' and created_at >= p_since and created_at < p_until),
       -- Emails that went at once: not the summary or the brief themselves.
-      'sent', (select coalesce(jsonb_agg(jsonb_build_object('subject', n.subject, 'severity', n.severity, 'at', n.created_at) order by n.created_at), '[]'::jsonb)
+      'sent', (select coalesce(jsonb_agg(jsonb_build_object('subject', n.subject, 'severity', n.severity, 'at', n.created_at) order by n.created_at, n.id), '[]'::jsonb)
                from (select * from private.owner_notifications
                      where channel = 'email' and status = 'sent' and created_at >= p_since and created_at < p_until
                        and dedupe_key not like 'summary:%' and dedupe_key not like 'brief:%'
-                     order by created_at desc limit 15) n),
+                     order by created_at desc, id desc limit 15) n),
       'sentCount', (select count(*) from private.owner_notifications
                     where channel = 'email' and status = 'sent' and created_at >= p_since and created_at < p_until
                       and dedupe_key not like 'summary:%' and dedupe_key not like 'brief:%'))
