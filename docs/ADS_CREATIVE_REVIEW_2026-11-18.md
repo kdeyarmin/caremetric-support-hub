@@ -92,3 +92,53 @@ were not authored as part of this review. Public Hub health and an approved crea
 returned HTTP 200 after #275's deployment. The Google Ads browser session was signed out,
 so platform review status, impressions, clicks and conversions could not be independently
 checked in Campaign Manager.
+
+## Delivery and attribution check (afternoon, November 18)
+
+A further read-only check at about 2:00 p.m. Eastern, against the production database and Railway (Railway deployment
+`cac6a733-b2bd-43b3-bd87-deed74fc9794`, successful), found nothing that proves delivery or attribution yet:
+
+- **Google campaign `24493303819`.** The only paid campaign the Hub has created this month. Its action (`966e6738…`) executed at
+  9:21 a.m. Eastern, launched live with a reservation of **$5.00 a day for 10 days ($50 committed)**, ending **November 27**. The
+  proposal names **Pennsylvania** as its location and the Intel free market review as its landing page, tagged
+  `utm_source=google&utm_medium=cpc&utm_campaign=search-intel`. These are the Hub's own receipts. Google's approval status, serving,
+  impressions, spend and conversions were still unread, because nothing in the Hub read Google back.
+- **LinkedIn.** The two automatic November attempts remain the only LinkedIn campaign actions: `linkedin_permission` on November 16
+  and `linkedin_invalid_request` on November 17. Neither has been retried.
+- **Ad review.** The daily review (latest 9:10 a.m. Eastern) read 19 ad sets with no platform refusal recorded, so its reads
+  succeeded, and skipped all 18 recommendations as `leads_elsewhere`. The receipt does not say which platform the ad sets are on.
+  Meta's ad read takes a link only from a creative's `link_data`. An ad built from an existing post, a video or carousel ad, or a
+  lead form carries no link the review reads, and such an ad was counted as `leads_elsewhere` too. So the 18 skips may be ads with
+  unreadable links rather than ads that lead to another site.
+- **Leads and conversions.** November has five non-test Intel leads, none with UTM values or ad click IDs. `ads_conversions` holds five
+  `no_click` skips each for Meta and LinkedIn (last November 14) and no submission. The Hub reports leads to Meta and LinkedIn only;
+  Intel's pages carry Google Analytics but no Google Ads conversion tag, so Google's own conversion tracking is unknown.
+- **Landing page and health.** `www.caremetricintel.com/market-review` and the Hub's session health endpoint returned HTTP 200.
+  Intel's lead form sends the stored UTM values and any `gclid`, `fbclid` or `li_fat_id` with the lead.
+
+### Changes in this branch (not deployed until merged)
+
+- `ads.plan` now reads Google back each day (read only, the same API access that creates campaigns): see
+  [Social media → Reading Google back](SOCIAL_MEDIA.md#new-campaigns-launched-on-their-own-2026-11-15). After merge and deployment, the
+  9:20 a.m. Eastern run's result (`private.agent_tasks.result -> 'google'`) answers approval, serving, budget, end date, places,
+  results, auto-tagging and conversion tracking for campaign `24493303819`. If Google refuses the read, the result records the fixed code
+  and Google's error enum, and the plan goes on.
+- The daily ad review separates `no_ad_link` (a link it could not read) from `leads_elsewhere` (a readable link to another site),
+  and records per platform the ad sets, ads, unreadable links, skips and the hosts that ads leading elsewhere point to.
+
+Neither change creates, starts, pauses or changes a campaign or a budget, and neither needs a migration.
+
+### Proposed for the owner's approval: deploy only after CI (not applied)
+
+Railway deploys the Hub's `support-hub-web` service from `main` with **Wait for CI off** (`source.checkSuites: false`), so a merge
+deploys while CI is still running. Intel's service already waits for CI and runs `npm run db:migrate` before each deploy. The Hub's
+migrations are applied to Supabase separately and must precede the image that needs them (see
+[Backend release contract](BACKEND_RELEASE_CONTRACT.md)).
+
+1. Turn on **Wait for CI** for `support-hub-web` (Railway → service → Settings → Source; `checkSuites: true`). A merge then deploys only
+   after the **Support Hub CI** workflow passes on that commit. A failed CI run means no deployment.
+2. For a release that adds a migration, apply it after CI passes on the pull request and **before** merging. Many server paths check the
+   database's declared features and keep their earlier behavior until it is applied, but not every change does, so migration first is
+   the order the contract describes. Record the applied version (`supabase_migrations.schema_migrations`) in the pull request.
+
+Nothing in Railway was changed by this review.

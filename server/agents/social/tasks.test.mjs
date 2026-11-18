@@ -529,8 +529,17 @@ describe('approved creative from the Creative Director', () => {
     });
     const result = async (link, marketed = undefined) => (await harness({ meta: metaOf({ adsOverview: vi.fn(async () => overviewOf(link)) }), model: null, ...(marketed ? { marketed } : {}) })
       .handlers['social.ads'](task('social.ads'), { now })).result;
-    expect(await result('https://example.com/form')).toMatchObject({ skipped: 1, skips: { leads_elsewhere: 1 } });
+    expect(await result('https://example.com/form?campaign=x')).toMatchObject({ skipped: 1, skips: { leads_elsewhere: 1 } });
     expect(await result('https://www.cmcarebase.com/', ['caremetric-intel'])).toMatchObject({ skipped: 1, skips: { product_not_marketed: 1 } });
+    // Review 2026-11-18: an ad whose link the review cannot read (a boosted post, a video ad) is not one that leads elsewhere, and the
+    // receipt says which platform each came from and, for one that leads elsewhere, only the host it leads to.
+    const unread = await result(null);
+    expect(unread).toMatchObject({ skipped: 1, skips: { no_ad_link: 1 }, platforms: { meta: { adsets: 1, ads: 1, noLink: 1, skips: { no_ad_link: 1 }, elsewhere: {} } } });
+    expect(unread.skips).not.toHaveProperty('leads_elsewhere');
+    expect(unread).not.toHaveProperty('platform');
+    const away = await result('https://example.com/form?campaign=x');
+    expect(away.platforms.meta).toMatchObject({ noLink: 0, skips: { leads_elsewhere: 1 }, elsewhere: { 'example.com': 1 } });
+    expect(JSON.stringify(away)).not.toContain('/form');
   });
 });
 
