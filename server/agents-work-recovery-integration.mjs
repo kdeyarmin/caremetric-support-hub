@@ -193,6 +193,7 @@ try {
 } finally {
   await admin.query('delete from private.creative_assets where id=any($1::uuid[]) or brief_id=any($2::uuid[])', [assets, briefs]);
   await admin.query('delete from private.creative_briefs where id=any($1::uuid[])', [briefs]);
+  await admin.query("delete from private.agent_tasks where kind = 'creative.request' and request_key in (select 'creative:brief:' || unnest($1::uuid[])::text)", [briefs]);
   await admin.query('delete from private.growth_roster_targets where ccn=any($1::text[])', [ccns]);
   await admin.query("delete from private.audit_events where action in ('creative.requeued', 'hub.social_connection', 'growth.marked_internal', 'growth.customer_linked', 'growth.person_found') and created_at >= $1", [runStart]);
   await admin.query('delete from private.agent_actions where id=any($1::uuid[]) or task_id=any($2::uuid[])', [actions, tasks]);

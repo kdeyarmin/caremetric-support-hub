@@ -89,6 +89,7 @@ try {
   console.log('Creative review integration passed: every county of the roster\'s states (the list\'s too), least recently pictured first with its roster counts by setting and the setting it last showed, eight weeks\' rest, the week\'s number, malformed input refused or ignored, only the Hub server asks, the vision review settings, and gate drift. Nothing was rendered or posted.');
 } finally {
   await admin.query('delete from private.creative_briefs where id=any($1::uuid[])', [briefs]);
+  await admin.query("delete from private.agent_tasks where kind = 'creative.request' and request_key in (select 'creative:brief:' || unnest($1::uuid[])::text)", [briefs]);
   await admin.query('delete from private.growth_roster_targets where ccn=any($1::text[])', [ccns]);
   await pool.end(); await admin.end();
 }
