@@ -161,6 +161,13 @@ describe('the end-of-day summary (owner decision 2026-11-18)', () => {
     expect(hold).toHaveBeenCalledWith('update');
   });
 
+  it('waits for a hold check that answers later, and sends when it fails', async () => {
+    const later = holding(async attention => attention === 'update');
+    expect(await later.notifier.send({ severity: 'info', subject: 'FYI', body: 'News.', dedupeKey: 'k-async', attention: 'update' })).toEqual([{ channel: 'email', delivery: 'held' }]);
+    const failing = holding(async () => { throw new Error('database blip'); });
+    expect(await failing.notifier.send({ severity: 'info', subject: 'FYI', body: 'News.', dedupeKey: 'k-async-2', attention: 'update' })).toEqual([{ channel: 'email', delivery: 'sent' }]);
+  });
+
   it('emails at once what cannot wait, and anything the owner has not chosen to hold', async () => {
     const { notifier, senders, store } = holding(attention => attention !== 'now');
     expect(await notifier.send({ severity: 'warning', subject: 'Still unanswered after 4 hours: contact CM-1201', body: 'Waiting.', dedupeKey: 'k-now', attention: 'now' }))

@@ -32,6 +32,13 @@ const clock = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', h
 const count = value => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.floor(Number(value)) : 0);
 const dollars = cents => `$${(Math.max(Number(cents) || 0, 0) / 100).toFixed(2)}`;
 const clip = (value, limit) => { const text = String(value ?? '').trim(); return text.length <= limit ? text : `${text.slice(0, limit - 1).trimEnd()}…`; };
+const waited = (from, to) => {
+  const minutes = Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 60_000));
+  if (!Number.isFinite(minutes)) return 'a while';
+  if (minutes < 90) return plural(Math.max(minutes, 1), 'minute');
+  const hours = Math.round(minutes / 60);
+  return hours < 48 ? plural(hours, 'hour') : plural(Math.round(hours / 24), 'day');
+};
 const time = value => { const date = new Date(value); return Number.isNaN(date.getTime()) ? '' : clock.format(date); };
 
 /** The summary hour the owner chose (12 to 23, Eastern), or the default for anything else. */
@@ -114,6 +121,12 @@ export function composeSummary(facts, day, { now = new Date(), since, publicOrig
   const waiting = actionList(day?.waiting, { other: ['other approval', 'other approvals'] });
   const approvalsRow = needs.find(([label]) => label === 'Waiting for your approval');
   if (approvalsRow && waiting) approvalsRow[1] = `${approvalsRow[1]}: ${waiting}`;
+  // Messages that came in and still have no answer: they were held for this email, so it must not say that nothing needs the owner.
+  const unanswered = count(day?.unanswered?.count);
+  if (unanswered) {
+    const oldest = day.unanswered.oldestAt ? ` (oldest ${waited(day.unanswered.oldestAt, generated)})` : '';
+    needs.splice(approvalsRow ? needs.indexOf(approvalsRow) + 1 : 0, 0, ['Messages waiting for an answer', `${unanswered}${oldest}`]);
+  }
 
   const notes = day?.notifications ?? {};
   const sent = Array.isArray(notes.sent) ? notes.sent : [];
@@ -222,6 +235,17 @@ export function summaryHandlers({ store, notifier, publicOrigin, services = {}, 
     }
   }
 
+  const week = 7 * 24 * 3_600_000;
+  async function windowStart(until, fallback) {
+    let cutoff = null;
+    try { cutoff = typeof store.summaryCutoff === 'function' ? await store.summaryCutoff() : null; } catch {
+      log(JSON.stringify({ event: 'hub_agent_summary_cutoff_unread' }));
+    }
+    const last = cutoff ? new Date(cutoff) : null;
+    if (!last || Number.isNaN(last.getTime()) || last >= until) return fallback;
+    return new Date(Math.max(last.getTime(), until.getTime() - week));
+  }
+
   async function summary(task, { now = () => new Date() } = {}) {
     const moment = now();
     const owner = task.sourceKind === 'owner';
@@ -231,13 +255,15 @@ export function summaryHandlers({ store, notifier, publicOrigin, services = {}, 
     const at = easternAt(date, hour);
     // Fired at noon, it waits until the owner's hour. A changed hour is read again when it wakes.
     if (!owner && moment < at) return { status: 'queued', retryAt: at, result: { date, waitingUntil: at.toISOString() } };
-    // The 24 hours since the last summary, so nothing falls between two of them; one the owner asks for covers the last 24 hours.
+    // From where the last scheduled summary ended, so moving the hour neither skips nor repeats anything (at most a week back; the first
+    // one covers 24 hours). One the owner asks for covers the last 24 hours and moves nothing.
     const until = owner ? moment : at;
-    const since = owner ? new Date(moment.getTime() - 24 * 3_600_000) : easternAt(dayBefore(date), hour);
+    const since = owner ? new Date(moment.getTime() - 24 * 3_600_000) : await windowStart(until, easternAt(dayBefore(date), hour));
     const day = await store.summaryFacts({ since, until });
     const on = live(settings.enabled) === true;
-    // Switched off, nothing is sent, unless updates were held before it was switched off: those are still delivered, once.
-    if (!owner && !on && !count(day?.notifications?.heldCount)) return { result: { date, skipped: 'summary_off' } };
+    // Switched off, nothing is sent, unless updates were held before it was switched off: those are still delivered, once. The window
+    // still ends here, so turning it on again starts from today.
+    if (!owner && !on && !count(day?.notifications?.heldCount)) return { result: { date, until: until.toISOString(), skipped: 'summary_off' } };
     const [facts, growth, findings] = await Promise.all([store.briefFacts(), growthFacts(since, until), watchdog(moment)]);
     const content = composeSummary(facts, day, { now: moment, since, publicOrigin, services, labels, growth, watchdog: findings, truth });
     const results = await notifier.send({
@@ -253,7 +279,7 @@ export function summaryHandlers({ store, notifier, publicOrigin, services = {}, 
       errorCode: reached ? null : 'not_delivered',
     });
     mustHaveReached(results);
-    return { result: { date, needsYou: content.needsYou, held: count(day?.notifications?.heldCount), delivery } };
+    return { result: { date, ...(owner ? {} : { until: until.toISOString() }), needsYou: content.needsYou, held: count(day?.notifications?.heldCount), delivery } };
   }
   return { 'summary.daily': summary };
 }

@@ -178,6 +178,10 @@ export function sqlAgentStore(pool, { fenced = false, growthPriority = false, tr
       notifyHold: (id, attention) => call('private.agent_notify_hold', [id, attention]),
       /** Between `since` and `until`: the team's work, what came in and went out, the approvals waiting by kind, and the alerts held or sent. Counts, kinds and alert subjects only. */
       summaryFacts: ({ since, until }) => call('private.agent_summary_facts', [since, until]),
+      /** Where the last scheduled summary's window ended, or null before the first. */
+      summaryCutoff: () => call('private.agent_summary_cutoff'),
+      /** Whether a summary will be sent (the Chief of Staff is active and its summary scheduled): nothing is held while it will not. */
+      summaryReady: () => call('private.agent_summary_ready'),
     } : {}),
     ownerContact: () => call('private.owner_contact'),
     /** Counts and times for the morning brief: what needs the owner, what the team did yesterday. No names, no text. */

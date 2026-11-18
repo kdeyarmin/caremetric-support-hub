@@ -16,7 +16,10 @@
 --    in Communications, by channel), what went out (replies sent from Communications, approved actions carried out, by kind), the
 --    approvals waiting now by kind, and the owner's alerts held or sent in the window (subjects, which never quote a customer). Hub
 --    server only, at most eight days.
--- 4. The Chief of Staff's summary.daily task, fired at noon Eastern; the server keeps it queued until the owner's hour.
+-- 4. The Chief of Staff's summary.daily task, fired at noon Eastern; the server keeps it queued until the owner's hour. Each summary
+--    starts where the last scheduled one ended (private.agent_summary_cutoff), so moving the hour neither skips nor repeats anything.
+-- 5. private.agent_summary_ready(): whether the Chief of Staff is active and its summary is scheduled. The server holds nothing while it
+--    is not, so a paused Chief of Staff never leaves messages waiting for a summary that will not be sent.
 --
 -- Nothing is sent by this migration. 20261118120100_owner_summary_contract.sql declares platform.agents.owner-summary.v1, and the server
 -- holds nothing and sends no summary until it is declared.
@@ -128,6 +131,16 @@ begin
                   select kind, count(*) as n from private.agent_actions where status = 'proposed' and expires_at > now() group by kind) x),
     'inbound', v_inbound,
     'outbound', v_outbound,
+    -- Conversations whose newest message arrived in the window and has had no reply or note since, and that are not closed: what still
+    -- waits for an answer now, of what the window brought in.
+    'unanswered', (select jsonb_build_object('count', count(*), 'oldestAt', min(x.at)) from (
+                     select c.id, (select max(m.created_at) from private.communication_messages m
+                                   where m.communication_id = c.id and m.direction = 'inbound') as at
+                     from private.communications c
+                     where c.last_message_at >= p_since and c.status <> 'closed') x
+                   where x.at >= p_since
+                     and not exists (select 1 from private.communication_messages a
+                                     where a.communication_id = x.id and a.direction in ('outbound', 'note') and a.created_at > x.at)),
     'notifications', jsonb_build_object(
       'held', (select coalesce(jsonb_agg(jsonb_build_object('subject', n.subject, 'attention', n.attention, 'agent', n.agent_key, 'name', a.display_name, 'at', n.created_at)
                                          order by n.created_at, n.id), '[]'::jsonb)
@@ -149,6 +162,31 @@ end;
 $$;
 revoke all on function private.agent_summary_facts(timestamptz, timestamptz) from public, anon, authenticated, service_role;
 grant execute on function private.agent_summary_facts(timestamptz, timestamptz) to hub_app_server;
+
+-- Where the last scheduled summary's window ended (its task's result), or null before the first.
+create or replace function private.agent_summary_cutoff() returns timestamptz
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  perform private.require_hub_app_server();
+  return (select max((t.result ->> 'until')::timestamptz) from private.agent_tasks t
+          where t.kind = 'summary.daily' and t.source_kind = 'schedule' and t.status = 'done'
+            and jsonb_typeof(t.result -> 'until') = 'string');
+end;
+$$;
+revoke all on function private.agent_summary_cutoff() from public, anon, authenticated, service_role;
+grant execute on function private.agent_summary_cutoff() to hub_app_server;
+
+-- Whether a summary will be sent: the Chief of Staff is active and its summary.daily schedule is enabled.
+create or replace function private.agent_summary_ready() returns boolean
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  perform private.require_hub_app_server();
+  return exists (select 1 from private.agents a join private.agent_schedules s on s.agent_key = a.key
+                 where a.key = 'chief_of_staff' and a.status = 'active' and s.task_kind = 'summary.daily' and s.enabled);
+end;
+$$;
+revoke all on function private.agent_summary_ready() from public, anon, authenticated, service_role;
+grant execute on function private.agent_summary_ready() to hub_app_server;
 
 -- The Chief of Staff's end-of-day summary. It fires at noon Eastern and the server keeps it queued until the owner's hour, so the owner
 -- can choose the hour on the Settings page without a schedule change.

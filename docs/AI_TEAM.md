@@ -368,10 +368,11 @@ then the social plan, new creative, the ad review, the ads plan and the creative
 through the day. Now, while **Settings → AI team → One end-of-day summary** is on (it is on by default):
 
 - **One email at the end of the day** (task `summary.daily`, shown as "End-of-day summary"), at **Settings → AI team → Summary
-  time** (17, 5 PM Eastern, by default). It covers the 24 hours since the previous summary, so nothing falls between two of them:
+  time** (17, 5 PM Eastern, by default). It starts where the previous summary ended (at most a week back; the first covers 24
+  hours), so nothing falls between two of them, even when you move the hour:
   - **Needs you**: the morning brief's list (approvals waiting, with what they are: "4 social posts, 2 creative assets and 1
     prospect email", tasks waiting for your sign-in, products that are down, failed tasks, past-due subscriptions, leads waiting
-    for a first reply, lost work you can fix).
+    for a first reply, lost work you can fix), and the messages that came in since the last summary and still have no answer.
   - **Already emailed to you today because it could not wait**, so you can check nothing was missed.
   - **What the team did**: jobs done by each agent, approved actions carried out and the AI spend.
   - **What came in**: customer messages in Communications (by channel), website leads and trial sign-ups.
@@ -392,8 +393,12 @@ through the day. Now, while **Settings → AI team → One end-of-day summary** 
     ad review, new paid campaigns, the creative refresh, prospect emails ready on Growth, new social comments). They are in the
     summary, and the replies they wait on are counted under Needs you, unless **Settings → AI team → Email new messages and
     approvals right away** is on.
-  - *News and reports* (the Monday scorecard and the weekly reports, a new trial, a report opened, autonomy steps switching,
-    campaigns that started, the live writing evaluation, a prospect the Sales Executive answered on its own): in the summary only.
+  - *News and reports* (the weekly reports the scorecard does not already carry, a new trial, a report opened, autonomy steps
+    switching, campaigns that started, the live writing evaluation, a prospect the Sales Executive answered on its own): in the
+    summary only. The **Monday scorecard** still arrives on its own on Monday morning: its figures (revenue, cost per trial, search
+    queries) are only in that email.
+- **Nothing is held while no summary would be sent**: with the Chief of Staff paused, or its summary unscheduled, every message is
+  emailed as it happens (`private.agent_summary_ready`).
 - A held message is recorded with the status "Held for the end-of-day summary" on the Team screen's alert history, where its full
   text stays. It counts as delivered: the task that raised it is done and is not tried again.
 

@@ -1,12 +1,13 @@
 -- Declares platform.agents.owner-summary.v1 once the end-of-day summary is in place (20261118120000_owner_summary.sql): its three
 -- settings have rows of the right kinds, an owner notification can be held for the summary (and only a held one says why), holding a
--- message and reading the summary's facts are security definers with a pinned empty search path that only the Hub server may run, and
--- the Chief of Staff's summary.daily task is scheduled.
+-- message, reading the summary's facts, its last cutoff and whether it will be sent are security definers with a pinned empty search
+-- path that only the Hub server may run, and the Chief of Staff's summary.daily task is scheduled.
 do $$
 declare
   contract jsonb := hub.get_backend_contract();
   feature constant text := 'platform.agents.owner-summary.v1';
-  server_fns constant text[] := array['private.agent_notify_hold(uuid,text)', 'private.agent_summary_facts(timestamptz,timestamptz)'];
+  server_fns constant text[] := array['private.agent_notify_hold(uuid,text)', 'private.agent_summary_facts(timestamptz,timestamptz)',
+    'private.agent_summary_cutoff()', 'private.agent_summary_ready()'];
   fn text;
 begin
   if (contract @> '{"api_version":4,"features":["platform.settings.v1","platform.agents.hardening.v1"]}'::jsonb) is not true then

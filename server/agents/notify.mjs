@@ -75,15 +75,16 @@ const attentions = new Set(['now', 'decision', 'update']);
 const attentionFor = (severity, attention) => (severity === 'urgent' ? 'now' : attentions.has(attention) ? attention : severity === 'warning' ? 'now' : 'update');
 
 /**
- * `hold(attention)` says whether a message of that attention waits for the end-of-day summary instead of being emailed now; it is read
- * for each message (the owner's settings apply within a minute). Without it, or when the store cannot record a held message (the
+ * `hold(attention)` (it may return a promise) says whether a message of that attention waits for the end-of-day summary instead of being
+ * emailed now; it is read for each message (the owner's settings apply within a minute). Without it, or when the store cannot record a held message (the
  * database does not declare the summary yet), every message is sent as before.
  */
 export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, hold = null, log = line => console.warn(line) }) {
   const channelsFor = severity => (severity === 'urgent' ? ['sms', 'email'] : ['email']);
-  const held = attention => {
+  // A setting or a readiness check that cannot be read holds nothing: a second email is better than a missing one.
+  const held = async attention => {
     if (attention === 'now' || typeof hold !== 'function' || typeof store?.notifyHold !== 'function') return false;
-    try { return hold(attention) === true; } catch { return false; }
+    try { return (await hold(attention)) === true; } catch { return false; }
   };
 
   async function transport(channel, { subject, body, severity, blocks, communicationReference }) {
@@ -144,7 +145,7 @@ export function ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, hol
       if (blocks !== null && (!Array.isArray(blocks) || blocks.length === 0)) throw new TypeError('Email blocks must be a non-empty list.');
       if (attention !== null && !attentions.has(attention)) throw new TypeError('Unsupported notification attention.');
       const level = attentionFor(severity, attention);
-      const input = { severity, subject: clip(subject, 200), body: clip(body, 4000), dedupeKey, agentKey, taskId, blocks, communicationReference, attention: level, hold: held(level) };
+      const input = { severity, subject: clip(subject, 200), body: clip(body, 4000), dedupeKey, agentKey, taskId, blocks, communicationReference, attention: level, hold: await held(level) };
       const results = [];
       for (const channel of channelsFor(severity)) results.push(await deliver(channel, input));
       return results;

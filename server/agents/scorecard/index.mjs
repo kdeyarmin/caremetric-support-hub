@@ -203,7 +203,8 @@ export function scorecardHandlers({
 
     const results = await notifier.send({
       severity: card.needsYou ? 'warning' : 'info', subject: card.subject, body: card.body, blocks: card.blocks,
-      dedupeKey, agentKey: task.agentKey, taskId: task.id, attention: asked ? 'now' : 'update',
+      // Its figures (revenue, cost per trial, search queries) travel only in this email, so it is never held for the summary.
+      dedupeKey, agentKey: task.agentKey, taskId: task.id, attention: 'now',
     });
     if (!asked && results.every(item => item.delivery === 'duplicate')) return { result: { skipped: results.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week: thisWeek } };
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);

@@ -82,6 +82,9 @@ try {
   const facts = await store.summaryFacts({ since, until });
   assert.deepEqual(facts.inbound, { messages: 2, conversations: 1, newConversations: 1, byChannel: { email: 1 } });
   assert.deepEqual(facts.outbound, { messages: 1, conversations: 1 });
+  // Its newest message came after the reply and has none: it still waits for an answer.
+  assert.equal(facts.unanswered.count, 1);
+  assert.equal(new Date(facts.unanswered.oldestAt).toISOString(), '2001-02-04T15:00:00.000Z');
   assert.equal(facts.notifications.heldCount, 2);
   assert.deepEqual(facts.notifications.held.map(item => [item.subject, item.attention, item.name]),
     [['Subject weekly', 'update', 'Social Media Manager'], ['Subject plan', 'decision', 'Social Media Manager']]);
@@ -94,7 +97,7 @@ try {
   await assert.rejects(store.summaryFacts({ since: until, until: since }), refused('22023'));
   await assert.rejects(admin.query('select private.agent_summary_facts($1, $2)', [since, until]), refused('42501'));
   for (const role of ['anon', 'authenticated', 'service_role']) {
-    for (const fn of ['private.agent_summary_facts(timestamptz,timestamptz)', 'private.agent_notify_hold(uuid,text)']) {
+    for (const fn of ['private.agent_summary_facts(timestamptz,timestamptz)', 'private.agent_notify_hold(uuid,text)', 'private.agent_summary_cutoff()', 'private.agent_summary_ready()']) {
       assert.equal((await row('select has_function_privilege($1, $2, \'execute\') as ok', [role, fn])).ok, false, `${role} ${fn}`);
     }
   }
@@ -119,6 +122,25 @@ try {
     'Replies sent from Communications: 1 message in 1 conversation']) assert.ok(summary.content.text.includes(words), words);
   assert.equal((await row("select status from private.owner_notifications where dedupe_key = 'summary:2001-02-03' and channel = 'email'")).status, 'sent');
   assert.match((await row('select summary from private.agent_runs where task_id = $1', [made.id])).summary, /^Sent the end-of-day summary: /);
+  // Once the task is done with that result, the next summary starts where it ended.
+  assert.equal(outcome.result.until, until.toISOString());
+  await admin.query("update private.agent_tasks set status = 'done', finished_at = now(), source_kind = 'schedule', result = $2 where id = $1", [made.id, outcome.result]);
+  assert.ok(new Date(await store.summaryCutoff()).getTime() >= until.getTime());
+
+  // A summary will be sent only while the Chief of Staff is active and its summary scheduled; nothing is held otherwise.
+  const chief = (await row("select status from private.agents where key = 'chief_of_staff'")).status;
+  try {
+    await admin.query("update private.agents set status = 'active' where key = 'chief_of_staff'");
+    assert.equal(await store.summaryReady(), true);
+    await admin.query("update private.agent_schedules set enabled = false where agent_key = 'chief_of_staff' and task_kind = 'summary.daily'");
+    assert.equal(await store.summaryReady(), false);
+    await admin.query("update private.agent_schedules set enabled = true where agent_key = 'chief_of_staff' and task_kind = 'summary.daily'");
+    await admin.query("update private.agents set status = 'paused' where key = 'chief_of_staff'");
+    assert.equal(await store.summaryReady(), false);
+  } finally {
+    await admin.query("update private.agents set status = $1 where key = 'chief_of_staff'", [chief]);
+    await admin.query("update private.agent_schedules set enabled = true where agent_key = 'chief_of_staff' and task_kind = 'summary.daily'");
+  }
 
   // The gate holds as applied and refuses a database where a held row need not say why.
   await admin.query(gate);

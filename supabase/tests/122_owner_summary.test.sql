@@ -19,6 +19,10 @@ select ok(has_function_privilege('hub_app_server', 'private.agent_notify_hold(uu
   and has_function_privilege('hub_app_server', 'private.agent_summary_facts(timestamptz,timestamptz)', 'execute')
   and not has_function_privilege('authenticated', 'private.agent_notify_hold(uuid,text)', 'execute')
   and not has_function_privilege('anon', 'private.agent_summary_facts(timestamptz,timestamptz)', 'execute')
+  and has_function_privilege('hub_app_server', 'private.agent_summary_cutoff()', 'execute')
+  and has_function_privilege('hub_app_server', 'private.agent_summary_ready()', 'execute')
+  and not has_function_privilege('authenticated', 'private.agent_summary_cutoff()', 'execute')
+  and not has_function_privilege('anon', 'private.agent_summary_ready()', 'execute')
   and not has_function_privilege('service_role', 'private.agent_summary_facts(timestamptz,timestamptz)', 'execute'), 'Only the server holds a message or reads the summary');
 select throws_ok($$ select private.agent_summary_facts(now() - interval '1 day', now()) $$, '42501', null, 'Outside the server role nothing is read');
 

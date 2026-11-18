@@ -63,6 +63,16 @@ describe('composing the end-of-day summary', () => {
     expect(summary.blocks[0]).toMatchObject({ type: 'callout', tone: 'warning', title: 'Needs your decision.' });
   });
 
+  it('counts the messages still waiting for an answer, so a held message never reads as all clear', () => {
+    const summary = composeSummary(facts({ approvals: { count: 2, oldestAt: '2026-11-18T20:00:00Z' } }),
+      day({ unanswered: { count: 3, oldestAt: '2026-11-18T14:00:00Z' }, waiting: { 'communication.reply': 2 } }), { now: evening, publicOrigin: origin });
+    expect(summary.needsYou).toBe(2);
+    expect(summary.body).toContain('Needs you:\n- Waiting for your approval: 2 (oldest 2 hours): 2 replies to customers\n- Messages waiting for an answer: 3 (oldest 8 hours)');
+    const only = composeSummary(facts(), day({ unanswered: { count: 1, oldestAt: '2026-11-18T21:30:00Z' } }), { now: evening });
+    expect(only.subject).toBe('CareMetric end of day, Wed, Nov 18: 1 thing needs you');
+    expect(only.blocks[0]).toMatchObject({ tone: 'warning', title: 'Needs your decision.' });
+  });
+
   it('lists what was held instead of emailed, approval requests first, and what had to go at once', () => {
     const summary = composeSummary(facts(), day({ notifications: {
       held: [
@@ -91,9 +101,10 @@ describe('composing the end-of-day summary', () => {
 describe('the end-of-day summary task', () => {
   // Fired at noon Eastern on Nov 18 (17:00 UTC).
   const scheduled = { id: 't1', agentKey: 'chief_of_staff', kind: 'summary.daily', sourceKind: 'schedule', requestKey: 'schedule:00000000-0000-4000-8000-000000000001:20261118T170000Z' };
-  const fixture = ({ enabled = true, hour = 17, held = 0, results = [{ channel: 'email', delivery: 'sent' }] } = {}) => {
+  const fixture = ({ enabled = true, hour = 17, held = 0, cutoff = null, results = [{ channel: 'email', delivery: 'sent' }] } = {}) => {
     const store = {
       summaryFacts: vi.fn(async () => day({ notifications: { held: [], heldCount: held, sent: [], sentCount: 0 } })),
+      summaryCutoff: vi.fn(async () => (cutoff instanceof Error ? Promise.reject(cutoff) : cutoff)),
       briefFacts: vi.fn(async () => facts()),
       startRun: vi.fn(async () => 'run-1'), finishRun: vi.fn(async () => {}),
     };
@@ -115,17 +126,35 @@ describe('the end-of-day summary task', () => {
     const outcome = await run(scheduled, new Date('2026-11-18T22:00:05Z'));
     expect(store.summaryFacts).toHaveBeenCalledWith({ since: new Date('2026-11-17T22:00:00Z'), until: new Date('2026-11-18T22:00:00Z') });
     expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ dedupeKey: 'summary:2026-11-18', attention: 'now', agentKey: 'chief_of_staff', taskId: 't1' }));
-    expect(outcome).toEqual({ result: { date: '2026-11-18', needsYou: 0, held: 0, delivery: ['email:sent'] } });
+    // It records where its window ended, for the next one to start from.
+    expect(outcome).toEqual({ result: { date: '2026-11-18', until: '2026-11-18T22:00:00.000Z', needsYou: 0, held: 0, delivery: ['email:sent'] } });
     expect(store.finishRun).toHaveBeenCalledWith('run-1', 'completed', {}, 'Sent the end-of-day summary: Nothing needs your decision right now.', null);
   });
 
   it('sends nothing while switched off, unless updates were held before it was', async () => {
     const off = fixture({ enabled: false });
-    expect(await off.run(scheduled, new Date('2026-11-18T22:01:00Z'))).toEqual({ result: { date: '2026-11-18', skipped: 'summary_off' } });
+    expect(await off.run(scheduled, new Date('2026-11-18T22:01:00Z'))).toEqual({ result: { date: '2026-11-18', until: '2026-11-18T22:00:00.000Z', skipped: 'summary_off' } });
     expect(off.notifier.send).not.toHaveBeenCalled();
     const leftover = fixture({ enabled: false, held: 2 });
     await leftover.run(scheduled, new Date('2026-11-18T22:01:00Z'));
     expect(leftover.notifier.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts where the last summary ended, so a changed hour neither skips nor repeats anything', async () => {
+    const at = new Date('2026-11-18T23:00:05Z');
+    // Yesterday's ended at 5 PM; today's is at 6 PM: the hour between is not lost.
+    const later = fixture({ hour: 18, cutoff: '2026-11-17T22:00:00.000Z' });
+    await later.run(scheduled, at);
+    expect(later.store.summaryFacts).toHaveBeenCalledWith({ since: new Date('2026-11-17T22:00:00.000Z'), until: new Date('2026-11-18T23:00:00Z') });
+    // A summary long switched off covers at most the last week; no summary yet, or a cutoff that cannot be read, covers 24 hours.
+    const stale = fixture({ hour: 18, cutoff: '2026-10-01T22:00:00.000Z' });
+    await stale.run(scheduled, at);
+    expect(stale.store.summaryFacts).toHaveBeenCalledWith({ since: new Date('2026-11-11T23:00:00Z'), until: new Date('2026-11-18T23:00:00Z') });
+    for (const cutoff of [null, new Error('database blip'), '2026-11-19T00:00:00.000Z']) {
+      const fresh = fixture({ hour: 18, cutoff });
+      await fresh.run(scheduled, at);
+      expect(fresh.store.summaryFacts, String(cutoff)).toHaveBeenCalledWith({ since: new Date('2026-11-17T23:00:00Z'), until: new Date('2026-11-18T23:00:00Z') });
+    }
   });
 
   it('sends one the owner asks for at once, for the last 24 hours, under its own key', async () => {

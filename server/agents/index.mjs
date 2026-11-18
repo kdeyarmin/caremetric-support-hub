@@ -86,7 +86,10 @@ export function agentTeam({
   const marketedSource = marketed ?? (marketing && typeof store.marketedProducts === 'function' ? () => store.marketedProducts() : [...defaultMarketed]);
   // What waits for the end-of-day summary: news, and approval requests unless the owner wants those right away.
   const summarySettings = summary ?? {};
-  const hold = attention => live(summarySettings.enabled) === true && (attention === 'update' || (attention === 'decision' && live(summarySettings.approvalsRightAway) !== true));
+  // Only while a summary will actually be sent: with the Chief of Staff paused, every message goes at once as before.
+  const hold = async attention => live(summarySettings.enabled) === true
+    && (attention === 'update' || (attention === 'decision' && live(summarySettings.approvalsRightAway) !== true))
+    && typeof store.summaryReady === 'function' && await store.summaryReady() === true;
   const notifier = ownerNotifier({ store, sms, email, ownerEmail, publicOrigin, hold, log });
   const runtime = model ?? modelRuntime({ apiKey: anthropicApiKey, store, record, notifier, log, now });
   const growth = features?.has?.('platform.agents.customer-growth.v1') ? givenGrowth : null;
