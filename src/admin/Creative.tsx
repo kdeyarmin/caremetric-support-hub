@@ -362,7 +362,9 @@ export function Creative({ client = creativeClient }: { client?: CreativeClient 
     if (changing.current) return;
     changing.current = true;
     setBusy("approve-all"); setNotice(null); setConfirmAll(false);
-    let approved = 0, refused = 0;
+    // Handed over now; approved, with the hand-over on the team's next run; no longer waiting (expired, or decided elsewhere meanwhile);
+    // refused by the route or its hand-over.
+    let handed = 0, later = 0, gone = 0, refused = 0;
     try {
       const open: CreativeAsset[] = [];
       for (let offset = 0; ; offset += allPageSize) {
@@ -374,17 +376,26 @@ export function Creative({ client = creativeClient }: { client?: CreativeClient 
         setProgress(`Approving ${index + 1} of ${open.length}…`);
         try {
           const result = await client.decide({ actionId: asset.actionId!, decision: "approve" });
-          if (result.status === "failed") refused += 1; else approved += 1;
+          // Only this run's own approval counts: an action that expired or was decided elsewhere meanwhile comes back undecided.
+          if (!result.decided) gone += 1;
+          else if (result.status === "executed") handed += 1;
+          else if (result.status === "approved") later += 1;
+          else refused += 1;
         } catch (error) {
           if (!(error instanceof TeamApiError)) throw error;
           refused += 1;
         }
       }
-      setNotice(refused
-        ? { ok: false, text: `Approved ${plural(approved, "asset")} and handed ${approved === 1 ? "it" : "them"} to the Social Media Manager; ${refused} could not be. Check the AI team's activity.` }
-        : { ok: true, text: approved ? `Approved ${plural(approved, "asset")} and handed ${approved === 1 ? "it" : "them"} to the Social Media Manager.` : "Nothing was waiting for your approval." });
+      const parts = [
+        handed ? `Approved ${plural(handed, "asset")} and handed ${handed === 1 ? "it" : "them"} to the Social Media Manager.` : null,
+        later ? `${plural(later, handed ? "more asset" : "asset")} ${later === 1 ? "is" : "are"} approved and ${later === 1 ? "goes" : "go"} to the Social Media Manager on the team's next run.` : null,
+        gone ? `${plural(gone, "asset")} ${gone === 1 ? "was" : "were"} no longer waiting (expired, or decided elsewhere), so ${gone === 1 ? "it was" : "they were"} not approved.` : null,
+        refused ? `${plural(refused, "asset")} could not be approved or handed over. Check the AI team's activity.` : null,
+      ].filter(Boolean);
+      setNotice({ ok: !gone && !refused, text: parts.length ? parts.join(" ") : "Nothing was waiting for your approval." });
     } catch (error) {
-      setNotice({ ok: false, text: `${approved ? `Approved ${plural(approved, "asset")} first. ` : ""}${failureText(error)}` });
+      const done = handed + later;
+      setNotice({ ok: false, text: `${done ? `Approved ${plural(done, "asset")} first. ` : ""}${failureText(error)}` });
     } finally {
       changing.current = false; setBusy(""); setProgress(""); reload();
     }
