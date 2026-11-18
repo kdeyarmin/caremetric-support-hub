@@ -15,9 +15,11 @@ select throws_ok($$select private.creative_live_assets(array['caremetric-intel']
 select ok(not bool_or(has_function_privilege(r, 'private.creative_live_assets(text[])', 'execute')), 'The expanded snapshot remains server-only')
 from unnest(array['anon', 'authenticated', 'service_role']) r;
 
-set session authorization hub_app_server;
+-- Supabase's test admin is not a superuser and cannot change session authorization.
+-- After testing the real guard above, follow the suite's transaction-local fixture pattern; rollback restores it.
+create or replace function private.require_hub_app_server() returns void
+language plpgsql stable set search_path = '' as $$ begin return; end; $$;
 create temporary table campaign_creative_snapshot as select private.creative_live_assets(array['caremetric-intel']) as assets;
-reset session authorization;
 select is((select count(*)::integer from campaign_creative_snapshot, jsonb_array_elements(assets) a where a->>'briefId' = '0117aaaa-0000-4000-8000-000000000001'), 2,
   'Only approved and live creative is returned, never retired creative');
 select ok((select bool_and(a @> jsonb_build_object('primaryText', 'See your agency alongside the other home health agencies in its county.',
