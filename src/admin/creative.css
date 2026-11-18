@@ -3,6 +3,9 @@
 .creative-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 20px; }
 .creative-header p { margin: 4px 0 0; max-width: 56rem; color: var(--muted); line-height: 1.55; }
 .creative-summary { display: flex; flex-wrap: wrap; gap: 8px; }
+.creative-approve-all { display: grid; gap: 8px; padding: 12px 16px; }
+.creative-approve-all p { margin: 0; }
+.creative-approve-all .button-row { align-items: center; }
 .creative-count { display: inline-flex; align-items: baseline; gap: 6px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: #334155; font: inherit; font-size: var(--text-sm); cursor: pointer; }
 .creative-count strong { font-size: var(--text-md); color: #0f172a; }
 .creative-count-active { border-color: var(--brand-dark); background: #eef2fb; }

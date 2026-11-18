@@ -21,6 +21,10 @@ const failureText = (error: unknown) => error instanceof TeamApiError ? error.me
   : "The result could not be confirmed, so the change may have gone through. Refresh and check before you try again.";
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 const pageSize = 24;
+// The most the studio read returns at once (server/agents/creative/admin.mjs): "Approve all" reads every waiting asset in pages of this size.
+const allPageSize = 60;
+/** An asset still waiting for the owner's decision. */
+const awaitingDecision = (asset: CreativeAsset) => asset.status === "proposed" && asset.actionStatus === "proposed" && Boolean(asset.actionId);
 
 /** The compliance result on a card: passed, or passed with warnings. A blocked asset is never listed. */
 function ComplianceBadge({ asset }: { asset: CreativeAsset }) {
@@ -56,7 +60,7 @@ function AssetCard({ asset, busy, onDecide, onCompare, comparing }: {
 }) {
   const [note, setNote] = useState("");
   const [asking, setAsking] = useState(false);
-  const open = asset.status === "proposed" && asset.actionStatus === "proposed" && asset.actionId;
+  const open = awaitingDecision(asset);
   const working = busy === `decide:${asset.id}`;
   return <article className={`creative-card${comparing ? " creative-card-comparing" : ""}`} id={`asset-${asset.id}`}>
     <Preview asset={asset} />
@@ -324,6 +328,8 @@ export function Creative({ client = creativeClient }: { client?: CreativeClient 
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
   const [comparing, setComparing] = useState<CreativeAsset | null>(null);
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [progress, setProgress] = useState("");
   const changing = useRef(false);
   const reload = useCallback(() => setRefresh(value => value + 1), []);
   const reader = useCallback((signal: AbortSignal) => { void refresh; return client.studio(filter, { signal }); }, [client, filter, refresh]);
@@ -347,8 +353,45 @@ export function Creative({ client = creativeClient }: { client?: CreativeClient 
       if (result.status === "failed") throw new TeamApiError(409, "The approval was recorded but the hand-over did not complete. Check the AI team's activity.");
     }, decision === "approve" ? "Approved and handed to the Social Media Manager." : decision === "revise" || trimmed ? "Sent back with your note. A revision is on its way." : "Rejected.");
   };
+  /**
+   * Approves every asset waiting for a decision, on every page, one at a time through the same decide route as each card's Approve (so each
+   * approval is the signed-in owner's, as an asset with a warning requires). One the route refuses is counted and the rest go on; an answer
+   * that cannot be confirmed stops the run, since that approval may or may not have gone through.
+   */
+  const approveAll = async () => {
+    if (changing.current) return;
+    changing.current = true;
+    setBusy("approve-all"); setNotice(null); setConfirmAll(false);
+    let approved = 0, refused = 0;
+    try {
+      const open: CreativeAsset[] = [];
+      for (let offset = 0; ; offset += allPageSize) {
+        const page = await client.studio({ product: null, platform: null, status: "proposed", offset, limit: allPageSize }, { signal: new AbortController().signal });
+        open.push(...page.assets.filter(awaitingDecision));
+        if (!page.assets.length || offset + allPageSize >= page.total) break;
+      }
+      for (const [index, asset] of open.entries()) {
+        setProgress(`Approving ${index + 1} of ${open.length}…`);
+        try {
+          const result = await client.decide({ actionId: asset.actionId!, decision: "approve" });
+          if (result.status === "failed") refused += 1; else approved += 1;
+        } catch (error) {
+          if (!(error instanceof TeamApiError)) throw error;
+          refused += 1;
+        }
+      }
+      setNotice(refused
+        ? { ok: false, text: `Approved ${plural(approved, "asset")} and handed ${approved === 1 ? "it" : "them"} to the Social Media Manager; ${refused} could not be. Check the AI team's activity.` }
+        : { ok: true, text: approved ? `Approved ${plural(approved, "asset")} and handed ${approved === 1 ? "it" : "them"} to the Social Media Manager.` : "Nothing was waiting for your approval." });
+    } catch (error) {
+      setNotice({ ok: false, text: `${approved ? `Approved ${plural(approved, "asset")} first. ` : ""}${failureText(error)}` });
+    } finally {
+      changing.current = false; setBusy(""); setProgress(""); reload();
+    }
+  };
   const setFilterValue = <K extends keyof StudioFilter>(key: K, value: StudioFilter[K]) => setFilter(previous => ({ ...previous, [key]: value, offset: 0 }));
   const counts = useMemo(() => shown?.statusCounts ?? {}, [shown]);
+  const waitingCount = counts.proposed ?? 0;
 
   return <div className="creative-page">
     <div className="page-heading creative-header"><div><span className="eyebrow">CareMetric Admin</span><h1><Palette size={22} aria-hidden="true" /> Creative</h1>
@@ -374,6 +417,20 @@ export function Creative({ client = creativeClient }: { client?: CreativeClient 
         <label className="team-field">Status<select value={filter.status ?? ""} onChange={event => setFilterValue("status", (event.target.value || null) as CreativeStatus | null)}>
           <option value="">Every status</option>{creativeStatuses.map(status => <option key={status} value={status}>{statusLabels[status]}</option>)}</select></label>
       </div>
+      {waitingCount > 0 && <section className="panel creative-approve-all" aria-label="Approve everything waiting">
+        {confirmAll
+          ? <>
+            <p>Approve all {plural(waitingCount, "asset")} waiting for you? Each one passed the compliance checks; any warnings are on its card. They go to the Social Media Manager, which can use them in posts and ads.</p>
+            <div className="button-row">
+              <button type="button" className="button button-primary button-small" disabled={Boolean(busy)} onClick={() => void approveAll()}><Check size={14} aria-hidden="true" />Yes, approve all {waitingCount}</button>
+              <button type="button" className="button button-secondary button-small" disabled={Boolean(busy)} onClick={() => setConfirmAll(false)}><X size={14} aria-hidden="true" />Cancel</button>
+            </div>
+          </>
+          : <div className="button-row">
+            <span>{plural(waitingCount, "asset")} waiting for your approval.</span>
+            <button type="button" className="button button-primary button-small" disabled={Boolean(busy)} onClick={() => setConfirmAll(true)}><Check size={14} aria-hidden="true" />{busy === "approve-all" ? progress || "Working…" : `Approve all ${waitingCount}`}</button>
+          </div>}
+      </section>}
       {comparing && <Comparison base={comparing} assets={shown.assets} onClose={() => setComparing(null)} />}
       {shown.assets.length
         ? <div className="creative-gallery">{shown.assets.map(asset => <AssetCard key={asset.id} asset={asset} busy={busy} comparing={comparing?.id === asset.id} onDecide={decide} onCompare={setComparing} />)}</div>
