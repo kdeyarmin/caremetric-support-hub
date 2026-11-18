@@ -54,6 +54,16 @@ function codeFor(status) {
   return failure('linkedin_invalid_request');
 }
 
+// Only structured, bounded diagnostics cross the worker/log boundary; response text may contain tokens or member data.
+export function linkedinFailureDetails(error) {
+  const detail = error?.linkedin;
+  if (!/^linkedin_/.test(error?.code ?? '') || !Number.isInteger(detail?.status) || detail.status < 400 || detail.status > 599
+    || !['GET', 'POST', 'PUT', 'DELETE'].includes(detail.method)
+    || !['adCampaignGroups', 'adCampaigns', 'creatives', 'posts', 'adTargetingEntities', 'other'].includes(detail.resource)) return {};
+  return { linkedin: { status: detail.status, method: detail.method, resource: detail.resource,
+    ...(Number.isSafeInteger(detail.serviceErrorCode) && detail.serviceErrorCode >= 0 ? { serviceErrorCode: detail.serviceErrorCode } : {}) } };
+}
+
 /**
  * LinkedIn's "little text" format reserves | { } @ [ ] ( ) < > # \ * _ ~ in a post's commentary: each is escaped, so nothing a draft
  * says can become a mention or markup, and a #Hashtag becomes a real hashtag.
@@ -162,8 +172,14 @@ export function linkedinClient({
     let text;
     try { text = await bounded(response); }
     catch (error) { if (method !== 'GET') throw failure('linkedin_unconfirmed'); throw error; }
-    if (method !== 'GET' && response.status >= 500) throw failure('linkedin_unconfirmed');
-    if (!response.ok) throw codeFor(response.status);
+    if (!response.ok) {
+      const error = method !== 'GET' && response.status >= 500 ? failure('linkedin_unconfirmed') : codeFor(response.status);
+      let data;
+      try { data = JSON.parse(text); } catch { data = null; }
+      const resource = path.split('/').find(part => ['adCampaignGroups', 'adCampaigns', 'creatives', 'posts', 'adTargetingEntities'].includes(part)) ?? 'other';
+      Object.assign(error, linkedinFailureDetails({ code: error.code, linkedin: { status: response.status, method, resource, serviceErrorCode: data?.serviceErrorCode } }));
+      throw error;
+    }
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
     return { data, id: response.headers?.get?.('x-restli-id') ?? response.headers?.get?.('x-linkedin-id') ?? null };
@@ -510,6 +526,7 @@ export function linkedinClient({
      */
     async createCampaign({ name, dailyBudgetCents, totalBudgetCents = null, currency = 'USD', startAt, endAt = null, states = [] }, { signal } = {}) {
       needAds();
+      // Sponsored Content requires its beneficiary organization even when ads use a separate token.
       if (!org) throw failure('linkedin_not_configured');
       // Limited to the roster's states (team review 2026-11-17, stage 6), each found through LinkedIn's own location lookup before anything
       // is created: a state it cannot name stops the campaign rather than letting it run nationwide.

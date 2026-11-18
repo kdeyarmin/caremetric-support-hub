@@ -50,6 +50,18 @@ describe('action executor', () => {
     expect(JSON.parse(throwing.logs[0])).toMatchObject({ event: 'hub_agent_action_error', action_id: 'a1', kind: 'communication.reply', code: 'executor_error' });
   });
 
+  it('persists and logs only allowlisted LinkedIn diagnostics', async () => {
+    const error = Object.assign(new Error('token secret'), { code: 'linkedin_invalid_request', linkedin: {
+      status: 422, method: 'POST', resource: 'adCampaigns', serviceErrorCode: 100, message: 'token secret', token: 'secret',
+    } });
+    const h = fixture({ executors: { 'communication.reply': async () => { throw error; } } });
+    await h.executor.executeOne('a1');
+    const linkedin = { status: 422, method: 'POST', resource: 'adCampaigns', serviceErrorCode: 100 };
+    expect(h.store.completeExecution).toHaveBeenCalledWith('a1', false, { error: 'linkedin_invalid_request', linkedin }, null);
+    expect(JSON.parse(h.logs[0])).toMatchObject({ linkedin });
+    expect(h.logs.join()).not.toContain('secret');
+  });
+
   it('keeps an executor\'s named error code', async () => {
     const { executor, store } = fixture({ executors: { 'communication.reply': async () => { throw Object.assign(new Error('x'), { code: 'channel_unavailable' }); } } });
     expect(await executor.executeOne('a1')).toMatchObject({ failed: true, error: 'channel_unavailable' });

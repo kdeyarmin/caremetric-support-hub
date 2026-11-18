@@ -20,7 +20,7 @@ function setup({ values = {}, linkedinConnected = true, metaConnected = true, go
   const store = {
     socialCampaignProposed: vi.fn(async (kind, target) => proposed(target)), adsMonthCampaigns: vi.fn(async () => history), proposeAction: vi.fn(async input => ({ id: `a-${input.targetId}`, created: true, status })),
     actionTrusted: vi.fn(async () => true), adsLaunchReserve: vi.fn(async (id, execution, daily, least, days) => ({ reserved: true, dailyBudgetCents: daily, days })),
-    adsLaunchRelease: vi.fn(async () => true), creativeLiveAssets: vi.fn(async () => [{ id: metaAsset, platform: 'meta', status: 'approved' }]),
+    adsLaunchRelease: vi.fn(async () => true), creativeLiveAssets: vi.fn(async () => (await Promise.all(['meta', 'linkedin'].map(platform => creative.approved({ platform })))).flat().map(item => ({ ...item, status: 'approved' }))),
     ...(refusals === undefined ? {} : { adsPlatformRefusals: vi.fn(async () => refusals) }),
   };
   const notifier = { send: vi.fn(async () => [{ channel: 'email', delivery: 'sent' }]) };
@@ -174,7 +174,7 @@ describe('creating a flight', () => {
     const firstAd = { name: 'Intel · creative 33333333', message: asset('meta').primaryText, headline: asset('meta').headline, description: 'Free market report', link: asset('meta').landingUrl,
       callToAction: 'LEARN_MORE', imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, creativeAssetId: metaAsset };
     const result = await h.executors['social.campaign_create']({ id: 'a9', kind: 'social.campaign_create', agentKey: 'social_manager', taskId: 't1', targetId: 'meta:caremetric-intel:2026-11',
-      input: { ...metaFlight, firstAd }, autoApproved: true, execution: 2 });
+      input: { ...metaFlight, link: 'https://www.caremetricintel.com/market-review', firstAd }, autoApproved: true, execution: 2 });
     expect(result).toMatchObject({ launched: true, dailyBudgetCents: 500, endsOn: '2026-11-25' });
     expect(h.store.adsLaunchReserve).toHaveBeenCalledWith('a9', 2, 500, 500, 10);
     expect(h.meta.createCampaign).toHaveBeenCalledWith({ name: metaFlight.name, dailyBudgetCents: 500, lifetimeBudgetCents: 5000, audienceId: '1234567', startAt: '2026-11-16T14:20:00.000Z', endAt: '2026-11-26T04:59:59.000Z' });

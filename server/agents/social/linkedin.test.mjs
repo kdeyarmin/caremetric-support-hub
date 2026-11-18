@@ -183,6 +183,14 @@ describe('the LinkedIn client', () => {
     await expect(lost.recentPosts()).rejects.toMatchObject({ code: 'linkedin_unavailable', transient: true });
   });
 
+  it('retains safe request diagnostics without response text, credentials or identifiers', async () => {
+    const fetchImpl = route([[/./, json({ message: `secret ${token}`, serviceErrorCode: 100, errorDetails: { token } }, 422)]]);
+    const error = await client(fetchImpl).createCampaign({ name: 'Test', dailyBudgetCents: 1000 }).catch(caught => caught);
+    expect(error).toMatchObject({ code: 'linkedin_invalid_request', linkedin: { status: 422, method: 'POST', resource: 'adCampaignGroups', serviceErrorCode: 100 } });
+    expect(JSON.stringify(error)).not.toMatch(/secret|AQX|5080001|errorDetails/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('renews an expired token once through LinkedIn\'s OAuth endpoint and sends the request again with it', async () => {
     const seen = [];
     const fetchImpl = vi.fn(async (url, init = {}) => {
