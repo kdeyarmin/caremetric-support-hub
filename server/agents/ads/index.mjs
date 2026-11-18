@@ -395,7 +395,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
             automatic.length ? `${plural(automatic.length, 'new campaign')} for ${month} ${automatic.length === 1 ? 'starts' : 'start'} on ${automatic.length === 1 ? 'its' : 'their'} own, because you handed ad campaign launch over: each with its first ad from your approved creative where one fits, with a total budget within your monthly number, ending with the month. Keep approving on the AI team page stops the next ones.` : null,
           ].filter(Boolean).join(' ');
           await notifier.send({ severity: 'info', subject: waiting.length ? `Paid ads: ${plural(waiting.length, 'new campaign')} to review` : `Paid ads: ${plural(automatic.length, 'new campaign')} starting on their own`,
-            body, dedupeKey: `ads:plan:${month}:${all.join(',')}`.slice(0, 200), agentKey: task.agentKey, taskId: task.id });
+            body, dedupeKey: `ads:plan:${month}:${all.join(',')}`.slice(0, 200), agentKey: task.agentKey, taskId: task.id, attention: waiting.length ? 'decision' : 'update' });
         }
         return { status: waiting.length ? 'awaiting_approval' : 'done',
           result: { month, proposed: all.length, ...(automatic.length ? { automatic: automatic.length } : {}), ...(Object.keys(skipped).length ? { skipped } : {}) } };
@@ -458,7 +458,8 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
       const release = async execution => { try { await store.adsLaunchRelease(execution.id, execution.execution ?? null); } catch { log(JSON.stringify({ event: 'hub_ads_reservation_unreleased', action_id: execution.id })); } };
       // The owner hears what happened to a campaign started on their behalf. A notice that cannot be sent never fails the campaign.
       const tell = async (execution, severity, subject, body) => {
-        try { await notifier?.send({ severity, subject, body, dedupeKey: `ads:launch:${execution.id}`, agentKey: 'social_manager' }); }
+        // A campaign that started (or was created paused) is news; one that did not, or that needs checking, is the owner's to look at now.
+        try { await notifier?.send({ severity, subject, body, dedupeKey: `ads:launch:${execution.id}`, agentKey: 'social_manager', attention: severity === 'warning' ? 'now' : 'update' }); }
         catch { log(JSON.stringify({ event: 'hub_ads_launch_notice_unsent', action_id: execution.id })); }
       };
       // The approved creative is still in use: approved, or live in another ad.
@@ -651,7 +652,8 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           const sent = await notifier.send({ severity: 'info', subject: `Google search campaign to import: ${input.name}`,
             body: `The Google Ads API is not set up yet, so here is the campaign ${automatic ? 'the team planned under your hand-over' : 'you approved'} as a file. In Google Ads Editor choose Account → Import → Paste text, paste it, review and post. It is paused until you enable it.`,
             blocks: [{ type: 'paragraph', text: 'Paste this into Google Ads Editor (Account → Import → Paste text):' }, { type: 'message', text: csv }],
-            dedupeKey: `ads:google:export:${execution.id}`, agentKey: 'social_manager' });
+            // The file to import travels only in this email.
+            dedupeKey: `ads:google:export:${execution.id}`, agentKey: 'social_manager', attention: 'now' });
           // A retry of this action finds the earlier attempt by its dedupe key: that counts only if the earlier attempt was sent.
           if (!sent.some(delivered)) throw Object.assign(new Error('The import file could not be emailed.'), { code: 'notification_failed', transient: true });
           return { exported: true, ...(automatic ? { launched: false, reason: 'google_not_configured' } : {}) };

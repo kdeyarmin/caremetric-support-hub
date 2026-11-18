@@ -43,7 +43,8 @@ describe('triaging one message', () => {
       severity: 'info', subject: 'New email: CM-1042 for CareBase',
       body: 'An email for CareBase reached the Hub 5 minutes ago. It looks like a general question.\n\nOpen CM-1042 in Communications. Nothing has been sent to the customer.',
       dedupeKey: `concierge:new:${ids.message}`, agentKey: 'support_concierge', taskId: 't1',
-      communicationReference: 1042,
+      // A new message waits for the end-of-day summary with the approvals (owner decision 2026-11-18); only an urgent one goes at once.
+      communicationReference: 1042, attention: 'decision',
     }]);
     expect(outcome).toEqual({ status: 'awaiting_approval', result: {
       outcome: 'alerted', reference: 1042, channel: 'email', product: 'carebase', category: 'general', phi: false, severity: 'info', delivery: ['email:sent'],
@@ -60,7 +61,8 @@ describe('triaging one message', () => {
     ]) {
       const harness = fixture({ snapshot: snapshotOf(`${body} ${canary}`) });
       const outcome = await harness.run();
-      expect(harness.sent[0], category).toMatchObject({ severity: 'urgent', dedupeKey: `concierge:urgent:${ids.communication}:2026-11-02` });
+      // An urgent message is never held for the end-of-day summary.
+      expect(harness.sent[0], category).toMatchObject({ severity: 'urgent', attention: 'now', dedupeKey: `concierge:urgent:${ids.communication}:2026-11-02` });
       expect(harness.sent[0].subject).toMatch(/^Urgent: possible/);
       expect(outcome.result).toMatchObject({ outcome: 'alerted', category, severity: 'urgent', delivery: ['sms:sent', 'email:sent'] });
       expect(everywhere(harness, outcome)).not.toContain(canary);
@@ -267,7 +269,7 @@ describe('a website lead', () => {
       severity: 'warning', subject: 'New web form message: CM-1042 for CareBase, sales or consulting inquiry',
       body: 'A web form message for CareBase reached the Hub 5 minutes ago. It looks like a sales or consulting inquiry.\n\nOpen CM-1042 in Communications. Nothing has been sent to the customer.',
       dedupeKey: `concierge:warn:${ids.message}`, agentKey: 'support_concierge', taskId: 't1',
-      communicationReference: 1042,
+      communicationReference: 1042, attention: 'decision',
     }]);
     expect(outcome).toEqual({ status: 'awaiting_approval', result: {
       outcome: 'alerted', reference: 1042, channel: 'web_form', product: 'carebase', category: 'sales', phi: false, severity: 'warning', delivery: ['email:sent'],
@@ -325,7 +327,8 @@ describe('the caps on alerts', () => {
   it('sends an urgent alert by email only once three urgent texts went out in the last hour', async () => {
     const harness = fixture({ snapshot: snapshotOf('Everything is down for every user.'), counts: { 'concierge:urgent:sms': 3 } });
     const outcome = await harness.run();
-    expect(harness.sent[0]).toMatchObject({ severity: 'warning', subject: expect.stringMatching(/^Urgent:/), dedupeKey: `concierge:urgent:${ids.communication}:2026-11-02` });
+    // Past the hourly text limit it goes by email only, and still at once.
+    expect(harness.sent[0]).toMatchObject({ severity: 'warning', attention: 'now', subject: expect.stringMatching(/^Urgent:/), dedupeKey: `concierge:urgent:${ids.communication}:2026-11-02` });
     expect(outcome.result.delivery).toEqual(['email:sent']);
     expect(harness.store.notificationCount).toHaveBeenCalledWith({ prefix: 'concierge:urgent:', channel: 'sms', since: new Date('2026-11-02T11:00:00Z') });
     expect(harness.store.notificationCount).toHaveBeenCalledWith({ prefix: 'concierge:urgent:', channel: 'email', since: new Date('2026-11-02T05:00:00Z') });
@@ -336,7 +339,8 @@ describe('the caps on alerts', () => {
       const harness = fixture({ snapshot: snapshotOf(body), counts: { [`${prefix}email`]: 20 } });
       const outcome = await harness.run();
       expect(harness.sent).toHaveLength(1);
-      expect(harness.sent[0], level).toMatchObject({ severity: 'warning', subject: 'Many new messages today', dedupeKey: `concierge:rollup:${level}:2026-11-02` });
+      expect(harness.sent[0], level).toMatchObject({ severity: 'warning', subject: 'Many new messages today', dedupeKey: `concierge:rollup:${level}:2026-11-02`,
+        attention: level === 'urgent' ? 'now' : 'decision' });
       expect(harness.sent[0].body).toContain('no longer emailed one at a time');
       expect(outcome.result.severity).toBe(level === 'info' ? 'info' : level);
     }

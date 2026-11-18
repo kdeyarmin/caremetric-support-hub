@@ -54,7 +54,7 @@ export function replyExecutor({ communications, store, notifier, threadSubjects 
       await notifier.send({
         severity: 'warning', subject: `Check CM-${reference} before sending again`,
         body: `A reply to CM-${reference} may or may not have reached the customer: the provider did not confirm it.\n\nOpen the conversation in Communications and look at the thread before you send anything else.`,
-        dedupeKey: `concierge:reply-check:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId,
+        dedupeKey: `concierge:reply-check:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId, attention: 'now',
       });
     } catch {
       log(JSON.stringify({ event: 'hub_agent_reply_warning_unsent', action_id: execution.id }));

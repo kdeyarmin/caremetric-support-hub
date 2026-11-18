@@ -144,6 +144,8 @@ export function salesReplyHandler({ store, notifier = null, drafting: draftingOp
           ? `The Sales Executive answered CM-${snapshot.reference} on its own, from the fact sheet, the sales playbook and your published guides.\n\nOpen the conversation in Communications to read it. Anything that needs you personally is still left for you.`
           : `The Sales Executive drafted an answer to CM-${snapshot.reference} from the fact sheet, the sales playbook and your published guides.\n\nOpen the AI team to read it and approve it. Nothing has been sent to the prospect.`,
         dedupeKey: `sales:draft:${payload.messageId}`, agentKey: task.agentKey, taskId: task.id, communicationReference: snapshot.reference,
+        // A drafted answer waits with the other approvals for the end-of-day summary; one answered on its own is news.
+        attention: sent ? 'update' : 'decision',
       });
       return results.map(item => `${item.channel}:${item.delivery}`).join(',');
     } catch {
@@ -159,7 +161,7 @@ export function salesReplyHandler({ store, notifier = null, drafting: draftingOp
       const results = await notifier.send({
         severity: 'info', subject: `CM-${snapshot.reference}: a ${products[payload.product]} inquiry for you`,
         body: `A prospect asked about ${products[payload.product]}, which the AI team is not marketing right now, so the Sales Executive did not draft an answer. The conversation is yours: decide whether this organization should join the pilot and reply in Communications.`,
-        dedupeKey: `sales:not-marketed:${snapshot.id}`, agentKey: task.agentKey, taskId: task.id,
+        dedupeKey: `sales:not-marketed:${snapshot.id}`, agentKey: task.agentKey, taskId: task.id, attention: 'decision',
       });
       return results.map(item => `${item.channel}:${item.delivery}`).join(',') || 'none';
     } catch {

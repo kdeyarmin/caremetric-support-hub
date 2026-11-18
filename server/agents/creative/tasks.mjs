@@ -148,7 +148,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       await notifier.send({ severity: 'warning', subject: `${plural(list.length, 'image')} with a warning ${list.length === 1 ? 'expires' : 'expire'} soon`,
         body: `${plural(list.length, 'image')} the Creative Director made ${list.length === 1 ? 'is' : 'are'} waiting for you with a compliance warning, and ${list.length === 1 ? 'it expires' : 'they expire'} within two days. An image with a warning is never approved on its own: approve or reject ${list.length === 1 ? 'it' : 'them'} on the Creative screen, or ${list.length === 1 ? 'it lapses' : 'they lapse'}.`,
         blocks: [{ type: 'details', rows }, ...(origin ? [{ type: 'button', label: 'Open the Creative screen', url: `${origin}/admin/creative` }] : [])],
-        dedupeKey: `creative:expiring:${easternDate(moment)}`, agentKey: task.agentKey, taskId: task.id });
+        dedupeKey: `creative:expiring:${easternDate(moment)}`, agentKey: task.agentKey, taskId: task.id, attention: 'decision' });
     } catch { log(JSON.stringify({ event: 'hub_creative_expiring_unsent' })); }
     return list.length;
   }
@@ -462,7 +462,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     if (counts.proposed && notifier) {
       const sent = await notifier.send({ severity: 'info', subject: 'New creative is waiting for your approval',
         body: `The Creative Director finished new ads that passed the compliance checks. Review, approve or ask for changes on the Creative screen${origin ? `: ${origin}/admin/creative` : ''}. Anything that failed a check was blocked and is not shown.`,
-        dedupeKey: `creative:ready:${easternDate(now())}`, agentKey: task.agentKey, taskId: task.id });
+        dedupeKey: `creative:ready:${easternDate(now())}`, agentKey: task.agentKey, taskId: task.id, attention: 'decision' });
       if (!sent.some(delivered) && !sent.some(item => item.delivery === 'duplicate')) log(JSON.stringify({ event: 'hub_creative_ready_unsent' }));
     }
     if (Object.values(counts).some(Boolean)) {
@@ -534,7 +534,8 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     // assets to retire, 0 winners to build on" arrived every week). A refresh the owner asked for always answers.
     if (retired || refreshed || notes.length || task.sourceKind === 'owner') {
       await notifier.send({ severity: 'info', subject: `Creative refresh: ${plural(retired, 'asset')} to retire, ${plural(refreshed, 'winner')} to build on`, body,
-        dedupeKey: task.sourceKind === 'owner' ? `creative:refresh:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id });
+        dedupeKey: task.sourceKind === 'owner' ? `creative:refresh:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id,
+        attention: task.sourceKind === 'owner' ? 'now' : retired || refreshed ? 'decision' : 'update' });
     }
     await recordRun({ store, log }, task, { promptVersion: 'creative-refresh.1', summary: body });
     return { result: { week, assets: rows.length, retired, refreshed } };
@@ -576,7 +577,8 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       return { result: { skipped: 'nothing_to_report', week } };
     }
     const sent = await notifier.send({ severity: 'info', subject: `Creative weekly: ${plural(rows.length, 'live asset')}, ${plural(totals.leads, 'lead')}`, body, blocks,
-      dedupeKey: task.sourceKind === 'owner' ? `creative:report:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id });
+      dedupeKey: task.sourceKind === 'owner' ? `creative:report:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id,
+      attention: task.sourceKind === 'owner' ? 'now' : 'update' });
     if (task.sourceKind !== 'owner' && sent.every(item => item.delivery === 'duplicate')) return { result: { skipped: sent.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week } };
     await recordRun({ store, log }, task, { promptVersion: 'creative-report.1', summary: `Sent the weekly creative report: ${body}` });
     return { result: { week, assets: rows.length, learnings: learned.length, leads: totals.leads } };

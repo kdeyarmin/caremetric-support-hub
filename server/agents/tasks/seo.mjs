@@ -379,7 +379,7 @@ export function seoHandlers({
     const dedupeKey = task.sourceKind === 'owner' ? `seo:${date}:${task.id}` : `seo:${week}`;
     // The Monday scorecard carries this report (it crawls the sites itself) while the owner's "Send the individual weekly reports" is off.
     if (await heldForScorecard({ store, log }, task)) return heldResult({ week });
-    if (task.sourceKind === 'schedule' && store.notificationStatus && ['sent','unknown','pending','suppressed'].includes(await store.notificationStatus(dedupeKey))) return { result: { skipped: 'already_attempted', week } };
+    if (task.sourceKind === 'schedule' && store.notificationStatus && ['sent','held','unknown','pending','suppressed'].includes(await store.notificationStatus(dedupeKey))) return { result: { skipped: 'already_attempted', week } };
 
     // The sites are different hosts, so they are checked side by side: each has its own deadline, well inside the task's.
     // Search Console is read at the same time.
@@ -408,7 +408,7 @@ export function seoHandlers({
     const report = composeSeoReport(audits, { now: moment, publicOrigin, duplicates, search, suggestions });
     const results = await notifier.send({
       severity: report.urgent > 0 ? 'warning' : 'info', subject: report.subject, body: report.body, blocks: report.blocks,
-      dedupeKey, agentKey: task.agentKey, taskId: task.id,
+      dedupeKey, agentKey: task.agentKey, taskId: task.id, attention: task.sourceKind === 'owner' ? 'now' : 'update',
     });
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);
     const reached = results.some(delivered);

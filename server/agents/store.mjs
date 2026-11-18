@@ -19,7 +19,7 @@ export const workRecoveryFeature = 'platform.agents.work-recovery.v1';
 /** Reach outside cold email (20261117250000_reach.sql, team review 2026-11-17, stage 6). */
 export const reachFeature = 'platform.agents.reach.v1';
 
-export function sqlAgentStore(pool, { fenced = false, growthPriority = false, trialPath = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, creativeReview = false, ads = false, watchdog = false, handover = false, workRecovery = false, strategist = false, reach = false } = {}) {
+export function sqlAgentStore(pool, { fenced = false, growthPriority = false, trialPath = false, growth = false, social = false, socialVideo = false, marketing = false, scorecard = false, creative = false, creativeData = false, creativeReview = false, ads = false, watchdog = false, handover = false, workRecovery = false, strategist = false, reach = false, summary = false } = {}) {
   const call = (operation, args = []) => transaction(pool, async client =>
     (await client.query(`select ${operation}(${args.map((_, index) => `$${index + 1}`).join(', ')}) as result`, args)).rows[0].result);
   return {
@@ -172,6 +172,17 @@ export function sqlAgentStore(pool, { fenced = false, growthPriority = false, tr
     notifyBegin: ({ channel, severity, subject, body, dedupeKey, agentKey = null, taskId = null }) =>
       call('private.agent_notify_begin', [channel, severity, subject, body, dedupeKey, agentKey, taskId]),
     notifyFinish: (id, delivery, providerMessageId = null) => call('private.agent_notify_finish', [id, delivery, providerMessageId]),
+    // The end-of-day summary (20261118120000_owner_summary.sql, platform.agents.owner-summary.v1).
+    ...(summary ? {
+      /** Records a message as held for the summary (`update` or `decision`) instead of sent. */
+      notifyHold: (id, attention) => call('private.agent_notify_hold', [id, attention]),
+      /** Between `since` and `until`: the team's work, what came in and went out, the approvals waiting by kind, and the alerts held or sent. Counts, kinds and alert subjects only. */
+      summaryFacts: ({ since, until }) => call('private.agent_summary_facts', [since, until]),
+      /** Where the last scheduled summary's window ended, or null before the first. */
+      summaryCutoff: () => call('private.agent_summary_cutoff'),
+      /** Whether a summary will be sent (the Chief of Staff is active and its summary scheduled): nothing is held while it will not. */
+      summaryReady: () => call('private.agent_summary_ready'),
+    } : {}),
     ownerContact: () => call('private.owner_contact'),
     /** Counts and times for the morning brief: what needs the owner, what the team did yesterday. No names, no text. */
     briefFacts: async () => {

@@ -59,6 +59,8 @@ describe("AI team display", () => {
     expect(statusLabel("awaiting_approval")).toBe("Waiting for approval");
     expect(statusLabel("proposed")).toBe("Waiting for approval");
     expect(statusLabel("suppressed")).toBe("Not sent (channel unavailable)");
+    expect(statusLabel("held")).toBe("Held for the end-of-day summary");
+    expect(taskLabel("summary.daily")).toBe("End-of-day summary");
     expect(statusLabel("surprise")).toBe("surprise");
     expect(outcomeLabel(null)).toBe("Running");
     expect(outcomeLabel("budget_exhausted")).toBe("Stopped at the daily budget");

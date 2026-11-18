@@ -326,7 +326,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const count=(n,one,many)=>`${n} ${n===1?one:many}`;
     if(written && notifier)await notifier.send({severity:'info',subject:owner==='account_manager'?'Customer emails are ready on Growth':'Prospect emails are ready on Growth',
       body:`${count(drafted+quietFollowups,'email','emails')} written${colleagueEmails?`, and ${count(colleagueEmails,'copy','copies')} for other people at the same organizations`:''}. Open Growth to approve ${written===1?'it':'them'}, unless you handed that kind of email over on the AI team page.`,
-      dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id});
+      dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id,attention:'decision'});
     return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(Object.keys(held).length?{held}:{}),...(reengaged?{reengaged}:{}),...(unreviewed?{unreviewed}:{}),...(colleagueEmails?{colleagues:colleagueEmails}:{}),...(quietFollowups?{quietFollowups}:{}),...(contacts?.searched?{contacts}:{})}};
   }
   async function discover(task,{signal,now=()=>new Date()}={}) {
@@ -513,7 +513,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const failed=reports.filter(report=>!report.passed).map(report=>report.product);
     if(failed.length&&notifier)await notifier.send({severity:'warning',subject:'Outreach guardrail check failed',
       body:`The daily outreach guardrail check failed for ${failed.join(' and ')}. Until it passes, no outreach email goes out on its own; emails you approve still go.`,
-      dedupeKey:`growth:evaluate:${growthDay(now())}`,agentKey:task.agentKey,taskId:task.id});
+      dedupeKey:`growth:evaluate:${growthDay(now())}`,agentKey:task.agentKey,taskId:task.id,attention:'now'});
     return {result:{evaluated:reports.length,passed:reports.filter(report=>report.passed).map(report=>report.product),failed}};
   }
   async function content(task,{signal,now=()=>new Date()}={}) {

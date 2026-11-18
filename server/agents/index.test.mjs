@@ -11,6 +11,25 @@ const store = (tasks = []) => ({
 const origin = 'https://support-hub-web-production.up.railway.app';
 
 describe('the AI team', () => {
+  it('holds news for the end-of-day summary only while a summary will be sent', async () => {
+    const email = { configured: true, send: vi.fn(async () => ({ delivery: 'sent', id: 'SG1' })) };
+    const notifications = ready => ({ ...store(), summaryReady: vi.fn(async () => ready), summaryFacts: vi.fn(),
+      notifyBegin: vi.fn(async () => ({ id: 'n1', duplicate: false, status: 'pending' })), notifyFinish: vi.fn(async () => {}), notifyHold: vi.fn(async () => 'held') });
+    const summary = { enabled: () => true, hour: 17, approvalsRightAway: false };
+    const message = { severity: 'info', subject: 'Social media weekly', body: 'Three posts.', dedupeKey: 'k', attention: 'update' };
+    const ready = notifications(true);
+    const team = agentTeam({ store: ready, publicOrigin: origin, email, ownerEmail: 'owner@example.test', summary });
+    expect(await team.notifier.send(message)).toEqual([{ channel: 'email', delivery: 'held' }]);
+    expect(email.send).not.toHaveBeenCalled();
+    // The Chief of Staff is paused (or its summary unscheduled): no summary would carry it, so it goes at once.
+    const paused = agentTeam({ store: notifications(false), publicOrigin: origin, email, ownerEmail: 'owner@example.test', summary });
+    expect(await paused.notifier.send(message)).toEqual([{ channel: 'email', delivery: 'sent' }]);
+    // Approval requests are held too, unless the owner wants them right away.
+    expect(await team.notifier.send({ ...message, dedupeKey: 'k2', attention: 'decision' })).toEqual([{ channel: 'email', delivery: 'held' }]);
+    const rightAway = agentTeam({ store: notifications(true), publicOrigin: origin, email, ownerEmail: 'owner@example.test', summary: { ...summary, approvalsRightAway: () => true } });
+    expect(await rightAway.notifier.send({ ...message, attention: 'decision' })).toEqual([{ channel: 'email', delivery: 'sent' }]);
+  });
+
   it('wires owner-directed emails to the existing transactional sender without a scheduled or model task', async () => {
     const requestKey = '11111111-1111-4111-8111-111111111111';
     const execution = { id: 'a1', agentKey: 'chief_of_staff', kind: 'email.external', autoApproved: false, execution: 2, input: { requestKey } };

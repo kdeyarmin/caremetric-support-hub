@@ -36,7 +36,7 @@ function ServicesPanel({ services, awaitingSession, waitingActions, busy, onRunW
       detail: services.enabled ? "The team's clock runs every minute." : "Switch on \"Run the AI team\" in Settings to start the team." },
     { name: "Work with code behind it", good: handled.length > 0, state: handled.length ? `${handled.length} registered` : "None yet",
       detail: handled.length ? handled.join(", ") : "An agent stays idle until the code for its work ships. Nothing here is broken." },
-    { name: "Your email address", good: services.ownerEmail, state: services.ownerEmail ? "Set" : "Missing", detail: services.ownerEmail ? "Alerts and the morning brief go here." : "Add your email in Settings (AI team) so the team can email you." },
+    { name: "Your email address", good: services.ownerEmail, state: services.ownerEmail ? "Set" : "Missing", detail: services.ownerEmail ? "Alerts and the end-of-day summary go here." : "Add your email in Settings (AI team) so the team can email you." },
     { name: "Email delivery", good: services.email, state: services.email ? "Ready" : "Not set up", detail: services.email ? "Through SendGrid." : "Set HUB_SENDGRID_API_KEY so the team can email you." },
     { name: "Text alerts", good: services.sms, state: services.sms ? "Ready" : "Not set up", detail: services.sms ? "Urgent items are texted to your verified number." : "Urgent items fall back to email until Twilio is configured." },
     { name: "AI model", good: services.ai, state: services.ai ? "Key configured" : "Not set up", detail: services.ai ? "An Anthropic key is configured. An agent uses it only where its own setting says so. Check task results to confirm access." : "Set ANTHROPIC_API_KEY on the Hub service. Agents that need a model wait until then." },

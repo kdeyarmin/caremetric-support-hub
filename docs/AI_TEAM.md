@@ -305,7 +305,8 @@ form's `HUB_LEAD_SECRET` does not match the Hub's. Set each product's secret bef
 
 ## The Chief of Staff
 
-Writes the morning brief: one email at 07:00 Eastern (task `brief.daily`, shown as "Morning brief").
+Writes the morning brief: one email at 07:00 Eastern (task `brief.daily`, shown as "Morning brief"), unless the
+[end-of-day summary](#the-end-of-day-summary) is on (the default since 2026-11-18): then the summary carries it.
 It uses no model. The email is composed from counts and times read in one server-only operation
 (`private.agent_brief_facts`), so it always arrives and never says anything the database does not.
 A model may later write the narrative on top of the same facts.
@@ -355,6 +356,57 @@ said nothing the week every county snapshot was blocked and the month's flight f
 - **CareBase is one pilot line**, since it is not marketed.
 - **The strategist never suggests a call.** Its activation move is the Account Manager's emails. It now names sign-ups that never
   added a card (`conversion`, `noCard`) and trials that end unpaid (a new constraint, `paying`, judged by new paying customers).
+
+### The end-of-day summary
+
+**Owner decision, 2026-11-18:** "I only want emails when something needs my decision or for me to do something. What would be
+nice would be 1 email at the end of the day of just a summary of what was done that day, what came in, what went out (just a
+summary) and if anything needs my decision." (`platform.agents.owner-summary.v1`, `20261118120000_owner_summary.sql`.)
+
+Before this, each agent emailed its own reports and approval requests as soon as they were ready: the morning brief at 07:00,
+then the social plan, new creative, the ad review, the ads plan and the creative refresh between 08:15 and 09:45, plus news
+through the day. Now, while **Settings → AI team → One end-of-day summary** is on (it is on by default):
+
+- **One email at the end of the day** (task `summary.daily`, shown as "End-of-day summary"), at **Settings → AI team → Summary
+  time** (17, 5 PM Eastern, by default). It starts where the previous summary ended (at most a week back; the first covers 24
+  hours), so nothing falls between two of them, even when you move the hour:
+  - **Needs you**: the morning brief's list (approvals waiting, with what they are: "4 social posts, 2 creative assets and 1
+    prospect email", tasks waiting for your sign-in, products that are down, failed tasks, past-due subscriptions, leads waiting
+    for a first reply, lost work you can fix), and the messages that came in since the last summary and still have no answer.
+  - **Already emailed to you today because it could not wait**, so you can check nothing was missed.
+  - **What the team did**: jobs done by each agent, approved actions carried out and the AI spend.
+  - **What came in**: customer messages in Communications (by channel), website leads and trial sign-ups.
+  - **What went out**: replies sent from Communications and what the team carried out (prospect emails, customer emails, social
+    posts, ad changes, articles).
+  - **Held for this summary instead of separate emails**: the subject of each message that would have been its own email.
+  - **Worth knowing**: as in the brief.
+- **The scheduled morning brief is not sent**: the summary carries its "Needs you" list. **Run now** still sends a brief.
+- **Every message the team sends you says how much of your attention it needs** (`attention` in `server/agents/notify.mjs`):
+  - *Right away, always:* an urgent customer message (also texted), a lead still unanswered after hours, something only you can
+    fix (a product down and back up, Meta or LinkedIn refusing the team, the model key refused, cold email paused by the bounce
+    guard, the outreach guardrail check failing, a reply or Stripe offer whose outcome is unknown, personal information in a public
+    comment, a campaign that did not start), anything you must copy by hand (a LinkedIn post to paste, a Google Ads import file, the
+    monthly outreach drafts, posts for your own profile), and anything you asked for with **Run now**.
+  - *New messages and approval requests* (owner decision 2026-11-18, "do it"): each new customer message the Support Concierge
+    alerts, a Sales Executive answer drafted for a prospect, a prospect asking about a product the team does not market, interest or
+    a price question on social media, and the routine batches (the week's social plan, new creative and images about to expire, the
+    ad review, new paid campaigns, the creative refresh, prospect emails ready on Growth, new social comments). They are in the
+    summary, and the replies they wait on are counted under Needs you, unless **Settings → AI team → Email new messages and
+    approvals right away** is on.
+  - *News and reports* (the weekly reports the scorecard does not already carry, a new trial, a report opened, autonomy steps
+    switching, campaigns that started, the live writing evaluation, a prospect the Sales Executive answered on its own): in the
+    summary only. The **Monday scorecard** still arrives on its own on Monday morning: its figures (revenue, cost per trial, search
+    queries) are only in that email.
+- **Nothing is held while no summary would be sent**: with the Chief of Staff paused, or its summary unscheduled, every message is
+  emailed as it happens (`private.agent_summary_ready`).
+- A held message is recorded with the status "Held for the end-of-day summary" on the Team screen's alert history, where its full
+  text stays. It counts as delivered: the task that raised it is done and is not tried again.
+
+Turned off, every message is emailed as it happens and the morning brief returns. Messages held before it was turned off still go
+out once, in that day's summary. Until the database declares the feature, nothing is held and no summary is sent. Like the brief,
+the summary uses no model and carries counts, agent names, alert subjects and times, never a customer's words, an address or an
+amount of money. The schedule fires at noon Eastern and the task waits, queued, until your hour, so changing **Summary time**
+needs no schedule change (a change made after noon applies from that day's summary if it is later, the next day's if earlier).
 
 ### The Monday scorecard
 
@@ -1527,7 +1579,7 @@ Owner (current administrator session): `get_agent_team`, `list_agent_activity`,
 A handler is `async (task, { signal }) => { status?, result?, errorCode?, retryAt? }`; a status of
 `awaiting_approval` leaves the task waiting for the owner. Logs name the task, the agent, the kind and an
 error code, never an error message. Whether the scheduler runs and where it emails the owner are settings:
-Settings → AI team → "Run the AI team" and "Your email for alerts and the morning brief"; the Team screen shows
+Settings → AI team → "Run the AI team" and "Your email for alerts and the daily summary"; the Team screen shows
 whether both are set. They replaced the `HUB_AGENTS_ENABLED` and `HUB_OWNER_EMAIL` variables, which the Hub copies in
 once on its first start after the settings migration and which can then be deleted. Every other switch and address in
 this document is a setting too; only keys and tokens stay in Railway (see [Settings](SETTINGS.md)).
@@ -1764,7 +1816,7 @@ serves everything else. The AI team is opt-in twice over: nothing runs unless Se
 either. With the code but not the tables, the AI team page shows a read failure and every task fails.
 
 To switch the Platform Engineer on: apply the migrations, switch on "Run the AI team" and enter
-"Your email for alerts and the morning brief" in Settings → AI team, open **AI team**, resume the Platform Engineer,
+"Your email for alerts and the daily summary" in Settings → AI team, open **AI team**, resume the Platform Engineer,
 press **Run now** on its health check and read the run it records. To switch the brief on, resume the Chief of Staff and press
 **Run now** on its morning brief: the first email arrives within a minute, and the next one at 07:00.
 To switch the SEO report on, resume the SEO Analyst and press **Run now** on its weekly check.

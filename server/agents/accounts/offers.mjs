@@ -62,7 +62,7 @@ export function offerExecutor({ store, billing, notifier = null, log = line => c
       await notifier.send({
         severity: 'warning', subject: `Check ${input.tenant}'s subscription in Stripe`,
         body: `An offer from your menu ("${input.offer}") for ${input.tenant} may or may not have been applied: Stripe did not answer. It will not be tried again on its own.\n\nOpen the subscription in Stripe (or the Billing page) and look before you offer anything else to this account.`,
-        dedupeKey: `offers:unconfirmed:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId,
+        dedupeKey: `offers:unconfirmed:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId, attention: 'now',
       });
     } catch {
       log(JSON.stringify({ event: 'hub_agent_offer_warning_unsent', action_id: execution.id }));

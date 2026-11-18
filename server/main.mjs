@@ -165,6 +165,8 @@ const team=agentTeam({pool,growth,growthMail,postalAddress,sms:textSender,email:
   watchdogIdleDays:setting('agents.watchdog_idle_days'),
   // The weekly strategist's Monday note at the top of the scorecard (Settings → AI team → Name the week's binding constraint).
   strategist:setting('agents.strategist'),
+  // One email a day instead of a stream of updates (Settings → AI team → One end-of-day summary, Summary time, Email new messages and approvals right away).
+  summary:{enabled:setting('agents.daily_summary'),hour:setting('agents.summary_hour'),approvalsRightAway:setting('agents.approvals_right_away')},
   // The social media tokens from Railway, with the page ids, ad accounts, images and ad limits from Settings → Social media.
   social:()=>socialConfig(connections.resolvedEnv(),connections.getSetting),
   // The Creative Director: Settings → Creative, with HeyGen's key from Railway.

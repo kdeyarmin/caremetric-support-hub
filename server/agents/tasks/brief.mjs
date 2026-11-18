@@ -41,7 +41,7 @@ const headlineFor = needs => (needs === 0 ? 'Nothing needs you this morning.' : 
  * Yesterday's growth, from private.agent_growth_facts: { needs, rows, line }, or null when there is no Growth section (the feature is not
  * declared). `growth.unavailable` says the figures could not be read, which the section says instead of showing zeros.
  */
-function growthSection(growth) {
+export function growthSection(growth) {
   if (!growth) return null;
   if (growth.unavailable === true) return { needs: [], rows: [['Growth figures', 'Could not be read this morning']], line: 'Growth: the figures could not be read this morning.' };
   const total = count(growth.leads?.total);
@@ -65,16 +65,15 @@ function growthSection(growth) {
 
 const creativePlatforms = { meta: 'Meta', linkedin: 'LinkedIn', google: 'Google display', youtube: 'YouTube' };
 const creativeProducts = { carebase: 'CareBase', 'caremetric-intel': 'Intel' };
-/** Turns the facts into { subject, body, blocks, needsYou }. Pure: the same facts always give the same email. */
-export function composeBrief(facts, { now = new Date(), publicOrigin, services = {}, labels = {}, growth = null, watchdog = [], truth = false } = {}) {
-  const generated = facts?.generatedAt ?? now;
+/**
+ * What needs the owner now, as [label, value] rows, from the brief's facts (private.agent_brief_facts), the growth section and the
+ * watchdog's findings. The end-of-day summary (summary.mjs) lists the same things.
+ */
+export function briefNeeds(facts, { generated, labels = {}, growthPart = null, findings = [], truth = false } = {}) {
   const approvals = count(facts?.approvals?.count);
   const incidents = Array.isArray(facts?.incidents) ? facts.incidents : [];
   const billing = facts?.billing ?? {};
-  const yesterday = facts?.yesterday ?? {};
   const customerGrowth = facts?.customerGrowth;
-  const agents = Array.isArray(facts?.agents) ? facts.agents : [];
-
   const needs = [];
   if (approvals) needs.push(['Waiting for your approval', `${approvals}${facts.approvals.oldestAt ? ` (oldest ${age(facts.approvals.oldestAt, generated)})` : ''}`]);
   if (count(facts?.awaitingSession)) needs.push(['Waiting for you to sign in', plural(count(facts.awaitingSession), 'task')]);
@@ -82,7 +81,6 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   if (count(facts?.failedTasks)) needs.push(['Failed tasks in the last 24 hours', String(count(facts.failedTasks))]);
   if (count(facts?.undeliveredAlerts)) needs.push(['Urgent alerts that did not reach you', String(count(facts.undeliveredAlerts))]);
   if (count(billing.pastDue)) needs.push(['Subscriptions past due', String(count(billing.pastDue))]);
-  const growthPart = growthSection(growth);
   if (growthPart) needs.push(...growthPart.needs);
 
   if (count(customerGrowth?.overdue)) needs.push(['Overdue customer follow-ups',String(customerGrowth.overdue)]);
@@ -91,22 +89,20 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   // (team review 2026-11-17, stage 5) it leaves Needs you; the watchdog names strong fits with no address when most have none.
   if (!truth && count(customerGrowth?.missingContact)) needs.push(['Opportunities missing a contact',String(customerGrowth.missingContact)]);
   // What the team lost that the owner can fix today (a platform that refused a campaign for its access, the bounce guard's pause).
-  const findings = Array.isArray(watchdog) ? watchdog : [];
   if (truth) for (const finding of findings.filter(item => item.needsYou === true)) needs.push(['Lost work', finding.text]);
+  return needs;
+}
 
-  const yesterdayRows = [
-    ['Runs recorded', String(count(yesterday.runs))],
-    ['Tasks finished', `${count(yesterday.tasksDone)} done, ${count(yesterday.tasksFailed)} failed`],
-    ['Actions carried out', String(count(yesterday.actionsExecuted))],
-    ['Incidents', `${count(yesterday.incidentsOpened)} opened, ${count(yesterday.incidentsClosed)} closed`],
-    ['AI spend', dollars(yesterday.spendCents)],
-  ];
-
+/** What is worth knowing but asks nothing of the owner, one line each. `moment` words a figure that could not be read ("this morning"). */
+export function briefWatch(facts, { services = {}, findings = [], truth = false, moment = 'this morning' } = {}) {
+  const billing = facts?.billing ?? {};
+  const customerGrowth = facts?.customerGrowth;
+  const agents = Array.isArray(facts?.agents) ? facts.agents : [];
   const watch = [];
   if(customerGrowth)watch.push(`Customer growth: ${count(customerGrowth.prospects)} prospects, ${count(customerGrowth.trials)} trials, ${count(customerGrowth.activated)} activated and ${count(customerGrowth.paid)} paid accounts recorded.`);
   // The Creative Director (platform.agents.creative.v1): counts and the strongest learning per product, never copy.
   const creative = facts?.creative;
-  if (creative?.unavailable === true) watch.push('Creative: the figures could not be read this morning.');
+  if (creative?.unavailable === true) watch.push(`Creative: the figures could not be read ${moment}.`);
   else if (creative && (count(creative.waiting) || count(creative.inProduction) || count(creative.approvedWeek) || count(creative.blockedWeek) || (creative.learnings ?? []).length)) {
     const wins = (Array.isArray(creative.learnings) ? creative.learnings : []).slice(0, 2)
       .map(item => `${String(item.kind ?? '')} "${String(item.value ?? '').slice(0, 40)}" on ${creativePlatforms[item.platform] ?? item.platform} for ${creativeProducts[item.product] ?? item.product}`);
@@ -120,6 +116,26 @@ export function composeBrief(facts, { now = new Date(), publicOrigin, services =
   if (services.sms === false) watch.push('Text alerts are not set up, so urgent items reach you by email only.');
   // The watchdog (watchdog.mjs): parts of the team that went quiet, with the likely cause.
   for (const finding of findings.filter(item => !truth || item.needsYou !== true)) watch.push(`Watchdog: ${finding.text}`);
+  return watch;
+}
+
+/** Turns the facts into { subject, body, blocks, needsYou }. Pure: the same facts always give the same email. */
+export function composeBrief(facts, { now = new Date(), publicOrigin, services = {}, labels = {}, growth = null, watchdog = [], truth = false } = {}) {
+  const generated = facts?.generatedAt ?? now;
+  const yesterday = facts?.yesterday ?? {};
+  const growthPart = growthSection(growth);
+  const findings = Array.isArray(watchdog) ? watchdog : [];
+  const needs = briefNeeds(facts, { generated, labels, growthPart, findings, truth });
+
+  const yesterdayRows = [
+    ['Runs recorded', String(count(yesterday.runs))],
+    ['Tasks finished', `${count(yesterday.tasksDone)} done, ${count(yesterday.tasksFailed)} failed`],
+    ['Actions carried out', String(count(yesterday.actionsExecuted))],
+    ['Incidents', `${count(yesterday.incidentsOpened)} opened, ${count(yesterday.incidentsClosed)} closed`],
+    ['AI spend', dollars(yesterday.spendCents)],
+  ];
+
+  const watch = briefWatch(facts, { services, findings, truth });
 
   const headline = headlineFor(needs.length);
   const link = /^https:\/\//i.test(publicOrigin ?? '') ? `${publicOrigin.replace(/\/+$/, '')}/admin/team` : null;
@@ -162,7 +178,11 @@ const dayBefore = date => {
  */
 export const senderServices = (sms, email) => ({ get sms() { return Boolean(sms?.configured); }, get email() { return Boolean(email?.configured); } });
 
-export function briefHandlers({ store, notifier, publicOrigin, services = {}, labels = {}, features = null, toolkit = null, watchdogIdleDays = 3, log = line => console.warn(line) }) {
+/**
+ * `inSummary()` is true while the end-of-day summary carries the brief (summary.mjs: Settings → AI team → "One end-of-day summary", once
+ * the database declares it): the scheduled morning brief is then not sent. A brief the owner asks for with Run now always is.
+ */
+export function briefHandlers({ store, notifier, publicOrigin, services = {}, labels = {}, features = null, toolkit = null, watchdogIdleDays = 3, inSummary = () => false, log = line => console.warn(line) }) {
   // The watchdog's findings (20261113240000_agent_watchdog.sql), never holding back the brief when they cannot be read.
   async function watchdog(moment) {
     if (typeof store.watchdogFacts !== 'function') return [];
@@ -189,17 +209,19 @@ export function briefHandlers({ store, notifier, publicOrigin, services = {}, la
   }
 
   async function brief(task, { now = () => new Date() } = {}) {
-    const facts = await store.briefFacts();
     const moment = now();
     // The scheduled brief is sent once a day, however often the task is retried, and the day is the one it was due for, so a retry after
     // midnight keeps its key. A brief the owner asks for is sent once per request (its own task), whatever day a retry falls on.
     const owner = task.sourceKind === 'owner';
     const date = dayKey.format(owner ? moment : dueMoment(task) ?? moment);
+    if (!owner && inSummary() === true) return { result: { date, skipped: 'in_summary' } };
+    const facts = await store.briefFacts();
     const content = composeBrief(facts, { now: moment, publicOrigin, services, labels, growth: await growthFacts(date), watchdog: await watchdog(moment), truth });
     const dedupeKey = owner ? `brief:owner:${task.id}` : `brief:${date}`;
     const results = await notifier.send({
       severity: content.needsYou > 0 ? 'warning' : 'info', subject: content.subject, body: content.body, blocks: content.blocks,
-      dedupeKey, agentKey: task.agentKey, taskId: task.id,
+      // The brief is itself the day's digest: it is never held for the summary.
+      dedupeKey, agentKey: task.agentKey, taskId: task.id, attention: 'now',
     });
     const delivery = results.map(item => `${item.channel}:${item.delivery}`);
     const reached = results.some(delivered);

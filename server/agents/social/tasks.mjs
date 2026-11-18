@@ -353,7 +353,9 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       ...founder.flatMap((post, index) => [{ type: 'paragraph', text: `Your post ${index + 1} (${productNames[post.product]})` }, { type: 'message', text: post.text }]),
       ...(/^https:\/\//i.test(publicOrigin ?? '') && proposed ? [{ type: 'button', label: 'Open the AI team', url: `${publicOrigin.replace(/\/+$/, '')}/admin/team` }] : []),
     ];
-    const results = await notifier.send({ severity: 'info', subject: `Social plan: ${plural(proposed, 'post')} to approve`, body, blocks, dedupeKey: asked ? `social:plan:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id });
+    // Posts to paste or copy by hand travel only in this email, so it goes now; posts waiting for approval wait on the Team screen.
+    const attention = asked || linkedin.length || founder.length ? 'now' : proposed ? 'decision' : 'update';
+    const results = await notifier.send({ severity: 'info', subject: `Social plan: ${plural(proposed, 'post')} to approve`, body, blocks, dedupeKey: asked ? `social:plan:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id, attention });
     // The Creative Director turns the week's plan into ad creative (when it is switched on); a failure here never fails the plan.
     if (creative?.planned) {
       try { await creative.planned(week); } catch { log(JSON.stringify({ event: 'hub_social_creative_plan_unqueued', week })); }
@@ -398,7 +400,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       await notifier.send({
         severity: 'info', subject: `${total} new social ${total === 1 ? 'comment or message' : 'comments and messages'}`,
         body: `${plural(fresh.comment, 'comment')} and ${plural(fresh.message, 'private message')} arrived on Facebook, Instagram or LinkedIn.\n\n${draftingOn() ? 'Drafted replies wait for you in the AI team; anything that needs you personally is left for you.' : 'Answer them on the platforms. Turning on customer text to AI lets the team draft replies for you to approve.'}`,
-        dedupeKey: `social:inbox:${task.id}`, agentKey: task.agentKey, taskId: task.id,
+        dedupeKey: `social:inbox:${task.id}`, agentKey: task.agentKey, taskId: task.id, attention: 'decision',
       });
     }
     return { result: { seen: items.length, enqueued: total, comments: fresh.comment, messages: fresh.message, ...(refused.length ? { refused } : {}) } };
@@ -411,7 +413,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       body: onLinkedIn
         ? `LinkedIn refused the Social Media Manager's token (${code.replaceAll('_', ' ')}). Renew the token or its permissions in LinkedIn, then open Settings → Social media → LinkedIn and Save and check the updated credentials; until then LinkedIn is not read.`
         : `Meta refused the Social Media Manager's token (${code.replaceAll('_', ' ')}). Renew the system user token or its permissions in Meta, then open Settings → Social media → Meta and Save and check the updated credentials; until then no comment or message is read.`,
-      dedupeKey: `social:access:${code}:${easternDate(moment)}`, agentKey: task.agentKey, taskId: task.id });
+      dedupeKey: `social:access:${code}:${easternDate(moment)}`, agentKey: task.agentKey, taskId: task.id, attention: 'now' });
   }
 
   // ---- One comment or message --------------------------------------------------------------------------------------------------------
@@ -437,7 +439,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const personal = async () => {
       if (notifier) await notifier.send({ severity: 'warning', subject: `A ${where} may contain personal information`,
         body: `A ${where} appears to contain personal or health information. Nothing has been posted in reply.${canRemove ? ` ${removal.pending} it is waiting for your approval in the AI team.` : item.kind === 'comment' ? ' Please delete it yourself if it should not stay public.' : ''}${item.url ? `\n\nReview it: ${item.url}` : ''}`,
-        dedupeKey: `social:phi:${item.platform}:${item.id}`, agentKey: task.agentKey, taskId: task.id });
+        dedupeKey: `social:phi:${item.platform}:${item.id}`, agentKey: task.agentKey, taskId: task.id, attention: 'now' });
       if (!canRemove) return { result: { outcome: 'left_for_owner', reason: 'personal_information', platform: item.platform, kind: item.kind } };
       const proposal = await propose(task, { kind: 'social.moderate', targetKind: 'social_item', targetId: target,
         preview: `${removal.verb} a ${where} that appears to contain personal or health information.${item.url ? `\n\nOpen it: ${item.url}` : ''}`,
@@ -470,7 +472,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       if (fresh && notifier) {
         await notifier.send({ severity: 'info', subject: `${reading.intent === 'pricing' ? 'A price question' : 'Interest'} on ${labels[item.platform]}${item.ad === true ? ' (on an ad)' : ''}`,
           body: `A ${where}${item.ad === true ? ' on one of your ads' : ''} reads as ${reading.intent === 'pricing' ? 'a question about price' : 'interest'}${product ? ` in ${productNames[product]}` : ''}. ${draftingOn() ? 'A reply waits for you in the AI team unless it needs you personally.' : 'Answer it on the platform.'} It has no email address, so it is not on the lead desk: the reply is how they hear back.${item.url ? `\n\nOpen it: ${item.url}` : ''}`,
-          dedupeKey: `social:interest:${item.platform}:${item.id}`.slice(0, 200), agentKey: task.agentKey, taskId: task.id });
+          dedupeKey: `social:interest:${item.platform}:${item.id}`.slice(0, 200), agentKey: task.agentKey, taskId: task.id, attention: 'decision' });
       }
     }
     if (reading.hide && item.kind === 'comment' && !canRemove) return { result: { outcome: 'left_for_owner', reason: 'spam', intent: reading.intent, platform: item.platform, kind: item.kind } };
@@ -553,7 +555,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (proposed && notifier) {
       await notifier.send({ severity: 'info', subject: `Ad review: ${plural(proposed, 'change')} to approve`,
         body: `${plural(counts.pause, 'ad')} to pause, ${plural(counts.create, 'new ad')} to start and ${plural(counts.budget, 'budget change')}, from the last seven days' results (rules ${rulesVersion}). Open the AI team to review them.`,
-        dedupeKey: task.sourceKind === 'owner' ? `social:ads:run:${task.id}` : `social:ads:${today}`, agentKey: task.agentKey, taskId: task.id });
+        dedupeKey: task.sourceKind === 'owner' ? `social:ads:run:${task.id}` : `social:ads:${today}`, agentKey: task.agentKey, taskId: task.id,
+        attention: task.sourceKind === 'owner' ? 'now' : 'decision' });
     }
     await recordRun({ store, log }, task, { promptVersion: rulesVersion, summary: `Reviewed ${plural(adsetCount, 'ad set')}: ${plural(recommendationCount, 'recommendation')}, ${plural(proposed, 'change')} proposed.` });
     // The review finishes once it has proposed: its proposals wait on the Team screen, and tomorrow's review is not held back by them.
@@ -685,7 +688,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       ...(/^https:\/\//i.test(publicOrigin ?? '') && waiting ? [{ type: 'button', label: 'Open the AI team', url: `${publicOrigin.replace(/\/+$/, '')}/admin/team` }] : []),
     ];
     const sent = await notifier.send({ severity: 'info', subject: `Social media weekly: ${plural(posts.length, 'post')}, ${money(spend)} ad spend`, body, blocks,
-      dedupeKey: asked ? `social:report:run:${task.id}` : `social:report:${week}`, agentKey: task.agentKey, taskId: task.id });
+      dedupeKey: asked ? `social:report:run:${task.id}` : `social:report:${week}`, agentKey: task.agentKey, taskId: task.id, attention: asked ? 'now' : 'update' });
     if (!asked && sent.every(item => item.delivery === 'duplicate')) return { result: { skipped: sent.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week } };
     await recordRun({ store, log }, task, { promptVersion: 'social-report.2', summary: `Sent the weekly social report: ${body}` });
     return { result: { week, posts: posts.length, spendCents: spend, results, waiting, ...(reached ? { postLeads, interested } : {}) } };

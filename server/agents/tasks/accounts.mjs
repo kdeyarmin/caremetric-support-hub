@@ -54,7 +54,7 @@ export function accountsHandlers({ store, notifier, publicOrigin, features = nul
 
     const results = await notifier.send({
       severity: 'info', subject: report.subject, body: report.body, blocks: report.blocks,
-      dedupeKey: asked ? `accounts:run:${task.id}` : `accounts:weekly:${week}`, agentKey: task.agentKey, taskId: task.id,
+      dedupeKey: asked ? `accounts:run:${task.id}` : `accounts:weekly:${week}`, agentKey: task.agentKey, taskId: task.id, attention: asked ? 'now' : 'update',
     });
     // A scheduled run that finds the week's alert already recorded sends nothing. It says whether that earlier attempt reached the owner.
     if (!asked && results.every(item => item.delivery === 'duplicate')) return { result: { skipped: results.some(delivered) ? 'already_sent' : 'earlier_attempt_unconfirmed', week } };

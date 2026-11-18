@@ -420,7 +420,7 @@ describe('a recovery', () => {
     const { handlers, notifier } = fixture();
     const { result } = await handlers['probe.recovery'](recoveryTask());
     expect(notifier.send).toHaveBeenCalledWith({
-      severity: 'info', subject: 'CareBase is answering again', dedupeKey: 'probe.recovery:carebase:3', agentKey: 'platform_engineer', taskId: 't1',
+      severity: 'info', subject: 'CareBase is answering again', dedupeKey: 'probe.recovery:carebase:3', agentKey: 'platform_engineer', taskId: 't1', attention: 'now',
       body: 'CareBase passed its health check again at Nov 2, 9:20 AM Eastern.\n\nIt first failed at Nov 2, 9:05 AM Eastern, about 15 minutes earlier.',
     });
     expect(result).toMatchObject({ delivery: ['email:sent'], action: 'recorded' });

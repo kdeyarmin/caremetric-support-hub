@@ -174,7 +174,7 @@ export function probeHandlers({
     ].join('\n\n');
     const results = await notifier.send({
       severity: urgent ? 'urgent' : 'warning', subject, body, dedupeKey: `probe.incident:${target.key}:${payload.incident}`,
-      agentKey: task.agentKey, taskId: task.id,
+      agentKey: task.agentKey, taskId: task.id, attention: 'now',
     });
     const action = await recordAction(task, {
       kind: 'incident.open', target, incident: payload.incident, preview: subject,
@@ -196,7 +196,8 @@ export function probeHandlers({
         : 'It had been reported down.',
     ].join('\n\n');
     const results = await notifier.send({
-      severity: 'info', subject, body, dedupeKey: `probe.recovery:${target.key}:${payload.incident}`, agentKey: task.agentKey, taskId: task.id,
+      // The owner was told at once that it was down, so the all-clear goes at once too.
+      severity: 'info', subject, body, dedupeKey: `probe.recovery:${target.key}:${payload.incident}`, agentKey: task.agentKey, taskId: task.id, attention: 'now',
     });
     const action = await recordAction(task, {
       kind: 'incident.resolve', target, incident: payload.incident, preview: subject,

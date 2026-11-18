@@ -1,4 +1,5 @@
 import { formTargets, probeTargets } from '../targets.mjs';
+import { live } from '../../live.mjs';
 import { conciergeHandlers } from '../concierge/index.mjs';
 import { accountsHandlers } from './accounts.mjs';
 import { autonomyHandlers } from './autonomy.mjs';
@@ -10,6 +11,7 @@ import { lifecycleHandlers } from './lifecycle.mjs';
 import { offerHandlers } from './offers.mjs';
 import { probeHandlers } from './probe.mjs';
 import { seoHandlers } from './seo.mjs';
+import { summaryHandlers } from './summary.mjs';
 
 /**
  * The handlers every Hub server ships with. They are always registered; nothing runs unless
@@ -22,16 +24,23 @@ import { seoHandlers } from './seo.mjs';
  * `lifecycle` is how the Account Manager's customer emails are sent ({ mail, postalAddress, publicOrigin }), and
  * the Content Marketer's handlers register only when the database declares its feature and `model` has a key, the hourly
  * autonomy check only when the database declares autonomy steps, and the Account Manager's offers only when it declares offers.
+ * `summary` is the owner's end-of-day summary settings ({ enabled, hour }, summary.mjs); its task registers once the database declares it,
+ * and while it is on the scheduled morning brief is not sent.
  */
 export function builtInHandlers({ store, notifier, model = null }, {
   publicOrigin, fetchImpl = fetch, log, services = {}, communications = null, features = null, guides = null, customerTextToAi = false, autoAcknowledge = false, leadSecrets = {}, lifecycle = {},
   marketed = null, searchConsoleSites = undefined, inboundFollowup = false, toolkit = null, watchdogIdleDays = 3,
-  feed = null, rosterStates = null, contentCountyTopics = false,
+  feed = null, rosterStates = null, contentCountyTopics = false, summary = {},
 } = {}) {
   const targets = probeTargets({ publicOrigin });
+  const labels = Object.fromEntries([...targets, ...formTargets].map(target => [target.key, target.label]));
+  const summaries = summaryHandlers({ store, notifier, publicOrigin, services, labels, features, toolkit, watchdogIdleDays, settings: summary, log });
+  // The morning brief steps aside only for a summary this server can send.
+  const inSummary = () => Boolean(summaries['summary.daily']) && live(summary.enabled) === true;
   return {
     ...probeHandlers({ store, notifier, targets, alertTargets: formTargets, fetchImpl, log }),
-    ...briefHandlers({ store, notifier, publicOrigin, services, features, toolkit, watchdogIdleDays, labels: Object.fromEntries([...targets, ...formTargets].map(target => [target.key, target.label])), log }),
+    ...briefHandlers({ store, notifier, publicOrigin, services, features, toolkit, watchdogIdleDays, labels, inSummary, log }),
+    ...summaries,
     ...seoHandlers({ store, notifier, model, publicOrigin, fetchImpl, searchConsoleSites, log }),
     ...accountsHandlers({ store, notifier, publicOrigin, features, log }),
     ...lifecycleHandlers({ store, features, lifecycle, log }),

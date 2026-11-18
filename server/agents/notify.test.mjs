@@ -93,6 +93,9 @@ describe('owner notifier', () => {
     expect(delivered({ channel: 'email', delivery: 'sent' })).toBe(true);
     expect(delivered({ channel: 'email', delivery: 'failed' })).toBe(false);
     expect(delivered({ channel: 'email', delivery: 'duplicate' })).toBe(false);
+    // Held for the end-of-day summary counts as delivered, now and on a repeat: the task that raised it is done.
+    expect(delivered({ channel: 'email', delivery: 'held' })).toBe(true);
+    expect(delivered({ channel: 'email', delivery: 'duplicate', original: 'held' })).toBe(true);
   });
 
   it('records a channel it cannot use as suppressed instead of failing', async () => {
@@ -136,6 +139,79 @@ describe('owner notifier', () => {
     const input = store.notifyBegin.mock.calls[0][0];
     expect(input.subject.length).toBe(200);
     expect(input.body.length).toBe(4000);
+  });
+});
+
+describe('the end-of-day summary (owner decision 2026-11-18)', () => {
+  const holding = (hold, over = {}) => {
+    const made = fixture(over);
+    made.store.notifyHold = vi.fn(async (id, attention) => { made.calls.push(`hold ${id} ${attention}`); return 'held'; });
+    made.notifier = ownerNotifier({ store: made.store, sms: made.senders.sms, email: made.senders.email, ownerEmail: 'owner@example.test', publicOrigin: origin, hold, log: line => made.logs.push(line) });
+    return made;
+  };
+
+  it('holds news for the summary instead of emailing it, and says so', async () => {
+    const hold = vi.fn(attention => attention === 'update');
+    const { notifier, calls, senders } = holding(hold);
+    const results = await notifier.send({ severity: 'info', subject: 'Social media weekly', body: 'Three posts.', dedupeKey: 'k-weekly', attention: 'update' });
+    expect(results).toEqual([{ channel: 'email', delivery: 'held' }]);
+    expect(results.some(delivered)).toBe(true);
+    expect(calls).toEqual(['begin email', 'hold n-email update']);
+    expect(senders.email.send).not.toHaveBeenCalled();
+    expect(hold).toHaveBeenCalledWith('update');
+  });
+
+  it('waits for a hold check that answers later, and sends when it fails', async () => {
+    const later = holding(async attention => attention === 'update');
+    expect(await later.notifier.send({ severity: 'info', subject: 'FYI', body: 'News.', dedupeKey: 'k-async', attention: 'update' })).toEqual([{ channel: 'email', delivery: 'held' }]);
+    const failing = holding(async () => { throw new Error('database blip'); });
+    expect(await failing.notifier.send({ severity: 'info', subject: 'FYI', body: 'News.', dedupeKey: 'k-async-2', attention: 'update' })).toEqual([{ channel: 'email', delivery: 'sent' }]);
+  });
+
+  it('emails at once what cannot wait, and anything the owner has not chosen to hold', async () => {
+    const { notifier, senders, store } = holding(attention => attention !== 'now');
+    expect(await notifier.send({ severity: 'warning', subject: 'Still unanswered after 4 hours: contact CM-1201', body: 'Waiting.', dedupeKey: 'k-now', attention: 'now' }))
+      .toEqual([{ channel: 'email', delivery: 'sent' }]);
+    // An urgent alert is never held, whatever it says about itself: text and email go at once.
+    expect(await notifier.send({ severity: 'urgent', subject: 'Hub is down', body: 'Down.', dedupeKey: 'k-urgent', attention: 'update' }))
+      .toEqual([{ channel: 'sms', delivery: 'sent' }, { channel: 'email', delivery: 'sent' }]);
+    expect(store.notifyHold).not.toHaveBeenCalled();
+    expect(senders.email.send).toHaveBeenCalledTimes(2);
+    // An approval request is held only while the owner holds decisions too.
+    const approvals = holding(attention => attention === 'update');
+    expect(await approvals.notifier.send({ severity: 'info', subject: 'Social plan: 4 posts to approve', body: 'Four posts.', dedupeKey: 'k-plan', attention: 'decision' }))
+      .toEqual([{ channel: 'email', delivery: 'sent' }]);
+  });
+
+  it('reads a message that does not say: a warning goes now, other news waits', async () => {
+    const { notifier, store } = holding(() => true);
+    expect(await notifier.send({ severity: 'warning', subject: 'Check this', body: 'Look.', dedupeKey: 'k-w' })).toEqual([{ channel: 'email', delivery: 'sent' }]);
+    expect(await notifier.send({ severity: 'info', subject: 'FYI', body: 'News.', dedupeKey: 'k-i' })).toEqual([{ channel: 'email', delivery: 'held' }]);
+    expect(store.notifyHold).toHaveBeenCalledWith('n-email', 'update');
+    await expect(notifier.send({ severity: 'info', subject: 'S', body: 'B', dedupeKey: 'k-bad', attention: 'later' })).rejects.toThrow(TypeError);
+  });
+
+  it('sends as before when nothing holds: no setting, a store that cannot hold, or a setting that cannot be read', async () => {
+    const plain = fixture();
+    expect(await plain.notifier.send({ severity: 'info', subject: 'FYI', body: 'News.', dedupeKey: 'k-1', attention: 'update' })).toEqual([{ channel: 'email', delivery: 'sent' }]);
+    const unable = fixture();
+    const notifier = ownerNotifier({ store: unable.store, sms: unable.senders.sms, email: unable.senders.email, ownerEmail: 'owner@example.test', publicOrigin: origin, hold: () => true });
+    expect(await notifier.send({ severity: 'info', subject: 'FYI', body: 'News.', dedupeKey: 'k-2', attention: 'update' })).toEqual([{ channel: 'email', delivery: 'sent' }]);
+    const broken = holding(() => { throw new Error('settings unread'); });
+    expect(await broken.notifier.send({ severity: 'info', subject: 'FYI', body: 'News.', dedupeKey: 'k-3', attention: 'update' })).toEqual([{ channel: 'email', delivery: 'sent' }]);
+  });
+
+  it('finds a held message on a repeat and never sends it, and sends nothing when it cannot record the hold', async () => {
+    const again = holding(() => true, { duplicate: true, original: 'held' });
+    const results = await again.notifier.send({ severity: 'info', subject: 'FYI', body: 'News.', dedupeKey: 'k-again', attention: 'update' });
+    expect(results).toEqual([{ channel: 'email', delivery: 'duplicate', original: 'held' }]);
+    expect(results.some(delivered)).toBe(true);
+    expect(again.senders.email.send).not.toHaveBeenCalled();
+    const unrecorded = holding(() => true);
+    unrecorded.store.notifyHold.mockRejectedValue(new Error('database blip'));
+    expect(await unrecorded.notifier.send({ severity: 'info', subject: 'FYI', body: 'News.', dedupeKey: 'k-blip', attention: 'update' })).toEqual([{ channel: 'email', delivery: 'unknown' }]);
+    expect(unrecorded.senders.email.send).not.toHaveBeenCalled();
+    expect(unrecorded.logs).toEqual([JSON.stringify({ event: 'hub_agent_notification_unheld', channel: 'email' })]);
   });
 });
 
