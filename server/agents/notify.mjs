@@ -10,11 +10,12 @@ import { live } from '../live.mjs';
  *
  * Every message says how much of the owner's attention it asks for (owner decision 2026-11-18: "I only want emails when something
  * needs my decision or for me to do something", with one summary at the end of the day):
- * - `now`: something only the owner can fix, or a person (a customer, a prospect) waiting on the owner. Always sent at once.
- * - `decision`: a routine batch waiting for approval (the week's posts, new creative, ad changes, prospect emails).
+ * - `now`: something only the owner can fix, an urgent message, or a lead still unanswered after hours. Always sent at once.
+ * - `decision`: a new customer or prospect message, or a routine batch waiting for approval (the week's posts, new creative, ad
+ *   changes, prospect emails).
  * - `update`: news and reports: nothing to do.
- * While Settings → AI team → "One end-of-day summary" is on, `update` messages (and `decision` messages too, unless "Email approval
- * requests right away" is on) are not emailed one at a time: each is recorded as held (`hold`, below) and the Chief of Staff's
+ * While Settings → AI team → "One end-of-day summary" is on, `update` messages (and `decision` messages too, unless "Email new
+ * messages and approvals right away" is on) are not emailed one at a time: each is recorded as held (`hold`, below) and the Chief of Staff's
  * end-of-day summary (tasks/summary.mjs) lists them. An urgent message is never held. A held message counts as delivered: the task
  * that raised it is done, and it is not tried again.
  *

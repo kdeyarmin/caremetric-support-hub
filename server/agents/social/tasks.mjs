@@ -472,7 +472,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       if (fresh && notifier) {
         await notifier.send({ severity: 'info', subject: `${reading.intent === 'pricing' ? 'A price question' : 'Interest'} on ${labels[item.platform]}${item.ad === true ? ' (on an ad)' : ''}`,
           body: `A ${where}${item.ad === true ? ' on one of your ads' : ''} reads as ${reading.intent === 'pricing' ? 'a question about price' : 'interest'}${product ? ` in ${productNames[product]}` : ''}. ${draftingOn() ? 'A reply waits for you in the AI team unless it needs you personally.' : 'Answer it on the platform.'} It has no email address, so it is not on the lead desk: the reply is how they hear back.${item.url ? `\n\nOpen it: ${item.url}` : ''}`,
-          dedupeKey: `social:interest:${item.platform}:${item.id}`.slice(0, 200), agentKey: task.agentKey, taskId: task.id, attention: 'now' });
+          dedupeKey: `social:interest:${item.platform}:${item.id}`.slice(0, 200), agentKey: task.agentKey, taskId: task.id, attention: 'decision' });
       }
     }
     if (reading.hide && item.kind === 'comment' && !canRemove) return { result: { outcome: 'left_for_owner', reason: 'spam', intent: reading.intent, platform: item.platform, kind: item.kind } };

@@ -13,8 +13,9 @@ import { dueMoment, mustHaveReached, plural, recordRun } from './shared.mjs';
  * While Settings → AI team → "One end-of-day summary" is on, the AI team's news and reports are not emailed one at a time: the notifier
  * holds them (notify.mjs) and this task lists them once a day, at the hour the owner chose (Settings → AI team → "Summary time"), with
  * what needs the owner, what came in, what went out and what the team did since the last summary. The scheduled morning brief is not
- * sent while it is on: this email carries the same "needs you" list. Something that cannot wait (a customer or prospect waiting on the
- * owner, something broken that only the owner can fix, anything urgent) is still emailed at once, and listed here again.
+ * sent while it is on: this email carries the same "needs you" list. New customer and prospect messages wait for it too (their replies
+ * are counted under Needs you). Something that cannot wait (an urgent message, a lead still unanswered after hours, something broken
+ * that only the owner can fix) is still emailed at once, and listed here again.
  *
  * The schedule fires at noon Eastern (20261118120000_owner_summary.sql); the task then waits, queued, until the chosen hour. Each
  * summary covers the 24 hours since the previous one, so nothing falls between two summaries. Like the brief it uses no model and
@@ -194,7 +195,7 @@ export function composeSummary(facts, day, { now = new Date(), since, publicOrig
 
 /**
  * Registered once the database declares the summary. `settings` holds two of the owner's settings, each a value or a function read when
- * used: `enabled` (One end-of-day summary) and `hour` (Summary time). The notifier reads "Email approval requests right away" itself.
+ * used: `enabled` (One end-of-day summary) and `hour` (Summary time). The notifier reads "Email new messages and approvals right away" itself.
  */
 export function summaryHandlers({ store, notifier, publicOrigin, services = {}, labels = {}, features = null, toolkit = null, watchdogIdleDays = 3,
   settings = {}, log = line => console.warn(line) }) {

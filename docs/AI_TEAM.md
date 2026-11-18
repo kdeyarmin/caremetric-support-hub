@@ -381,18 +381,19 @@ through the day. Now, while **Settings → AI team → One end-of-day summary** 
   - **Worth knowing**: as in the brief.
 - **The scheduled morning brief is not sent**: the summary carries its "Needs you" list. **Run now** still sends a brief.
 - **Every message the team sends you says how much of your attention it needs** (`attention` in `server/agents/notify.mjs`):
-  - *Right away, always:* a customer or prospect waiting on you (every Support Concierge alert, a Sales Executive draft waiting
-    for approval, a prospect asking about a product the team does not market, a lead unanswered after hours, a price question on
-    social media), something only you can fix (a product down and back up, Meta or LinkedIn refusing the team, the model key
-    refused, cold email paused by the bounce guard, the outreach guardrail check failing, a reply or Stripe offer whose outcome is
-    unknown, personal information in a public comment, a campaign that did not start), anything you must copy by hand (a LinkedIn
-    post to paste, a Google Ads import file, the monthly outreach drafts, posts for your own profile), anything you asked for with
-    **Run now**, and anything urgent (which is also texted).
-  - *Approval requests* (the week's social plan, new creative and images about to expire, the ad review, new paid campaigns, the
-    creative refresh, prospect emails ready on Growth, new social comments with drafted replies): in the summary, unless **Settings
-    → AI team → Email approval requests right away** is on.
+  - *Right away, always:* an urgent customer message (also texted), a lead still unanswered after hours, something only you can
+    fix (a product down and back up, Meta or LinkedIn refusing the team, the model key refused, cold email paused by the bounce
+    guard, the outreach guardrail check failing, a reply or Stripe offer whose outcome is unknown, personal information in a public
+    comment, a campaign that did not start), anything you must copy by hand (a LinkedIn post to paste, a Google Ads import file, the
+    monthly outreach drafts, posts for your own profile), and anything you asked for with **Run now**.
+  - *New messages and approval requests* (owner decision 2026-11-18, "do it"): each new customer message the Support Concierge
+    alerts, a Sales Executive answer drafted for a prospect, a prospect asking about a product the team does not market, interest or
+    a price question on social media, and the routine batches (the week's social plan, new creative and images about to expire, the
+    ad review, new paid campaigns, the creative refresh, prospect emails ready on Growth, new social comments). They are in the
+    summary, and the replies they wait on are counted under Needs you, unless **Settings → AI team → Email new messages and
+    approvals right away** is on.
   - *News and reports* (the Monday scorecard and the weekly reports, a new trial, a report opened, autonomy steps switching,
-    campaigns that started, the live writing evaluation): in the summary only.
+    campaigns that started, the live writing evaluation, a prospect the Sales Executive answered on its own): in the summary only.
 - A held message is recorded with the status "Held for the end-of-day summary" on the Team screen's alert history, where its full
   text stays. It counts as delivered: the task that raised it is done and is not tried again.
 

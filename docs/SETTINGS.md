@@ -83,9 +83,9 @@ The end-of-day summary (owner decision 2026-11-18: one email a day instead of a 
 
 | Settings group | Setting | What it does |
 | --- | --- | --- |
-| AI team | One end-of-day summary | One email a day with what needs your decision, what the team did, what came in and what went out. Reports and news wait for it, and it replaces the morning brief. A customer or prospect waiting on you, something only you can fix, and anything urgent still reach you at once (**on** by default) |
+| AI team | One end-of-day summary | One email a day with what needs your decision, what the team did, what came in and what went out. New customer and prospect messages, approval requests, reports and news wait for it, and it replaces the morning brief. Urgent customer messages, a lead still unanswered after hours, and anything only you can fix still reach you at once (**on** by default) |
 | AI team | Summary time | The hour the summary is sent, Eastern, 12 to 23 on a 24-hour clock (default 17, 5 PM). Each summary covers the 24 hours since the one before |
-| AI team | Email approval requests right away | Each batch of work waiting for your approval (the week's posts, new creative, ad changes, prospect emails) is emailed as soon as it is ready instead of only in the summary (off by default) |
+| AI team | Email new messages and approvals right away | Each new customer or prospect message, and each batch of work waiting for your approval (the week's posts, new creative, ad changes, prospect emails), is emailed as soon as it arrives instead of only in the summary (off by default) |
 
 Settings added with the AI workforce build-out (2026-11-13), all settings from the start and all off or empty until you choose
 ([AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md) has the order to turn them on):

@@ -62,7 +62,7 @@ const emailAddress = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
  * owner gives is always carried out. The Social Media Manager uses approved creative whenever the database has it.
  * `summary` is the owner's end-of-day summary (Settings → AI team): `{ enabled, hour, approvalsRightAway }`, each a value or a function
  * read when used. Once the database declares platform.agents.owner-summary.v1 and `enabled` is true, news is held for the summary
- * instead of emailed one at a time (notify.mjs), and so are approval requests unless `approvalsRightAway` is true.
+ * instead of emailed one at a time (notify.mjs), and so are new messages and approval requests unless `approvalsRightAway` is true.
  */
 export function agentTeam({
   pool, growth: givenGrowth = null, growthMail = null, postalAddress = '', store: givenStore = null, handlers = {}, executors = {}, sms, email, ownerEmail, publicOrigin,

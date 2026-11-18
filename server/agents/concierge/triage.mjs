@@ -33,6 +33,7 @@ import { screenIdentifiers } from './screen.mjs';
 import { conciergeSettings } from './settings.mjs';
 import { replyBody } from './templates.mjs';
 import { live } from '../../live.mjs';
+import { delivered } from '../notify.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const dailyEmailCap = 20;
@@ -58,8 +59,7 @@ const undelivered = results => (results.some(item => item.delivery === 'failed')
   : null);
 // After the notifier's attempts are used up, every try says "duplicate" and the earlier status says why. When nothing reached the owner and a
 // channel ended failed, there is nothing left to retry: the task fails, which shows on the Team screen, instead of passing for an alert.
-const given = item => item.delivery === 'sent' || (item.delivery === 'duplicate' && item.original === 'sent');
-const exhausted = results => (results.some(item => item.delivery === 'duplicate' && item.original === 'failed') && !results.some(given)
+const exhausted = results => (results.some(item => item.delivery === 'duplicate' && item.original === 'failed') && !results.some(delivered)
   ? Object.assign(new Error('The owner alert could not be delivered.'), { code: 'alert_not_delivered' })
   : null);
 
@@ -108,12 +108,14 @@ export function triageHandler({ store, notifier, drafting: draftingOption = null
   async function deliverAlert({ task, snapshot, payload, words, severity, now }) {
     const day = easternDate.format(now());
     const dayStart = task.budget?.dayStart ? new Date(task.budget.dayStart) : new Date(now().getTime() - 24 * 3_600_000);
-    // A customer is waiting on the business: these always reach the owner at once.
-    const base = { subject: words.subject, body: words.body, agentKey: task.agentKey, taskId: task.id, communicationReference: snapshot.reference, attention: 'now' };
+    // An urgent message reaches the owner at once (and by text). Any other new message waits for the end-of-day summary with the approval
+    // requests, unless the owner wants those right away (owner decision 2026-11-18); its reply is counted there under Needs you.
+    const base = { subject: words.subject, body: words.body, agentKey: task.agentKey, taskId: task.id, communicationReference: snapshot.reference,
+      attention: severity === 'urgent' ? 'now' : 'decision' };
     const rollup = level => notifier.send({
       severity: 'warning', subject: 'Many new messages today',
       body: `More than ${dailyEmailCap} ${{ urgent: 'urgent', warning: 'flagged', info: 'new' }[level]} messages have reached the Hub today, so they are no longer emailed one at a time.\n\nOpen Communications to see all of them.`,
-      dedupeKey: `concierge:rollup:${level}:${day}`, agentKey: task.agentKey, taskId: task.id, attention: 'now',
+      dedupeKey: `concierge:rollup:${level}:${day}`, agentKey: task.agentKey, taskId: task.id, attention: level === 'urgent' ? 'now' : 'decision',
     });
     if (severity === 'urgent') {
       const urgentKey = `concierge:urgent:${snapshot.id}:${day}`;
