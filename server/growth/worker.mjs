@@ -15,6 +15,7 @@ import { enrichProspects } from './enrichment.mjs';
 import { discoveryQueries, linkablePages, playbookFor, senderFor } from './playbook.mjs';
 import { founder } from '../agents/content/facts.mjs';
 import { campaignBlocks, campaignEyebrow, campaignProduct, readCampaign } from './campaign.mjs';
+import { isAgencyTrialUrl } from './agency-campaign.mjs';
 import { searchResultLimit } from './research.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
 import { chooseSite, confirmsSite, phoneCandidates, phoneQuery, rankTarget, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
@@ -553,7 +554,7 @@ export const growthOptOutPath='/api/growth/preferences/';
 /** Product pages (including campaign tags), plus authentic Intel report tokens already isolated by the draft's exact-link check. */
 export function messageLinks(product,words,reports=null) {
   const pages=new Set(linkablePages(product).map(page=>page.url));
-  const tagged=(String(words??'').match(/https:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(linkTrailing,'')).filter(url=>pages.has(untaggedUrl(url))||(product==='caremetric-intel'&&reports?.accepts?.(url)===true));
+  const tagged=(String(words??'').match(/https:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(linkTrailing,'')).filter(url=>pages.has(untaggedUrl(url))||(product==='caremetric-intel'&&(isAgencyTrialUrl(url)||reports?.accepts?.(url)===true)));
   return [...pages,...new Set(tagged)];
 }
 /**
@@ -571,8 +572,8 @@ export function linkLabels(product,words,reports=null) {
     if(!/^https:\/\/[^\s<>"]+$/.test(url))continue;
     // A link written without campaign tags is its own page.
     const page=untaggedUrl(url)??url;
-    if(product==='caremetric-intel'&&reports?.accepts?.(url)===true)labels[url]='Open your agency\'s market report (PDF)';
-    else if(next?.url===page)labels[url]=next.label;
+    if(product==='caremetric-intel'&&reports?.accepts?.(url)===true)labels[url]=url.endsWith('/view')?'Open your agency\'s market report':'Open your agency\'s market report (PDF)';
+    else if(next?.url===page||(product==='caremetric-intel'&&isAgencyTrialUrl(url)))labels[url]=next?.label;
     else if(pages.has(page))labels[url]=/\/market-review\/?$/.test(page)?'Get your agency\'s free market report':pages.get(page);
   }
   return labels;
@@ -616,7 +617,7 @@ export function growthEmail({product,purpose=null,quiet=false,subject,body,posta
   const campaign=product===campaignProduct&&purpose==='marketing'?readCampaign(words,{reports}):null;
   if(!campaign)return letter;
   const designed=renderEmail({layout:'branded',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
-    eyebrow:campaignEyebrow(campaign.touch,campaign.setting),heading:subject,greeting:`Hello${greeting?` ${greeting}`:''},`,
+    eyebrow:campaign.version===2?null:campaignEyebrow(campaign.touch,campaign.setting),heading:subject,greeting:`Hello${greeting?` ${greeting}`:''},`,
     blocks:campaignBlocks(campaign,{links:messageLinks(product,campaign.opening,reports)}).filter(Boolean),
     // The first email carries the founder's words as a signed quote, so it needs no second sign-off under its closing panel.
     signature:campaign.touch===1?[]:signature,footer});

@@ -118,12 +118,12 @@ describe('sales playbook', () => {
     for (const first of [reportTouchAngle, reviewTouchAngle]) {
       expect(first).toMatch(/^First email, built around /);
       expect(first).toMatch(/Never state or hint at the agency's own figure, rank or rating: the reader opens the report to see them\./);
-      expect(first).toMatch(/what CareMetric Intel does in five points, your story as the founder in your own words, and the free trial with its link/);
+      expect(first).toMatch(/three ways CareMetric Intel helps the team, a short founder quote, and a link to the free trial/);
       expect(first).toMatch(/No other link, no free trial, no price and no story about yourself in your words\./);
       expect(first).not.toMatch(/Founders Sale|risk-free|three questions|two links/);
     }
     // The second email's sections carry the Founders Sale and the trial; the third's, the report and the trial's link.
-    for (const second of [viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle]) expect(second).toMatch(/the Founders Sale, the 30-day free trial with its link, and the market report's link again/);
+    for (const second of [viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle]) expect(second).toMatch(/the Founders Sale, the 30-day free trial button, and a link back to the report/);
     expect(reportCloseAngle).toMatch(/^Third and last email: a short close\./);
     expect(reportCloseAngle).toMatch(/No link in your words, no new pitch and no question\./);
     // None tells the writer to call or meet, and the words each uses for the report's physicians pass the standing check (standing.mjs).
