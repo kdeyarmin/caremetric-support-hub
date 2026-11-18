@@ -92,7 +92,10 @@ short flight** set (3 to 30 days; empty is off), the month's number funds one ca
   newer than its last reconnect under Settings → Social media (Settings → Paid ads for Google) (`private.ads_platform_refusals`,
   `<platform>_connection_failing` in the plan's result). A campaign a platform refuses tells you at once ("New … campaign not created"),
   and a flight that failed is tried again the next day on a platform that is not failing, at most three times a month, instead of
-  waiting for the next Monday.
+  waiting for the next Monday. Since the November 18 review, candidates with fewer failed or empty launches are tried first, so a
+  campaign request error on LinkedIn does not keep taking the flight ahead of a launch-ready Meta campaign. The attempt limit also
+  applies on Mondays and owner runs. An empty automatic campaign is revisited each day when approved creative becomes available;
+  while no candidate can start, the planner waits instead of creating more empty campaigns.
 - A campaign approved before flights were switched on or off is refused when it is created (`budget_changed`), so it is planned again
   under the setting as it stands. The autonomy step **Ad campaign launch** (`ad_campaigns`, AI team page; it ships held) adds
 `social.campaign_create` and `social.google_campaign` to the Social Media Manager's list. While it is automatic:
@@ -103,11 +106,14 @@ short flight** set (3 to 30 days; empty is off), the month's number funds one ca
   put in through the daily ad review's own `social.ad_create` path (its checks, and marking the creative live), and only then is the
   campaign started (the ad set, then the campaign on Meta; the group, then the campaign on LinkedIn). A Google search campaign starts
   with the responsive search ad the plan wrote and code checked against the fact sheet.
-- **Spending stays within your numbers.** The campaigns starting on their own share "Most to spend on new campaigns a month": each
-  gets a thirtieth of its share a day, never above "Most any ad may spend per day". Before it is created, each reserves its daily budget
-  for the rest of the month in the database (`private.ads_launch_reserve`, table `private.ads_launch_reservations`, closed to every
-  role), lowered to what the month's number has left; every campaign launched this way ends on the month's last day. No budget is ever
-  raised: an ad set's budget increase still waits for you.
+- **The total budget is bounded.** Campaigns starting on their own share "Most to spend on new campaigns a month". Their daily planning
+  amount is limited by "Most any ad may spend per day", and each reserves that amount for its remaining days in the database
+  (`private.ads_launch_reserve`, table `private.ads_launch_reservations`, closed to every role), lowered to what the month has left.
+  Since the November 18 review, that reservation is also enforced on the platform: Meta uses an ad-set lifetime budget, LinkedIn a
+  total budget on the new campaign's own group, and Google a campaign total budget. Daily budgets alone were averages, so multiplying
+  them by a flight's days did not enforce its total. Platforms control day-to-day pacing; the daily planning amount is not a hard
+  per-day spending ceiling. Every automatic campaign ends at its flight's end or the month's end. Google's total-budget campaigns
+  need at least three days; a shorter remaining window falls back to a paused draft. An ad set's budget increase still waits for you.
 - **Where launching live is not possible, it falls back to the way before**, and you are told why: no approved creative that fits, the
   creative no longer approved, too little of the month's number left, the month's last day, or (for Google) the Google Ads API not set
   up, in which case the campaign is emailed as a Google Ads Editor file, paused. If Google refuses to create it running, it is created
@@ -115,6 +121,11 @@ short flight** set (3 to 30 days; empty is off), the month's number funds one ca
   asked to look; its budget and end date bound it either way.
 - **Checked again when carried out**: as for founder posts, a campaign approved automatically goes ahead only while the hand-over
   still stands, and an owner's approval of a campaign still creates it paused.
+
+**Google API and import checks (2026-11-18).** Search campaigns use the API's `targetSpend` field for Maximize clicks; the old
+`maximizeClicks` field was invalid. A successful HTTP response without the created campaign's resource is treated as unconfirmed,
+with the budget reservation retained and a notice to check Google Ads. State-scoped campaigns use presence targeting; Google Ads
+Editor exports also preserve the roster states instead of silently switching to the whole country.
 
 ## Approved video posts
 

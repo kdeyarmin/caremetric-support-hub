@@ -140,6 +140,48 @@ describe('the Meta client', () => {
 });
 
 describe('new campaigns and lead reports', () => {
+  it('sets a lifetime budget for an automatic flight, with a start and end, instead of a daily budget that can overdeliver', async () => {
+    const fetchImpl = route([[/\/campaigns$/, { id: '601' }], [/\/adsets$/, { id: '602' }]]);
+    const meta = client(fetchImpl);
+    const input = { name: 'Flight', dailyBudgetCents: 500, lifetimeBudgetCents: 5000, audienceId: '1234567', startAt: '2099-11-18T14:00:00Z', endAt: '2099-11-28T14:00:00Z' };
+    await meta.createCampaign(input);
+    const params = new URLSearchParams(fetchImpl.mock.calls[1][1].body);
+    expect(params.get('lifetime_budget')).toBe('5000');
+    expect(params.has('daily_budget')).toBe(false);
+    expect(params.get('start_time')).toBe(String(Date.parse(input.startAt) / 1000));
+    expect(params.get('end_time')).toBe(String(Date.parse(input.endAt) / 1000));
+    for (const invalid of [{ startAt: null }, { endAt: null }, { lifetimeBudgetCents: 499 }]) {
+      await expect(meta.createCampaign({ ...input, ...invalid })).rejects.toMatchObject({ code: 'meta_invalid_request' });
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['creative', 'ad', 'campaign', 'adset', 'start'])('refuses an unconfirmed %s receipt without claiming deployment', async missing => {
+    const fetchImpl = route([[/POST/, (url) => {
+      const part = url.pathname.endsWith('/adcreatives') ? 'creative' : url.pathname.endsWith('/ads') ? 'ad'
+        : url.pathname.endsWith('/campaigns') ? 'campaign' : url.pathname.endsWith('/adsets') ? 'adset' : 'start';
+      return json(part === missing ? {} : part === 'start' ? { success: true } : { id: '601' });
+    }]]);
+    const meta = client(fetchImpl);
+    const work = ['creative', 'ad'].includes(missing) ? meta.createAd({ adsetId: '40', name: 'Ad', message: 'Copy', headline: 'Title', description: '', link: 'https://cmcarebase.com/signup' })
+      : missing === 'start' ? meta.startCampaign({ campaignId: '601', adsetId: '602' })
+        : meta.createCampaign({ name: 'Flight', dailyBudgetCents: 1000, audienceId: '1234567' });
+    await expect(work).rejects.toMatchObject({ code: 'meta_unconfirmed', transient: false });
+    expect(fetchImpl).toHaveBeenCalledTimes(['ad', 'adset'].includes(missing) ? 2 : 1);
+  });
+
+  it.each(['server', 'malformed', 'stream', 'abort'])('never retries a write after an uncertain %s response', async mode => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn(async () => {
+      if (mode === 'abort') { controller.abort(); throw controller.signal.reason; }
+      if (mode === 'stream') return new Response(new ReadableStream({ start(stream) { stream.error(new Error('broken body')); } }));
+      return mode === 'server' ? json({ error: { code: 2 } }, 503) : new Response('unreadable');
+    });
+    await expect(client(fetchImpl).createCampaign({ name: 'Flight', dailyBudgetCents: 1000, audienceId: '1234567' }, { signal: controller.signal }))
+      .rejects.toMatchObject({ code: 'meta_unconfirmed', transient: false });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('creates a paused traffic campaign and a paused ad set for the retargeting audience, and reports a lead by hash and click', async () => {
     const seen = [];
     const fetchImpl = vi.fn(async (url, init) => {

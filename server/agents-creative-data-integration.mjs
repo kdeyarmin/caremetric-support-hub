@@ -83,6 +83,7 @@ try {
   console.log('Data creative integration passed: counties from where the roster\'s agencies are (most first, never excluded, not pictured for eight weeks, within the week\'s number), a figure carried only by a data brief and given back to the drafter, published articles from executed publications still live, and gate drift. Nothing was rendered or posted.');
 } finally {
   await admin.query('delete from private.creative_briefs where id=any($1::uuid[])', [briefs]);
+  await admin.query("delete from private.agent_tasks where kind = 'creative.request' and request_key in (select 'creative:brief:' || unnest($1::uuid[])::text)", [briefs]);
   await admin.query('delete from private.agent_actions where id=any($1::uuid[])', [actions]);
   await admin.query('delete from hub.content_items where id=any($1::uuid[])', [items]);
   await admin.query('delete from private.growth_roster_targets where ccn=any($1::text[])', [ccns]);

@@ -325,9 +325,12 @@ const bodies = {
     const landscape = frame.shape === 'landscape';
     const blockWidth = landscape ? frame.inner * 0.45 : frame.inner;
     const wordsWidth = landscape ? frame.inner * 0.5 : frame.inner;
-    const statSize = fit(o.stat, { width: blockWidth, size: Math.round(frame.u * (landscape ? 20 : 24)), min: Math.round(frame.u * 10), maxLines: 1 });
+    // A figure is one unbroken word, so counting wrapped lines never shrinks it. Bold digits are wider than prose's average character,
+    // particularly in Geist. Reserve 0.7 em per character for the complete figure
+    // (including its separators), and keep it on one line; a six-digit county total must never lose its final digit at the margin.
+    const statSize = Math.min(Math.round(frame.u * (landscape ? 20 : 24)), Math.floor(blockWidth / (String(o.stat).length * 0.7)));
     const block = h('div', { flexDirection: 'column', gap: Math.round(frame.u * 1.5), width: blockWidth },
-      text(ctx, { role: 'stat', value: o.stat, size: statSize, bold: true, color: 'accent', background: colors.background, width: blockWidth, maxLines: 1, lineHeight: 1 }),
+      text(ctx, { role: 'stat', value: o.stat, size: statSize, bold: true, color: 'accent', background: colors.background, width: blockWidth, maxLines: 1, lineHeight: 1, style: { whiteSpace: 'nowrap' } }),
       // A longer label (a county's market concentration) steps down to fit three lines; a short one is drawn as before.
       o.statLabel ? text(ctx, { role: 'stat label', value: o.statLabel, size: fit(o.statLabel, { width: blockWidth, size: Math.round(frame.u * 4), min: Math.round(frame.u * 3), maxLines: 3 }),
         bold: true, color: 'text', background: colors.background, width: blockWidth, maxLines: 3 }) : null);

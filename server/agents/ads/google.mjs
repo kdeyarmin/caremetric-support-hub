@@ -64,14 +64,18 @@ export function checkGooglePlan(raw, { factsKey, competitors = false }) {
 const csvCell = value => (/[",\n]/.test(String(value ?? '')) ? `"${String(value).replace(/"/g, '""')}"` : String(value ?? ''));
 
 /** The plan as one CSV for Google Ads Editor (Account → Import → From file): the campaign (paused), its keywords and negatives, and the ad. */
-export function editorCsv(plan, { name, finalUrl, dailyBudgetCents }) {
+export function editorCsv(plan, { name, finalUrl, dailyBudgetCents, states = [] }) {
   const header = ['Campaign', 'Campaign Type', 'Campaign Status', 'Budget', 'Networks', 'Location', 'Ad Group', 'Keyword', 'Criterion Type', 'Final URL',
     ...Array.from({ length: 15 }, (_, i) => `Headline ${i + 1}`), ...Array.from({ length: 4 }, (_, i) => `Description ${i + 1}`)];
   const row = values => header.map(column => csvCell(values[column] ?? '')).join(',');
   const group = `${name} - search`;
   const matchName = { EXACT: 'Exact', PHRASE: 'Phrase', BROAD: 'Broad' };
+  // Keep the same locations as an API launch. Each location needs its own campaign row in Editor; qualifying the state with its
+  // country also keeps a state name from being interpreted as a city. Only an unscoped campaign gets the whole country.
+  const locations = states.length ? [...new Set(states.map(state => `${state.name}, United States`))] : ['United States'];
   return [header.map(csvCell).join(','),
-    row({ Campaign: name, 'Campaign Type': 'Search', 'Campaign Status': 'Paused', Budget: (dailyBudgetCents / 100).toFixed(2), Networks: 'Google search', Location: 'United States' }),
+    row({ Campaign: name, 'Campaign Type': 'Search', 'Campaign Status': 'Paused', Budget: (dailyBudgetCents / 100).toFixed(2), Networks: 'Google search', Location: locations[0] }),
+    ...locations.slice(1).map(location => row({ Campaign: name, Location: location })),
     ...plan.keywords.map(keyword => row({ Campaign: name, 'Ad Group': group, Keyword: keyword.text, 'Criterion Type': matchName[keyword.match] })),
     ...plan.negatives.map(text => row({ Campaign: name, Keyword: text, 'Criterion Type': 'Campaign Negative Broad' })),
     row({ Campaign: name, 'Ad Group': group, 'Final URL': finalUrl, ...Object.fromEntries(plan.headlines.map((text, i) => [`Headline ${i + 1}`, text])),
@@ -80,6 +84,8 @@ export function editorCsv(plan, { name, finalUrl, dailyBudgetCents }) {
 }
 
 const failure = (code, transient = false) => Object.assign(new Error('Google Ads refused the request.'), { code, transient });
+const calendarDay = value => typeof value === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)
+  && Number.isFinite(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 
 export const adwordsScope = 'https://www.googleapis.com/auth/adwords';
 
@@ -147,22 +153,36 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
     /**
      * Creates the campaign PAUSED in one mutate; returns its resource name. `live` (a launch the owner handed over) creates it ENABLED with
      * its last day `endDate` (YYYY-MM-DD, the account's time zone), so it can never spend past its month; the mutate is atomic, so a
-     * refusal creates nothing. A paused campaign may carry its last day too (a flight, which ends on its own).
+     * refusal creates nothing. A paused campaign may carry its last day too (a flight, which ends on its own). A bounded automatic launch
+     * supplies totalBudgetCents and startDate as well: a campaign total budget enforces its reservation, unlike an average daily budget.
      */
     stateTargets,
 
-    async createSearchCampaign({ name, dailyBudgetCents, finalUrl, plan, live = false, endDate = null, states = [] }, { signal } = {}) {
+    async createSearchCampaign({ name, dailyBudgetCents, totalBudgetCents = null, finalUrl, plan, live = false, startDate = null, endDate = null, states = [] }, { signal } = {}) {
       if (!configured) throw failure('google_not_configured');
-      if ((live || endDate !== null) && !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(endDate ?? '')) throw failure('google_invalid_request');
+      if ((live || endDate !== null || totalBudgetCents !== null) && !calendarDay(endDate)) throw failure('google_invalid_request');
+      if (startDate !== null && (!calendarDay(startDate) || (endDate !== null && startDate > endDate))) throw failure('google_invalid_request');
+      if (totalBudgetCents !== null && (!Number.isSafeInteger(totalBudgetCents) || totalBudgetCents <= 0 || !calendarDay(startDate))) throw failure('google_invalid_request');
+      if (totalBudgetCents !== null) {
+        const days = (Date.parse(endDate) - Date.parse(startDate)) / 86_400_000 + 1;
+        if (days < 3 || days > 90) throw failure('google_invalid_request');
+      }
       // Limited to the roster's states (team review 2026-11-17, stage 6), each found through Google's own location suggestions before
       // anything is created: a state it cannot name stops the campaign rather than letting it run nationwide.
       const places = states.length ? await stateTargets(states, signal) : ['geoTargetConstants/2840'];
       const base = `customers/${customer}`;
       const budget = `${base}/campaignBudgets/-1`, campaign = `${base}/campaigns/-2`, adGroup = `${base}/adGroups/-3`;
       const mutateOperations = [
-        { campaignBudgetOperation: { create: { resourceName: budget, name: `${name} budget`.slice(0, 250), amountMicros: String(dailyBudgetCents * 10_000), deliveryMethod: 'STANDARD', explicitlyShared: false } } },
-        { campaignOperation: { create: { resourceName: campaign, name: name.slice(0, 250), status: live ? 'ENABLED' : 'PAUSED', advertisingChannelType: 'SEARCH', campaignBudget: budget, maximizeClicks: {},
+        { campaignBudgetOperation: { create: { resourceName: budget, name: `${name} budget`.slice(0, 250),
+          ...(totalBudgetCents === null ? { amountMicros: String(dailyBudgetCents * 10_000) }
+            : { period: 'CUSTOM_PERIOD', totalAmountMicros: String(BigInt(totalBudgetCents) * 10_000n) }),
+          deliveryMethod: 'STANDARD', explicitlyShared: false } } },
+        // Google's API calls the Maximize clicks bidding strategy targetSpend; maximizeClicks is not a campaign field.
+        { campaignOperation: { create: { resourceName: campaign, name: name.slice(0, 250), status: live ? 'ENABLED' : 'PAUSED', advertisingChannelType: 'SEARCH', campaignBudget: budget, targetSpend: {},
+          ...(startDate !== null ? { startDateTime: `${startDate} 00:00:00` } : {}),
           ...(endDate !== null ? { endDateTime: `${endDate} 23:59:59` } : {}),
+          // A roster-state campaign reaches people in those states; Google's default also includes people elsewhere interested in them.
+          ...(states.length ? { geoTargetTypeSetting: { positiveGeoTargetType: 'PRESENCE' } } : {}),
           networkSettings: { targetGoogleSearch: true, targetSearchNetwork: false, targetContentNetwork: false, targetPartnerSearchNetwork: false },
           containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING' } } },
         ...places.map(geoTargetConstant => ({ campaignCriterionOperation: { create: { campaign, location: { geoTargetConstant } } } })),
@@ -182,8 +202,12 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
       } catch (error) { if (signal?.aborted) throw error; throw failure('google_unconfirmed'); }
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw failure(response.status === 401 || response.status === 403 ? 'google_permission' : response.status >= 500 ? 'google_unconfirmed' : 'google_invalid_request');
-      const created = (data?.mutateOperationResponses ?? []).map(item => item?.campaignResult?.resourceName).find(Boolean);
-      return { campaign: typeof created === 'string' ? created : null };
+      const responses = Array.isArray(data?.mutateOperationResponses) ? data.mutateOperationResponses : [];
+      const created = responses.map(item => item?.campaignResult?.resourceName).find(Boolean);
+      // A 2xx response without a campaign receipt is not confirmation that it was launched. It may already be running, so preserve
+      // its reservation and require reconciliation, just as for a timeout after sending the atomic mutate.
+      if (typeof created !== 'string' || !new RegExp(`^${base}/campaigns/[0-9]+$`).test(created)) throw failure('google_unconfirmed');
+      return { campaign: created };
     },
   };
 }

@@ -590,13 +590,15 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       describe: output => `Wrote ${plural(output.variants.length, 'ad variant')} for a ${source.name} ad set.` }, signal);
     if (result.outcome !== 'completed') { skip(counts, `model_${/^[a-z_]{1,40}$/.test(result.outcome ?? '') ? result.outcome : 'error'}`); return 0; }
     let made = 0;
+    const linkedinAd = source.platform === 'linkedin';
     for (const [index, variant] of (result.output.variants ?? []).slice(0, 2).entries()) {
-      const parts = [checkSocialText(variant.message, { surface: 'ad_message', product }), checkSocialText(variant.headline, { surface: 'ad_headline', product }), checkSocialText(variant.description, { surface: 'ad_description', product })];
+      const parts = [checkSocialText(variant.message, { surface: 'ad_message', product }),
+        checkSocialText(variant.headline, { surface: linkedinAd ? 'ad_linkedin_headline' : 'ad_headline', product }),
+        checkSocialText(variant.description, { surface: linkedinAd ? 'ad_linkedin_description' : 'ad_description', product })];
       if (parts.some(part => !part.ok) || parts[0].text.length < 60) { counts.rejected += 1; continue; }
       const [message, headline, description] = parts.map(part => part.text);
       const callToAction = variant.callToAction === 'SIGN_UP' ? 'SIGN_UP' : 'LEARN_MORE';
       const name = `${adset?.name ?? 'Ad set'} · ${String(variant.angle ?? 'variant').slice(0, 30)} · ${today}`;
-      const linkedinAd = source.platform === 'linkedin';
       const brandImage = linkedinAd && !base.imageHash && images().length ? images()[index % images().length] : null;
       const imageLine = base.imageHash ? `Image: the same as "${base.name}"` : brandImage ? `Image: ${brandImage}` : 'Image: none';
       const proposal = await propose(task, { kind: 'social.ad_create', targetKind: 'social_adset', targetId: `${source.key(rec.adsetId)}:${today}:${index + 1}`,
@@ -611,7 +613,13 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const assets = await approvedImages(product, source.platform);
     const adset = overview.adsets.find(item => item.id === rec.adsetId);
     const linkedinAd = source.platform === 'linkedin';
+    // An approved asset stays available after publication. Refreshing a tired ad must not publish that same creative again in its
+    // ad set, including a variant already tested and paused. Other ad sets may still use it.
+    const used = new Set(overview.ads.filter(ad => ad.adsetId === rec.adsetId).flatMap(ad => {
+      try { return [new URL(ad.copy?.link).searchParams.get('utm_content')]; } catch { return []; }
+    }));
     for (const asset of assets) {
+      if (used.has(asset.id)) continue;
       // Each platform's own lengths: LinkedIn creative is written longer than a Meta headline allows (content.mjs adCopyFromCreative).
       const copy = adCopyFromCreative(asset, { product, linkedin: linkedinAd });
       if (!copy) continue;

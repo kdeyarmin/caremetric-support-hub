@@ -41,6 +41,11 @@ CareBase is off while it is in its pilot.
 
 **Run now** on the AI team page runs any of them on any day.
 
+Automated briefs and their drafting tasks are recorded in one transaction (`20261118005317_creative_brief_queue_atomic.sql`), so a
+server interruption cannot leave a new brief without work queued. If the Creative switch or model is unavailable, or the agent is in
+Observe, the brief's task waits 30 minutes before trying again under the normal task retry limit. A model refusal is recorded as failed
+work instead of a completed task with an undrafted brief.
+
 ### Briefs and copy
 
 A brief names the product, a goal, an audience (organizations and roles, never a health condition: the database refuses one), the
@@ -129,6 +134,9 @@ Seven layouts: **headline**, **stat** (one fact-sheet number with its source), *
 **quote** (CareMetric's own line, never a customer's), **offer** (the offer card), **checklist** and **split** (landscape). Each adapts to
 square, portrait, tall (Stories keep the top 12% and bottom 18% clear), landscape and the small 300×250. Fonts (Geist and Inter) and the
 brand files are bundled, so nothing is fetched while rendering.
+
+Stat figures size to their full width, including commas, and stay on one line. This fixes county totals such as **194,028** being clipped
+at the right edge; regression tests measure the rendered glyphs in both fonts across the supported placements.
 
 ### Brand themes (`server/agents/creative/themes.mjs`)
 

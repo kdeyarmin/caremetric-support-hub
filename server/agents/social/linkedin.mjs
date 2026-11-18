@@ -455,7 +455,11 @@ export function linkedinClient({
             const article = post?.content?.article ?? {};
             copy = { message: String(post?.commentary ?? ''), headline: String(article.title ?? ''), description: String(article.description ?? ''), link: typeof article.source === 'string' ? article.source : null };
             image = imageUrn(article.thumbnail);
-          } catch (error) { if (signal?.aborted) throw error; }
+          } catch (error) {
+            // A deleted post can be absent, but a refused or interrupted read is not a healthy ad-account snapshot. Let the daily
+            // review report access failures (and retry transient reads) instead of caching empty copy as a non-product ad all day.
+            if (signal?.aborted || error?.transient || ['linkedin_token_invalid', 'linkedin_permission', 'linkedin_not_configured'].includes(error?.code)) throw error;
+          }
         }
         ads.push({ id, name: String(creative.name ?? `Creative ${id}`), adsetId: campaign, active, createdAt: iso(creative.createdAt), imageHash: image, copy });
       }
@@ -504,8 +508,9 @@ export function linkedinClient({
      * targeting (a state, a matched company list) in Campaign Manager and starts it there. `endAt` (a launch the owner handed over) ends
      * both then, so they can never spend past their month.
      */
-    async createCampaign({ name, dailyBudgetCents, currency = 'USD', startAt, endAt = null, states = [] }, { signal } = {}) {
+    async createCampaign({ name, dailyBudgetCents, totalBudgetCents = null, currency = 'USD', startAt, endAt = null, states = [] }, { signal } = {}) {
       needAds();
+      if (!org) throw failure('linkedin_not_configured');
       // Limited to the roster's states (team review 2026-11-17, stage 6), each found through LinkedIn's own location lookup before anything
       // is created: a state it cannot name stops the campaign rather than letting it run nationwide.
       const locations = states.length ? await geoUrns(states, signal) : ['urn:li:geo:103644278'];
@@ -513,23 +518,29 @@ export function linkedinClient({
       const start = Number.isFinite(Date.parse(startAt ?? '')) ? Date.parse(startAt) : Date.now() + 86_400_000;
       const end = endAt === null ? null : Date.parse(endAt);
       if (end !== null && !(Number.isFinite(end) && end > start)) throw failure('linkedin_invalid_request');
+      if (totalBudgetCents !== null && (!Number.isInteger(totalBudgetCents) || totalBudgetCents < dailyBudgetCents || !Number.isFinite(end))) throw failure('linkedin_invalid_request');
       const runSchedule = end === null ? { start } : { start, end };
       const group = await call('POST', `adAccounts/${account}/adCampaignGroups`, { signal, auth: adsAuth, body: {
-        account: accountUrn, name: name.slice(0, 100), status: 'DRAFT', runSchedule } });
+        account: accountUrn, name: name.slice(0, 100), status: 'DRAFT', runSchedule,
+        ...(totalBudgetCents === null ? {} : { totalBudget: { amount: (totalBudgetCents / 100).toFixed(2), currencyCode: currency } }) } });
       const groupId = bareId(group.id, /^urn:li:sponsoredCampaignGroup:/);
       if (!groupId) throw failure('linkedin_unconfirmed');
       const amount = (dailyBudgetCents / 100).toFixed(2);
       const campaign = await call('POST', `adAccounts/${account}/adCampaigns`, { signal, auth: adsAuth, body: {
-        account: accountUrn, campaignGroup: `urn:li:sponsoredCampaignGroup:${groupId}`, name: name.slice(0, 100), status: 'DRAFT', type: 'SPONSORED_UPDATES',
+        account: accountUrn, campaignGroup: `urn:li:sponsoredCampaignGroup:${groupId}`, associatedEntity: org,
+        name: name.slice(0, 100), status: 'DRAFT', type: 'SPONSORED_UPDATES',
         objectiveType: 'WEBSITE_VISIT', costType: 'CPM', optimizationTargetType: 'MAX_CLICK', dailyBudget: { amount, currencyCode: currency },
         locale: { country: 'US', language: 'en' }, offsiteDeliveryEnabled: false, runSchedule,
         targetingCriteria: { include: { and: [
           { or: { 'urn:li:adTargetingFacet:locations': locations } },
+          { or: { 'urn:li:adTargetingFacet:interfaceLocales': ['urn:li:locale:en_US'] } },
           { or: { 'urn:li:adTargetingFacet:industries': ['urn:li:industry:14'] } },
           { or: { 'urn:li:adTargetingFacet:seniorities': ['urn:li:seniority:5', 'urn:li:seniority:6', 'urn:li:seniority:7', 'urn:li:seniority:8', 'urn:li:seniority:9', 'urn:li:seniority:10'] } },
         ] } },
       } });
-      return { campaignGroupId: groupId, campaignId: bareId(campaign.id, /^urn:li:sponsoredCampaign:/) ?? '' };
+      const id = bareId(campaign.id, /^urn:li:sponsoredCampaign:/);
+      if (!id) throw failure('linkedin_unconfirmed');
+      return { campaignGroupId: groupId, campaignId: id };
     },
 
     /** Starts a draft campaign group and campaign once the campaign's first ad is in it: the group, then the campaign. Used only for a launch the owner handed over. */
@@ -569,7 +580,9 @@ export function linkedinClient({
       let creative;
       try { creative = await call('POST', `adAccounts/${account}/creatives`, { signal, auth: adsAuth, body: { campaign: `urn:li:sponsoredCampaign:${campaign}`, content: { reference: post.id }, intendedStatus: 'ACTIVE' } }); }
       catch (error) { if (signal?.aborted || error?.code === 'linkedin_unconfirmed') throw error; throw Object.assign(failure(error?.code ?? 'linkedin_invalid_request'), { postId: post.id }); }
-      return { id: bareId(creative.id, /^urn:li:sponsoredCreative:/) ?? String(creative.id ?? ''), postId: post.id };
+      const id = bareId(creative.id, /^urn:li:sponsoredCreative:/);
+      if (!id) throw failure('linkedin_unconfirmed');
+      return { id, postId: post.id };
     },
   };
   return onceADay(client);

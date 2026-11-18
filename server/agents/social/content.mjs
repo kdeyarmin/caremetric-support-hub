@@ -23,7 +23,7 @@ import { linkTags, tagLinks, untagLinks } from '../links.mjs';
 // social-plan.8 and social-reply.5 (team review 2026-11-17, stage 6): CareMetric Intel's call to action is its free market report.
 // social-plan.9, social-ads.6 and social-reply.6 (2026-11-17, later): Intel's data is named by its source, never as public (`public_data`).
 export const planPromptVersion = 'social-plan.9';
-export const adPromptVersion = 'social-ads.6';
+export const adPromptVersion = 'social-ads.7';
 export const replyPromptVersion = 'social-reply.6';
 
 export const platforms = ['facebook', 'instagram', 'linkedin'];
@@ -81,7 +81,7 @@ Write two variants, each with a different angle from the others and from the ads
 
 Meta's and LinkedIn's advertising policies apply: never assert or imply a person's personal attributes (health, medical condition, finances, age and the like); write about organizations and their work ("Tracking annual training hours across your homes?" is fine; "Are you struggling with..." is not). No exaggerated claims, no all capitals, no clickbait, no links in the text.
 
-Lengths: message (the primary text) 60 to 400 characters, headline up to 40, description up to 30. callToAction is LEARN_MORE or SIGN_UP.
+Lengths: message (the primary text) 60 to 400 characters. For Meta, headline up to 40 and description up to 30 characters. For LinkedIn, headline and description each up to 70 characters. callToAction is LEARN_MORE or SIGN_UP.
 
 ${rules}
 

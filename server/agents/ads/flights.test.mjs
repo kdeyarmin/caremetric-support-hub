@@ -177,7 +177,7 @@ describe('creating a flight', () => {
       input: { ...metaFlight, firstAd }, autoApproved: true, execution: 2 });
     expect(result).toMatchObject({ launched: true, dailyBudgetCents: 500, endsOn: '2026-11-25' });
     expect(h.store.adsLaunchReserve).toHaveBeenCalledWith('a9', 2, 500, 500, 10);
-    expect(h.meta.createCampaign).toHaveBeenCalledWith({ name: metaFlight.name, dailyBudgetCents: 500, audienceId: '1234567', endAt: '2026-11-26T04:59:59.000Z' });
+    expect(h.meta.createCampaign).toHaveBeenCalledWith({ name: metaFlight.name, dailyBudgetCents: 500, lifetimeBudgetCents: 5000, audienceId: '1234567', startAt: '2026-11-16T14:20:00.000Z', endAt: '2026-11-26T04:59:59.000Z' });
     expect(h.notifier.send.mock.calls.at(-1)[0].body).toContain('ends on 2026-11-25');
   });
 });
@@ -219,6 +219,34 @@ describe('a platform that refuses the team', () => {
     const off = setup({ values: { 'ads.flight_days': null }, history: [failed] });
     expect((await off.handlers['ads.plan'](task(), { now: tuesday })).result).toEqual({ skipped: 'not_monday' });
     expect(off.store.adsMonthCampaigns).not.toHaveBeenCalled();
+  });
+
+  it('tries another launch-ready platform after a campaign failure even when its connection is still healthy', async () => {
+    const h = setup({ handover: true, status: 'auto_approved', history: [{ kind: 'social.campaign_create', targetId: 'linkedin:caremetric-intel:2026-11', status: 'failed', flight: true }] });
+    h.creative.approved.mockImplementation(async ({ platform }) => [asset(platform)]);
+    await h.handlers['ads.plan'](task({ agent: trusted }), { now: () => new Date('2026-11-17T14:20:00Z') });
+    expect(h.store.proposeAction.mock.calls.map(([item]) => item.targetId)).toEqual(['meta:caremetric-intel:2026-11']);
+  });
+
+  it('enforces the monthly retry limit on Mondays and owner runs as well as weekdays', async () => {
+    const failed = { kind: 'social.campaign_create', targetId: 'linkedin:caremetric-intel:2026-11', status: 'failed', flight: true };
+    for (const sourceKind of ['schedule', 'owner']) {
+      const h = setup({ history: Array.from({ length: flightAttempts }, () => failed) });
+      expect((await h.handlers['ads.plan'](task({ sourceKind }), { now: monday })).result).toEqual({ proposed: 0, skipped: { flight_attempts_used: 1 } });
+      expect(h.store.proposeAction).not.toHaveBeenCalled();
+    }
+  });
+
+  it('revisits an empty automatic campaign each day when creative becomes available without making more empty campaigns', async () => {
+    const h = setup({ handover: true, status: 'auto_approved', history: [{ kind: 'social.campaign_create', targetId: 'meta:caremetric-intel:2026-11', status: 'executed', flight: true, empty: true }] });
+    h.creative.approved.mockResolvedValue([]);
+    const tuesday = () => new Date('2026-11-17T14:20:00Z');
+    const waiting = await h.handlers['ads.plan'](task({ agent: trusted }), { now: tuesday });
+    expect(waiting.result.skipped).toMatchObject({ waiting_for_launch_ready: 1 });
+    expect(h.store.proposeAction).not.toHaveBeenCalled();
+    h.creative.approved.mockImplementation(async ({ platform }) => platform === 'meta' ? [asset(platform)] : []);
+    await h.handlers['ads.plan'](task({ agent: trusted }), { now: tuesday });
+    expect(h.store.proposeAction.mock.calls.map(([item]) => item.targetId)).toEqual(['meta:caremetric-intel:2026-11']);
   });
 
   it('tells the owner when a platform refuses a campaign, and says nothing for a failure that will be retried', async () => {
@@ -264,6 +292,17 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
     const none = reachSetup({ values: { 'growth.roster_states': [] } });
     await none.executors['social.campaign_create']({ id: 'a1', kind: 'social.campaign_create', input: metaFlight });
     expect(none.meta.createCampaign.mock.calls[0][0]).not.toHaveProperty('states');
+  });
+
+  it('keeps roster-state targeting when Google search is handed off as an import file', async () => {
+    const h = reachSetup({ values: { 'ads.monthly_budget_cents': 30000, 'ads.flight_days': null } });
+    await h.executors['social.google_campaign']({ id: 'g1', kind: 'social.google_campaign', input: {
+      product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 500, finalUrl: 'https://www.caremetricintel.com/market-review', plan: googlePlan,
+    } });
+    const csv = h.notifier.send.mock.calls.at(-1)[0].blocks.find(block => block.type === 'message').text;
+    expect(csv).toContain('Pennsylvania');
+    expect(csv).toContain('New Jersey');
+    expect(csv).not.toMatch(/,United States,/);
   });
 
   it('tells the owner when a platform cannot name a roster state, and launches nothing nationwide instead', async () => {
