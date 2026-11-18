@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Creative } from "./Creative";
 import type { CreativeClient } from "./creativeClient";
 import { studioSchema } from "./creativeProtocol";
+import { TeamApiError } from "./teamClient";
 import type { BrandKit, CreativeAsset, CreativeStudio } from "./creativeProtocol";
 
 vi.hoisted(() => { vi.stubEnv("VITE_DEMO_MODE", "true"); });
@@ -60,6 +61,46 @@ describe("the Creative screen", () => {
     expect(screen.getByText(/Drawn in the CareBase theme/)).toBeTruthy();
     expect(screen.getAllByText(/the official .* logo is used/)).toHaveLength(2);
     expect(screen.getAllByText(/Use a PNG with a transparent background/)).toHaveLength(2);
+  });
+
+  it("approves everything waiting, on every page, after one confirmation", async () => {
+    const client = clientOf();
+    render(<Creative client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Approve all 2" }));
+    expect(screen.getByText(/Approve all 2 assets waiting for you\?/)).toBeTruthy();
+    expect(client.decide).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Yes, approve all 2" }));
+    expect(await screen.findByText("Approved 2 assets and handed them to the Social Media Manager.")).toBeTruthy();
+    // Every waiting asset is read in full pages, and each is approved through the owner's own decide route; an approved one is left alone.
+    expect(client.studio).toHaveBeenCalledWith({ product: null, platform: null, status: "proposed", offset: 0, limit: 60 }, expect.anything());
+    expect(client.decide.mock.calls.map(([input]) => input)).toEqual([
+      { actionId: "33333333-3333-4333-8333-333333333333", decision: "approve" }, { actionId: "33333333-3333-4333-8333-333333333333", decision: "approve" },
+    ]);
+  });
+
+  it("says how many it could not approve, and never approves without the confirmation", async () => {
+    const client = clientOf();
+    client.decide.mockRejectedValueOnce(new TeamApiError(409, "That approval has expired."));
+    render(<Creative client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Approve all 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(client.decide).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Approve all 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, approve all 2" }));
+    expect(await screen.findByText("Approved 1 asset and handed it to the Social Media Manager. 1 asset could not be approved or handed over. Check the AI team's activity.")).toBeTruthy();
+    expect(client.decide).toHaveBeenCalledTimes(2);
+  });
+
+  it("never counts an approval that expired or was decided elsewhere, and says when the hand-over comes later", async () => {
+    const client = clientOf();
+    client.decide
+      .mockResolvedValueOnce({ id: "33333333-3333-4333-8333-333333333333", kind: "creative.asset_review", status: "expired", decided: false })
+      .mockResolvedValueOnce({ id: "33333333-3333-4333-8333-333333333333", kind: "creative.asset_review", status: "approved", decided: true });
+    render(<Creative client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Approve all 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, approve all 2" }));
+    expect(await screen.findByText("1 asset is approved and goes to the Social Media Manager on the team's next run. 1 asset was no longer waiting (expired, or decided elsewhere), so it was not approved.")).toBeTruthy();
+    expect(screen.queryByText(/handed it to the Social Media Manager/)).toBeNull();
   });
 
   it("approves through the AI team's decide route, and asks for changes only with a note", async () => {
