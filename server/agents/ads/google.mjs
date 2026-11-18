@@ -87,12 +87,86 @@ const failure = (code, transient = false) => Object.assign(new Error('Google Ads
 const calendarDay = value => typeof value === 'string' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)
   && Number.isFinite(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
 
+// Google's own enum names (SERVING, DISAPPROVED, NOT_CONVERSION_TRACKED, …): kept only when they look like one.
+const enumWord = value => (typeof value === 'string' && /^[A-Z][A-Z0-9_]{0,59}$/.test(value) ? value : null);
+const count = value => { const n = Number(value); return Number.isFinite(n) && n >= 0 ? Math.round(n) : 0; };
+const cents = micros => { const n = Number(micros); return Number.isFinite(n) && n >= 0 ? Math.round(n / 10_000) : null; };
+const dayOf = value => (typeof value === 'string' && calendarDay(value.slice(0, 10)) ? value.slice(0, 10) : null);
+// A refused search keeps only Google's error enum (e.g. queryError.UNRECOGNIZED_FIELD), never its message text.
+const searchRefusal = data => {
+  for (const detail of Array.isArray(data?.error?.details) ? data.error.details : []) {
+    for (const item of Array.isArray(detail?.errors) ? detail.errors : []) {
+      for (const [kind, value] of Object.entries(item?.errorCode ?? {})) {
+        const reason = `${kind}.${value}`;
+        if (/^[a-zA-Z]{1,40}\.[A-Z][A-Z0-9_]{0,59}$/.test(reason)) return reason;
+      }
+    }
+  }
+  return null;
+};
+
+/**
+ * The read-back of the account's running campaigns (review 2026-11-18): the raw rows of deliveryReport's searches, keyed by campaign id.
+ * Exported for tests. `rows` is { account, campaigns, metrics, ads, locations }, each the `results` of one search.
+ */
+export function deliveryFromRows({ account = [], campaigns = [], metrics = [], ads = [], locations = [] }) {
+  const customer = account[0]?.customer ?? {};
+  const byId = new Map();
+  for (const row of campaigns) {
+    const id = String(row?.campaign?.id ?? '');
+    if (!/^[0-9]{1,20}$/.test(id) || byId.has(id)) continue;
+    const campaign = row.campaign;
+    const budget = row.campaignBudget ?? {};
+    byId.set(id, {
+      id, name: String(campaign.name ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 120),
+      status: enumWord(campaign.status), serving: enumWord(campaign.servingStatus), primary: enumWord(campaign.primaryStatus),
+      reasons: (Array.isArray(campaign.primaryStatusReasons) ? campaign.primaryStatusReasons : []).map(enumWord).filter(Boolean).slice(0, 10),
+      startDay: dayOf(campaign.startDateTime), endDay: dayOf(campaign.endDateTime),
+      budget: { period: enumWord(budget.period), dailyCents: cents(budget.amountMicros), totalCents: cents(budget.totalAmountMicros) },
+      locations: [], ads: { approved: 0, limited: 0, disapproved: 0, underReview: 0, other: 0 },
+      impressions: 0, clicks: 0, costCents: 0, conversions: 0,
+    });
+  }
+  for (const row of metrics) {
+    const item = byId.get(String(row?.campaign?.id ?? ''));
+    if (!item) continue;
+    item.impressions += count(row.metrics?.impressions);
+    item.clicks += count(row.metrics?.clicks);
+    item.costCents += cents(row.metrics?.costMicros) ?? 0;
+    item.conversions += Number.isFinite(Number(row.metrics?.conversions)) && Number(row.metrics.conversions) > 0 ? Number(row.metrics.conversions) : 0;
+  }
+  for (const row of ads) {
+    const item = byId.get(String(row?.campaign?.id ?? ''));
+    if (!item) continue;
+    const approval = enumWord(row.adGroupAd?.policySummary?.approvalStatus);
+    const review = enumWord(row.adGroupAd?.policySummary?.reviewStatus);
+    if (approval === 'DISAPPROVED') item.ads.disapproved += 1;
+    else if (approval === 'APPROVED') item.ads.approved += 1;
+    else if (approval === 'APPROVED_LIMITED' || approval === 'AREA_OF_INTEREST_ONLY') item.ads.limited += 1;
+    else if (review === 'REVIEW_IN_PROGRESS' || review === 'UNDER_APPEAL') item.ads.underReview += 1;
+    else item.ads.other += 1;
+  }
+  for (const row of locations) {
+    const item = byId.get(String(row?.campaign?.id ?? ''));
+    const place = row?.campaignCriterion?.location?.geoTargetConstant;
+    if (item && /^geoTargetConstants\/[0-9]{1,12}$/.test(String(place ?? '')) && !item.locations.includes(place)) item.locations.push(place);
+  }
+  for (const item of byId.values()) item.conversions = Math.round(item.conversions * 100) / 100;
+  return {
+    // JSON leaves out a field at its default, so a customer row without autoTaggingEnabled means false; no row at all means unknown.
+    account: { autoTagging: account.length ? customer.autoTaggingEnabled === true : null,
+      conversionTracking: enumWord(customer.conversionTrackingSetting?.conversionTrackingStatus) },
+    campaigns: [...byId.values()],
+  };
+}
+
 export const adwordsScope = 'https://www.googleapis.com/auth/adwords';
 
 /**
  * The Google Ads API: an access token, and one atomic mutate that creates a PAUSED search campaign (its budget, United States targeting,
  * negative keywords, one ad group with its keywords and the responsive search ad). Nothing runs until the owner enables it in Google Ads,
- * unless the owner handed ad campaign launch over: then it is created ENABLED and ends with its month.
+ * unless the owner handed ad campaign launch over: then it is created ENABLED and ends with its month. `deliveryReport` reads back, and
+ * never changes, what Google reports about the enabled campaigns.
  *
  * The token comes from an OAuth client's refresh token when all three are set, else from the Hub's Google service account
  * (`serviceAccount`, the HUB_SEARCH_CONSOLE_CREDENTIALS key) added as a Standard user in Google Ads, which needs no refresh token. API
@@ -148,8 +222,60 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
     }
     return states.map(state => stateCache.get(state.code));
   }
+  // One GAQL search (googleAds:search), every page of it (at most five): read only, with the credentials that create campaigns.
+  async function search(query, token, signal) {
+    const rows = [];
+    let pageToken = null;
+    for (let page = 0; page < 5; page += 1) {
+      let response;
+      try {
+        response = await fetchImpl(`https://googleads.googleapis.com/${apiVersion}/customers/${customer}/googleAds:search`, { method: 'POST', redirect: 'error',
+          signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(timeoutMs)]),
+          headers: { Authorization: `Bearer ${token}`, ...(devToken ? { 'developer-token': devToken } : {}), 'Content-Type': 'application/json', ...(login ? { 'login-customer-id': login } : {}) },
+          body: JSON.stringify({ query, ...(pageToken ? { pageToken } : {}) }) });
+      } catch (error) { if (signal?.aborted) throw error; throw failure('google_unavailable', true); }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const refused = failure(response.status === 401 || response.status === 403 ? 'google_permission' : response.status === 429 || response.status >= 500 ? 'google_unavailable' : 'google_query_refused',
+          response.status === 429 || response.status >= 500);
+        const reason = searchRefusal(data);
+        throw reason ? Object.assign(refused, { reason }) : refused;
+      }
+      rows.push(...(Array.isArray(data?.results) ? data.results : []));
+      pageToken = typeof data?.nextPageToken === 'string' && data.nextPageToken ? data.nextPageToken : null;
+      if (!pageToken) break;
+    }
+    return rows;
+  }
+
   return {
     configured, auth,
+    /**
+     * What Google reports about the account's enabled campaigns (review 2026-11-18: campaign 24493303819 was created through this client,
+     * but its approval, delivery and the account's conversion tracking could be checked only in a browser session Google refused). Read
+     * only, five searches: the account's auto-tagging and conversion tracking; each enabled campaign's status, serving status, budget,
+     * dates; its impressions, clicks, cost and conversions from `since` to `until` (YYYY-MM-DD, the account's days); its enabled ads'
+     * policy approval; and the places it targets. At most 20 campaigns, newest first. Nothing is changed in Google Ads.
+     */
+    async deliveryReport({ since, until }, { signal } = {}) {
+      if (!configured) throw failure('google_not_configured');
+      if (!calendarDay(since) || !calendarDay(until) || since > until) throw failure('google_invalid_request');
+      const token = await accessToken(signal);
+      const rows = {};
+      rows.account = await search('SELECT customer.auto_tagging_enabled, customer.conversion_tracking_setting.conversion_tracking_status FROM customer LIMIT 1', token, signal);
+      rows.campaigns = await search('SELECT campaign.id, campaign.name, campaign.status, campaign.serving_status, campaign.primary_status, campaign.primary_status_reasons, '
+        + 'campaign.start_date_time, campaign.end_date_time, campaign_budget.period, campaign_budget.amount_micros, campaign_budget.total_amount_micros '
+        + "FROM campaign WHERE campaign.status = 'ENABLED' ORDER BY campaign.id DESC LIMIT 20", token, signal);
+      const ids = [...new Set(rows.campaigns.map(row => String(row?.campaign?.id ?? '')).filter(id => /^[0-9]{1,20}$/.test(id)))];
+      if (ids.length) {
+        const which = `campaign.id IN (${ids.join(', ')})`;
+        rows.metrics = await search(`SELECT campaign.id, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign WHERE ${which} AND segments.date BETWEEN '${since}' AND '${until}'`, token, signal);
+        rows.ads = await search(`SELECT campaign.id, ad_group_ad.policy_summary.approval_status, ad_group_ad.policy_summary.review_status FROM ad_group_ad WHERE ${which} AND ad_group_ad.status = 'ENABLED'`, token, signal);
+        rows.locations = await search(`SELECT campaign.id, campaign_criterion.location.geo_target_constant FROM campaign_criterion WHERE ${which} AND campaign_criterion.type = 'LOCATION' AND campaign_criterion.negative = FALSE`, token, signal);
+      }
+      return { since, until, ...deliveryFromRows(rows) };
+    },
+
     /**
      * Creates the campaign PAUSED in one mutate; returns its resource name. `live` (a launch the owner handed over) creates it ENABLED with
      * its last day `endDate` (YYYY-MM-DD, the account's time zone), so it can never spend past its month; the mutate is atomic, so a
