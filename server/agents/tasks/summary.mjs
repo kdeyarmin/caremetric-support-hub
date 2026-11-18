@@ -28,6 +28,7 @@ const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }
 const easternHour = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hourCycle: 'h23' });
 const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric' });
 const clock = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+const weekdayOnly = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' });
 
 const count = value => (Number.isFinite(Number(value)) && Number(value) > 0 ? Math.floor(Number(value)) : 0);
 const dollars = cents => `$${(Math.max(Number(cents) || 0, 0) / 100).toFixed(2)}`;
@@ -80,6 +81,8 @@ const actionWords = {
   'social.google_campaign': ['Google search campaign', 'Google search campaigns'],
   'content.publish': ['article', 'articles'],
   'creative.asset': ['creative asset', 'creative assets'],
+  // An asset with a warning from the checks, which only the owner can approve.
+  'creative.asset_review': ['ad image to review', 'ad images to review'],
   'creative.retire': ['creative asset to retire', 'creative assets to retire'],
   'offer.apply': ['offer from your menu', 'offers from your menu'],
 };
@@ -134,7 +137,10 @@ export function composeSummary(facts, day, { now = new Date(), since, publicOrig
   const held = (Array.isArray(notes.held) ? notes.held : []).map((item, index) => ({ item, index }))
     .sort((a, b) => (a.item.attention === 'decision' ? 0 : 1) - (b.item.attention === 'decision' ? 0 : 1) || a.index - b.index).map(({ item }) => item);
   const more = (shown, total) => (count(total) > shown ? [`…and ${count(total) - shown} more on the AI team page.`] : []);
-  const sentLines = [...sent.map(item => `${time(item.at)}: ${clip(item.subject, 160)}`), ...more(sent.length, notes.sentCount)];
+  // The window spans two days: a time from the day before says which day it was.
+  const today = dayKey.format(now);
+  const stamp = at => (dayKey.format(new Date(at)) === today ? time(at) : `${weekdayOnly.format(new Date(at))} ${time(at)}`);
+  const sentLines = [...sent.map(item => `${stamp(item.at)}: ${clip(item.subject, 160)}`), ...more(sent.length, notes.sentCount)];
   const heldLines = [...held.map(item => `${item.name ? `${item.name}: ` : ''}${clip(item.subject, 160)}`), ...more(held.length, notes.heldCount)];
 
   // What the team did: the window's totals and, by agent, the work that took a run (a check that found nothing new records none).
@@ -175,7 +181,7 @@ export function composeSummary(facts, day, { now = new Date(), since, publicOrig
   const body = [
     headline,
     decisions ? `Needs you:\n${needs.map(([label, value]) => `- ${label}: ${value}`).join('\n')}` : null,
-    sentLines.length ? `Already emailed to you today because it could not wait:\n${sentLines.map(line => `- ${line}`).join('\n')}` : null,
+    sentLines.length ? `Already emailed to you since the last summary, because it could not wait:\n${sentLines.map(line => `- ${line}`).join('\n')}` : null,
     `What the team did ${sinceWords}: ${doneLine}`,
     `What came in:\n${inRows.map(([label, value]) => `- ${label}: ${value}`).join('\n')}`,
     `What went out:\n${outRows.map(([label, value]) => `- ${label}: ${value}`).join('\n')}`,
@@ -192,7 +198,7 @@ export function composeSummary(facts, day, { now = new Date(), since, publicOrig
     blocks: [
       { type: 'callout', tone: decisions ? 'warning' : 'success', title: decisions ? 'Needs your decision.' : 'All clear.', text: headline },
       ...(decisions ? [{ type: 'details', rows: needs }] : []),
-      ...(sentLines.length ? [{ type: 'paragraph', text: 'Already emailed to you today because it could not wait:' }, ...list(sentLines)] : []),
+      ...(sentLines.length ? [{ type: 'paragraph', text: 'Already emailed to you since the last summary, because it could not wait:' }, ...list(sentLines)] : []),
       { type: 'paragraph', text: `What the team did ${sinceWords}: ${doneLine}` },
       ...(byAgent.length ? [{ type: 'details', rows: byAgent }] : []),
       { type: 'paragraph', text: 'What came in' },

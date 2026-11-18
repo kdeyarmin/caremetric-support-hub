@@ -373,7 +373,7 @@ through the day. Now, while **Settings → AI team → One end-of-day summary** 
   - **Needs you**: the morning brief's list (approvals waiting, with what they are: "4 social posts, 2 creative assets and 1
     prospect email", tasks waiting for your sign-in, products that are down, failed tasks, past-due subscriptions, leads waiting
     for a first reply, lost work you can fix), and the messages that came in since the last summary and still have no answer.
-  - **Already emailed to you today because it could not wait**, so you can check nothing was missed.
+  - **Already emailed to you since the last summary, because it could not wait**, so you can check nothing was missed.
   - **What the team did**: jobs done by each agent, approved actions carried out and the AI spend.
   - **What came in**: customer messages in Communications (by channel), website leads and trial sign-ups.
   - **What went out**: replies sent from Communications and what the team carried out (prospect emails, customer emails, social

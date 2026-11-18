@@ -28,6 +28,8 @@ describe('the summary\'s words', () => {
     expect(actionList({ 'growth.message': 3, 'social.post': 1, 'communication.reply': 2, 'incident.open': 4, 'mystery.kind': 1 }))
       .toBe('3 prospect emails, 2 replies to customers, 1 social post and 1 other change');
     expect(actionList({ 'social.post': 1 })).toBe('1 social post');
+    // Images with a warning from the checks wait for the owner as their own kind of approval.
+    expect(actionList({ 'creative.asset_review': 39, 'communication.reply': 1 })).toBe('39 ad images to review and 1 reply to a customer');
     expect(actionList({ 'incident.resolve': 2 })).toBeNull();
     expect(actionList({})).toBeNull();
   });
@@ -80,9 +82,11 @@ describe('composing the end-of-day summary', () => {
         { subject: 'Social plan: 4 posts to approve', attention: 'decision', name: 'Social Media Manager', at: '2026-11-18T13:15:00Z' },
       ],
       heldCount: 30,
-      sent: [{ subject: 'Still unanswered after 4 hours: contact CM-1201', severity: 'warning', at: '2026-11-18T15:14:00Z' }], sentCount: 1,
+      sent: [{ subject: 'New email: CM-1045', severity: 'info', at: '2026-11-17T23:18:00Z' },
+        { subject: 'Still unanswered after 4 hours: contact CM-1201', severity: 'warning', at: '2026-11-18T15:14:00Z' }], sentCount: 2,
     } }), { now: evening, publicOrigin: origin });
-    expect(summary.body).toContain('Already emailed to you today because it could not wait:\n- 10:14 AM: Still unanswered after 4 hours: contact CM-1201');
+    // A time from the day before says which day it was.
+    expect(summary.body).toContain('Already emailed to you since the last summary, because it could not wait:\n- Tue 6:18 PM: New email: CM-1045\n- 10:14 AM: Still unanswered after 4 hours: contact CM-1201');
     expect(summary.body).toContain([
       'Held for this summary instead of separate emails:', '- Social Media Manager: Social plan: 4 posts to approve',
       '- Social Media Manager: Social media weekly: 3 posts, $0.00 ad spend', '- …and 28 more on the AI team page.',
