@@ -51,6 +51,10 @@ try {
   const first = await store.creativeBriefCreate(brief);
   assert.equal(first.created, true);
   briefs.push(first.id);
+  const draftingTask = await row('select id, payload, status from private.agent_tasks where request_key = $1', [`creative:brief:${first.id}`]);
+  assert.equal(draftingTask.status, 'queued', 'Creating a brief also queues drafting in the same transaction');
+  assert.equal(draftingTask.payload.briefId, first.id);
+  tasks.push(draftingTask.id);
   assert.equal((await store.creativeBriefCreate(brief)).created, false, 'The same request key is one brief');
   await assert.rejects(store.creativeBriefCreate({ ...brief, requestKey: `it:${run}:advisors`, product: 'advisors' }), error => error.code === '23514', 'Only CareBase and Intel get creative');
   await assert.rejects(store.creativeBriefCreate({ ...brief, requestKey: `it:${run}:health`, audience: 'Patients with diabetes' }), error => error.code === '23514', 'An audience never names a health condition');

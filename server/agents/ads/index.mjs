@@ -55,6 +55,7 @@ const pausedWords = { linkedin: 'as a draft', meta: 'paused', google: 'paused' }
 const fallbackWords = {
   no_approved_creative: 'None of your approved creative fits it right now (approve some on the Creative screen).',
   month_ending: 'It is the last day of the month, too late to start a campaign that ends with it.',
+  window_too_short: "Too few days remain for Google's minimum three-day total-budget campaign.",
   monthly_budget_used: 'Too little of this month\'s number is left for it after the campaigns already started this month.',
   no_monthly_budget: '"Most to spend on new campaigns a month" is not set.',
   month_over: 'Its month has ended.',
@@ -218,8 +219,9 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           // A flight that failed this month is tried again the next day, on a platform that is not failing, up to flightAttempts times
           // (review 2026-11-17: November's only flight failed on a Monday and the next plan was a week away).
           const tried = monthly && config().flightDays > 0 ? await store.adsMonthCampaigns(month).catch(error => { if (error?.transient) throw error; return null; }) : null;
-          const failed = Array.isArray(tried) ? tried.filter(item => item.flight === true && item.status === 'failed').length : 0;
-          if (!failed || failed >= flightAttempts || tried.some(takesFlight)) return { result: { skipped: 'not_monday' } };
+          const failed = Array.isArray(tried) ? tried.filter(item => item.flight === true && (item.status === 'failed' || item.empty === true)).length : 0;
+          const empty = Array.isArray(tried) && tried.some(item => item.empty === true);
+          if ((!failed && !empty) || failed >= flightAttempts || tried.some(takesFlight)) return { result: { skipped: 'not_monday' } };
         }
         if (!monthly) return { result: { skipped: 'no_monthly_budget' } };
         const list = await marketedNow(marketed);
@@ -244,6 +246,10 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         const history = flights ? await store.adsMonthCampaigns(month) : null;
         // Not knowing the month's campaigns, the plan proposes no flight rather than risk a second one.
         if (flights && !Array.isArray(history)) return { result: { proposed: 0, skipped: { flight_history_unread: 1 } } };
+        // The limit applies on Mondays and owner runs too; otherwise each Monday could restart a month's exhausted retries.
+        if (flights && history.filter(item => item.flight === true && (item.status === 'failed' || item.empty === true)).length >= flightAttempts) {
+          return { result: { proposed: 0, skipped: { flight_attempts_used: 1 } } };
+        }
         const taken = (kind, targetId) => (flights ? history.some(item => item.kind === kind && item.targetId === targetId && takesFlight(item)) : store.socialCampaignProposed(kind, targetId));
 
         // 1. This month's campaigns not yet proposed, product by product: LinkedIn, Meta, then Google search.
@@ -277,10 +283,19 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         //    flight needs the Google Ads API, which sets its last day (an import file cannot).
         if (flights) {
           proposedAlready = history.filter(takesFlight).length;
+          // A request refusal can be a campaign problem rather than an access failure. Give another viable platform a turn before
+          // repeating that same failed launch; launch-ready candidates still take precedence below. Stable ties retain product order.
+          const attemptsFor = slot => history.filter(item => item.kind === slot.kind && item.targetId === slot.targetId
+            && (item.status === 'failed' || item.empty === true)).length;
+          slots.sort((a, b) => attemptsFor(a) - attemptsFor(b));
           const fits = slot => ((slot.platform !== 'google' || google().configured)
             ? flightBudget({ monthlyBudgetCents: monthly, maxDailyBudgetCents: social.maxDailyBudgetCents, flightDays }, slot.platform, left.days) : null);
           const starts = slot => onItsOwn(slot.kind) && (slot.platform === 'google' ? google().configured : Boolean(slot.firstAd));
-          const chosen = proposedAlready ? null : (slots.find(slot => starts(slot) && fits(slot)) ?? slots.find(slot => fits(slot)) ?? null);
+          // An earlier automatic launch left an empty paused campaign. Revisit it each day as new creative is approved, but do not
+          // manufacture another empty campaign while no candidate can actually start. Manual proposals still follow the owner's path.
+          const waitingForCreative = history.some(item => item.empty === true) && slots.some(slot => onItsOwn(slot.kind));
+          const chosen = proposedAlready ? null : (slots.find(slot => starts(slot) && fits(slot)) ?? (waitingForCreative ? null : slots.find(slot => fits(slot))) ?? null);
+          if (waitingForCreative && !chosen && !proposedAlready) skip('waiting_for_launch_ready');
           for (const slot of slots) if (slot !== chosen) skip(proposedAlready ? 'flight_this_month' : chosen ? 'flight_taken' : 'flight_does_not_fit');
           if (chosen) chosen.flight = fits(chosen);
           slots.splice(0, slots.length, ...(chosen ? [chosen] : []));
@@ -316,7 +331,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
             const how = !onItsOwn(kind)
               ? `It is created ${pausedWords[platform]}: nothing runs or spends until you start it. It starts with no ads: add its first ad in ${managers[platform]} (your approved creative is on the Creative screen). Once an ad is running in it, the team's daily ad review can propose more.${flightNote(slot)}`
               : ad
-                ? `You handed ad campaign launch over, so it starts on its own, with this first ad from your approved creative ${ad.creativeAssetId}, and runs until ${windowOf(slot).lastDay}. It stays within your monthly number and your daily ad-set limit; if too little of the month's number is left when it starts, it is created ${pausedWords[platform]} with no ads instead.\n\nFirst ad\n${platform === 'linkedin' ? 'Post text' : 'Primary text'}: ${ad.message}\nHeadline: ${ad.headline}\nDescription: ${ad.description}\n${platform === 'linkedin' ? '' : `Button: ${ad.callToAction === 'SIGN_UP' ? 'Sign up' : 'Learn more'}\n`}Link: ${ad.link}\nImage: ${ad.imageUrl}`
+                ? `You handed ad campaign launch over, so it starts on its own, with this first ad from your approved creative ${ad.creativeAssetId}, and runs until ${windowOf(slot).lastDay}. Its total budget stays within your monthly number; the platform controls day-to-day pacing; if too little of the month's number is left when it starts, it is created ${pausedWords[platform]} with no ads instead.\n\nFirst ad\n${platform === 'linkedin' ? 'Post text' : 'Primary text'}: ${ad.message}\nHeadline: ${ad.headline}\nDescription: ${ad.description}\n${platform === 'linkedin' ? '' : `Button: ${ad.callToAction === 'SIGN_UP' ? 'Sign up' : 'Learn more'}\n`}Link: ${ad.link}\nImage: ${ad.imageUrl}`
                 : `You handed ad campaign launch over, but none of your approved creative fits it yet, so it is created ${pausedWords[platform]} with no ads, as before: add its first ad in ${managers[platform]} (your approved creative is on the Creative screen) and start it there.${flightNote(slot)}`;
             action = await store.proposeAction({ taskId: task.id, kind, targetKind: 'social_item', targetId,
               preview: `New ${platformNames[platform]} campaign for ${productNames[product]}: ${name}.\n\n${budgetLine(slot, daily)}\nAudience: ${audience}.\nGoal: visits to ${page.label} (${link}).\n\n${how}`.slice(0, 6000),
@@ -335,7 +350,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
             const finalUrl = taggedUrl(page.url, { source: 'google', medium: 'cpc', campaign: `search-${product === 'carebase' ? 'carebase' : 'intel'}` });
             const how = !onItsOwn(kind) ? `It is created paused (or emailed to you as an import file while the Google Ads API is not set up).${flightNote(slot)}`
               : google().configured
-                ? `You handed ad campaign launch over, so it starts on its own with the ad above and runs until ${windowOf(slot).lastDay}, within your monthly number and your daily ad-set limit (created paused instead if too little of the month's number is left when it starts).`
+                ? `You handed ad campaign launch over, so it starts on its own with the ad above and runs until ${windowOf(slot).lastDay}, with a total budget within your monthly number (created paused instead if too little of the month's number is left when it starts).`
                 : 'You handed ad campaign launch over, but the Google Ads API is not set up, so it is emailed to you as an import file, paused, as before.';
             action = await store.proposeAction({ taskId: task.id, kind, targetKind: 'social_item', targetId,
               preview: `New Google search campaign for ${productNames[product]}: ${name}.\n\n${budgetLine(slot, daily)} Location: ${statesWords()}. Landing page: ${finalUrl}\n\nHeadlines:\n${checked.plan.headlines.join('\n')}\n\nDescriptions:\n${checked.plan.descriptions.join('\n')}\n\nKeywords: ${checked.plan.keywords.map(k => `${k.text} (${k.match.toLowerCase()})`).join(', ')}\n\nNegative keywords: ${checked.plan.negatives.join(', ')}\n\n${how}`.slice(0, 6000),
@@ -347,7 +362,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         if (all.length) {
           const body = [
             waiting.length ? `The team proposed ${plural(waiting.length, 'new paused campaign')} for ${month}. Open the AI team to review the budget, audience and ads; nothing spends until you start it.` : null,
-            automatic.length ? `${plural(automatic.length, 'new campaign')} for ${month} ${automatic.length === 1 ? 'starts' : 'start'} on ${automatic.length === 1 ? 'its' : 'their'} own, because you handed ad campaign launch over: each with its first ad from your approved creative where one fits, within your monthly number and daily ad-set limit, ending with the month. Keep approving on the AI team page stops the next ones.` : null,
+            automatic.length ? `${plural(automatic.length, 'new campaign')} for ${month} ${automatic.length === 1 ? 'starts' : 'start'} on ${automatic.length === 1 ? 'its' : 'their'} own, because you handed ad campaign launch over: each with its first ad from your approved creative where one fits, with a total budget within your monthly number, ending with the month. Keep approving on the AI team page stops the next ones.` : null,
           ].filter(Boolean).join(' ');
           await notifier.send({ severity: 'info', subject: waiting.length ? `Paid ads: ${plural(waiting.length, 'new campaign')} to review` : `Paid ads: ${plural(automatic.length, 'new campaign')} starting on their own`,
             body, dedupeKey: `ads:plan:${month}:${all.join(',')}`.slice(0, 200), agentKey: task.agentKey, taskId: task.id });
@@ -452,11 +467,12 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         const reservation = await reserve(execution, input.dailyBudgetCents, platform, left.days);
         if (!reservation?.reserved) return fallback(/^[a-z][a-z_]{0,59}$/.test(reservation?.reason ?? '') ? reservation.reason : 'not_reserved');
         const daily = reservation.dailyBudgetCents;
+        const total = reservation.committedCents ?? daily * (reservation.days ?? left.days);
         let created;
         try {
           created = await (platform === 'meta'
-            ? meta.createCampaign({ name: input.name, dailyBudgetCents: daily, audienceId: input.audienceId, endAt: left.endsAt.toISOString(), ...located() })
-            : linkedin.createCampaign({ name: input.name, dailyBudgetCents: daily, startAt: new Date(moment.getTime() + 3_600_000).toISOString(), endAt: left.endsAt.toISOString(), ...located() }));
+            ? meta.createCampaign({ name: input.name, dailyBudgetCents: daily, lifetimeBudgetCents: total, audienceId: input.audienceId, startAt: moment.toISOString(), endAt: left.endsAt.toISOString(), ...located() })
+            : linkedin.createCampaign({ name: input.name, dailyBudgetCents: daily, totalBudgetCents: total, startAt: new Date(moment.getTime() + 3_600_000).toISOString(), endAt: left.endsAt.toISOString(), ...located() }));
         } catch (error) {
           // Paused, or not there at all: nothing can spend, so its share of the month is given back.
           await release(execution);
@@ -481,11 +497,11 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           // The campaign and its ad exist; whether it started is not known for certain. Its budget and end date bound it either way, so its
           // share stays reserved.
           await tell(execution, 'warning', `Check the new ${platformNames[platform]} campaign: ${input.name}`,
-            `It and its first ad were created, but starting it was not confirmed (${codeOf(error).replaceAll('_', ' ')}). Look at it in ${managers[platform]}: it spends at most ${money(daily)} a day and ends on ${left.lastDay} if it runs.`);
+            `It and its first ad were created, but starting it was not confirmed (${codeOf(error).replaceAll('_', ' ')}). Look at it in ${managers[platform]}: it has a total budget of ${money(total)} and ends on ${left.lastDay} if it runs.`);
           return { created: true, ...created, adId: made?.id ?? null, launched: false, reason: codeOf(error) };
         }
         await tell(execution, 'info', `New ${platformNames[platform]} campaign started: ${input.name}`,
-          `It started on its own, as you handed ad campaign launch over, with its first ad from your approved creative ${ad.creativeAssetId}. It spends at most ${money(daily)} a day and ends on ${left.lastDay}. Pause it in ${managers[platform]} at any time.`);
+          `It started on its own, as you handed ad campaign launch over, with its first ad from your approved creative ${ad.creativeAssetId}. It has a total budget of ${money(total)} and ends on ${left.lastDay}. Pause it in ${managers[platform]} at any time.`);
         return { created: true, ...created, adId: made?.id ?? null, launched: true, dailyBudgetCents: daily, endsOn: left.lastDay };
       }
 
@@ -501,22 +517,27 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         if (!canReserve()) throw failure('approval_required');
         const moment = now();
         const left = campaignWindow(moment, input.flightDays ?? null);
-        if (monthLeft(moment).days < 2) return fallback('month_ending');
+        if (left.days < 3) return fallback('window_too_short');
         const reservation = await reserve(execution, input.dailyBudgetCents, 'google', left.days);
         if (!reservation?.reserved) return fallback(/^[a-z][a-z_]{0,59}$/.test(reservation?.reason ?? '') ? reservation.reason : 'not_reserved');
         const daily = reservation.dailyBudgetCents;
+        const total = reservation.committedCents ?? daily * (reservation.days ?? left.days);
         let created;
         try {
-          created = await client.createSearchCampaign({ name: input.name, dailyBudgetCents: daily, finalUrl: input.finalUrl, plan, live: true, endDate: left.lastDay, ...located() });
+          created = await client.createSearchCampaign({ name: input.name, dailyBudgetCents: daily, totalBudgetCents: total, startDate: easternDate(moment), finalUrl: input.finalUrl, plan, live: true, endDate: left.lastDay, ...located() });
         } catch (error) {
           // Not confirmed: it may exist and run, bounded by its budget and end date, so its share stays reserved.
-          if (error?.code === 'google_unconfirmed') throw error;
+          if (error?.code === 'google_unconfirmed') {
+            await tell(execution, 'warning', `Check the new Google search campaign: ${input.name}`,
+              `Google did not confirm whether it created the campaign. Check Google Ads before trying again: it may already be running, with a total budget of ${money(total)} through ${left.lastDay}. Its share of this month's number stays reserved until its status is resolved.`);
+            throw error;
+          }
           await release(execution);
           if (error?.code === 'google_invalid_request') return fallback('google_refused_live');
           throw error;
         }
         await tell(execution, 'info', `New Google search campaign started: ${input.name}`,
-          `It started on its own, as you handed ad campaign launch over. It spends at most ${money(daily)} a day and ends on ${left.lastDay}. Pause it in Google Ads at any time.`);
+          `It started on its own, as you handed ad campaign launch over. It has a total budget of ${money(total)} and ends on ${left.lastDay}. Pause it in Google Ads at any time.`);
         return { created: true, ...created, launched: true, dailyBudgetCents: daily, endsOn: left.lastDay };
       }
 
@@ -587,7 +608,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           }
           // An import file cannot carry a flight's last day, so a flight needs the API.
           if (input.flightDays !== undefined) throw failure('google_not_configured');
-          const csv = editorCsv(checked.plan, { name: input.name, finalUrl: input.finalUrl, dailyBudgetCents: input.dailyBudgetCents });
+          const csv = editorCsv(checked.plan, { name: input.name, finalUrl: input.finalUrl, dailyBudgetCents: input.dailyBudgetCents, ...located() });
           const sent = await notifier.send({ severity: 'info', subject: `Google search campaign to import: ${input.name}`,
             body: `The Google Ads API is not set up yet, so here is the campaign ${automatic ? 'the team planned under your hand-over' : 'you approved'} as a file. In Google Ads Editor choose Account → Import → Paste text, paste it, review and post. It is paused until you enable it.`,
             blocks: [{ type: 'paragraph', text: 'Paste this into Google Ads Editor (Account → Import → Paste text):' }, { type: 'message', text: csv }],

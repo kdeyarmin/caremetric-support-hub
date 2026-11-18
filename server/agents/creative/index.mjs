@@ -16,7 +16,7 @@
 import { live, rebuilt } from '../../live.mjs';
 import { creativeExecutors } from './executor.mjs';
 import { heygenClient } from './heygen.mjs';
-import { creativeHandlers } from './tasks.mjs';
+import { creativeHandlers, deferCreativeRequest } from './tasks.mjs';
 
 export const creativeFeature = 'platform.agents.creative.v1';
 export const creativeDeclared = features => (features instanceof Set ? features.has(creativeFeature) : Array.isArray(features) && features.includes(creativeFeature));
@@ -59,8 +59,11 @@ export function creativeTeam({ creative = null, features = null, fetchImpl = fet
         settings: { get dailyRenderCap() { return config().dailyRenderCap; }, get videoProvider() { return config().videoProvider; },
           get countySnapshotsPerWeek() { return config().countySnapshotsPerWeek; },
           get visionReview() { return config().visionReview === true; }, get visionMinScore() { return config().visionMinScore; } } });
-      // Off in Settings → Creative: a task is put aside without work, and nothing is rendered, proposed or sent.
-      return Object.fromEntries(Object.entries(handlers).map(([kind, handler]) => [kind, (task, context) => (enabled() ? handler(task, context) : { result: { skipped: 'creative_off' } })]));
+      // Scheduled sweeps are disposable while switched off. A brief's sole drafting task must wait
+      // for the switch to come back on, otherwise its open brief is stranded without a task.
+      return Object.fromEntries(Object.entries(handlers).map(([kind, handler]) => [kind, (task, context) => (enabled() ? handler(task, context)
+        : kind === 'creative.request' ? deferCreativeRequest('creative_off', task.payload?.briefId, context?.now?.() ?? new Date())
+          : { result: { skipped: 'creative_off' } })]));
     },
     executors: ({ store }) => creativeExecutors({ store }),
   };

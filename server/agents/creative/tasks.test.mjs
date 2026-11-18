@@ -142,6 +142,44 @@ describe('the work', () => {
     expect(store.creativeBriefFinish).toHaveBeenCalledWith(briefId, 'skipped', { reason: 'product_not_marketed' });
   });
 
+  it('keeps a brief queued through a missing model or Observe, then drafts it when work resumes', async () => {
+    for (const reason of ['model_not_configured', 'observe_only']) {
+      const model = modelOf();
+      model.configured = reason !== 'model_not_configured';
+      const h = harness({ model, autonomy: reason === 'observe_only' ? 'observe' : 'propose' });
+      const requested = h.task('creative.request', { payload: { briefId } });
+      expect(await h.handlers['creative.request'](requested, { now })).toMatchObject({ status: 'queued',
+        retryAt: new Date('2026-11-09T15:00:00Z'), result: { deferred: reason, briefId } });
+      expect(model.run).not.toHaveBeenCalled();
+      model.configured = true;
+      requested.agent.autonomy = 'propose';
+      expect((await h.handlers['creative.request'](requested, { now })).result.drafts).toBe(3);
+    }
+  });
+
+  it('keeps a brief queued when the Creative switch is off, and drafts it after it is enabled', async () => {
+    const h = harness();
+    let enabled = false;
+    const team = creativeTeam({ features: new Set([creativeFeature]), creative: () => ({ enabled }) });
+    const handlers = team.handlers({ store: h.store, notifier: h.notifier, model: modelOf() });
+    const requested = task('creative.request', { payload: { briefId } });
+    expect(await handlers['creative.request'](requested, { now })).toMatchObject({ status: 'queued', result: { deferred: 'creative_off', briefId } });
+    expect(h.store.creativeBriefContext).not.toHaveBeenCalled();
+    enabled = true;
+    expect((await handlers['creative.request'](requested, { now })).result.drafts).toBe(3);
+  });
+
+  it('defers a provider outage after normal retries and records a refusal as failed work', async () => {
+    const model = { configured: true, run: vi.fn(async () => { throw Object.assign(new Error('Unavailable'), { code: 'ai_unavailable', transient: true }); }) };
+    const h = harness({ model });
+    const requested = task('creative.request', { payload: { briefId }, attempts: 3 });
+    expect(await h.handlers['creative.request'](requested, { now })).toMatchObject({ status: 'queued', result: { deferred: 'ai_unavailable', briefId } });
+    expect(h.store.creativeBriefFinish).toHaveBeenLastCalledWith(briefId, 'open', null);
+    model.run.mockResolvedValueOnce({ outcome: 'refused' });
+    expect(await h.handlers['creative.request'](requested, { now })).toMatchObject({ status: 'failed', errorCode: 'refused', result: { briefId } });
+    expect(h.store.creativeDraftsSave).not.toHaveBeenCalled();
+  });
+
   it('renders and proposes a passing asset, blocks a failing one before rendering, and never hands anything over itself', async () => {
     const passing = { id: assetId, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static', layout: 'checklist', width: 1080, height: 1080,
       variantLabel: 'A', hookType: 'proof', ...copyOf('proof'), overlay: copyOf('proof').overlay, offerCode: null, brandKit: fullKit, landingUrl: 'https://www.caremetricintel.com/?utm_content=x' };
