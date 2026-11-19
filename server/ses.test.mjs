@@ -78,6 +78,34 @@ describe('sending through SES', () => {
     await expect(send(async () => ok({ MessageId: 'bad id with spaces' }))).resolves.toEqual({ delivery: 'sent', id: null });
   });
 
+  it('sends again after a wait when SES says the sending rate was exceeded, and nothing else is sent twice', async () => {
+    const tooMany = { status: 429, json: async () => ({ message: 'Maximum sending rate exceeded.' }) };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(tooMany).mockResolvedValueOnce(tooMany).mockResolvedValueOnce(ok());
+    const wait = vi.fn(async () => {});
+    const mail = sesBulkMail({ ...access, from: () => 'support@caremetric.ai', replyTo: () => 'support@caremetric.ai', fetchImpl, wait });
+    await expect(mail.send({ to: 'pat@example.org', subject: 'News', text: 'Text' })).resolves.toEqual({ delivery: 'sent', id: '0100019a-example-message-id-000000' });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(new Set(fetchImpl.mock.calls.map(([, request]) => request.body)).size).toBe(1);
+    const [first, second] = wait.mock.calls.map(([ms]) => ms);
+    expect(first).toBeGreaterThanOrEqual(1000); expect(first).toBeLessThan(1500);
+    expect(second).toBeGreaterThanOrEqual(2000); expect(second).toBeLessThan(3000);
+
+    for (const status of [400, 503]) {
+      const once = vi.fn(async () => ({ status, json: async () => ({}) })), never = vi.fn(async () => {});
+      await sesMail({ ...access, fetchImpl: once, wait: never }).send('pat@example.org', 'Hi', 'Text');
+      expect(once).toHaveBeenCalledTimes(1);
+      expect(never).not.toHaveBeenCalled();
+    }
+  });
+
+  it('counts a message as failed once SES is still refusing it for the rate after three waits', async () => {
+    const fetchImpl = vi.fn(async () => ({ status: 429, json: async () => ({}) }));
+    const wait = vi.fn(async () => {});
+    await expect(sesMail({ ...access, fetchImpl, wait }).send('pat@example.org', 'Hi', 'Text')).resolves.toEqual({ delivery: 'failed', id: null });
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(wait).toHaveBeenCalledTimes(3);
+  });
+
   it('is not configured without a usable key or sender', () => {
     expect(sesMail({ ...access, accessKeyId: '' }).configured).toBe(false);
     expect(sesMail({ ...access, secretAccessKey: 'short' }).configured).toBe(false);

@@ -93,10 +93,19 @@ export function mimeMessage({ from, fromName = '', to, replyTo = null, subject, 
 }
 
 /**
- * The SES v2 SendEmail call shared by both senders. Answers like the SendGrid senders: `sent` with SES's message id, `failed` when
- * SES refused the message (a 4xx: it was not sent), `unknown` when the outcome cannot be known (a timeout or a server error).
+ * SES answers 429 (TooManyRequests) when the account's sending rate is exceeded (14 a second since production access, November 19,
+ * 2026). That answer means SES did not accept the message, so it is sent again after these waits (each stretched by up to half again,
+ * so concurrent senders spread out) before it counts as failed. Bulk email sends five at a time and can briefly run faster than that.
  */
-function sesClient({ accessKeyId, secretAccessKey, sessionToken = null, region, configurationSet, fetchImpl, now }) {
+const throttleWaitsMs = [1000, 2000, 4000];
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * The SES v2 SendEmail call shared by both senders. Answers like the SendGrid senders: `sent` with SES's message id, `failed` when
+ * SES refused the message (a 4xx: it was not sent; a 429 only after the waits above), `unknown` when the outcome cannot be known (a
+ * timeout or a server error). Only a 429 is sent again: any other answer, and any request whose outcome is unknown, is final.
+ */
+function sesClient({ accessKeyId, secretAccessKey, sessionToken = null, region, configurationSet, fetchImpl, now, wait = pause }) {
   const regionNow = () => { const value = live(region); return typeof value === 'string' && regionPattern.test(value) ? value : 'us-east-2'; };
   const setNow = () => { const value = live(configurationSet); return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : null; };
   return {
@@ -107,24 +116,31 @@ function sesClient({ accessKeyId, secretAccessKey, sessionToken = null, region, 
       const body = JSON.stringify({ Destination: { ToAddresses: [to] }, Content: { Raw: { Data: Buffer.from(raw, 'utf8').toString('base64') } },
         ConfigurationOverrides: { Tracking: { ClickTrackingEnabled: 'DISABLED', OpenTrackingEnabled: 'DISABLED' } },
         ...(tags.length ? { EmailTags: tags } : {}), ...(set ? { ConfigurationSetName: set } : {}) });
-      let response;
-      try {
-        const headers = signV4({ method: 'POST', url, region: regionNow(), service: 'ses', accessKeyId, secretAccessKey, sessionToken,
-          headers: { 'content-type': 'application/json' }, body, now: now() });
-        delete headers.host;
-        response = await fetchImpl(url, { method: 'POST', headers, body, redirect: 'error', signal: AbortSignal.timeout(15000) });
-      } catch { return { delivery: 'unknown', id: null }; }
-      if (response.status >= 400 && response.status < 500) return { delivery: 'failed', id: null };
-      if (response.status !== 200) return { delivery: 'unknown', id: null };
-      const id = (await response.json().catch(() => ({})))?.MessageId;
-      return { delivery: 'sent', id: typeof id === 'string' && /^[A-Za-z0-9._-]{1,200}$/.test(id) ? id : null };
+      for (let attempt = 0; ; attempt += 1) {
+        let response;
+        try {
+          const headers = signV4({ method: 'POST', url, region: regionNow(), service: 'ses', accessKeyId, secretAccessKey, sessionToken,
+            headers: { 'content-type': 'application/json' }, body, now: now() });
+          delete headers.host;
+          response = await fetchImpl(url, { method: 'POST', headers, body, redirect: 'error', signal: AbortSignal.timeout(15000) });
+        } catch { return { delivery: 'unknown', id: null }; }
+        if (response.status === 429 && attempt < throttleWaitsMs.length) {
+          const base = throttleWaitsMs[attempt];
+          await wait(base + Math.floor(Math.random() * base / 2));
+          continue;
+        }
+        if (response.status >= 400 && response.status < 500) return { delivery: 'failed', id: null };
+        if (response.status !== 200) return { delivery: 'unknown', id: null };
+        const id = (await response.json().catch(() => ({})))?.MessageId;
+        return { delivery: 'sent', id: typeof id === 'string' && /^[A-Za-z0-9._-]{1,200}$/.test(id) ? id : null };
+      }
     },
   };
 }
 
 /** SES for staff replies and alerts: the same interface as sendgridMail (communications.mjs). `from` and `replyTo` may be functions. */
-export function sesMail({ accessKeyId, secretAccessKey, sessionToken = null, region = 'us-east-2', configurationSet = null, from = 'support@caremetric.ai', replyTo = null, fromName = 'CareMetric Support', fetchImpl = fetch, now = () => new Date() }) {
-  const client = sesClient({ accessKeyId, secretAccessKey, sessionToken, region, configurationSet, fetchImpl, now });
+export function sesMail({ accessKeyId, secretAccessKey, sessionToken = null, region = 'us-east-2', configurationSet = null, from = 'support@caremetric.ai', replyTo = null, fromName = 'CareMetric Support', fetchImpl = fetch, now = () => new Date(), wait = pause }) {
+  const client = sesClient({ accessKeyId, secretAccessKey, sessionToken, region, configurationSet, fetchImpl, now, wait });
   const sender = () => { const value = live(from); return typeof value === 'string' ? value.trim() : ''; };
   const reply = () => { const value = live(replyTo); return typeof value === 'string' && emailAddress.test(value.trim()) ? value.trim() : null; };
   return {
@@ -138,8 +154,8 @@ export function sesMail({ accessKeyId, secretAccessKey, sessionToken = null, reg
 }
 
 /** SES for bulk, growth and customer email: the same interface as sendgridBulkMail (bulk-email.mjs). Settings may be functions. */
-export function sesBulkMail({ accessKeyId, secretAccessKey, sessionToken = null, region = 'us-east-2', configurationSet = null, from = 'support@caremetric.ai', fromName = 'CareMetric', fromNameLocked = false, replyTo = from, category = 'hub-bulk-email', fetchImpl = fetch, now = () => new Date() }) {
-  const client = sesClient({ accessKeyId, secretAccessKey, sessionToken, region, configurationSet, fetchImpl, now });
+export function sesBulkMail({ accessKeyId, secretAccessKey, sessionToken = null, region = 'us-east-2', configurationSet = null, from = 'support@caremetric.ai', fromName = 'CareMetric', fromNameLocked = false, replyTo = from, category = 'hub-bulk-email', fetchImpl = fetch, now = () => new Date(), wait = pause }) {
+  const client = sesClient({ accessKeyId, secretAccessKey, sessionToken, region, configurationSet, fetchImpl, now, wait });
   const sender = () => ({ from: String(live(from) ?? '').trim(), fromName: String(live(fromName) ?? ''), replyTo: String(live(replyTo) ?? '').trim() });
   return {
     get configured() { const value = sender(); return client.configured && emailAddress.test(value.from) && emailAddress.test(value.replyTo) && /^[a-z0-9-]{1,40}$/.test(category); },
