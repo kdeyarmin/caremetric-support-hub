@@ -617,6 +617,73 @@ describe('approved creative from the Creative Director', () => {
     expect(away.platforms.meta).toMatchObject({ noLink: 0, skips: { leads_elsewhere: 1 }, elsewhere: { 'example.com': 1 } });
     expect(JSON.stringify(away)).not.toContain('/form');
   });
+
+  // Review 2026-11-19: 18 active Meta ad sets were skipped as no_ad_link, and the receipt could not say what they spent or what their ads were.
+  it('lists each ad set it read with its budget, its last seven days and the kind of each active ad whose link it cannot read', async () => {
+    const old = '2026-10-01T00:00:00Z';
+    const overview = {
+      adsets: [{ id: '40', name: `Boosted ${'x'.repeat(100)}`, active: true, dailyBudget: 2000 }, { id: '41', name: 'Flight', active: true, dailyBudget: null, lifetimeBudget: 5000 },
+        { id: '42', name: 'Old test', active: false, dailyBudget: 1000 }],
+      ads: [{ id: '1', name: 'Post', adsetId: '40', active: true, createdAt: old, shape: 'existing_post', copy: { message: 'Words only the ad carries', link: null } },
+        { id: '2', name: 'Video', adsetId: '41', active: true, createdAt: old, shape: 'video', copy: { link: null } },
+        { id: '3', name: 'Link', adsetId: '41', active: true, createdAt: old, shape: 'link', copy: { link: 'https://www.caremetricintel.com/' } },
+        { id: '4', name: 'Paused video', adsetId: '41', active: false, createdAt: old, shape: 'video', copy: { link: null } },
+        { id: '5', name: 'Paused', adsetId: '42', active: false, createdAt: old, copy: { link: null } }],
+      // Under the rules' thresholds, so nothing is judged: the one recommendation is ad set 40's refresh (it has one active ad).
+      current: [{ adId: '1', impressions: 400, clicks: 4, spendCents: 900, frequency: 1.2, results: 0 }, { adId: '2', impressions: 600, clicks: 9, spendCents: 1200, frequency: 1.1, results: 1 },
+        { adId: '3', impressions: 100, clicks: 1, spendCents: 300, frequency: 1, results: 0 }],
+      previous: [],
+    };
+    const { result } = await harness({ meta: metaOf({ adsOverview: vi.fn(async () => overview) }), model: null }).handlers['social.ads'](task('social.ads'), { now });
+    const meta = result.platforms.meta;
+    expect(meta).toMatchObject({ adsets: 3, noLink: 4, noLinkKinds: { existing_post: 1, video: 2, unknown: 1 }, skips: { no_ad_link: 1 } });
+    // Active ad sets first, the one that spent most at the top; the paused one last.
+    expect(meta.adsetList.map(row => row.id)).toEqual(['41', '40', '42']);
+    // A budget or count that is empty is left out of a row.
+    expect(meta.adsetList[0]).toEqual({ id: '41', name: 'Flight', active: true, lifetimeBudgetCents: 5000, activeAds: 2,
+      impressions: 700, clicks: 10, spendCents: 1500, results: 1, noLink: { video: 1 } });
+    expect(meta.adsetList[1]).toMatchObject({ id: '40', dailyBudgetCents: 2000, activeAds: 1, spendCents: 900, noLink: { existing_post: 1 }, skips: { no_ad_link: 1 } });
+    expect(meta.adsetList[1].name).toHaveLength(60);
+    // Codex review 2026-11-19: a name cut inside an emoji left half a surrogate pair, which Postgres refuses as JSON.
+    const emoji = { ...overview, adsets: [{ id: '40', name: `${'a'.repeat(59)}😀 and more`, active: true, dailyBudget: 2000 }] };
+    const cut = (await harness({ meta: metaOf({ adsOverview: vi.fn(async () => emoji) }), model: null }).handlers['social.ads'](task('social.ads'), { now })).result.platforms.meta.adsetList[0].name;
+    expect(cut).toBe(`${'a'.repeat(59)}😀`);
+    expect(JSON.stringify(cut)).not.toMatch(/\\ud[89ab]/i);
+    expect(meta.adsetList[2]).toEqual({ id: '42', name: 'Old test', active: false, dailyBudgetCents: 1000, activeAds: 0, impressions: 0, clicks: 0, spendCents: 0, results: 0 });
+    // The receipt keeps the owner's labels and the numbers, never an ad's copy, and nothing of the review's own bookkeeping.
+    expect(JSON.stringify(result)).not.toContain('Words only the ad carries');
+    expect(result).not.toHaveProperty('adset');
+
+    const many = { adsets: Array.from({ length: 35 }, (_, index) => ({ id: String(100 + index), name: `Set ${index}`, active: false, dailyBudget: 1000 })), ads: [], current: [], previous: [] };
+    const capped = (await harness({ meta: metaOf({ adsOverview: vi.fn(async () => many) }), model: null }).handlers['social.ads'](task('social.ads'), { now })).result.platforms.meta;
+    expect(capped.adsets).toBe(35);
+    expect(capped.adsetList).toHaveLength(30);
+  });
+
+  // A task's result may take at most 16 KB as stored (agent_tasks_result_check), about 1.5 times its JSON: a long list must never fail the review.
+  it('keeps the ad set rows of every platform within one byte budget, the biggest spenders first', async () => {
+    const old = '2026-10-01T00:00:00Z';
+    const accountOf = (prefix, count) => ({
+      adsets: Array.from({ length: count }, (_, index) => ({ id: `${prefix}${String(index).padStart(16, '0')}`, name: `${'Pennsylvania home health operators '.repeat(3)}${index}`, active: true, dailyBudget: 2500 })),
+      ads: Array.from({ length: count }, (_, index) => ({ id: `${prefix}9${index}`, name: 'Ad', adsetId: `${prefix}${String(index).padStart(16, '0')}`, active: true, createdAt: old, shape: 'existing_post', copy: { link: null } })),
+      current: Array.from({ length: count }, (_, index) => ({ adId: `${prefix}9${index}`, impressions: 900, clicks: 9, spendCents: 1000 + index, frequency: 1, results: 0 })), previous: [],
+    });
+    const { result } = await harness({ meta: metaOf({ adsOverview: vi.fn(async () => accountOf('12', 30)) }), linkedin: linkedinOf({ adsOverview: vi.fn(async () => accountOf('6', 30)) }), model: null })
+      .handlers['social.ads'](task('social.ads'), { now });
+    const { meta, linkedin } = result.platforms;
+    expect([meta.adsets, linkedin.adsets]).toEqual([30, 30]);
+    expect(JSON.stringify(meta.adsetList).length + JSON.stringify(linkedin.adsetList).length).toBeLessThanOrEqual(7000);
+    // Today's account (18 active Meta ad sets) fits whole, and Meta leaves room for LinkedIn's campaigns.
+    expect(meta.adsetList.length).toBeGreaterThanOrEqual(18);
+    expect(JSON.stringify(meta.adsetList).length).toBeLessThanOrEqual(5800);
+    expect(linkedin.adsetList.length).toBeGreaterThanOrEqual(3);
+    // The rows cut are the ones that spent least; every row kept says why its recommendation was skipped.
+    expect(meta.adsetList[0].spendCents).toBe(1029);
+    expect(meta.adsetList.every((row, index) => index === 0 || row.spendCents <= meta.adsetList[index - 1].spendCents)).toBe(true);
+    expect(meta.adsetList.every(row => row.skips?.no_ad_link === 1 && row.noLink?.existing_post === 1)).toBe(true);
+    // 1.45 times this is under 11.6 KB as stored, inside the 16 KB a task's result may take.
+    expect(JSON.stringify(result).length).toBeLessThan(8000);
+  });
 });
 
 describe('event posts, article links and stories', () => {

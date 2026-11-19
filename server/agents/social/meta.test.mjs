@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { metaClient } from './meta.mjs';
+import { creativeShape, metaClient } from './meta.mjs';
 
 const token = 'EAAG-system-user-token-0123456789';
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -132,15 +132,39 @@ describe('the Meta client', () => {
 
   it('reads the ad account into ad sets, ads with their copy and two weeks of results', async () => {
     const meta = client(route([
-      [/\/adsets$/, { data: [{ id: '40', name: 'PA operators', effective_status: 'ACTIVE', daily_budget: '2500', campaign: { name: 'Trials', objective: 'OUTCOME_LEADS' } }] }],
-      [/\/ads$/, { data: [{ id: '50', name: 'Training', adset_id: '40', effective_status: 'ACTIVE', created_time: '2026-10-01T00:00:00Z',
-        creative: { id: '60', object_story_spec: { link_data: { message: 'Track training', name: 'Start free', description: '30-day trial', link: 'https://cmcarebase.com/signup', image_hash: 'abc' } } } }] }],
+      [/\/adsets$/, { data: [{ id: '40', name: 'PA operators', effective_status: 'ACTIVE', daily_budget: '2500', campaign: { name: 'Trials', objective: 'OUTCOME_LEADS' } },
+        { id: '41', name: 'Flight', effective_status: 'ACTIVE', lifetime_budget: '5000', campaign: { name: 'Flight', objective: 'OUTCOME_TRAFFIC' } }] }],
+      [/\/ads$/, (url, params) => {
+        // The creative's existing post is read, so an ad that promotes one can be told apart from an ad with no link at all.
+        expect(params.get('fields')).toContain('creative{id,image_hash,object_story_spec,object_story_id}');
+        return json({ data: [{ id: '50', name: 'Training', adset_id: '40', effective_status: 'ACTIVE', created_time: '2026-10-01T00:00:00Z',
+          creative: { id: '60', object_story_spec: { link_data: { message: 'Track training', name: 'Start free', description: '30-day trial', link: 'https://cmcarebase.com/signup', image_hash: 'abc' } } } },
+        { id: '51', name: 'Boosted', adset_id: '41', effective_status: 'ACTIVE', created_time: '2026-10-01T00:00:00Z', creative: { id: '61', object_story_id: '1111_77' } }] });
+      }],
       [/\/insights$/, (url, params) => json({ data: [{ ad_id: '50', impressions: '2000', inline_link_clicks: '40', spend: '25.50', frequency: '1.8', actions: [{ action_type: 'lead', value: '3' }, { action_type: 'link_click', value: '40' }] }], window: params.get('time_range') })],
     ]));
     const overview = await meta.adsOverview({ now: new Date('2026-11-08T15:00:00Z') });
-    expect(overview.adsets).toEqual([{ id: '40', name: 'PA operators', active: true, dailyBudget: 2500, objective: 'OUTCOME_LEADS', campaign: 'Trials' }]);
-    expect(overview.ads[0]).toMatchObject({ id: '50', adsetId: '40', active: true, imageHash: 'abc', copy: { message: 'Track training', headline: 'Start free', link: 'https://cmcarebase.com/signup' } });
+    expect(overview.adsets).toEqual([{ id: '40', name: 'PA operators', active: true, dailyBudget: 2500, lifetimeBudget: null, objective: 'OUTCOME_LEADS', campaign: 'Trials' },
+      { id: '41', name: 'Flight', active: true, dailyBudget: null, lifetimeBudget: 5000, objective: 'OUTCOME_TRAFFIC', campaign: 'Flight' }]);
+    expect(overview.ads[0]).toMatchObject({ id: '50', adsetId: '40', active: true, shape: 'link', imageHash: 'abc', copy: { message: 'Track training', headline: 'Start free', link: 'https://cmcarebase.com/signup' } });
+    expect(overview.ads[1]).toMatchObject({ id: '51', adsetId: '41', shape: 'existing_post', copy: { link: null } });
     expect(overview.current).toEqual([{ adId: '50', impressions: 2000, clicks: 40, spendCents: 2550, frequency: 1.8, results: 3 }]);
+  });
+
+  // Review 2026-11-19: 18 active ad sets were skipped because their ads' links could not be read, and nothing said what those ads were.
+  it('names the kind of ad a creative makes, and only a link ad has a link the review reads', () => {
+    const lead = { call_to_action: { type: 'SIGN_UP', value: { lead_gen_form_id: '88' } } };
+    expect(creativeShape({ object_story_spec: { link_data: { link: 'https://www.caremetricintel.com/', ...lead } } })).toBe('lead_form');
+    expect(creativeShape({ object_story_spec: { video_data: { video_id: '9', ...lead } } })).toBe('lead_form');
+    expect(creativeShape({ object_story_spec: { video_data: { video_id: '9', call_to_action: { type: 'LEARN_MORE', value: { link: 'https://www.caremetricintel.com/' } } } } })).toBe('video');
+    expect(creativeShape({ object_story_spec: { link_data: { link: 'https://www.caremetricintel.com/', child_attachments: [{ link: 'https://www.caremetricintel.com/a' }] } } })).toBe('carousel');
+    expect(creativeShape({ object_story_spec: { link_data: { link: 'https://www.caremetricintel.com/' } } })).toBe('link');
+    expect(creativeShape({ object_story_spec: { photo_data: { image_hash: 'abc' } } })).toBe('photo');
+    expect(creativeShape({ object_story_spec: { text_data: { message: 'Hello' } } })).toBe('text');
+    expect(creativeShape({ object_story_id: '1111_77' })).toBe('existing_post');
+    // A creative written into the ad wins over the post Meta made from it.
+    expect(creativeShape({ object_story_id: '1111_77', object_story_spec: { link_data: { link: 'https://www.caremetricintel.com/' } } })).toBe('link');
+    for (const other of [undefined, null, {}, { asset_feed_spec: { link_urls: [] } }, { object_story_spec: 'x', object_story_id: '' }]) expect(creativeShape(other)).toBe('other');
   });
 });
 

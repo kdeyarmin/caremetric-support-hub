@@ -33,7 +33,8 @@ export function evaluateAds({ adsets = [], ads = [], current = [], previous = []
   for (const adset of adsets) {
     const members = ads.filter(ad => ad.adsetId === adset.id);
     const total = metric(members.map(ad => thisWeek.get(ad.id)).filter(Boolean));
-    summaries.push({ id: adset.id, name: adset.name, active: adset.active, dailyBudget: adset.dailyBudget, activeAds: members.filter(ad => ad.active).length, ...total });
+    summaries.push({ id: adset.id, name: adset.name, active: adset.active, dailyBudget: adset.dailyBudget, lifetimeBudget: adset.lifetimeBudget ?? null,
+      activeAds: members.filter(ad => ad.active).length, ...total });
     if (!adset.active) continue;
     const active = members.filter(ad => ad.active);
     const judged = active.filter(ad => {
