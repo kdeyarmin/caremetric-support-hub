@@ -1,5 +1,6 @@
 import { adsConfig } from './agents/ads/index.mjs';
 import pg from 'pg';
+import { assertAdvertisingRelease } from './advertising-release.mjs';
 import { smsProvider } from './sms-provider.mjs';
 import { smsAuth, ownerAccess } from './sms-auth.mjs';
 import { passwordAuth } from './password-auth.mjs';
@@ -59,6 +60,7 @@ const provider=smsProvider({apiKey:process.env.HUB_TELNYX_API_KEY,profileId:proc
 const api=gateway(pool);
 const contract=await untilReachable(()=>api.rpc('get_backend_contract',{}),{deadline:reachableBy});
 assertBackendContract(contract);
+await untilReachable(()=>assertAdvertisingRelease(pool),{deadline:reachableBy});
 // Optional features (declared ahead of the builds that use them) are read once at boot, like the AI team's.
 const features=new Set(contract.features);
 // The Hub's settings (Settings page, server/hub-settings.mjs): every switch and value that is not a secret. Railway keeps only the

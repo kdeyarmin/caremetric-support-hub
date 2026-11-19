@@ -295,6 +295,48 @@ describe('the daily ad review', () => {
     const again = harness({ settings: { targetCostCents: 2000, maxDailyBudgetCents: 3000 }, openTargets: ['social.ad_budget:40'], meta: metaOf({ adsOverview: vi.fn(async () => winning) }) });
     expect((await again.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0, skipped: 1, skips: { already_proposed: 1 } });
   });
+
+  it('refuses a budget increase when any destination in the ad set could not be read', async () => {
+    const winning = { ...overview, ads: overview.ads.map((ad, index) => index ? { ...ad, copy: { ...ad.copy, link: null } } : ad),
+      current: [overview.current[0], { adId: '51', impressions: 6000, clicks: 110, spendCents: 3000, frequency: 1.6, results: 4 }] };
+    const h = harness({ settings: { targetCostCents: 2000, maxDailyBudgetCents: 3000 }, meta: metaOf({ adsOverview: vi.fn(async () => winning) }) });
+    expect((await h.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0, skips: { no_ad_link: 1 } });
+    expect(h.store.proposeAction).not.toHaveBeenCalled();
+  });
+
+  // Review 2026-11-18: LinkedIn reads the link of active creatives only, so a paused creative has none and must not block the ad set.
+  it('ignores ads that cannot spend when checking destinations before a budget increase', async () => {
+    const paused = { id: '52', name: 'Paused', adsetId: '40', active: false, createdAt: '2026-10-01T00:00:00Z', copy: { message: '', headline: '', description: '', link: null } };
+    const current = [overview.current[0], { adId: '51', impressions: 6000, clicks: 110, spendCents: 3000, frequency: 1.6, results: 4 }];
+    const settings = { targetCostCents: 2000, maxDailyBudgetCents: 3000 };
+    const h = harness({ settings, meta: metaOf({ adsOverview: vi.fn(async () => ({ ...overview, ads: [...overview.ads, paused], current })) }) });
+    await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(h.store.proposeAction.mock.calls[0][0]).toMatchObject({ kind: 'social.ad_budget', targetId: '40', input: { adsetId: '40', from: 2000, to: 2400 } });
+    const idle = harness({ settings, meta: metaOf({ adsOverview: vi.fn(async () => ({ ...overview, ads: overview.ads.map(ad => ({ ...ad, active: false })), current })) }) });
+    expect((await idle.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0, skips: { no_active_ad: 1 } });
+    expect(idle.store.proposeAction).not.toHaveBeenCalled();
+  });
+
+  it.each(['https://www.caremetricintel.com/market-review?offer=county', 'https://www.caremetricintel.com/articles/report'])('does not replace unsupported destination %s with a default page', async link => {
+    const model = modelReturning({ variants: [] });
+    const snapshot = { adsets: [{ id: '40', name: 'Report', active: true, dailyBudget: 2000 }],
+      ads: [{ id: '50', adsetId: '40', active: true, copy: { link } }], current: [], previous: [] };
+    const h = harness({ model, meta: metaOf({ adsOverview: vi.fn(async () => snapshot) }) });
+    expect((await h.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ create: 0, skips: { destination_not_supported: 1 } });
+    expect(h.store.proposeAction).not.toHaveBeenCalled();
+    expect(model.run).not.toHaveBeenCalled();
+  });
+
+  it('keeps generated report copy on its report destination', async () => {
+    const model = modelReturning({ variants: [{ angle: 'market', message: 'See referral patterns and agency market information in a report for your team.',
+      headline: 'Your agency market report', description: 'Agency market information', callToAction: 'LEARN_MORE' }] });
+    const snapshot = { adsets: [{ id: '40', name: 'Report', active: true, dailyBudget: 2000 }],
+      ads: [{ id: '50', adsetId: '40', active: true, copy: { link: 'https://www.caremetricintel.com/market-review/?utm_source=linkedin' } }], current: [], previous: [] };
+    const h = harness({ model, meta: metaOf({ adsOverview: vi.fn(async () => snapshot) }) });
+    await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(h.store.proposeAction).toHaveBeenCalledTimes(1);
+    expect(new URL(h.store.proposeAction.mock.calls[0][0].input.link).pathname).toBe('/market-review');
+  });
 });
 
 describe('the daily ad review on LinkedIn', () => {
@@ -494,6 +536,25 @@ describe('approved creative from the Creative Director', () => {
     expect(model.run).not.toHaveBeenCalled();
   });
 
+  it('keeps a report refresh on the report and finds matching creative after the first twenty', async () => {
+    const destination = 'https://www.caremetricintel.com/market-review';
+    const meta = metaOf({ adsOverview: vi.fn(async () => ({
+      adsets: [{ id: '40', name: 'Intel report', active: true, dailyBudget: 2000 }],
+      ads: [{ id: '1', adsetId: '40', active: true, copy: { link: destination } }], current: [], previous: [],
+    })) });
+    const h = harness({ meta, creative: { approved: vi.fn(async () => [approvedAsset()]) } });
+    const report = approvedAsset({ status: 'approved', landingUrl: `${destination}?utm_source=meta&utm_medium=paid&utm_campaign=report` });
+    h.store.creativeLiveAssets = vi.fn(async () => [...Array.from({ length: 25 }, () => approvedAsset({ status: 'approved' })), report]);
+    await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(h.store.proposeAction).toHaveBeenCalledTimes(1);
+    expect(h.store.proposeAction.mock.calls[0][0].input.link).toBe(report.landingUrl);
+    h.store.proposeAction.mockClear();
+    h.store.creativeLiveAssets.mockResolvedValue([approvedAsset({ status: 'approved' })]);
+    const outcome = await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(h.store.proposeAction).not.toHaveBeenCalled();
+    expect(outcome.result.skips).toMatchObject({ model_not_configured: 1 });
+  });
+
   it('skips a refresh without a model or usable approved creative', async () => {
     const meta = metaOf({ adsOverview: vi.fn(async () => ({
       adsets: [{ id: '40', name: 'Intel prospecting', active: true, dailyBudget: 2000 }],
@@ -529,6 +590,7 @@ describe('approved creative from the Creative Director', () => {
     });
     const result = async (link, marketed = undefined) => (await harness({ meta: metaOf({ adsOverview: vi.fn(async () => overviewOf(link)) }), model: null, ...(marketed ? { marketed } : {}) })
       .handlers['social.ads'](task('social.ads'), { now })).result;
+    expect(await result('not a URL')).toMatchObject({ skipped: 1, skips: { no_ad_link: 1 } });
     expect(await result('https://example.com/form?campaign=x')).toMatchObject({ skipped: 1, skips: { leads_elsewhere: 1 } });
     expect(await result('https://www.cmcarebase.com/', ['caremetric-intel'])).toMatchObject({ skipped: 1, skips: { product_not_marketed: 1 } });
     // Review 2026-11-18: an ad whose link the review cannot read (a boosted post, a video ad) is not one that leads elsewhere, and the

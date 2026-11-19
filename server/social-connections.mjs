@@ -80,11 +80,14 @@ export function connectionValue(provider, field, value) {
   return settingInput(catalog.get(connectionFields[provider][field]), text);
 }
 
-const failureMessage = code => {
+const failureMessage = (code, advertising = false) => {
   if (/token_invalid$/.test(code)) {
     const provider = code.startsWith('linkedin_') ? 'LinkedIn' : 'Meta';
     return `${provider} rejected the access token. It may be invalid, expired or revoked. Follow step 4 of the ${provider} setup instructions to generate a replacement ${provider === 'LinkedIn' ? 'in OAuth Token Tools' : 'under Business Suite → Settings → Users → System users'}, then save it here. Your sign-in password cannot be used as an access token.`;
   }
+  if (advertising && /permission$/.test(code)) return code.startsWith('linkedin_')
+    ? 'LinkedIn denied advertising access. Check Advertising API approval, the ad account assignment for a Development app, account roles, and r_ads, rw_ads, r_ads_reporting, r_organization_social and w_organization_social. Conversion reporting also needs Conversions API approval and rw_conversions. A Page connection alone does not establish ad access.'
+    : 'Meta denied advertising access. Check the system user’s ad account assignment, ads_read and ads_management permissions, and the app’s Marketing API access. A Page connection alone does not establish ad access.';
   if (/permission$/.test(code)) return code.startsWith('linkedin_')
     ? 'LinkedIn denied access. Check your app’s Community Management API approval, the token’s permissions, and that the person who authorized it is an administrator of this Company Page. See setup steps 2–4.'
     : 'Meta denied access. Check that the system user has both the Page and app assigned, and that the token includes the app’s approved Page permissions. See setup steps 2–4.';
@@ -199,11 +202,21 @@ export function socialConnections({ pool, features, settings, env = process.env,
     for (const [field, variable] of Object.entries(secretFields[provider])) supplied[variable] = state.connections[provider].secrets[field];
     const config = socialConfig(supplied, key => state.values.get(key)?.value ?? catalog.get(key)?.default);
     const client = provider === 'meta' ? metaClient({ ...config.meta, fetchImpl }) : linkedinClient({ ...config.linkedin, fetchImpl });
-    if (!(provider === 'meta' ? client.configured.pages : client.configured.page)) return { ok: false, message: 'Save a Page ID and access token before checking the connection.' };
-    try {
-      await client.checkConnection({ signal: AbortSignal.timeout(20000) });
-      return { ok: true, message: 'Read access verified for the Page and any saved Instagram or ad account. Publishing permissions still depend on the provider’s app approval. No content was published.' };
-    } catch (error) { return { ok: false, message: failureMessage(String(error?.code ?? '')) }; }
+    const pageConfigured = provider === 'meta' ? client.configured.pages : client.configured.page;
+    if (!pageConfigured && !client.configured.ads) return { ok: false, message: 'Save a Page or ad account ID and access token before checking the connection.' };
+    const signal = AbortSignal.timeout(20000);
+    const checks = await Promise.all([
+      ...(pageConfigured ? [{ label: 'Page', advertising: false, read: () => client.checkConnection({ signal, includeAds: false }) }] : []),
+      ...(client.configured.ads ? [{ label: 'Advertising data', advertising: true, read: () => client.adsOverview({ signal }) }] : []),
+    ].map(async ({ label, advertising, read }) => {
+      try { await read(); return { ok: true, message: `${label} read access verified.` }; }
+      catch (error) { return { ok: false, message: `${label}: ${failureMessage(String(error?.code ?? ''), advertising)}` }; }
+    }));
+    return { ok: checks.every(check => check.ok), message: [
+      ...checks.map(check => check.message),
+      ...(!client.configured.ads ? ['Advertising is not configured.'] : []),
+      'Publishing permission, campaign-write permission, conversion reporting and ad delivery are not verified by this read-only check. No content was published and no campaign was created or changed.',
+    ].join(' ') };
   }
   async function admin(token, input) {
     if (exact(input, ['action']) && input.action === 'list') return list(token);

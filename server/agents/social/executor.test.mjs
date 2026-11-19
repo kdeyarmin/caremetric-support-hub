@@ -181,12 +181,24 @@ describe('approved creative', () => {
   it('starts a Meta ad with the approved image and tracked link, and marks the asset live', async () => {
     const meta = metaOf();
     const creative = { live: vi.fn(async () => true) };
-    const executors = socialExecutors({ meta, settings: {}, now, log: () => {}, creative });
+    const asset = { id: assetId, token: 'f'.repeat(64), status: 'approved', product: 'caremetric-intel', platform: 'meta', kind: 'static', placement: 'meta.feed_square',
+      primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans', description: 'Free trial', landingUrl: link, cta: 'Start free trial' };
+    const store = { creativeLiveAssets: vi.fn(async () => [asset]) };
+    const executors = socialExecutors({ meta, settings: {}, now, log: () => {}, creative, store, publicOrigin: 'https://help.caremetric.ai' });
     const input = { adsetId: '120200000000001', name: 'Ad', message: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans',
       description: 'Free trial', link, imageHash: null, imageUrl: image, callToAction: 'SIGN_UP', product: 'caremetric-intel', creativeAssetId: assetId };
     expect(await executors['social.ad_create']({ id: 'a1', kind: 'social.ad_create', input, targetId: '', agentKey: 'social_manager' })).toEqual({ created: true, id: '90' });
     expect(meta.createAd).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: image, link }));
     expect(creative.live).toHaveBeenCalledWith(assetId, '90');
+    for (const patch of [{ status: 'retired' }, { primaryText: 'Changed after approval' }, { token: 'e'.repeat(64) }, { landingUrl: 'https://www.caremetricintel.com/market-review' }, { cta: 'Learn more' }, { platform: 'linkedin' }]) {
+      meta.createAd.mockClear();
+      store.creativeLiveAssets.mockResolvedValue([{ ...asset, ...patch }]);
+      await expect(executors['social.ad_create']({ id: 'a2', input })).rejects.toMatchObject({ code: 'ad_creative_changed' });
+      expect(meta.createAd).not.toHaveBeenCalled();
+    }
+    store.creativeLiveAssets.mockResolvedValue([{ id: assetId, status: 'approved' }]);
+    await expect(executors['social.ad_create']({ id: 'a3', input })).rejects.toMatchObject({ code: 'ad_creative_changed' });
+
   });
 
   it('never fails a publish because the asset could not be marked live', async () => {
