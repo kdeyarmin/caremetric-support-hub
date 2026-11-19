@@ -213,7 +213,7 @@ export const citesDataFile=words=>dataCitation.test(String(words??''));
  * is the county report, which needs only a state, a county and an email address.
  */
 const retiredReviewLink=/https:\/\/(?:www\.)?caremetricintel\.com\/market-review(?:[/?#\s]|$)/i;
-const asksForIdentifier=/\b(?:enter|type|use|give|send)\s+(?:us\s+)?(?:your|the|its|an?)?\s*(?:agency(?:'|’)s\s+)?(?:CMS\s+|Medicare\s+)?(?:certification number|CCN)\b|\bsearch(?:ing)?\s+(?:for\s+(?:your|the|an?)\s+agency\s+by\s+(?:its\s+)?name|by\s+(?:(?:your|the)\s+)?agency(?:(?:'|’)s)?\s+name)\b/i;
+const asksForIdentifier=/\b(?:enter|type|use|give|send)\s+(?:us\s+)?(?:your|the|its|an?)?\s*(?:agency(?:'|’)s\s+)?(?:CMS\s+|Medicare\s+)?(?:certification number|CCN)\b|\bsearch(?:ing)?\s+(?:for\s+(?:your|the|an?)\s+agency\s+by\s+(?:its\s+)?name|by\s+(?:(?:your|the)\s+)?agency(?:(?:'|’)s)?\s+name)\b|\b(?:enter|type|give|provide|send|share|tell)\s+(?:us\s+)?(?:(?:your|the)\s+(?:agency(?:(?:'|’)s)?|organization(?:(?:'|’)s)?|hospice(?:(?:'|’)s)?)\s+name|the\s+name\s+of\s+(?:your|the)\s+(?:agency|organization|hospice))\b/i;
 export const offersRetiredReview=(product,text)=>product==='caremetric-intel'&&(retiredReviewLink.test(String(text??''))||asksForIdentifier.test(String(text??'')));
 
 /**

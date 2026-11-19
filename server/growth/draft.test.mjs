@@ -744,8 +744,14 @@ it('never offers the retired market review or asks for an agency\'s certificatio
  const check=body=>draftProblem(answer(body),{product:'caremetric-intel',sources:intel.evidence,outreach:true,organization:intel.name});
  expect(check(`Get your free market report:\n${retired}`)).toBe('link');
  for(const words of ['Enter your CMS certification number and it is emailed to you as a PDF.','Type your agency\'s CCN on this page.',
-   'Search by agency name and state. We\'ll email your report.','Search for your agency by name and the report is emailed.'])
+   'Search by agency name and state. We\'ll email your report.','Search for your agency by name and the report is emailed.',
+   // A direct request for the name, as well as a search by it (Codex review on kdeyarmin/caremetric-support-hub#292).
+   'Enter your agency\'s name and state to get your free report by email.','Just type your agency name and we will email it.',
+   'Tell us the name of your agency and we will send it.','Provide the organization’s name below.'])
   expect(check(`${words}\n${county}`),words).toBe('retired_page');
+ // Naming the agency the email is about is not asking the reader for it.
+ expect(check(`Your agency name came up while I was researching Erie County.\n${county}`)).toBeNull();
+ expect(check(`Enter your email address and the county report is emailed to you.\n${county}`)).toBeNull();
  expect(check(`Choose your state and county and it is emailed to you as a PDF.\n${county}`)).toBeNull();
  // Intel's own feature words ("search by name, city, tag, NPI or CCN") are not a request for the agency's number.
  expect(check('In Intel your team can search accounts by name, city, tag, NPI or CCN. Which referral sources does your team visit each week?')).toBeNull();
