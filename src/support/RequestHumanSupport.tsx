@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
 import { appRequest } from '../lib/appSession';
 
-export function RequestHumanSupport({ caseId, onChanged }: { caseId: string; onChanged: () => void }) {
+export function RequestHumanSupport({ caseId, aiStage, onChanged }: { caseId: string; aiStage?: string | null; onChanged: () => void }) {
   const [state, setState] = useState<'ready' | 'saving' | 'requested'>('ready');
   const [error, setError] = useState('');
   const requestId = useRef<string | null>(null);
+  const requested = state === 'requested' || aiStage === 'halted' || aiStage === 'exhausted';
   async function request() {
     setState('saving'); setError('');
     requestId.current ??= crypto.randomUUID();
@@ -16,7 +17,7 @@ export function RequestHumanSupport({ caseId, onChanged }: { caseId: string; onC
     }
   }
   return <div className="panel">
-    {state === 'requested' ? <p role="status">Human support has been requested. Automated attempts have stopped; the support team will follow up here.</p> : <>
+    {requested ? <p role="status">Human support has been requested. Automated attempts have stopped; the support team will follow up here.</p> : <>
       <p>You can ask a person for help at any time.</p>
       <button type="button" className="button button-secondary" disabled={state === 'saving'} onClick={() => void request()}>{state === 'saving' ? 'Requesting…' : 'Request human support'}</button>
     </>}

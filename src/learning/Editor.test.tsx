@@ -161,11 +161,12 @@ it("turns a question into select all that apply and saves its set of correct ans
   fireEvent.click(correct(1)); fireEvent.click(correct(2));
   expect(correct(2).checked).toBe(true);
   fireEvent.click(correct(1));
+  fireEvent.click(screen.getByRole("button", { name: "Remove option 3" }));
   const [, document, version] = await saveDraft();
   expect(version).toBe(3);
   const saved = document.units[1];
   expect(saved.type === "quiz" && saved.questions[0]).toEqual({ id: question, prompt: "Which apply?", points: 1, correctOptionIds: [second, first],
-    options: [{ id: first, text: "Lock wheels" }, { id: second, text: "Clear the path" }, { id: third, text: "Rush the transfer" }] });
+    options: [{ id: first, text: "Lock wheels" }, { id: second, text: "Clear the path" }] });
 });
 
 it("offers CareMetric PennSync, retired except for courses, as a placement authors can clear", async () => {
@@ -186,11 +187,13 @@ it("links course editors to material imports from Course authoring, and nobody e
   api.drafts.mockResolvedValue([]);
   const { unmount } = render(<MemoryRouter><CourseLibrary products={products} /></MemoryRouter>);
   expect((await screen.findByRole("link", { name: "Review material imports" })).getAttribute("href")).toBe("/imports/docstudio");
+  expect(screen.getByRole("heading", { name: /Create a course/ })).toBeTruthy();
   unmount();
   api.editorAccess.mockResolvedValue(false);
   render(<MemoryRouter><CourseLibrary products={products} /></MemoryRouter>);
   await waitFor(() => expect(api.editorAccess).toHaveBeenCalledTimes(2));
   expect(screen.queryByRole("link", { name: "Review material imports" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: /Create a course/ })).toBeNull();
 });
 
 it("asks before a link inside the Hub discards unsaved course edits", async () => {

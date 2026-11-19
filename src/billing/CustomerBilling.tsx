@@ -196,6 +196,8 @@ function NewSubscriptionSheet({ client, detail, catalog, onClose, onSaved }: { c
   const action = useBillingAction();
   const prices = [...catalog.prices, ...detail.custom_prices].filter(price => price.active && catalog.products.some(product => product.id === price.product && product.app === app && product.active));
   const recurring = prices.filter(price => price.type === 'recurring');
+  const validCoupons = catalog.coupons.filter(coupon => coupon.valid && (!coupon.app || coupon.app === app));
+  const validPromos = catalog.promotion_codes.filter(code => code.active && validCoupons.some(coupon => coupon.id === code.coupon) && (!code.customer || code.customer === detail.customer?.id));
   const label = (price: CatalogPrice) => { const product = catalog.products.find(item => item.id === price.product); return `${product?.name ?? price.product} · ${priceLabel(price, product?.unit_label)}${price.tenant_id ? ' · custom' : ''}`; };
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -207,7 +209,7 @@ function NewSubscriptionSheet({ client, detail, catalog, onClose, onSaved }: { c
     if (result) onSaved();
   }
   return <Sheet title="New subscription" onClose={onClose} busy={action.busy}><form className="billing-form" onSubmit={event => void submit(event)}>
-    <label>Application<select value={app} onChange={event => { setApp(event.target.value as BillingApp); setLines([{ price: '', quantity: 1 }]); }}>{billingApps.map(slug => <option key={slug} value={slug}>{appLabels[slug]}</option>)}</select></label>
+    <label>Application<select value={app} onChange={event => { setApp(event.target.value as BillingApp); setLines([{ price: '', quantity: 1 }]); setDiscount(''); }}>{billingApps.map(slug => <option key={slug} value={slug}>{appLabels[slug]}</option>)}</select></label>
     <fieldset><legend>Plan and add-ons</legend>
       {lines.map((line, index) => <div className="billing-form-grid" key={index}>
         <label>{index === 0 ? 'Plan' : 'Add-on or one-time fee'}<select value={line.price} onChange={event => setLines(current => current.map((entry, at) => at === index ? { ...entry, price: event.target.value } : entry))}><option value="">Choose…</option>{(index === 0 ? recurring : prices).map(price => <option key={price.id} value={price.id}>{label(price)}</option>)}</select></label>
@@ -222,8 +224,8 @@ function NewSubscriptionSheet({ client, detail, catalog, onClose, onSaved }: { c
       <label>Payment<select value={collection} onChange={event => setCollection(event.target.value as typeof collection)}><option value="send_invoice">Email invoices (pay by link)</option><option value="charge_automatically">Charge the card on file</option></select></label>
       {collection === 'send_invoice' && <label>Days to pay each invoice<input type="number" min={1} max={365} value={days} onChange={event => setDays(event.target.value)} /></label>}
       <label>Discount <small>optional</small><select value={discount} onChange={event => setDiscount(event.target.value)}><option value="">None</option>
-        {catalog.coupons.filter(coupon => coupon.valid).map(coupon => <option key={coupon.id} value={`coupon:${coupon.id}`}>Coupon · {coupon.name || coupon.id} · {couponLabel(coupon)}</option>)}
-        {catalog.promotion_codes.filter(code => code.active).map(code => <option key={code.id} value={`promo:${code.id}`}>Code · {code.code}</option>)}</select></label>
+        {validCoupons.map(coupon => <option key={coupon.id} value={`coupon:${coupon.id}`}>Coupon · {coupon.name || coupon.id} · {couponLabel(coupon)}</option>)}
+        {validPromos.map(code => <option key={code.id} value={`promo:${code.id}`}>Code · {code.code}</option>)}</select></label>
     </div>
     {collection === 'charge_automatically' && <p className="billing-muted">Without a saved card the first invoice waits for payment; send its payment link from Invoices within 23 hours or Stripe expires the subscription.</p>}
     <Notice error={action.error} /><div className="billing-actions"><button className="button button-primary" disabled={action.busy}>{action.busy ? 'Creating in Stripe…' : 'Create subscription'}</button></div>
@@ -247,10 +249,11 @@ function ItemSheet({ client, subscription, item, prices, products, onClose, onSa
   const [price, setPrice] = useState(item?.price ?? ''); const [quantity, setQuantity] = useState(String(item?.quantity ?? 1));
   const [proration, setProration] = useState<typeof prorationOptions[number][0]>('create_prorations');
   const action = useBillingAction();
+  const amount = Math.max(1, Number(quantity) || 1);
+  const unchanged = Boolean(item && price === item.price && amount === item.quantity);
   const label = (entry: CatalogPrice) => { const product = products.find(candidate => candidate.id === entry.product); return `${product?.name ?? entry.product} · ${priceLabel(entry, product?.unit_label)}${entry.tenant_id ? ' · custom' : ''}`; };
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const amount = Math.max(1, Number(quantity) || 1);
     const base = { subscription: subscription.id, expected_version: subscription.version, proration };
     const result = item
       ? await action.run(['subscription.item.update', item.id, price, amount, proration], request_key => client.command({ action: 'subscription.item.update', ...base, item: item.id, price: price !== item.price ? price : null, quantity: amount !== item.quantity ? amount : null, request_key }))
@@ -267,7 +270,7 @@ function ItemSheet({ client, subscription, item, prices, products, onClose, onSa
     <label>Quantity{item?.unit_label ? ` (${item.unit_label}s)` : ''}<input type="number" min={1} max={100000} value={quantity} onChange={event => setQuantity(event.target.value)} /></label>
     {oneTime(price) ? <p className="billing-muted">A one-time fee is charged on the subscription's next invoice.</p>
       : <label>Proration<select value={proration} onChange={event => setProration(event.target.value as typeof proration)}>{prorationOptions.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>}
-    <Notice error={action.error} /><div className="billing-actions"><button className="button button-primary" disabled={action.busy || !price}>{action.busy ? 'Saving in Stripe…' : item ? 'Save change' : 'Add'}</button>
+    <Notice error={action.error} /><div className="billing-actions"><button className="button button-primary" disabled={action.busy || !price || unchanged}>{action.busy ? 'Saving in Stripe…' : item ? 'Save change' : 'Add'}</button>
       {item && subscription.items.length > 1 && <button type="button" className="button button-secondary" disabled={action.busy} onClick={() => void remove()}>Remove item</button>}</div>
   </form></Sheet>;
 }
@@ -327,6 +330,8 @@ function PauseSheet({ client, subscription, onClose, onSaved }: { client: Billin
 function DiscountSheet({ client, subscription, catalog, onClose, onSaved }: { client: BillingClient; subscription: Subscription; catalog: BillingWorkspace; onClose: () => void; onSaved: (message: string) => void }) {
   const [choice, setChoice] = useState('');
   const action = useBillingAction();
+  const validCoupons = catalog.coupons.filter(coupon => coupon.valid && (!coupon.app || coupon.app === subscription.app));
+  const validPromos = catalog.promotion_codes.filter(code => code.active && validCoupons.some(coupon => coupon.id === code.coupon) && (!code.customer || code.customer === subscription.customer));
   const send = async (op: 'apply' | 'remove', value: string) => {
     const coupon = value.startsWith('coupon:') ? value.slice(7) : null; const promotion = value.startsWith('promo:') ? value.slice(6) : null;
     const result = await action.run(['subscription.discount', subscription.id, op, value], request_key => client.command({ action: 'subscription.discount', subscription: subscription.id, op, coupon, promotion_code: promotion, expected_version: subscription.version, request_key }));
@@ -337,8 +342,8 @@ function DiscountSheet({ client, subscription, catalog, onClose, onSaved }: { cl
       <div><strong>{coupon ? coupon.name || coupon.id : discount.coupon}</strong>{coupon && <small className="billing-muted"> · {couponLabel(coupon)}</small>}{code && <small className="billing-muted"> · code {code.code}</small>}</div>
       <button type="button" className="button button-secondary button-small" disabled={action.busy} onClick={() => void send('remove', discount.promotion_code ? `promo:${discount.promotion_code}` : `coupon:${discount.coupon}`)}>Remove</button></li>; })}</ul> : <p className="billing-muted">No discounts on this subscription.</p>}
     <label>Apply<select value={choice} onChange={event => setChoice(event.target.value)}><option value="">Choose a coupon or code…</option>
-      {catalog.coupons.filter(coupon => coupon.valid && (!coupon.app || coupon.app === subscription.app)).map(coupon => <option key={coupon.id} value={`coupon:${coupon.id}`}>Coupon · {coupon.name || coupon.id} · {couponLabel(coupon)}</option>)}
-      {catalog.promotion_codes.filter(code => code.active).map(code => <option key={code.id} value={`promo:${code.id}`}>Code · {code.code}</option>)}</select></label>
+      {validCoupons.map(coupon => <option key={coupon.id} value={`coupon:${coupon.id}`}>Coupon · {coupon.name || coupon.id} · {couponLabel(coupon)}</option>)}
+      {validPromos.map(code => <option key={code.id} value={`promo:${code.id}`}>Code · {code.code}</option>)}</select></label>
     <Notice error={action.error} /><div className="billing-actions"><button type="button" className="button button-primary" disabled={action.busy || !choice} onClick={() => void send('apply', choice)}>Apply discount</button></div>
   </div></Sheet>;
 }

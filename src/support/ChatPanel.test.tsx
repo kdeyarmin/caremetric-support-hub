@@ -67,12 +67,12 @@ describe('chat connection recovery', () => {
     await screen.findByText('Hello');
     let resolve!: (value: ChatThread) => void;
     vi.mocked(chat.thread).mockReturnValueOnce(new Promise(done => { resolve = done; }));
-    const pending = poll();
+    await poll();
     vi.mocked(chat.send).mockResolvedValue({ ...thread, messages: [...thread.messages, { ...thread.messages[0], id: '44444444-4444-4444-8444-444444444444', body: 'New reply' }] });
     fireEvent.change(screen.getByLabelText('Your message'), { target: { value: 'New reply' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     await screen.findByText('New reply');
-    await act(async () => { resolve(thread); await pending; });
+    await act(async () => { resolve(thread); });
     expect(screen.getByText('New reply')).toBeTruthy();
   });
 

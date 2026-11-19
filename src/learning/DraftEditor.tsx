@@ -52,7 +52,7 @@ export function DraftEditor({ material, busy, reasonReady, publishReady, onChang
         {contentKey && !contentEditable && <p>Edit this lesson’s existing content format in the native course editor.</p>}
         {contentKey && minutesEditable && <label>Estimated minutes<input type="number" min={0} max={1440} step={1} disabled={busy}
             value={Number.isNaN(fieldValue("estimatedMinutes", minutes)) ? "" : fieldValue("estimatedMinutes", minutes) ?? ""}
-            onChange={event => editBlock(block.id, "estimatedMinutes", event.target.value === "" ? Number.NaN : Number(event.target.value), minutes)} /></label>}
+            onChange={event => editBlock(block.id, "estimatedMinutes", event.target.value === "" ? (minutes === null ? null : Number.NaN) : Number(event.target.value), minutes)} /></label>}
         {contentKey && !minutesEditable && <p>Edit this lesson’s existing duration format in the native course editor.</p>}
       </details>;
     })}

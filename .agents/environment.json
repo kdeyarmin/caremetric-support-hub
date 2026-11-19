@@ -1,0 +1,3 @@
+{
+  "install": "touch ~/.bashrc && sed -i -e '/case \\$- in/,/esac/d' -e '/\\[ -z \"\\$PS1\" \\] && return/d' ~/.bashrc 2>/dev/null || true; grep -qxF 'export VITE_DEMO_MODE=true' ~/.bashrc || echo 'export VITE_DEMO_MODE=true' >> ~/.bashrc; grep -qxF 'export SUPPORT_HUB_ALLOW_DEMO_BUILD=true' ~/.bashrc || echo 'export SUPPORT_HUB_ALLOW_DEMO_BUILD=true' >> ~/.bashrc; npm ci && npm run build:sdk"
+}

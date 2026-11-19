@@ -40,6 +40,9 @@ it("reads native duration without changing the field name in the command contrac
 });
 it("allows new content for an empty native body", () => {
   const f = setup(true, null);
+  fireEvent.change(screen.getByLabelText("Estimated minutes"), { target: { value: "5" } });
+  fireEvent.change(screen.getByLabelText("Estimated minutes"), { target: { value: "" } });
+  expect(screen.queryByRole("alert")).toBeNull();
   fireEvent.change(screen.getByLabelText("Lesson text"), { target: { value: "New lesson" } });
   fireEvent.click(screen.getByRole("button", { name: "Preview draft edits" }));
   expect(f.onPreview).toHaveBeenCalledExactlyOnceWith({ blocks: [{ blockId: f.material.blocks[0].id, content: "New lesson" }] });

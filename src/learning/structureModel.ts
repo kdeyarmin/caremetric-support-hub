@@ -14,8 +14,11 @@ export function fieldEditable(block: Lesson, field: BodyKey) {
   const body = bodyObject(block), value = body?.[bodyKeys[field]];
   return body !== null && (value == null || typeof value === (field === "estimatedMinutes" ? "number" : "string"));
 }
-export function updateBody(block: Lesson, field: BodyKey, value: string | number): Lesson {
-  return { ...block, body: { ...bodyObject(block), [bodyKeys[field]]: value } as Lesson["body"] };
+export function updateBody(block: Lesson, field: BodyKey, value: string | number | undefined): Lesson {
+  const next = { ...bodyObject(block) };
+  if (value === undefined) delete next[bodyKeys[field]];
+  else next[bodyKeys[field]] = value;
+  return { ...block, body: next as Lesson["body"] };
 }
 function fields(block: Lesson): BodyKey[] {
   return ["estimatedMinutes", "activityType", ...(block.type === "text" ? ["content" as const] : block.type === "video" ? ["transcript" as const] : block.type === "attestation" ? ["attestationText" as const, "attestationVersion" as const] : [])];

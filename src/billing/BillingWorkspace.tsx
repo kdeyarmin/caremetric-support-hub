@@ -125,17 +125,18 @@ function CustomersTab({ data, client, refresh }: { data: Workspace; client: Bill
 
 const slugify = (name: string) => name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63).replace(/-+$/, '');
 function TenantSheet({ client, onClose, onSaved }: { client: BillingClient; onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState(''); const [slug, setSlug] = useState(''); const [industry, setIndustry] = useState('');
+  const [name, setName] = useState(''); const [slug, setSlug] = useState(''); const [slugEdited, setSlugEdited] = useState(false); const [industry, setIndustry] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const activeSlug = slugEdited ? slug : slugify(name);
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
-    try { await client.createTenant({ name: name.trim(), slug: slug || slugify(name), industry: industry.trim() }); onSaved(); }
+    try { await client.createTenant({ name: name.trim(), slug: activeSlug, industry: industry.trim() }); onSaved(); }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'The tenant could not be saved.'); }
     finally { setBusy(false); }
   }
   return <Sheet title="Set up a tenant" onClose={onClose} busy={busy}><form className="billing-form" onSubmit={event => void submit(event)}>
     <label>Name<input required minLength={2} maxLength={180} value={name} onChange={event => setName(event.target.value)} /></label>
-    <div className="billing-form-grid"><label>Slug<input required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={63} value={slug || slugify(name)} onChange={event => setSlug(event.target.value)} /><small>Permanent. Lowercase letters, numbers and hyphens.</small></label>
+    <div className="billing-form-grid"><label>Slug<input required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={63} value={activeSlug} onChange={event => { setSlugEdited(true); setSlug(event.target.value); }} /><small>Permanent. Lowercase letters, numbers and hyphens.</small></label>
       <label>Industry <small>optional</small><input maxLength={120} value={industry} onChange={event => setIndustry(event.target.value)} /></label></div>
     <Notice error={error} /><div className="billing-actions"><button className="button button-primary" disabled={busy}>{busy ? 'Saving…' : 'Set up tenant'}</button></div>
   </form></Sheet>;
