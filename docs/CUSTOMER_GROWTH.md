@@ -600,10 +600,23 @@ first, a third of them on a Sunday afternoon. Each switch below is under Setting
   the memo can compare bands. An email over the day's cap waits for the next Eastern day instead of being tried every 15 minutes. An
   agency's first open of its report brings its second email forward to the policy's own gap after the first (72 hours) instead of four
   days (`growth_report_open_followup`, no new version, so colleagues' emails on the same touch are not cancelled).
-- **Send cold email from this hour / until this hour** (`growth.send_from_hour`, `growth.send_until_hour`). Eastern time, Monday to
-  Friday; the "until" hour itself is outside (16 stops at 4 pm). The send claim refuses a cold email outside them (`outside_hours`) and it
-  waits for the next opening (`private.growth_next_send_at`). Replies and customer emails are never held. Both empty, or "until" not
-  after "from": any time, as before.
+- **Send cold email from this hour / until this hour** (`growth.send_from_hour`, `growth.send_until_hour`). Monday to Friday; the "until"
+  hour itself is outside (16 stops at 4 pm). The send claim refuses a cold email outside them (`outside_hours`) and it waits for the next
+  opening (`private.growth_next_send_at`). Replies and customer emails are never held. Both empty, or "until" not after "from": any time,
+  as before. The hours are Eastern for every agency unless the next setting is on: with the roster beyond the East Coast, 11 to 16
+  Eastern keeps every email between 8 am and 4 pm for agencies from New York to California (Alaska and Hawaii are earlier).
+- **Send cold email in each agency's own time zone** (`growth.send_local_time`, off). With it on, the same hours are read where the agency
+  is (20261118130000_growth_local_send_time.sql), so 8 to 16 reaches every agency between 8 am and 4 pm its own time, on its own
+  Monday to Friday. The zone comes from the state of the agency's Medicare roster record (`private.growth_roster_targets`, linked when the
+  roster agency became a prospect) through `private.growth_state_zones` (`private.growth_org_zone`); with several records in different
+  states, the highest ranked one's state. An agency with no roster record (found some other way), or a state with no zone, stays Eastern,
+  and so does every agency while the setting is off. A state in two zones takes the zone most of its people live in (Indiana, Kentucky,
+  Michigan and Florida Eastern; Texas, Kansas, Nebraska, North Dakota, South Dakota and Tennessee Central; Idaho Mountain; Oregon
+  Pacific), so an agency in the part that keeps the other time is reached an hour early or late. Arizona, Hawaii, Alaska and the territories
+  have their own zones, and daylight saving time follows the database's rules. The send claim and its deferral
+  (`private.growth_claim_message`, `private.growth_defer_action`) are the only places that read it; the daily caps still count the Eastern
+  day, and an email over the cap waits for the next Eastern day and then for its agency's next opening. Turning it on or off applies to
+  the next claim.
 - **Test a short first email** (`growth.short_first_email`): **retired on 2026-11-17** by the owner's decision. It wrote half of the
   Intel first emails that link the agency's own report short (the report and one question, with the trial in the second email). Every
   first email built around a market report now has one form, a short opening and the email's own sections (see

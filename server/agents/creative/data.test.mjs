@@ -13,6 +13,12 @@ describe('county snapshots', () => {
     expect(placeName('Orleans Parish', 'LA')).toBe('Orleans Parish, LA');
     expect(placeName('Capitol Planning Region', 'CT')).toBe('Capitol Planning Region, CT');
     expect(placeName('', 'PA')).toBeNull();
+    expect(placeName('Richmond city', 'VA')).toBe('Richmond City, VA');
+    expect(placeName('Carson City', 'NV')).toBe('Carson City, NV');
+    expect(placeName('Adjuntas Municipio', 'PR')).toBe('Adjuntas Municipio, PR');
+    expect(placeName('District of Columbia', 'DC')).toBe('Washington, DC');
+    expect(placeName('Doña Ana County', 'NM')).toBe('Doña Ana County, NM');
+    expect(placeName('Allegheny', undefined)).toBeNull();
   });
 
   it('prints a figure only when it is true to the data and fits: no zeros, no decline shown as growth', () => {

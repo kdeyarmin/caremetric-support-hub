@@ -34,7 +34,7 @@ const refused = code => error => error?.code === code;
 const gate = await readFile(new URL('../supabase/migrations/20261117190100_growth_priority_contract.sql', import.meta.url), 'utf8');
 const seedAgents = (await admin.query("select key,status,autonomy,config from private.agents where key='marketing_manager'")).rows;
 const seedPolicies = (await admin.query('select * from private.growth_policies')).rows;
-const settingKeys = ['growth.send_priority', 'growth.send_from_hour', 'growth.send_until_hour', 'growth.cold_email_daily_cap', 'growth.bounce_guard_percent', 'growth.presend_check'];
+const settingKeys = ['growth.send_priority', 'growth.send_from_hour', 'growth.send_until_hour', 'growth.send_local_time', 'growth.cold_email_daily_cap', 'growth.bounce_guard_percent', 'growth.presend_check'];
 const seedSettings = (await admin.query('select key,value,changed_at,changed_by from private.hub_settings where key=any($1::text[])', [settingKeys])).rows;
 const runStart = (await row('select now() as t')).t;
 const intel = (await row("select id from hub.products where slug='caremetric-intel'")).id;
@@ -101,7 +101,7 @@ try {
   for (const p of seedPolicies) {
     await store.manage(token, 'policy', { product: p.product, version: p.version, enabled: true, autoSend: false, dailyLimit: 100, minGapHours: 72, maxTouches: 3, bookingUrl: '', approvedClaim: 'Know every referral source in your county.' });
   }
-  for (const key of ['growth.send_priority', 'growth.send_from_hour', 'growth.send_until_hour', 'growth.bounce_guard_percent', 'growth.presend_check']) await setting(key, null);
+  for (const key of ['growth.send_priority', 'growth.send_from_hour', 'growth.send_until_hour', 'growth.send_local_time', 'growth.bounce_guard_percent', 'growth.presend_check']) await setting(key, null);
   await setting('growth.cold_email_daily_cap', 100);
   // A one-hour window twelve hours from now: the current Eastern time is always outside it.
   const hour = Number((await row("select extract(hour from now() at time zone 'America/New_York')::int as h")).h);
@@ -189,6 +189,32 @@ try {
   assert.equal(claimed.send, true, 'with no hours set the email goes');
   assert.equal((await messageOf(th.id)).status, 'sending');
   await store.finish(th.id, 'accepted', null);
+
+  // ---- 3b. The hours in the agency's own time zone (20261118130000_growth_local_send_time.sql) ----------------------------------------
+  // An agency in Hawaii whose Medicare record names its state. The hours are one hour wide and start at the current Eastern hour, so
+  // Eastern is inside them on a weekday and Hawaii, five or six hours behind, never is.
+  const pz = await prospect('claim-local');
+  await admin.query("insert into private.growth_roster_targets(ccn,name,setting,state,period,claim,status,organization_id) values($1,'Synthetic Hawaii agency','home_health','HI','2026Q3','A Medicare-certified home health agency.','graduated',$2)",
+    [`H${run.toUpperCase()}`, pz.org]);
+  const zoneOf = async org => (await row('select private.growth_org_zone($1) as z', [org])).z;
+  assert.equal(await zoneOf(pz.org), 'America/New_York', 'with the switch off the agency is read in Eastern time');
+  await setting('growth.send_local_time', true);
+  assert.equal(await zoneOf(pz.org), 'Pacific/Honolulu', 'with it on, an agency in Hawaii is read in Hawaii time');
+  assert.equal(await zoneOf(ph.org), 'America/New_York', 'an agency with no Medicare record stays Eastern');
+  await setting('growth.send_from_hour', hour);
+  await setting('growth.send_until_hour', hour + 1);
+  const tz = await touch(pz);
+  execution = await start(tz.action);
+  assert.deepEqual(await store.claim(tz.id, tz.action), { send: false, status: 'outside_hours' }, 'a cold email to Hawaii waits outside the hours as Hawaii keeps them');
+  assert.equal((await messageOf(tz.id)).attempted_at, null, 'nothing was attempted');
+  assert.equal(await agents.deferExecution(tz.action, execution, 'growth.message', 'outside_hours'), true);
+  const hawaiiOpening = (await row("select private.growth_next_send_at(now() + interval '15 minutes', 'Pacific/Honolulu') as t")).t;
+  const easternOpening = await nextOpening(new Date(Date.now() + 15 * 60_000));
+  assert.ok(Math.abs(epoch((await actionOf(tz.action)).not_before) - epoch(hawaiiOpening)) < 120_000, 'it waits for the next opening in Hawaii');
+  assert.ok(Math.abs(epoch(hawaiiOpening) - epoch(easternOpening)) > 3_600_000, 'which is not the Eastern opening');
+  assert.ok(await minutesAhead(tz.action) > 30, 'never sooner than the opening');
+  await setting('growth.send_local_time', false);
+  await open();
 
   // ---- 4. A first report open brings the second email forward ------------------------------------------------------------------------
   const contacted = async label => {
@@ -328,7 +354,7 @@ try {
     }
   } finally { client.release(); }
 
-  console.log('Growth priority integration passed: the ready queue unchanged with the switch off and by band, fit and waiting time with it on (6 actions); deferrals to the next day, the next opening and 15 minutes; the claim holds a cold email outside the hours and never a customer email; a first report open brings the second email forward, a second or the switch off does not; the snapshot\'s band and first form; quiet prospects at step 1 and 2 and never a third; no brief without an address; the Sales Executive\'s context; server-only access and 11 kinds of gate drift. No model was called and no email was sent.');
+  console.log('Growth priority integration passed: the ready queue unchanged with the switch off and by band, fit and waiting time with it on (6 actions); deferrals to the next day, the next opening and 15 minutes; the hours read in an agency own time zone; the claim holds a cold email outside the hours and never a customer email; a first report open brings the second email forward, a second or the switch off does not; the snapshot\'s band and first form; quiet prospects at step 1 and 2 and never a third; no brief without an address; the Sales Executive\'s context; server-only access and 11 kinds of gate drift. No model was called and no email was sent.');
 } finally {
   for (const s of seedSettings) await admin.query('update private.hub_settings set value=$2,changed_at=$3,changed_by=$4 where key=$1', [s.key, s.value, s.changed_at, s.changed_by]);
   const orgs = (await admin.query('select id from private.growth_organizations where domain=any($1::text[])', [domains])).rows.map(r => r.id);
@@ -351,6 +377,7 @@ try {
   await admin.query('delete from private.email_suppressions where email_hash=any($1::text[])', [emails]);
   await admin.query('delete from private.growth_contacts where organization_id=any($1::uuid[])', [orgs]);
   await admin.query("delete from private.audit_events where action like 'growth.%' and entity_id=any($1::uuid[])", [orgs]);
+  await admin.query('delete from private.growth_roster_targets where organization_id=any($1::uuid[])', [orgs]);
   await admin.query('delete from private.growth_organizations where id=any($1::uuid[])', [orgs]);
   await admin.query('delete from private.agent_evaluations where created_at>=$1', [runStart]);
   await admin.query("delete from private.audit_events where (action='growth.auto_qualified' and created_at>=$1) or actor_id=$2", [runStart, owner]);

@@ -9,6 +9,7 @@
  * rejected in the last 90 days, favouring products whose inbox questions (counts only, never text) have been busiest lately
  * and turning away from the product the last article was about.
  */
+import { countyPlace, slugWords } from '../places.mjs';
 import { officialSources, productPageIds } from './facts.mjs';
 
 // Every Intel article suggests Intel's free market report first, the call to action the cold email and the ads lead with (team review
@@ -442,19 +443,18 @@ export const quarterTag = moment => { const date = new Date(moment); return `${d
  * without a usable name or state.
  */
 export function countyTopic({ countyFips, state, name }) {
-  const full = String(name ?? '').replace(/[^A-Za-z .'-]/g, '').replace(/\s+/g, ' ').trim();
-  // A Louisiana parish or an Alaska borough keeps its own word; anything else is a county.
-  const kind = full.match(/\s(County|Parish|Borough|Census Area|Municipality)$/i)?.[1] ?? 'County';
-  const county = full.replace(/\s+(County|Parish|Borough|Census Area|Municipality)$/i, '').trim();
-  if (!/^[0-9]{5}$/.test(countyFips ?? '') || !/^[A-Z]{2}$/.test(state ?? '') || county.length < 2 || county.length > 40) return null;
-  const place = `${county} ${kind.toLowerCase().replace(/\b[a-z]/g, letter => letter.toUpperCase())}`;
-  const words = place.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
+  const found = countyPlace(name, state);
+  if (!/^[0-9]{5}$/.test(countyFips ?? '') || !/^[A-Z]{2}$/.test(state ?? '') || !found || found.base.length < 2 || found.base.length > 40) return null;
+  // The county's own word (Parish, Borough, Planning Region, City for a Virginia independent city) stays; DC and the territories have none.
+  const place = found.label;
+  const unit = found.kind ? found.kind.toLowerCase() : 'area';
+  const words = slugWords(place);
   return topic({
     key: `county-${countyFips}`, product: 'intel', kind: 'marketing', priority: 2,
     title: `Home health and hospice in ${place}, ${state}: what to look at in the market`,
     slug: `home-health-hospice-${words}-${state.toLowerCase()}`,
     audience: `Owners, administrators and marketing leaders at home health agencies and hospices serving ${place}, ${state}`,
-    angle: `The questions an agency in ${place} should be able to answer about its market (who leads it, which hospitals its residents use and which physicians Intel ranks highest as referral sources), and how Intel's free county report and free market report answer them from public Medicare data. State no figure about the ${kind.toLowerCase()}: the reports hold them.`,
+    angle: `The questions an agency in ${place} should be able to answer about its market (who leads it, which hospitals its residents use and which physicians Intel ranks highest as referral sources), and how Intel's free county report and free market report answer them from public Medicare data. State no figure about the ${unit}: the reports hold them.`,
     keywords: [`${place.toLowerCase()} home health`, `${place.toLowerCase()} hospice`, `home health market ${place.toLowerCase()}`],
     facts: [
       'Medicare data can show where to look, but it does not confirm a referral: confirmed referrals are the ones the agency records itself.',
