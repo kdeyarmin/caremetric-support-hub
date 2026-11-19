@@ -25,7 +25,6 @@ import { catalogBlocks } from '../content/features.mjs';
 import { articleHomeUrl } from '../content/facts.mjs';
 import { screenIdentifiers } from '../concierge/screen.mjs';
 import { dueMoment, heldForScorecard, heldResult, permanent, plural, recordRun, when } from '../tasks/shared.mjs';
-import { playbookFor } from '../../growth/playbook.mjs';
 import {
   adCopyFromCreative, adImagePlacements, adPromptVersion, adSchema, adSystem, checkSocialText, planPromptVersion, planSchema, planSystem, replyPromptVersion, replySchema, replySystem,
   replyUserMessage, socialLinks, socialProducts, tagSocialLink, tagSocialText, withHashtags,
@@ -33,7 +32,7 @@ import {
 import { trustedWith } from '../handover.mjs';
 import { evaluateAds, rankPosts, rulesVersion } from './rules.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
-import { untaggedUrl, validTagValue } from '../links.mjs';
+import { validTagValue, sameAdDestination } from '../links.mjs';
 import { live } from '../../live.mjs';
 import { failingPlatforms } from '../ads/index.mjs';
 
@@ -560,6 +559,11 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
             preview: `Pause the ${source.name} ad "${rec.adName}" in the ${where} "${rec.adsetName}": it ${rec.reason}.`, input: { adId: rec.adId, adsetId: rec.adsetId, reason: rec.reason, ...platform } })) counts.pause += 1;
         } else if (rec.kind === 'budget') {
           if (targets.has(`social.ad_budget:${source.key(rec.adsetId)}`)) { skip(counts, 'already_proposed'); continue; }
+          // A missing destination is not permission to increase an ad set's spend. Only the ads that can spend count: LinkedIn's overview
+          // reads the link of active creatives only, so a paused creative never has one and must not hold back the ad set.
+          const spending = overview.ads.filter(ad => ad.adsetId === rec.adsetId && ad.active);
+          if (!spending.length) { skip(counts, 'no_active_ad'); continue; }
+          if (spending.some(ad => hostOf(ad.copy?.link) === null)) { skip(counts, 'no_ad_link'); continue; }
           // No more money for an ad set that sends people to a product the team is not marketing.
           const away = overview.ads.find(ad => ad.adsetId === rec.adsetId && leadsElsewhere(ad.copy?.link, marketedList));
           if (away) { skip(counts, 'leads_elsewhere'); noteElsewhere(counts, away.copy.link); continue; }
@@ -605,8 +609,9 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     // Already approved copy and images need no model. Only the fallback that writes fresh copy needs an AI connection.
     if (!model?.configured) { skip(counts, 'model_not_configured'); return 0; }
     const allowed = socialLinks(product).map(link => link.url);
-    // The base ad's page (read through any campaign tags it already carries), else the product's next step, tagged as a paid ad.
-    const page = [base.copy.link, untaggedUrl(base.copy.link)].find(url => allowed.includes(url)) ?? playbookFor(product).nextStep.url;
+    // Generated copy must also keep the original offer. Never fall back to the product's default page.
+    const page = allowed.find(url => sameAdDestination(url, base.copy.link));
+    if (!page) { skip(counts, 'destination_not_supported'); return 0; }
     const link = tagSocialLink(page, { platform: source.platform === 'linkedin' ? 'linkedin' : 'facebook', product, content: 'ad', paid: true });
     const adset = overview.adsets.find(item => item.id === rec.adsetId);
     const thisWeek = new Map(overview.current.map(row => [row.adId, row]));
@@ -639,7 +644,13 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
   }
 
   async function creativeAd(task, rec, overview, today, source, product) {
-    const assets = await approvedImages(product, source.platform);
+    // Search all approved assets; an older article must not hide a later matching report asset.
+    const assets = typeof store.creativeLiveAssets === 'function' && assetOrigin
+      ? ((await store.creativeLiveAssets([product])) ?? []).filter(asset => asset.status === 'approved' && asset.product === product
+        && asset.platform === source.platform && asset.kind === 'static' && imagePlacements[source.platform].includes(asset.placement)
+        && /^[0-9a-f]{64}$/.test(asset.token ?? '')).map(asset => ({ ...asset, url: `${assetOrigin}/api/creative/a/${asset.token}.png` }))
+      : await approvedImages(product, source.platform);
+    const destination = overview.ads.find(ad => ad.id === rec.basedOn)?.copy?.link;
     const adset = overview.adsets.find(item => item.id === rec.adsetId);
     const linkedinAd = source.platform === 'linkedin';
     // An approved asset stays available after publication. Refreshing a tired ad must not publish that same creative again in its
@@ -648,7 +659,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       try { return [new URL(ad.copy?.link).searchParams.get('utm_content')]; } catch { return []; }
     }));
     for (const asset of assets) {
-      if (used.has(asset.id)) continue;
+      if (used.has(asset.id) || !sameAdDestination(asset.landingUrl, destination)) continue;
       // Each platform's own lengths: LinkedIn creative is written longer than a Meta headline allows (content.mjs adCopyFromCreative).
       const copy = adCopyFromCreative(asset, { product, linkedin: linkedinAd });
       if (!copy) continue;

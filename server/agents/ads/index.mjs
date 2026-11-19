@@ -24,7 +24,7 @@ import { live } from '../../live.mjs';
 import { easternDate, easternMidnight, weekStart } from '../accounts/week.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { productPage } from '../content/facts.mjs';
-import { linkTags, taggedUrl } from '../links.mjs';
+import { linkTags, taggedUrl, sameAdDestination } from '../links.mjs';
 import { playbookFor } from '../../growth/playbook.mjs';
 import { adCopyFromCreative, adImagePlacements } from '../social/content.mjs';
 import { socialExecutors } from '../social/executor.mjs';
@@ -59,21 +59,7 @@ const productNames = { carebase: 'CareBase', 'caremetric-intel': 'CareMetric Int
 // the county's largest agencies and three moves; the strongest reason for an agency to raise its hand), CareBase's free trial.
 const landing = { 'caremetric-intel': 'intel-market-review', carebase: 'carebase-signup' };
 
-// Tracking tags may differ between the campaign and its approved creative; offer/query parameters may not.
-export function sameAdDestination(left, right) {
-  const destination = value => {
-    try {
-      const url = new URL(value);
-      if (url.protocol !== 'https:' || url.username || url.password) return null;
-      for (const key of [...url.searchParams.keys()]) if (/^utm_/i.test(key)) url.searchParams.delete(key);
-      url.searchParams.sort();
-      url.pathname = url.pathname.replace(/\/+$/, '') || '/';
-      return url.href;
-    } catch { return null; }
-  };
-  const target = destination(left);
-  return target !== null && target === destination(right);
-}
+export { sameAdDestination } from '../links.mjs';
 
 function campaignCreative(asset, product, platform, origin) {
   const page = productPage(landing[product]);

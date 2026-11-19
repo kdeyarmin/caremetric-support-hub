@@ -189,12 +189,14 @@ only after three days and 1,000 impressions or $20 of spend in the last seven da
   The executor re-checks the cap, refuses a step over 25%, and refuses if the budget changed since the proposal. The database refuses any automatic approval of a budget change.
 
 Each run's result counts what it skipped by reason (`skips`: `already_proposed`, `leads_elsewhere` for an ad that links to no CareMetric
-product page, `no_ad_link` for an ad whose link the review cannot read, `product_not_marketed`, `no_base_ad`, `model_not_configured`,
-`model_<outcome>`) and keeps the access error each platform answered (`refusedBy`), which the flight planner reads (2026-11-17: the
-review skipped 18 of 18 recommendations every day and nothing said why). Since November 18 the result also breaks this down by platform
-(`platforms.meta`, `platforms.linkedin`: ad sets, ads, `noLink` ads whose link could not be read, the platform's own `skips`, and for an
-ad that leads elsewhere only the host it leads to, `elsewhere`). A Meta ad built from an existing post, a video or carousel ad, or a lead
-form carries no link the review reads; it was counted as `leads_elsewhere` before and is `no_ad_link` now.
+product page, `no_ad_link` for an ad whose link the review cannot read, `destination_not_supported` when generated copy cannot retain
+the base ad's destination, `no_active_ad` for a budget increase on an ad set with no ad that can spend, `product_not_marketed`,
+`no_base_ad`, `model_not_configured`, `model_<outcome>`) and keeps the access error each platform answered (`refusedBy`), which the
+flight planner reads (2026-11-17: the review skipped 18 of 18 recommendations every day and nothing said why). Since November 18 the
+result also breaks this down by platform (`platforms.meta`, `platforms.linkedin`: ad sets, ads, `noLink` ads whose link could not be
+read, the platform's own `skips`, and for an ad that leads elsewhere only the host it leads to, `elsewhere`). A Meta ad built from an
+existing post, a video or carousel ad, or a lead form carries no link the review reads; it was counted as `leads_elsewhere` before and
+is `no_ad_link` now.
 
 Results are leads and sign-ups as Meta and LinkedIn report them (LinkedIn: website conversions and Lead Gen Form leads). On LinkedIn a
 campaign plays the part of an ad set (it holds the daily budget) and a creative the part of an ad, and the same rules apply. A new ad
@@ -320,7 +322,8 @@ access token before its stated expiry.
 **Optional: add LinkedIn advertising** needs Advertising API approval and Campaign Manager account access. Development apps must
 also list the ad account under **Products → Advertising API → View settings**. Use `r_ads`, `rw_ads`, `r_ads_reporting`,
 `r_organization_social` and `w_organization_social` for the Hub's ad workflow. A separate app can supply the advertising token and
-renewal credentials. The **LinkedIn API version** (default `202609`) and **LinkedIn API tier** (default Development) settings
+renewal credentials. Reporting leads through the Conversions API additionally requires that product’s approval and
+`rw_conversions` on the advertising token (alongside `r_ads`). The **LinkedIn API version** (default `202609`) and **LinkedIn API tier** (default Development) settings
 remain below the cards.
 
 Official sources checked November 11, 2026: [create an app](https://www.linkedin.com/help/linkedin/answer/a1667239),
@@ -414,3 +417,30 @@ since they were approved. Words that fail are not published, and the action fail
 the approved words). The AI team page says in words which rule refused it (`writingCheckReasons` in `src/admin/teamProtocol.ts`),
 so you can approve a corrected post. `invalid_post` is kept for a post the Hub cannot publish at all (its platform, a story's
 image, or an image address that is not https).
+
+
+## Advertising release and verification
+
+Railway's pre-deploy command runs `node server/release-check.mjs`. Before a replacement server starts its workers,
+`server/main.mjs` repeats that read-only check. It verifies the installed creative-validation fields, approved/live
+filter, server-only access and atomic brief enqueue. It does not run migrations or contact advertising providers.
+Apply the reviewed migrations first. Production ledger versions may differ from repository filenames; installed
+function definitions and permissions are the evidence. A failed pre-deploy check leaves the previous deployment in place.
+
+Enable **Wait for CI** on Railway's `support-hub-web` service so a main push waits for GitHub Actions before deployment.
+The database prerequisite check and CI gate serve different purposes; both are needed. No workflow here applies production migrations.
+
+Ad refreshes preserve the destination of the base ad, ignoring only UTM tags and trailing slashes. Approved images for a
+trial, article or report cannot substitute for another offer. The refresh searches the full approved snapshot, and the
+executor rechecks the current approved/live copy, image and CTA before a provider write. Missing links are reported as
+`no_ad_link`; an ad set whose active ads include one cannot receive a budget increase. Paused ads are not checked: LinkedIn's
+overview reads the link of active creatives only.
+
+**Settings → Social media → Save and check** tests Page reads and advertising data reads independently, including
+reporting and ad destinations. An organic failure cannot hide a working separate advertising connection. The result
+is explicitly limited to read access: it does not prove write authorization, conversions or paid delivery.
+
+Before claiming a campaign works, reconcile the Hub receipt with the provider's campaign ID, approval status, total
+budget, end date, destinations, targeting, impressions and actual spend. Reconcile attributed leads separately.
+Hub server conversion submissions currently cover Meta and LinkedIn, not Google; verify Google conversion actions
+and the site's tag or import integration independently. An empty result is not evidence of zero account spending.

@@ -14,7 +14,7 @@
  * A request Meta or LinkedIn may have received but did not confirm is never retried: it fails as `social_unconfirmed` and the owner
  * is asked to look before trying again.
  */
-import { checkSocialText } from './content.mjs';
+import { checkSocialText, adCopyFromCreative, adImagePlacements } from './content.mjs';
 import { metaId } from './meta.mjs';
 import { linkedinComment, linkedinPost } from './linkedin.mjs';
 import { publishApprovedVideo } from './video.mjs';
@@ -181,6 +181,19 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
         : [['message', 'ad_message'], ['headline', 'ad_headline'], ['description', 'ad_description']];
       const parts = adSurfaces.map(([field, surface]) => checkSocialText(input[field], { surface, product: input.product ?? null }));
       if (parts.some(part => !part.ok) || !checkSocialText(`Start here: ${input.link}`, { surface: 'facebook', product: input.product ?? null }).ok) throw failure('invalid_ad');
+      // Refreshes need the same last-moment approval check as a campaign's first ad.
+      // An unavailable/older snapshot fails closed before any provider write.
+      if (input.creativeAssetId) {
+        if (typeof store?.creativeLiveAssets !== 'function') throw failure('ad_creative_changed');
+        const platform = onLinkedIn(input) ? 'linkedin' : 'meta';
+        const asset = ((await store.creativeLiveAssets([input.product])) ?? []).find(item => item.id === input.creativeAssetId);
+        const current = asset && adCopyFromCreative(asset, { product: input.product, linkedin: onLinkedIn(input) });
+        const origin = /^https:\/\//i.test(publicOrigin ?? '') ? publicOrigin.replace(/\/+$/, '') : null;
+        if (!asset || !['approved', 'live'].includes(asset.status) || asset.product !== input.product || asset.platform !== platform
+          || asset.kind !== 'static' || !adImagePlacements[platform].includes(asset.placement) || !/^[0-9a-f]{64}$/.test(asset.token ?? '')
+          || !current || Object.keys(current).some(key => current[key] !== input[key]) || !origin || input.imageHash
+          || input.imageUrl !== `${origin}/api/creative/a/${asset.token}.png`) throw failure('ad_creative_changed');
+      }
       const created = await careful(execution, () => (onLinkedIn(input) ? li : meta).createAd({ adsetId: input.adsetId, name: String(input.name ?? 'CareMetric ad'), message: input.message, headline: input.headline,
         description: input.description, link: input.link, imageHash: typeof input.imageHash === 'string' ? input.imageHash : null,
         imageUrl: /^https:\/\//.test(input.imageUrl ?? '') ? input.imageUrl : null, callToAction: input.callToAction }));

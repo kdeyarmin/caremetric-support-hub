@@ -124,6 +124,7 @@ function ConnectionCard({ initial, editable, client }: { initial: SocialConnecti
       <details className="social-advanced"><summary>Optional: add LinkedIn advertising</summary>
         <p>First obtain <strong>Advertising API</strong> approval for your app and access to the ad account in Campaign Manager. For an app with Development access, add the ad account under <strong>Products → Advertising API → View settings</strong>.</p>
         <p>Generate a token with <code>r_ads</code>, <code>rw_ads</code>, <code>r_ads_reporting</code>, <code>r_organization_social</code> and <code>w_organization_social</code>. A separate advertising app can use the fields below.</p>
+        <p>To report leads to LinkedIn, the advertising token also needs Conversions API approval and <code>rw_conversions</code>. A successful Page check does not verify this access.</p>
         {advanced.linkedin.filter(item => !["clientId", "clientSecret", "refreshToken"].includes(item.key)).map(field)}
       </details>
     </>}
@@ -142,7 +143,7 @@ export function SocialConnections({ client = socialConnectionsClient }: { client
   return <div className="social-connections">
     <p><LockKeyhole size={16} aria-hidden="true" /> Connect your business Pages so the Social Media Manager can use them. Start with either provider’s setup instructions below.</p>
     <p className="muted">Each connection needs a Page ID (the number identifying your business Page) and an access token (a secret code issued by the provider). These are different from your sign-in email and password. Provider app approval may be required before a usable token can be issued.</p>
-    <p className="muted">The Hub encrypts saved tokens. Save and check tests read access; it does not publish a post or verify publishing permission.</p>
+    <p className="muted">The Hub encrypts saved tokens. Save and check tests Page access and advertising data separately. It does not publish, start an ad, or verify campaign-write permissions, conversion reporting or delivery.</p>
     <button type="button" className="button button-secondary button-small" onClick={() => setRefresh(value => value + 1)} disabled={state.status === "loading"}><RefreshCw size={14} aria-hidden="true" /> Refresh connections</button>
     {state.status === "loading" && <Loading label="Loading social connections" app="Hub" />}
     {state.status === "error" && <ReadFailure error={state.error} retry={() => setRefresh(value => value + 1)} />}
