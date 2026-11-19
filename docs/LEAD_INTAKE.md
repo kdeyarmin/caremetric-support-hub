@@ -95,6 +95,12 @@ What the Hub does by kind:
 | `trial_signup` | carebase, intel | no | at once |
 | `newsletter`, `savings_model`, `county_report` | carebase, intel | no | daily digest |
 
+An Intel `county_report` lead is a request for Intel's free county report (`/county-report`): the visitor chooses a state and a
+county and enters an email address, Intel emails the report as a PDF, and `details` names the state and county. Since
+2026-11-19 it is Intel's only free report request: the agency market review, which asked for an agency's name or CCN, is retired
+(`/market-review` redirects to the county report). A follow-up to such a lead never sends the person to a page to enter more to get
+a report (`inboundSequence` in `server/growth/playbook.mjs`).
+
 The AI team's alerts follow this table ([AI_TEAM.md](AI_TEAM.md)): the Support Concierge alerts on each conversation as a
 sales inquiry and proposes a personal acknowledgment for the owner to approve; the Growth Manager emails each trial at once,
 reminds the owner about a lead conversation nobody has answered, and puts the daily-digest kinds in the morning brief and its

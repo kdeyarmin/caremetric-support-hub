@@ -12,9 +12,9 @@ const policy = { enabled: true, approvedClaim: 'CareMetric Intel shows home heal
 const scheduled = (over = {}) => ({ id: '00000000-0000-4000-8000-0000000000aa', agentKey: 'marketing_manager', kind: 'growth.evaluate_live', sourceKind: 'schedule', attempts: 1,
   requestKey: 'schedule:00000000-0000-4000-8000-000000000001:20261116T115000Z', agent: { autonomy: 'act' }, ...over });
 
-// A reader-and-writer model stand-in: writes a first email in the form every agency gets (its market report and one question, linking
-// the case's own report, or the market report page for a case without one), and scores it as told.
-const reviewPage = 'https://www.caremetricintel.com/market-review';
+// A reader-and-writer model stand-in: writes a first email in the form every agency gets (a free report and one question, linking
+// the case's own report, or Intel's free county report page for a case without one), and scores it as told.
+const reviewPage = 'https://www.caremetricintel.com/county-report';
 const email = (link, source) => ({ subject: 'A market report for your agency', body: `I put together a free market report for your agency from Medicare data.\n${link}\n\nDoes it match what your team sees in the field?`,
   citations: [source], needsHuman: false });
 function stubModel({ score = 4, weakness = 'none', outcome = 'completed', failOn = null } = {}) {
@@ -50,7 +50,7 @@ describe('the twelve live evaluation cases', () => {
     expect(new Set(cases.map(item => item.key)).size).toBe(12);
     expect(new Set(cases.map(item => item.opportunity.id)).size).toBe(12);
     for (const trigger of liveTriggers) expect(cases.filter(item => item.trigger === trigger)).toHaveLength(3);
-    // The agency's own report, or the market report page for an agency with no roster record. (It was the short or the standard first
+    // The agency's own report, or Intel's free county report page for an agency with no roster record. (It was the short or the standard first
     // email until every first email became the report and nothing else, 2026-11-17.)
     for (const brief of [true, false]) for (const link of ['report', 'review']) expect(cases.filter(item => item.brief === brief && item.link === link)).toHaveLength(3);
     // The database keeps a case under its key (private.growth_live_eval_record).
@@ -114,11 +114,11 @@ describe('growth.evaluate_live', () => {
     expect([product, version, passed]).toEqual(['caremetric-intel', liveEvaluationVersion, true]);
     expect(version).not.toBe(growthEvaluationVersion);
     expect(results.results).toHaveLength(12);
-    expect(JSON.stringify(results)).not.toMatch(/free market report|what your team sees|report\/live-eval|market-review/);
+    expect(JSON.stringify(results)).not.toMatch(/free market report|what your team sees|report\/live-eval|market-review|county-report/);
     expect(JSON.stringify(results).length).toBeLessThan(12_000);
     expect(model.calls.filter(version => version === criticPromptVersion).length).toBeGreaterThanOrEqual(12);
-    expect(criticPromptVersion).toBe('critic.4');
-    // Six were written around the agency's own report and six around the market report page, each in the one first-email form.
+    expect(criticPromptVersion).toBe('critic.5');
+    // Six were written around the agency's own report and six around the free county report page, each in the one first-email form.
     const written = model.run.mock.calls.filter(([, request]) => request.promptVersion !== criticPromptVersion).map(([, request]) => JSON.parse(request.user));
     expect(written.filter(input => input.touchPlan === reportTouchAngle && input.report === true)).toHaveLength(6);
     expect(written.filter(input => input.touchPlan === reviewTouchAngle && input.report === undefined)).toHaveLength(6);

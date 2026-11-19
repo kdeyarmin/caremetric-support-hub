@@ -5,12 +5,12 @@
  *
  * 1. Twelve made-up CareMetric Intel agencies (`liveEvaluationCases`): the four triggers the sweep writes from (newly certified, a new
  *    owner, the CMS record alone, the agency's own website), each three times, so every pairing of with or without an account brief and
- *    the agency's own report or the market report page comes up three times. (Until 2026-11-17 the second half of each pairing was the
+ *    the agency's own report or the free county report page comes up three times. (Until 2026-11-17 the second half of each pairing was the
  *    short or the standard first email; every first email built around a report now has one form, so the link it carries took its place.)
  *    Invented names, places, numbers and sites; no person, address or phone.
  * 2. Each is written on the real writer path (draft.mjs `draftMessage`, the real model, the top model where the sweep would use it, the
  *    approved learning memo where the sweep would use it) and read by the real reader (draft.mjs `criticPromptVersion`), as a first
- *    email built around a market report. Nothing is saved as a message and nothing is sent.
+ *    email built around a report. Nothing is saved as a message and nothing is sent.
  * 3. It passes when every draft passed the code checks, the reader scored every one, their average "would reply" is at least 3.5 and
  *    none is below 2 (`gradeLiveEvaluation`). Recorded as private.agent_evaluations version 'growth.live.1' (reach.mjs
  *    `liveEvaluationVersion`), which the send claim never reads (it reads 'growth.1'): a weak week never holds up sending. The Monday
@@ -41,7 +41,7 @@ export const liveDeadlineMs = 200_000;
 export const liveRetryMs = 60_000;
 
 export const liveTriggers = Object.freeze(['new_agency', 'new_owner', 'cms_record', 'web']);
-// Every pairing of a brief and the link the first email carries (the agency's own report, or the market report page for an agency with
+// Every pairing of a brief and the link the first email carries (the agency's own report, or the free county report page for an agency with
 // no roster record); each trigger leaves out one pairing, so each pairing comes up three times in twelve cases.
 const pairings = Object.freeze([{ brief: true, link: 'report' }, { brief: true, link: 'review' }, { brief: false, link: 'report' }, { brief: false, link: 'review' }]);
 
@@ -87,7 +87,7 @@ function briefFor(trigger, agency, evidence) {
 
 /**
  * The twelve cases. A `report` case carries the agency's own report link, as the sweep gives an agency on the roster; a `review` case
- * carries none, so its email points to the market report page.
+ * carries none, so its email points to the free county report page.
  */
 export function liveEvaluationCases(now = new Date(), policy = {}) {
   const cases = [];

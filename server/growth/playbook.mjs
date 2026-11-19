@@ -10,7 +10,7 @@
  */
 import { founder, products as facts, productPages } from '../agents/content/facts.mjs';
 
-export const playbookVersion = 'sales-playbook.6';
+export const playbookVersion = 'sales-playbook.7';
 
 /**
  * How CareMetric sells (owner decision 2026-11-08): entirely self-serve. Nobody offers a demo, a sales call or a meeting. A prospect gets
@@ -149,7 +149,7 @@ export const salesPlaybook = deepFreeze({
   },
   'caremetric-intel': {
     product: 'caremetric-intel', factsKey: 'intel', name: facts.intel.name, shortName: 'Intel',
-    territory: 'United States: home health and hospice agencies first; also hospitals, nursing homes and personal care homes that market to referral sources.',
+    territory: 'United States: home health agencies, hospices, hospitals, nursing homes, personal care and assisted living homes and other organizations that market to referral sources.',
     icp: {
       fits: [
         'A home health agency or a hospice agency with a marketing, business development or community liaison role.',
@@ -190,7 +190,7 @@ export const salesPlaybook = deepFreeze({
       `A ${facts.intel.trialDays}-day free trial on one county, started online.`,
     ],
     nextStep: { label: 'Start a CareMetric Intel free trial', url: pageUrl('intel-home') },
-    pages: ['intel-home', 'intel-how-it-works', 'intel-market-review', 'intel-county-report', 'intel-pricing', 'intel-resources', 'intel-targeted-marketing', 'intel-territory-analysis', 'intel-referral-measurement', 'intel-manager-playbook'],
+    pages: ['intel-home', 'intel-how-it-works', 'intel-county-report', 'intel-pricing', 'intel-resources', 'intel-targeted-marketing', 'intel-territory-analysis', 'intel-referral-measurement', 'intel-manager-playbook'],
     qualifyingQuestions: [
       'Which counties or service areas does your team cover today?',
       'How many marketers or liaisons do you have, and how do they track visits and follow-ups?',
@@ -234,9 +234,10 @@ export const touchAngle = touch => sequencePlan[Math.min(Math.max(Number(touch) 
  * the writer what the email already says, so nothing is written twice. Until 2026-11-17 the whole email was the writer's letter, and
  * the first one held only the report: the owner read it as something to throw away, with no word on what the software does.
  *
- * `reportTouchAngle` is for an agency whose own report the draft links to; `reviewTouchAngle` for one without a roster record, which
- * gets the page where any agency's report is emailed to it. Code holds the first email's opening to `shortFormLimits` and to its one
- * link (draft.mjs `shortFormProblem`).
+ * `reportTouchAngle` is for an agency whose own report the draft links to; `reviewTouchAngle` for one without its own report, which
+ * gets Intel's free county report page instead (2026-11-19: the market review that asked for an agency's name or certification number
+ * was retired; the county report is emailed for any state and county and covers every kind of provider located there). Code holds the
+ * first email's opening to `shortFormLimits` and to its one link (draft.mjs `shortFormProblem`).
  */
 export const shortFormLimits = Object.freeze({ words: 120, questions: 1 });
 const openingOnly = 'You write only the opening of this email, as its first words under the greeting. Below your words the email itself goes on, in words written for this kind of organization, so write none of what it adds.';
@@ -244,22 +245,22 @@ const reportOpening = `Open with the county: when a source with the id "county" 
 const firstAdds = 'The email adds: the report button, three ways CareMetric Intel helps the team, a short founder quote, and a link to the free trial.';
 const firstLimits = `No other link, no free trial, no price and no story about yourself in your words. Two or three sentences, never more than ${shortFormLimits.words} words, at most one question and exactly one link.`;
 export const reportTouchAngle = `First email, built around the agency's own free market report. ${openingOnly} ${firstAdds} Say that you put together a free market report for this agency, by name, from Medicare data, that it compares agencies based in the area and suggests hospitals and clinicians to research, and put the report link on its own line. ${reportOpening} ${firstLimits}`;
-export const reviewTouchAngle = `First email, built around a free market report the agency can get for itself. ${openingOnly} ${firstAdds} Say that a free market report for this agency, by name, built from Medicare data, is one step away, that it compares agencies based in the area and suggests hospitals and clinicians to research, and put the market report page's link on its own line. ${reportOpening} ${firstLimits}`;
+export const reviewTouchAngle = `First email, built around Intel's free county report, which the reader can get for the county the agency serves. ${openingOnly} ${firstAdds} Say that a free report on the county, built from Medicare and Census data, is one step away: the reader chooses the state and county and the report is emailed as a PDF. Say that it shows the hospitals the county's residents use and the providers of every kind located there, and put the county report page's link on its own line. Never call it the agency's own report: the reader asks for it with only a state, a county and an email address. ${reportOpening} ${firstLimits}`;
 
 /**
  * The second email, four days after the report. Its sections show a week of the work in the software, the Founders Sale and the
  * free trial, with the report's link again. Where Intel tells the Hub whether the report was opened (views.mjs, 2026-11-16),
  * `viewedTouchAngle` follows an open and `unviewedTouchAngle` everything else; `reviewFollowupAngle` follows a first email that pointed
- * to the market report page. Never say or hint that you know whether it was opened. The trial is offered without its card terms
+ * to the free county report page. Never say or hint that you know whether it was opened. The trial is offered without its card terms
  * (owner direction 2026-11-17, facts.mjs `trialMention`).
  */
 const secondAdds = `The email adds: three steps for the week in CareMetric Intel, the Founders Sale, the ${facts.intel.trialDays}-day free trial button, and a link back to the report. Write two or three sentences and end with one qualifying question. No link in your words, and nothing about the credit card or billing.`;
 export const viewedTouchAngle = `Second email to an agency whose market report was sent with the first. Do not say or hint that you know whether anyone opened it. ${openingOnly} ${secondAdds} Pick up where a report leaves an agency: it shows where they stand, and the next step is deciding who the team visits each week. Do not repeat touch 1's opening or tell your story.`;
 export const unviewedTouchAngle = `Second email to an agency whose market report was sent with the first. Do not say or hint that you know whether anyone opened it. ${openingOnly} ${secondAdds} Bring a new subject and a different angle from touch 1: lead with one part of the report (hospitals the county's residents use, clinicians to research, or agencies based in the area) and what a marketing team does with that information. Do not repeat touch 1's opening.`;
-export const reviewFollowupAngle = `Second email to an agency whose first email offered a free market report it can get for itself. ${openingOnly} ${secondAdds} Bring a new subject and a different angle from touch 1: one concrete thing a marketing team does with a market report (plan visits around the hospitals the county's residents use or research local clinicians). Do not repeat touch 1's opening.`;
+export const reviewFollowupAngle = `Second email to an agency whose first email offered Intel's free county report. ${openingOnly} ${secondAdds} Bring a new subject and a different angle from touch 1: one concrete thing a marketing team does with a county report (plan visits around the hospitals the county's residents use or get to know the providers located there). Do not repeat touch 1's opening.`;
 /**
  * The three emails to a nursing home (owner direction 2026-11-17: every email is written for the reader's own kind of business, and
- * none is a plain letter). Intel's market reports cover home health and hospice agencies only, so a nursing home is offered none:
+ * none is a plain letter). An agency's own market report covers home health and hospice agencies only, so a nursing home's emails carry none:
  * its emails open on its own work, admissions from hospitals, and the email's sections say what Intel does for a nursing home
  * (campaign.mjs). Never home health or hospice rankings: a nursing home does not compete with them.
  */
@@ -271,12 +272,16 @@ export const nursingHomeAngles = Object.freeze([
   `Third and last email to a nursing home: a short close. ${openingOnly} The email adds: three lines on what CareMetric Intel does for a nursing home, and the ${facts.intel.trialDays}-day free trial's link. ${nursingHomeOnly} Write two or three sentences, about fifty words: say this is your last note, and that if someone else handles admissions or marketing there they can forward this, or reply saying who. Make it easy to say "not now". No link in your words, no new pitch and no question.`,
 ]);
 /** The third and last email to a CareMetric Intel agency: a short close that leaves the report with them. */
-export const reportCloseAngle = `Third and last email: a short close. ${openingOnly} The email adds: the market report button and a link to the ${facts.intel.trialDays}-day free trial. Write two or three sentences, about fifty words: say this is your last note and that if someone else handles marketing there they can forward this, or reply saying who, so the report reaches the right person. Make it easy to say "not now". No link in your words, no new pitch and no question.`;
+export const reportCloseAngle = `Third and last email: a short close. ${openingOnly} The email adds: the report button and a link to the ${facts.intel.trialDays}-day free trial. Write two or three sentences, about fifty words: say this is your last note and that if someone else handles marketing there they can forward this, or reply saying who, so the report reaches the right person. Make it easy to say "not now". No link in your words, no new pitch and no question.`;
 
-/** Follow-ups to a person who asked for something on the website (a county report, a savings model, a newsletter or a contact form). */
+/**
+ * Follow-ups to a person who asked for something on the website (a county report, a savings model, a newsletter or a contact form). A county
+ * report is emailed to whoever asks for it (2026-11-19), so a follow-up never sends them to a page to enter more to get a report.
+ */
+const alreadyHave = 'If they asked for a county report, it was already emailed to them: never send them to a page to ask for it again or to enter anything more to get a report.';
 export const inboundSequence = deepFreeze([
-  { touch: 1, angle: 'They asked for it: thank them in one sentence for requesting what "lead" names, say what one part of it usually means for an organization like theirs, and offer the free trial as the way to see the rest for their own territory. Warm and short. Do not tell the founder\'s story at length: one sentence at most.' },
-  { touch: 2, angle: 'A week later: one concrete thing they could do with the product that follows from what they asked for, and one useful page from "links". Ask one simple question about what they are working on.' },
+  { touch: 1, angle: `They asked for it: thank them in one sentence for requesting what "lead" names, say what one part of it usually means for an organization like theirs, and offer the free trial as the way to see the rest for their own territory. ${alreadyHave} Warm and short. Do not tell the founder's story at length: one sentence at most.` },
+  { touch: 2, angle: `A week later: one concrete thing they could do with the product that follows from what they asked for, and one useful page from "links". ${alreadyHave} Ask one simple question about what they are working on.` },
   { touch: 3, angle: 'A short, polite last note: ask whether this is a priority this year or whether someone else handles it. Make it easy to say "not now". No new pitch.' },
 ]);
 export const inboundAngle = touch => inboundSequence[Math.min(Math.max(Number(touch) || 1, 1), inboundSequence.length) - 1].angle;
@@ -356,8 +361,8 @@ const agencyWords = /\b(home health|home healthcare|hospice)\b/i;
 /**
  * Which kind of Intel prospect an organization is, as far as its name and its research say: 'nursing_home', or null for a home health or
  * hospice agency and for anything not clearly a nursing home. The name decides first; otherwise the research must name a nursing home and
- * say nothing of home health or hospice. Intel's reports cover home health and hospice agencies only, so a nursing home's emails are its
- * own (`nursingHomeAngles`); anything doubtful keeps the agency's report-led email.
+ * say nothing of home health or hospice. An agency's own market report covers home health and hospice agencies only, so a nursing home's
+ * emails are its own (`nursingHomeAngles`); anything doubtful keeps the agency's report-led email.
  */
 export function intelSetting({ name = '', evidence = [] } = {}) {
   const named = String(name ?? '');

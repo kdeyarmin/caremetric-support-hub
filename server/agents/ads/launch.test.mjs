@@ -14,8 +14,8 @@ const metaAsset = '33333333-3333-4333-8333-333333333333';
 const linkedinAsset = '44444444-4444-4444-8444-444444444444';
 const asset = (platform, over = {}) => ({ id: platform === 'meta' ? metaAsset : linkedinAsset, token, product: 'caremetric-intel', platform,
   placement: platform === 'meta' ? 'meta.feed_square' : 'linkedin.single_image', kind: 'static', headline: 'Territory plans from Medicare data',
-  primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', description: 'Free market report', cta: 'Get your report',
-  landingUrl: `https://www.caremetricintel.com/market-review?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`, ...over });
+  primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', description: 'Free county report', cta: 'Get your report',
+  landingUrl: `https://www.caremetricintel.com/county-report?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`, ...over });
 const trusted = { autonomy: 'act', config: { auto_approve_kinds: ['social.campaign_create', 'social.google_campaign'] } };
 
 function setup({ values = {}, googleConfigured = false, approved = platform => [asset(platform)], reservation = (id, execution, daily) => ({ reserved: true, dailyBudgetCents: daily }),
@@ -45,10 +45,10 @@ function setup({ values = {}, googleConfigured = false, approved = platform => [
 
 describe('campaign destinations', () => {
   it('ignores only tracking tags and trailing slashes, retaining offer parameters and anchors', () => {
-    const page = 'https://www.caremetricintel.com/market-review';
+    const page = 'https://www.caremetricintel.com/county-report';
     expect(sameAdDestination(`${page}/?utm_source=linkedin`, `${page}?utm_content=asset`)).toBe(true);
     for (const other of [undefined, 'bad', page.replace('https:', 'http:'), `${page}?offer=trial`, `${page}#trial`,
-      page.replace('/market-review', '/resources/marketing-activity-referral-measurement'), page.replace('www.', ''),
+      page.replace('/county-report', '/resources/marketing-activity-referral-measurement'), page.replace('www.', ''),
       page.replace('https://', 'https://user:password@')]) expect(sameAdDestination(page, other)).toBe(false);
   });
 });
@@ -121,9 +121,9 @@ describe('the monthly plan with ad campaign launch handed over', () => {
 });
 
 describe('launching a campaign approved under the hand-over', () => {
-  const metaInput = { link: 'https://www.caremetricintel.com/market-review', platform: 'meta', product: 'caremetric-intel', name: 'CareMetric Intel retargeting 2026-11', dailyBudgetCents: 1500, audienceId: '1234567',
+  const metaInput = { link: 'https://www.caremetricintel.com/county-report', platform: 'meta', product: 'caremetric-intel', name: 'CareMetric Intel retargeting 2026-11', dailyBudgetCents: 1500, audienceId: '1234567',
     firstAd: { name: 'Intel retargeting · creative 33333333', message: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans from Medicare data',
-      description: 'Free market report', link: `https://www.caremetricintel.com/market-review?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`,
+      description: 'Free county report', link: `https://www.caremetricintel.com/county-report?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`,
       callToAction: 'LEARN_MORE', imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, creativeAssetId: metaAsset } };
   const auto = (input, over = {}) => ({ id: 'a9', kind: 'social.campaign_create', agentKey: 'social_manager', taskId: 't1', targetId: 'meta:caremetric-intel:2026-11', input, autoApproved: true, execution: 2, ...over });
 
@@ -223,7 +223,7 @@ describe('launching a campaign approved under the hand-over', () => {
   });
 
   it('uses the committed reservation as the total cap and keeps a too-short Google window paused', async () => {
-    const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/market-review', plan: googlePlan };
+    const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/county-report', plan: googlePlan };
     const execution = { id: 'g1', kind: 'social.google_campaign', input, autoApproved: true, execution: 1 };
     const bounded = setup({ googleConfigured: true, reservation: () => ({ reserved: true, dailyBudgetCents: 1000, days: 10, committedCents: 10000 }) });
     await bounded.executors['social.google_campaign'](execution);
@@ -237,7 +237,7 @@ describe('launching a campaign approved under the hand-over', () => {
   it('alerts the owner and preserves the budget when Google creation is unconfirmed', async () => {
     const h = setup({ googleConfigured: true });
     h.googleClient.createSearchCampaign.mockRejectedValueOnce(Object.assign(new Error('unknown'), { code: 'google_unconfirmed' }));
-    const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/market-review', plan: googlePlan };
+    const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/county-report', plan: googlePlan };
     await expect(h.executors['social.google_campaign']({ id: 'g1', kind: 'social.google_campaign', input, autoApproved: true, execution: 1 })).rejects.toMatchObject({ code: 'google_unconfirmed' });
     expect(h.googleClient.createSearchCampaign).toHaveBeenCalledTimes(1);
     expect(h.store.adsLaunchRelease).not.toHaveBeenCalled();

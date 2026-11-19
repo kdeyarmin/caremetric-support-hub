@@ -190,8 +190,9 @@ claim still comes from the fact sheet (`server/agents/content/facts.mjs`, the co
   (`discoveryQueriesPerDay`; four segments by 36 Pennsylvania places for CareBase, so it never leaves Pennsylvania; eight segments by
   104 markets across the country for Intel: six for home health and hospice agencies and, since 2026-11-16, two for nursing homes,
   the first of them right after the first agency segment). No search repeats until the whole grid has been searched; the next pass
-  reads the next page of each search. Intel's free reports serve home health and hospice agencies only, so a prospect that is clearly a
-  nursing home gets its own emails, in a nursing home's words, and no report page (`intelSetting` and `nursingHomeAngles` in `playbook.mjs`). Calls to the search provider are paced a second apart. If a later search fails, the day's searching stops and
+  reads the next page of each search. An agency's own market report covers home health and hospice agencies only, so a prospect that is
+  clearly a nursing home gets its own emails, in a nursing home's words, with no report in them (`intelSetting` and `nursingHomeAngles`
+  in `playbook.mjs`). Intel's free county report serves every kind of organization and is never withheld from one (2026-11-19). Calls to the search provider are paced a second apart. If a later search fails, the day's searching stops and
   what was found is kept; only a failure of the first search fails the run. Discovery drops directories, listing and review sites,
   provider-number and company-data lookups, trade associations and trade press, social networks, job boards and government or school
   sites, and any host that names itself a directory, a listing, a review or a jobs site, so the contact finder never writes to a
@@ -298,20 +299,21 @@ names the agency, never a person, and carries the opportunity's id as its refere
 A draft carries the link only once Intel has answered it with the PDF (`checkedLinkFor`: one GET with a 20-second timeout; the
 answer is kept per agency for 12 hours when the report opens and an hour when it doesn't). An agency certified after CMS's newest
 post-acute file gets its county's report built around it, saying CMS hasn't published its own patients yet. One Medicare's
-directory doesn't list yet has no report, so its email offers the market review page instead of a link that opens to "No report for
-this link".
+directory doesn't list yet has no report, so its email offers Intel's free county report page instead of a link that opens to "No
+report for this link".
 
 **The first email leads with the report, then says what the software does and offers the trial** (owner direction 2026-11-15 for
 the report; owner direction 2026-11-17 for the rest: a first email that was the report and nothing else, which this section
 described for a few hours that day, was "the worst marketing email that I've ever seen", with "no explanation of what else the
-software does"). A prospect that is clearly a nursing home gets the same designed email without a report, as Intel's reports
-serve home health and hospice agencies only (see "Written for the reader's kind of business" below). The email goes to the agency's best contact: a named owner, administrator or marketing leader
+software does"). A prospect that is clearly a nursing home gets the same designed email without a report, as an agency's own
+market report covers home health and hospice agencies only (see "Written for the reader's kind of business" below). The email goes to the agency's best contact: a named owner, administrator or marketing leader
 when the team found one, else the role address, and, as separate emails, the other decision-makers there (see
 [Several decision-makers at one organization](#several-decision-makers-at-one-organization)).
 
 **Who writes what.** The writer writes only the **opening**, for this one agency (`reportTouchAngle` and `reviewTouchAngle` in
 `playbook.mjs`, `growth.17`): two or three sentences that say a free market report was made for the agency, by name, from Medicare
-data, with the report's link on its own line and at most one question. A county figure from the brief comes first, about the county.
+data (or, for an agency without its own report, that Intel's free county report is one step away), with the report's link on its own
+line and at most one question. A county figure from the brief comes first, about the county.
 Code holds the opening to that (`shortFormProblem`): at most 120 words, at most one question, the report's link and no other, no
 trial and no price. Everything after the opening is written once, for each kind of business, in `server/growth/campaign.mjs` from
 the fact sheet, and added to the email when it is drafted (`withCampaign`). So **the email you approve on the Growth page is the
@@ -345,7 +347,8 @@ industry").
 - **A nursing home gets the same three designed emails** (`nursingHomeAngles`): what Intel does for a nursing home, a week of the
   work, and a short close, each with the trial. No market report is offered or mentioned. Until 2026-11-17 a nursing home got the
   plain letter.
-- **Intel's own email** for a requested market report lists what Intel does the same way, for a home health agency or a hospice.
+- **Intel's own email** that delivers a requested county report offers the free trial and never sends the reader to another page
+  to enter more information (Intel, 2026-11-19).
 
 - **The headline is the subject.** The subject names the agency or its county and the report, or asks the question the report
   answers.
@@ -377,10 +380,16 @@ industry").
   that followed its instructions failed. A rank that is plainly about physicians or referral sources now passes, and the
   instructions say "the highest-ranked physicians for outreach".
 
-An Intel prospect with no roster record gets the same email with the market report page
-(`https://www.caremetricintel.com/market-review`, `intel-market-review`) in place of its own link: any agency gets its full report
-there by entering its CCN. Its card's button reads "Get your free market report", and its second email (`reviewFollowupAngle`)
-points to that page again and offers the trial. The writer never
+An Intel prospect with no roster record gets the same email with Intel's free county report page
+(`https://www.caremetricintel.com/county-report`, `intel-county-report`) in place of its own link (owner direction 2026-11-19:
+nobody is asked for a CCN or an agency's name, and the free report serves every kind of organization). The reader chooses a state
+and a county and enters an email address, and the county report is emailed as a PDF: the county at a glance, the hospitals its
+residents use most, and the nursing homes, home health agencies, hospices and personal care and assisted living homes located there.
+The writer's opening says so (`reviewTouchAngle`) and never calls it the agency's own report. Its button reads "Get your free county
+report", and its second email (`reviewFollowupAngle`) points to that page again and offers the trial. Until 2026-11-19 these emails
+pointed to Intel's market review, which asked for an agency's name or CCN; Intel retired it (`/market-review` redirects to the county
+report). A draft that asks for either, or links the retired page, is refused when written and withdrawn when it would be sent
+(`retired_page`, `offersRetiredReview` in `draft.mjs`), and the next sweep writes it again. The writer never
 states a figure from the report: the reader opens it to see them. CareMetric's own agency (`ownAgencies` in `roster.mjs`) is never a
 prospect. The link check accepts that one report link for that one draft, and no other agency's. The report's trial link carries
 `utm_content=agency-report`, so the Monday scorecard counts the visits it brings.
@@ -413,7 +422,7 @@ finds it:
 
 No match: the prospect is tried again in 30 days, then every 90 (a website may add its address; CMS publishes a new quarter); one the
 website or the feed could not answer, in an hour. A website whose read failed (a timeout, a refused connection) is tried again in an
-hour for the first three attempts, then on the 30 and 90-day schedule. Until then its emails offer the market report page, as before. The telephone
+hour for the first three attempts, then on the 30 and 90-day schedule. Until then its emails offer Intel's free county report page. The telephone
 numbers go to Intel in the one request and nowhere else: they are never stored, logged, written into evidence or shown to a model.
 A matched agency's record is observed again whenever the weekly roster read covers its state. The Growth screen's roster list shows a
 matched agency with its organization, as it shows one the roster resolved.
@@ -675,8 +684,8 @@ Stage 3 of the [November 17 review](AI_WORKFORCE_REVIEW_2026-11-17.md) (`2026111
 - **A live writing evaluation each Monday** (Settings → Customer growth → "Run a live writing evaluation each Monday"; task
   `growth.evaluate_live`, 06:50 Eastern, `server/growth/live-evaluation.mjs`). Twelve made-up Intel agencies (invented names, `.example`
   sites, CCNs 990101 to 990104, no person, address or telephone number) cover the four triggers (a new agency, a new owner, a CMS record,
-  the web), each with three of the four pairings of brief or none and the agency's own report or the market report page (until
-  2026-11-17, short or standard). Each is written on the real writer, with the active memo and the top model as the settings say, and
+  the web), each with three of the four pairings of brief or none and the agency's own report or the free county report page
+  (until 2026-11-17, short or standard). Each is written on the real writer, with the active memo and the top model as the settings say, and
   read by the reader (`critic.3`). The run passes when every draft passes the
   checks, the reader scored every draft, the average "would reply" is at least 3.5 and none is below 2. Each grade is kept as it is
   written (`private.growth_live_eval_cases`, 120 days), so the twelve run over a few tries inside the scheduler's limit. The result is

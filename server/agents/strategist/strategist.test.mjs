@@ -181,7 +181,7 @@ describe('the weekly strategist', () => {
     // Two quiet weeks of 56 cold emails make the message a candidate too; the model chose among both.
     expect(outcome.result).toEqual({ week: '2026-11-09', constraint: 'reach', chosenBy: 'model', candidates: ['reach', 'engagement'] });
     const request = model.run.mock.calls[0][1];
-    expect(request).toMatchObject({ tier: 'quality', effort: 'high', promptVersion: 'strategist.3' });
+    expect(request).toMatchObject({ tier: 'quality', effort: 'high', promptVersion: 'strategist.4' });
     const user = JSON.parse(request.user);
     expect(user.week).toEqual({ from: '2026-11-09', to: '2026-11-15' });
     expect(user.candidates.map(c => c.key)).toEqual(['reach', 'engagement']);

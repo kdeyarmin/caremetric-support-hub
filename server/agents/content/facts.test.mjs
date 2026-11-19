@@ -86,6 +86,11 @@ describe('the fact sheet', () => {
     // Checked on the live site on 2026-11-09: the home page carries id="how-it-works" and links /county-report.
     expect(productPages.find(page => page.id === 'intel-how-it-works').url).toBe('https://www.caremetricintel.com/#how-it-works');
     expect(productPages.find(page => page.id === 'intel-county-report').url).toBe('https://www.caremetricintel.com/county-report');
+    // Intel retired its market review on 2026-11-19 (owner direction: nobody is asked for a CCN or an agency's name; the county report
+    // serves every kind of organization). No page, capability or catalog feature offers it.
+    expect(productPages.some(page => page.id === 'intel-market-review' || /market-review/.test(page.url))).toBe(false);
+    expect(products.intel.capabilities.join('\n')).not.toMatch(/market review|market-review|\bCCN\b/);
+    expect(products.intel.capabilities.find(line => line.startsWith('Competitor intelligence'))).toContain('a free county report anyone can request on Intel\'s site for any county, emailed as a PDF');
     for (const label of [...Object.values(officialSources).map(source => source.label), ...productPages.map(page => page.label)]) {
       expect(label, label).not.toMatch(/assisted living residence|\bALR\b|auditor/i);
     }

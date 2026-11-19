@@ -190,7 +190,7 @@ describe('approved creative', () => {
     expect(await executors['social.ad_create']({ id: 'a1', kind: 'social.ad_create', input, targetId: '', agentKey: 'social_manager' })).toEqual({ created: true, id: '90' });
     expect(meta.createAd).toHaveBeenCalledWith(expect.objectContaining({ imageUrl: image, link }));
     expect(creative.live).toHaveBeenCalledWith(assetId, '90');
-    for (const patch of [{ status: 'retired' }, { primaryText: 'Changed after approval' }, { token: 'e'.repeat(64) }, { landingUrl: 'https://www.caremetricintel.com/market-review' }, { cta: 'Learn more' }, { platform: 'linkedin' }]) {
+    for (const patch of [{ status: 'retired' }, { primaryText: 'Changed after approval' }, { token: 'e'.repeat(64) }, { landingUrl: 'https://www.caremetricintel.com/county-report' }, { cta: 'Learn more' }, { platform: 'linkedin' }]) {
       meta.createAd.mockClear();
       store.creativeLiveAssets.mockResolvedValue([{ ...asset, ...patch }]);
       await expect(executors['social.ad_create']({ id: 'a2', input })).rejects.toMatchObject({ code: 'ad_creative_changed' });

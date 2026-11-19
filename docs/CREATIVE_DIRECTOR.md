@@ -52,7 +52,7 @@ A brief names the product, a goal, an audience (organizations and roles, never a
 platforms, images and/or videos with their lengths, an optional angle and an optional offer code. The model is given the brief, the
 product's own pages (by id), the brand kit's voice, banned phrases and required disclaimers, the owner's screenshots (by id and label), the
 product's learnings and its recent headlines (not to repeat), and, for a revision, the asset it replaces and the owner's note. Its system
-prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.10` and `creative-variants.10`) carry the fact sheet and the sales
+prompts (`server/agents/creative/copy.mjs`, versions `creative-concept.11` and `creative-variants.11`) carry the fact sheet and the sales
 playbook (the Sales Executive's fact source) and are cached. The answers are closed JSON schemas.
 
 **What each product does** (`server/agents/content/features.mjs`, data in `intel-features.json` and `carebase-features.json`). Each brief's
@@ -404,8 +404,9 @@ Since 2026-11-16 (`20261116130000_creative_review.sql`, feature `platform.agents
   recently pictured first, then those with the most roster agencies (`private.creative_data_counties(integer, timestamptz, jsonb)`),
   so a county with no agency located in it (three of Pennsylvania's 67) takes its turn too. Without the list, the roster's own counties,
   as before.
-- **To the free market report.** Every snapshot sends agencies to the free market report for their own agency (`/market-review`),
-  whatever page the concept chose.
+- **To the free county report.** Every snapshot sends the reader to Intel's free county report (`/county-report`: any state and
+  county, emailed as a PDF), whatever page the concept chose. Until 2026-11-19 it sent agencies to the market review, which asked for
+  an agency's name or certification number; Intel retired it.
 - **Why none.** A plan run that opens no snapshot says why in its result (`snapshotsSkipped`: `off`, `feed_not_configured`,
   `database_not_ready`, `no_county_due`, `no_figure_fits`, or the feed's error code). Until the Hub restarts after the migration that
   declares a feature, it does not see it: the November 15 run opened none because the data creative migration reached production that

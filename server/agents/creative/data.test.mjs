@@ -87,7 +87,10 @@ describe('county snapshots', () => {
     expect(brief).toMatchObject({ product: 'caremetric-intel', source: 'data.county', requestKey: 'data:county:42003:2026-11-16', formats: ['static'], facts: snapshot });
     expect(brief.audience).toBe('Owners, administrators and marketers at home health agencies serving Allegheny County, PA');
     expect(brief.audience).not.toMatch(/patient|condition|diagnos/i);
-    expect(brief.goal).toMatch(/free market report for their own agency/);
+    // Every snapshot sends the reader to Intel's free county report (2026-11-19: the market review is retired).
+    expect(brief.goal).toMatch(/send them to the free county report$/);
+    expect(snapshot.landing).toBe('intel-county-report');
+    expect(`${brief.goal} ${brief.angle}`).not.toMatch(/market report|own agency/);
     expect(countyBrief({ ...snapshot, setting: 'hospice' }, '2026-11-16').angle).toMatch(/^County snapshot, hospice only:/);
     const drawn = withFacts({ layout: 'headline', headline: 'H', overlay: { stat: '99', statLabel: 'made up', statSource: '', kicker: 'k' } }, snapshot);
     expect(drawn).toMatchObject({ layout: 'stat', overlay: { stat: '250,000', statLabel: snapshot.statLabel, statSource: snapshot.statSource, kicker: 'k' } });
@@ -139,7 +142,7 @@ describe('figure checks', () => {
       const facts = countySnapshot(county([figure(key, valueOf(key), { setting: key.startsWith('home_health') || key.startsWith('hospice') ? setting : 'general', data_year: '2024' })]), 0, setting);
       expect(facts?.figure, key).toBe(key);
       const drafted = withFacts({ layout: 'headline', headline: 'Know where your agency stands', primaryText: 'See how your county\'s market looks from Medicare data.',
-        description: 'Free market report', cta: 'Get the report', altText: `A tile showing ${facts.stat}`, overlay: { kicker: 'Medicare data' } }, facts);
+        description: 'Free county report', cta: 'Get the report', altText: `A tile showing ${facts.stat}`, overlay: { kicker: 'Medicare data' } }, facts);
       for (const platform of ['meta', 'linkedin']) {
         const findings = copyFindings({ product: 'caremetric-intel', platform, copy: drafted, facts });
         expect(findings.filter(item => item.level === 'block'), `${key} on ${platform}`).toEqual([]);

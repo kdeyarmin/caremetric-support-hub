@@ -7,7 +7,8 @@
  * Each snapshot is about one care setting (owner decision 2026-11-16: keep it in the agency's own industry): a home health snapshot shows
  * a home health figure (or a general one about the county's people) to home health agencies, a hospice snapshot a hospice figure to
  * hospices, never another setting's. Its figures lead with how crowded and how concentrated the county's market is, and every snapshot
- * sends the reader to the free market report for their own agency. Counties are every county in the roster's states, the least recently
+ * sends the reader to Intel's free county report (2026-11-19: the market review that asked for an agency's name or certification number
+ * was retired; the county report serves every kind of organization). Counties are every county in the roster's states, the least recently
  * pictured first (creative_data_counties), so a county with no agency located in it is pictured too.
  */
 import { placeName } from '../places.mjs';
@@ -15,8 +16,8 @@ import { placeName } from '../places.mjs';
 export const dataBriefSources = Object.freeze(['data.county', 'data.release', 'observance']);
 export const snapshotSettings = Object.freeze(['home_health', 'hospice']);
 const statMax = 20, labelMax = 100, sourceMax = 80;
-// Where every snapshot sends people: the free market report for the reader's own agency (content/facts.mjs).
-export const snapshotLanding = 'intel-market-review';
+// Where every snapshot sends people: Intel's free county report, for any county (content/facts.mjs).
+export const snapshotLanding = 'intel-county-report';
 
 const settingWords = {
   home_health: { name: 'home health', agencies: 'home health agencies', who: 'home health agencies' },
@@ -107,10 +108,10 @@ export function countyBrief(snapshot, week) {
   const words = settingWords[snapshot.setting] ?? settingWords.home_health;
   return {
     product: 'caremetric-intel', source: 'data.county', requestKey: `data:county:${snapshot.countyFips}:${week}`,
-    goal: `Show ${words.who} serving ${snapshot.place} one Medicare or Census number about their market, and send them to the free market report for their own agency`,
+    goal: `Show ${words.who} serving ${snapshot.place} one Medicare or Census number about their market, and send them to the free county report`,
     audience: `Owners, administrators and marketers at ${words.agencies} serving ${snapshot.place}`,
     platforms: ['meta', 'linkedin'], formats: ['static'], videoLengths: [],
-    angle: `County snapshot, ${words.name} only: ${snapshot.stat} ${snapshot.statLabel} (${snapshot.statSource}). Say nothing about any other care setting. The free market report shows where the reader's own agency stands in its county.`.slice(0, 500),
+    angle: `County snapshot, ${words.name} only: ${snapshot.stat} ${snapshot.statLabel} (${snapshot.statSource}). Say nothing about any other care setting. The free county report, emailed for any county, shows the hospitals its residents use and the providers located there.`.slice(0, 500),
     facts: snapshot,
   };
 }

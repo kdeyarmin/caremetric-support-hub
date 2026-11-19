@@ -12,9 +12,10 @@
 import { countyPlace, slugWords } from '../places.mjs';
 import { officialSources, productPageIds } from './facts.mjs';
 
-// Every Intel article suggests Intel's free market report first, the call to action the cold email and the ads lead with (team review
-// 2026-11-17, stage 6: no article led to it).
-const reportFirst = value => (value.product === 'intel' && !value.links.includes('intel-market-review') ? ['intel-market-review', ...value.links] : value.links);
+// Every Intel article suggests Intel's free county report first, the call to action the cold email and the ads lead with (team review
+// 2026-11-17, stage 6: no article led to it). Since 2026-11-19 it is Intel's one free report anyone can request: the market review that
+// asked for an agency's name or certification number was retired, and the county report serves every kind of organization.
+const reportFirst = value => (value.product === 'intel' ? ['intel-county-report', ...value.links.filter(id => id !== 'intel-county-report')] : value.links);
 const topic = value => Object.freeze({ ...value, facts: Object.freeze(value.facts), sources: Object.freeze(value.sources), links: Object.freeze(reportFirst(value)), keywords: Object.freeze(value.keywords) });
 
 const pchAndAlf = 'Administrators and owners of Pennsylvania personal care homes and Assisted Living Facilities';
@@ -438,9 +439,9 @@ export const quarterTag = moment => { const date = new Date(moment); return `${d
 
 /**
  * A county topic (team review 2026-11-17, stage 6; Settings → AI team → "Write articles about the roster's counties"): what an agency in
- * one of the roster's counties should look at in its market, pointing to Intel's free county report and market report. It states no
- * figure: the county's figures are in the report, and the article holds only the facts below and the fact sheet's. Null for a county
- * without a usable name or state.
+ * one of the roster's counties should look at in its market, pointing to Intel's free county report. It states no figure: the county's
+ * figures are in the report, and the article holds only the facts below and the fact sheet's. Null for a county without a usable name or
+ * state.
  */
 export function countyTopic({ countyFips, state, name }) {
   const found = countyPlace(name, state);
@@ -454,14 +455,14 @@ export function countyTopic({ countyFips, state, name }) {
     title: `Home health and hospice in ${place}, ${state}: what to look at in the market`,
     slug: `home-health-hospice-${words}-${state.toLowerCase()}`,
     audience: `Owners, administrators and marketing leaders at home health agencies and hospices serving ${place}, ${state}`,
-    angle: `The questions an agency in ${place} should be able to answer about its market (who leads it, which hospitals its residents use and which physicians Intel ranks highest as referral sources), and how Intel's free county report and free market report answer them from public Medicare data. State no figure about the ${unit}: the reports hold them.`,
+    angle: `The questions an agency in ${place} should be able to answer about its market (which providers are located there, which hospitals its residents use and which physicians Intel ranks highest as referral sources), and how Intel's free county report and Intel itself answer them from Medicare and Census data. State no figure about the ${unit}: the report holds them.`,
     keywords: [`${place.toLowerCase()} home health`, `${place.toLowerCase()} hospice`, `home health market ${place.toLowerCase()}`],
     facts: [
       'Medicare data can show where to look, but it does not confirm a referral: confirmed referrals are the ones the agency records itself.',
       'CMS publishes provider data about home health services at data.cms.gov.',
     ],
     sources: ['cms-home-health', 'cms-data'],
-    links: ['intel-county-report', 'intel-market-review', 'intel-home'],
+    links: ['intel-county-report', 'intel-home'],
     inquiries: ['sales'],
   });
 }

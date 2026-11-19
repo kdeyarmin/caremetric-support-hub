@@ -7,13 +7,13 @@ import { handoverFeature } from '../handover.mjs';
 const monday = () => new Date('2026-11-16T14:20:00Z');
 const task = over => ({ id: 't1', agentKey: 'social_manager', kind: 'ads.plan', sourceKind: 'schedule', agent: { autonomy: 'propose' }, ...over });
 const settingsOf = values => key => ({ 'ads.monthly_budget_cents': 5000, 'ads.flight_days': 10, 'ads.meta_audience_id': '1234567', ...values })[key];
-const googlePlan = { headlines: ['Referral sources in one place', 'Plan visits by county', 'Free market report'], descriptions: ['CareMetric Intel brings territory analysis and a marketing CRM into one place.', 'See where your agency stands.'],
+const googlePlan = { headlines: ['Referral sources in one place', 'Plan visits by county', 'Free county report'], descriptions: ['CareMetric Intel brings territory analysis and a marketing CRM into one place.', 'See where your agency stands.'],
   keywords: ['home health crm', 'hospice marketing', 'home health marketing software', 'referral source tracking', 'hospice referral tracking'].map(text => ({ text, match: 'PHRASE' })), negatives: ['jobs'] };
 const token = 'e'.repeat(64);
 const metaAsset = '33333333-3333-4333-8333-333333333333';
 const asset = platform => ({ id: metaAsset, token, product: 'caremetric-intel', platform, placement: platform === 'meta' ? 'meta.feed_square' : 'linkedin.single_image', kind: 'static',
-  headline: 'Where does your agency rank?', primaryText: 'CareMetric Intel shows your county\'s home health market from Medicare data, free for your agency.', description: 'Free market report',
-  cta: 'Get your report', landingUrl: `https://www.caremetricintel.com/market-review?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}` });
+  headline: 'Where does your agency rank?', primaryText: 'CareMetric Intel shows your county\'s home health market from Medicare data, free for your agency.', description: 'Free county report',
+  cta: 'Get your report', landingUrl: `https://www.caremetricintel.com/county-report?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}` });
 const trusted = { autonomy: 'act', config: { auto_approve_kinds: ['social.campaign_create', 'social.google_campaign'] } };
 
 function setup({ values = {}, linkedinConnected = true, metaConnected = true, googleConfigured = false, proposed = () => false, history = [], handover = false, status = 'proposed', refusals = undefined } = {}) {
@@ -150,7 +150,7 @@ describe('creating a flight', () => {
     await h.executors['social.campaign_create']({ id: 'a2', input: { platform: 'linkedin', product: 'caremetric-intel', name: 'Intel prospecting', dailyBudgetCents: 1000, flightDays: 5 } });
     expect(h.linkedin.createCampaign).toHaveBeenCalledWith({ name: 'Intel prospecting', dailyBudgetCents: 1000, startAt: '2026-11-16T15:20:00.000Z', endAt: '2026-11-21T04:59:59.000Z' });
     const google = setup({ googleConfigured: true });
-    await google.executors['social.google_campaign']({ id: 'a3', input: { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 500, finalUrl: 'https://www.caremetricintel.com/market-review', plan: googlePlan, flightDays: 10 } });
+    await google.executors['social.google_campaign']({ id: 'a3', input: { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 500, finalUrl: 'https://www.caremetricintel.com/county-report', plan: googlePlan, flightDays: 10 } });
     expect(google.googleClient.createSearchCampaign.mock.calls[0][0]).toMatchObject({ dailyBudgetCents: 500, endDate: '2026-11-25' });
     expect(google.googleClient.createSearchCampaign.mock.calls[0][0].live).toBeUndefined();
   });
@@ -165,16 +165,16 @@ describe('creating a flight', () => {
     const { flightDays, ...spread } = metaFlight; void flightDays;
     await expect(setup({ values: { 'ads.monthly_budget_cents': 90000 } }).executors['social.campaign_create']({ id: 'a1', input: { ...spread, dailyBudgetCents: 3000 } })).rejects.toMatchObject({ code: 'budget_changed' });
     // A Google flight cannot be an import file: it would never end.
-    await expect(setup().executors['social.google_campaign']({ id: 'a3', input: { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 500, finalUrl: 'https://www.caremetricintel.com/market-review', plan: googlePlan, flightDays: 10 } }))
+    await expect(setup().executors['social.google_campaign']({ id: 'a3', input: { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 500, finalUrl: 'https://www.caremetricintel.com/county-report', plan: googlePlan, flightDays: 10 } }))
       .rejects.toMatchObject({ code: 'google_not_configured' });
   });
 
   it('launches a flight handed over: reserves only its own days, and ends after its last day', async () => {
     const h = setup({ handover: true });
-    const firstAd = { name: 'Intel · creative 33333333', message: asset('meta').primaryText, headline: asset('meta').headline, description: 'Free market report', link: asset('meta').landingUrl,
+    const firstAd = { name: 'Intel · creative 33333333', message: asset('meta').primaryText, headline: asset('meta').headline, description: 'Free county report', link: asset('meta').landingUrl,
       callToAction: 'LEARN_MORE', imageUrl: `https://help.caremetric.ai/api/creative/a/${token}.png`, creativeAssetId: metaAsset };
     const result = await h.executors['social.campaign_create']({ id: 'a9', kind: 'social.campaign_create', agentKey: 'social_manager', taskId: 't1', targetId: 'meta:caremetric-intel:2026-11',
-      input: { ...metaFlight, link: 'https://www.caremetricintel.com/market-review', firstAd }, autoApproved: true, execution: 2 });
+      input: { ...metaFlight, link: 'https://www.caremetricintel.com/county-report', firstAd }, autoApproved: true, execution: 2 });
     expect(result).toMatchObject({ launched: true, dailyBudgetCents: 500, endsOn: '2026-11-25' });
     expect(h.store.adsLaunchReserve).toHaveBeenCalledWith('a9', 2, 500, 500, 10);
     expect(h.meta.createCampaign).toHaveBeenCalledWith({ name: metaFlight.name, dailyBudgetCents: 500, lifetimeBudgetCents: 5000, audienceId: '1234567', startAt: '2026-11-16T14:20:00.000Z', endAt: '2026-11-26T04:59:59.000Z' });
@@ -324,7 +324,7 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
   it('keeps roster-state targeting when Google search is handed off as an import file', async () => {
     const h = reachSetup({ values: { 'ads.monthly_budget_cents': 30000, 'ads.flight_days': null } });
     await h.executors['social.google_campaign']({ id: 'g1', kind: 'social.google_campaign', input: {
-      product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 500, finalUrl: 'https://www.caremetricintel.com/market-review', plan: googlePlan,
+      product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 500, finalUrl: 'https://www.caremetricintel.com/county-report', plan: googlePlan,
     } });
     const csv = h.notifier.send.mock.calls.at(-1)[0].blocks.find(block => block.type === 'message').text;
     expect(csv).toContain('Pennsylvania');

@@ -258,7 +258,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
             if(quality&&(topDrafts>=1||clock()-started>45_000)){held.top_model_later=(held.top_model_later??0)+1;continue;}
           }
           const memo=work.kind==='outreach'?await memoFor(o.product):null;
-          // The agency's own report, only once Intel has opened it (report-link.mjs checkedLinkFor); otherwise the review page.
+          // The agency's own report, only once Intel has opened it (report-link.mjs checkedLinkFor); otherwise the free county report page.
           const report=work.kind==='outreach'&&growth.reports?(growth.reports.checkedLinkFor?await growth.reports.checkedLinkFor(o,{signal}):growth.reports.linkFor?.(o))??null:null;
           if(quality)topDrafts++;
           const views=viewing&&live(growth.views?.enabled)===true;
@@ -560,7 +560,7 @@ export function messageLinks(product,words,reports=null) {
 /**
  * What a link on a line of its own is called in the HTML part, by its address as written (email review 2026-11-17: a report link was
  * shown as its whole address, some 300 characters of token and campaign tags, which reads as unsafe to click). The agency's own report,
- * the product's next step (its free trial), the page where an agency gets its report, then any other product page by its own label.
+ * the product's next step (its free trial), then any other product page (Intel's free county report among them) by its own label.
  * The plain-text part keeps the address.
  */
 export function linkLabels(product,words,reports=null) {
@@ -574,7 +574,7 @@ export function linkLabels(product,words,reports=null) {
     const page=untaggedUrl(url)??url;
     if(product==='caremetric-intel'&&reports?.accepts?.(url)===true)labels[url]=url.endsWith('/view')?'Open your agency\'s market report':'Open your agency\'s market report (PDF)';
     else if(next?.url===page||(product==='caremetric-intel'&&isAgencyTrialUrl(url)))labels[url]=next?.label;
-    else if(pages.has(page))labels[url]=/\/market-review\/?$/.test(page)?'Get your agency\'s free market report':pages.get(page);
+    else if(pages.has(page))labels[url]=pages.get(page);
   }
   return labels;
 }
