@@ -12,17 +12,18 @@ const route = handlers => vi.fn(async (url, init = {}) => {
 const client = (fetchImpl, over = {}) => metaClient({ token, pageId: '1111', instagramId: '2222', adAccountId: 'act_3333', fetchImpl, ...over });
 
 describe('the Meta client', () => {
-  it.each(['facebook', 'instagram'])('stages %s video, reads processing and publishes only on a separate call', async platform => {
+  // Review 2026-11-19: Meta refused switching an uploaded, unpublished Page video to published (meta_permission). A Page video is now
+  // uploaded and published in one request; an Instagram Reel is still staged and published on a separate call.
+  it.each(['facebook', 'instagram'])('uploads %s video once, reads processing, and publishes a Reel only on a separate call', async platform => {
     const fetchImpl = route([
       [/^GET \/v23\.0\/1111$/, { access_token: 'EAAG-page-token-abcdefghijklmnop' }],
       [/^POST \/v23\.0\/(1111\/videos|2222\/media)$/, (url, params) => {
         expect(params.get(platform === 'facebook' ? 'file_url' : 'video_url')).toMatch(/\/api\/creative\/a\/[f]{64}\.mp4$/);
-        if (platform === 'facebook') { expect(url.host).toBe('graph-video.facebook.com'); expect(params.get('published')).toBe('false'); }
+        if (platform === 'facebook') { expect(url.host).toBe('graph-video.facebook.com'); expect(params.get('published')).toBe('true'); expect(params.get('description')).toBe('Territory planning.'); }
         else expect(params.get('media_type')).toBe('REELS');
         return json({ id: '900' });
       }],
       [/^GET \/v23\.0\/900$/, { status: { video_status: 'ready' }, status_code: 'FINISHED' }],
-      [/^POST \/v23\.0\/900$/, (url, params) => { expect(params.get('published')).toBe('true'); return json({ success: true }); }],
       [/^POST \/v23\.0\/2222\/media_publish$/, (url, params) => { expect(params.get('creation_id')).toBe('900'); return json({ id: '901' }); }],
     ]);
     const meta = client(fetchImpl);
@@ -30,7 +31,11 @@ describe('the Meta client', () => {
     expect(staged).toEqual({ id: '900' });
     expect(fetchImpl.mock.calls.some(([url]) => String(url).includes('media_publish'))).toBe(false);
     expect(await meta.readVideo(staged.id, { platform })).toEqual({ ready: true, failed: false });
+    const before = fetchImpl.mock.calls.length;
     expect(await meta.publishVideo({ platform, videoId: staged.id, message: 'Territory planning.' })).toEqual({ id: platform === 'facebook' ? '900' : '901' });
+    // The Page video was published by its upload: nothing is sent to Meta to publish it, and nothing ever updates the video itself.
+    expect(fetchImpl.mock.calls.length - before).toBe(platform === 'facebook' ? 0 : 1);
+    expect(fetchImpl.mock.calls.some(([url, init]) => init?.method === 'POST' && new URL(url).pathname === '/v23.0/900')).toBe(false);
   });
 
   it('treats unfinished/failed video processing separately and never retries an uncertain publish', async () => {

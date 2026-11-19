@@ -171,7 +171,11 @@ Hub's own approved creative URL, and the database checks that the selected asset
 No arbitrary video URL can be uploaded by a post action. LinkedIn uploads are limited to 60 MiB; the Creative Director also checks
 the asset's platform limits before approval.
 
-Facebook uploads the video unpublished, checks its processing status, then publishes it. Instagram creates a Reels container, waits
+Facebook uploads the video to the Page and publishes it in the same request, then checks its processing status; the post shows once
+processing ends. (Until November 19 it uploaded the video unpublished and published it later. Meta documents an unpublished Page video
+only as an ads post, with no way to publish it afterwards, and refused that last step as `meta_permission` on November 17.) Because the
+upload publishes it, a Facebook video still processing after the hour stops as `social_unconfirmed`, not as a failure: look at the Page
+before proposing it again. Instagram creates a Reels container, waits
 for `FINISHED`, then publishes that container. LinkedIn initializes and finalizes an upload, waits for `AVAILABLE`, then creates the
 Page post. The worker persists the provider ID and stage, checks again on later runs while processing, and gives up after one hour.
 The same post approval and schedule cover the whole sequence. Nothing changes the owner's existing approval or budget controls.
@@ -180,11 +184,13 @@ If a write may have succeeded but the platform did not confirm it, or the worker
 stops as `social_unconfirmed`. Inspect the Page and the provider's uploaded videos first. The saved upload/publication intent prevents
 an automatic repeat, including after a worker restart. Confirmed processing failure or timeout needs a fresh reviewed proposal.
 
-Video uses the existing Meta `pages_manage_posts` / `instagram_content_publish` permissions and LinkedIn's `w_organization_social`
+Video uses the existing Meta `pages_manage_posts` / `instagram_content_publish` permissions (a Page video, like a Page photo, needs a
+Page token from someone with the Page's create-content task) and LinkedIn's `w_organization_social`
 permission with approved Community Management API access. These permissions and the account's app review must be granted by the
 platform; connecting a token does not grant them. The implementation follows Meta's
 [Instagram publishing collection](https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api), Facebook's
-[Video API fields](https://github.com/facebook/facebook-python-business-sdk/blob/main/facebook_business/adobjects/advideo.py), and
+[Video API fields](https://github.com/facebook/facebook-python-business-sdk/blob/main/facebook_business/adobjects/advideo.py) and
+[Page videos reference](https://developers.facebook.com/docs/graph-api/reference/page/videos/), and
 LinkedIn's [Videos API](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api?view=li-lms-2026-09)
 and [Posts API](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api?view=li-lms-2026-09).
 
