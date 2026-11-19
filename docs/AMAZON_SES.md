@@ -18,7 +18,10 @@ posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is 
   when there is one, each part base64), signed with AWS Signature Version 4. No AWS SDK. Bulk, growth and customer email
   carry `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`. Each message is tagged with its
   category; growth email also carries its growth message id as the `growth_message_id` tag. A 4xx from SES means the
-  message was not sent (`failed`); a timeout or a 5xx is `unknown`, exactly as with SendGrid.
+  message was not sent (`failed`); a timeout or a 5xx is `unknown`, exactly as with SendGrid. The one exception is a 429:
+  the Hub sent faster than the account's rate (14 a second), so SES did not take the message. It is sent again after about
+  1, 2 and 4 seconds (each wait stretched at random by up to half, so the five bulk senders spread out) and counts as
+  `failed` only if SES still refuses it. Nothing else is ever sent twice.
 - **Tracking:** every SES request explicitly disables open and click tracking, including when the account or configuration
   set enables it. Support links remain direct and no tracking pixel is added.
 - **Delivery events** (`POST /api/growth/delivery/ses`): the configuration set publishes Delivery, Bounce, Complaint and
@@ -38,7 +41,7 @@ posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is 
    `feedback-smtp.us-east-2.amazonaws.com` (priority 10) and a TXT for `mail` with `v=spf1 include:amazonses.com ~all`.
    They sit beside the SendGrid records; nothing existing changes.
 2. **Production access.** A new SES account sends only to verified addresses (200 a day). Request production access in
-   the SES console for transactional email. Prospecting (cold) email is not part of that request: AWS's acceptable use
+   the SES console for transactional email. Granted on November 19, 2026 in us-east-2: 50,000 messages a day, 14 a second. Prospecting (cold) email is not part of that request: AWS's acceptable use
    policy does not allow unsolicited bulk email, so leave **Growth email service** on SendGrid.
 3. **Sending key.** The IAM user `ses-sender-hub` exists with one inline policy: `ses:SendEmail` and
    `ses:SendRawEmail` only, only for the `caremetric.ai` and `caremetricadvisors.com` identities and the
