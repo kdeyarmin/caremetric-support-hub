@@ -38,6 +38,21 @@ export const reachFeature = 'platform.agents.reach.v1';
 /** The roster's states (Settings → Customer growth → States to prospect in) as [{ code, name }], for each platform's own location lookup. */
 export const rosterTargets = value => rosterStates(value).map(code => ({ code, name: stateNames[code] }));
 
+/**
+ * Roster places the ad platforms cannot name as a US state: Google, Meta and LinkedIn each treat Puerto Rico as a country, so its
+ * location lookup fails (`*_geo_unresolved`), and one failed lookup stops every new campaign. The roster still prospects there.
+ */
+export const notAdLocations = Object.freeze(['PR']);
+/**
+ * The roster's states as the ad platforms are asked for them: without the places they cannot name. When nothing else is left (Puerto
+ * Rico alone) the roster's states stay, so the lookup fails and the owner is told, never a campaign for the whole country instead.
+ */
+export const adTargets = value => {
+  const all = rosterTargets(value);
+  const named = all.filter(state => !notAdLocations.includes(state.code));
+  return named.length ? named : all;
+};
+
 export const adsFeature = 'platform.agents.ads.v1';
 const productNames = { carebase: 'CareBase', 'caremetric-intel': 'CareMetric Intel' };
 // Where new campaigns send people (2026-11-16): Intel's free market report for the reader's own agency (its share and rank in its county,
@@ -242,10 +257,13 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
   const declared = features instanceof Set ? features.has(adsFeature) : Array.isArray(features) && features.includes(adsFeature);
   const reach = features instanceof Set ? features.has(reachFeature) : Array.isArray(features) && features.includes(reachFeature);
   // With reach, every new campaign is limited to the roster's states (none chosen: the whole country, as before).
-  const states = () => (reach ? rosterTargets(config().rosterStates) : []);
+  const states = () => (reach ? adTargets(config().rosterStates) : []);
+  // A roster place left out of every campaign's location, named in what the owner reads so a smaller footprint is never a surprise.
+  const leftOut = () => (reach ? rosterTargets(config().rosterStates).filter(state => !states().some(chosen => chosen.code === state.code)) : []);
   // Only a campaign limited to states carries them, so without reach a campaign is asked for exactly as before.
   const located = () => { const list = states(); return list.length ? { states: list } : {}; };
   const statesWords = () => { const list = states(); return list.length ? list.map(state => state.name).join(', ') : 'the United States'; };
+  const leftOutNote = () => { const skipped = leftOut(); return skipped.length ? ` Not ${skipped.map(state => state.name).join(', ')}: the ad platforms cannot target ${skipped.length === 1 ? 'it' : 'them'} as a US state.` : ''; };
   const config = () => live(ads) ?? adsConfig({});
   const google = () => googleClient ?? googleAdsClient({ ...config().google, fetchImpl });
   // The owner's "Ad campaign launch" step can be switched on only once the database declares it.
@@ -450,7 +468,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
                 ? `You handed ad campaign launch over, so it starts on its own, with this first ad from your approved creative ${ad.creativeAssetId}, and runs until ${windowOf(slot).lastDay}. Its total budget stays within your monthly number; the platform controls day-to-day pacing; if too little of the month's number is left when it starts, it is created ${pausedWords[platform]} with no ads instead.\n\nFirst ad\n${platform === 'linkedin' ? 'Post text' : 'Primary text'}: ${ad.message}\nHeadline: ${ad.headline}\nDescription: ${ad.description}\n${platform === 'linkedin' ? '' : `Button: ${ad.callToAction === 'SIGN_UP' ? 'Sign up' : 'Learn more'}\n`}Link: ${ad.link}\nImage: ${ad.imageUrl}`
                 : `You handed ad campaign launch over, but none of your approved creative fits it yet, so it is created ${pausedWords[platform]} with no ads, as before: add its first ad in ${managers[platform]} (your approved creative is on the Creative screen) and start it there.${flightNote(slot)}`;
             action = await store.proposeAction({ taskId: task.id, kind, targetKind: 'social_item', targetId,
-              preview: `New ${platformNames[platform]} campaign for ${productNames[product]}: ${name}.\n\n${budgetLine(slot, daily)}\nAudience: ${audience}.\nGoal: visits to ${page.label} (${link}).\n\n${how}`.slice(0, 6000),
+              preview: `New ${platformNames[platform]} campaign for ${productNames[product]}: ${name}.\n\n${budgetLine(slot, daily)}\nAudience: ${audience}.${leftOutNote()}\nGoal: visits to ${page.label} (${link}).\n\n${how}`.slice(0, 6000),
               input: { platform, product, name, dailyBudgetCents: daily, ...(platform === 'meta' ? { audienceId: config().metaAudienceId } : {}), link, ...(onItsOwn(kind) && ad ? { firstAd: ad } : {}),
                 ...(slot.flight ? { flightDays: slot.flight.days } : {}) } })
               .catch(error => { if (error?.code === '42501') return null; throw error; });
@@ -469,7 +487,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
                 ? `You handed ad campaign launch over, so it starts on its own with the ad above and runs until ${windowOf(slot).lastDay}, with a total budget within your monthly number (created paused instead if too little of the month's number is left when it starts).`
                 : 'You handed ad campaign launch over, but the Google Ads API is not set up, so it is emailed to you as an import file, paused, as before.';
             action = await store.proposeAction({ taskId: task.id, kind, targetKind: 'social_item', targetId,
-              preview: `New Google search campaign for ${productNames[product]}: ${name}.\n\n${budgetLine(slot, daily)} Location: ${statesWords()}. Landing page: ${finalUrl}\n\nHeadlines:\n${checked.plan.headlines.join('\n')}\n\nDescriptions:\n${checked.plan.descriptions.join('\n')}\n\nKeywords: ${checked.plan.keywords.map(k => `${k.text} (${k.match.toLowerCase()})`).join(', ')}\n\nNegative keywords: ${checked.plan.negatives.join(', ')}\n\n${how}`.slice(0, 6000),
+              preview: `New Google search campaign for ${productNames[product]}: ${name}.\n\n${budgetLine(slot, daily)} Location: ${statesWords()}.${leftOutNote()} Landing page: ${finalUrl}\n\nHeadlines:\n${checked.plan.headlines.join('\n')}\n\nDescriptions:\n${checked.plan.descriptions.join('\n')}\n\nKeywords: ${checked.plan.keywords.map(k => `${k.text} (${k.match.toLowerCase()})`).join(', ')}\n\nNegative keywords: ${checked.plan.negatives.join(', ')}\n\n${how}`.slice(0, 6000),
               input: { product, name, dailyBudgetCents: daily, finalUrl, plan: checked.plan, ...(slot.flight ? { flightDays: slot.flight.days } : {}) } }).catch(error => { if (error?.code === '42501') return null; throw error; });
           }
           if (action && action.created !== false) (action.status === 'auto_approved' ? automatic : waiting).push(targetId);

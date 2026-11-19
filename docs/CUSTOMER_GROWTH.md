@@ -603,7 +603,10 @@ first, a third of them on a Sunday afternoon. Each switch below is under Setting
 - **Send cold email from this hour / until this hour** (`growth.send_from_hour`, `growth.send_until_hour`). Eastern time, Monday to
   Friday; the "until" hour itself is outside (16 stops at 4 pm). The send claim refuses a cold email outside them (`outside_hours`) and it
   waits for the next opening (`private.growth_next_send_at`). Replies and customer emails are never held. Both empty, or "until" not
-  after "from": any time, as before.
+  after "from": any time, as before. The hours are Eastern for every agency, not the agency's own: with the roster beyond the East Coast,
+  11 to 16 keeps every email between 8 am and 4 pm for agencies from New York to California (Alaska and Hawaii are earlier). Sending in
+  each agency's own time zone needs a database change to the send claim and its deferral (`private.growth_claim_message`,
+  `private.growth_defer_action`) and is not built yet.
 - **Test a short first email** (`growth.short_first_email`): **retired on 2026-11-17** by the owner's decision. It wrote half of the
   Intel first emails that link the agency's own report short (the report and one question, with the trial in the second email). Every
   first email built around a market report now has one form, a short opening and the email's own sections (see

@@ -113,6 +113,17 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
     expect(lancaster.facts.flatMap(numbersIn)).toEqual([]);
     expect(countyTopic({ countyFips: '22071', state: 'LA', name: 'Orleans Parish' })).toMatchObject({ slug: 'home-health-hospice-orleans-parish-la', title: 'Home health and hospice in Orleans Parish, LA: what to look at in the market' });
     expect(countyTopic({ countyFips: '02290', state: 'AK', name: 'Yukon-Koyukuk census area' }).title).toContain('Yukon-Koyukuk Census Area, AK');
+    // Every other kind of name Intel sends: an independent city is not the county of the same name, accents stay in the title and are folded in the slug.
+    const city = countyTopic({ countyFips: '51760', state: 'VA', name: 'Richmond city' });
+    const county = countyTopic({ countyFips: '51159', state: 'VA', name: 'Richmond County' });
+    expect(city).toMatchObject({ slug: 'home-health-hospice-richmond-city-va', title: 'Home health and hospice in Richmond City, VA: what to look at in the market' });
+    expect(county.slug).toBe('home-health-hospice-richmond-county-va');
+    expect(city.angle).toContain('State no figure about the city');
+    expect(countyTopic({ countyFips: '35013', state: 'NM', name: 'Doña Ana County' })).toMatchObject({ slug: 'home-health-hospice-dona-ana-county-nm', title: expect.stringContaining('in Doña Ana County, NM:') });
+    expect(countyTopic({ countyFips: '11001', state: 'DC', name: 'District of Columbia' })).toMatchObject({ slug: 'home-health-hospice-washington-dc', title: expect.stringContaining('in Washington, DC:') });
+    expect(countyTopic({ countyFips: '09110', state: 'CT', name: 'Capitol Planning Region' }).angle).toContain('about the planning region');
+    expect(countyTopic({ countyFips: '72001', state: 'PR', name: 'Adjuntas Municipio' }).slug).toBe('home-health-hospice-adjuntas-municipio-pr');
+    expect(backlogProblems([city, county, countyTopic({ countyFips: '11001', state: 'DC', name: 'District of Columbia' })])).toEqual([]);
     for (const bad of [{ countyFips: '4207', state: 'PA', name: 'Lancaster' }, { countyFips: '42071', state: 'pa', name: 'Lancaster' }, { countyFips: '42071', state: 'PA', name: '' }]) {
       expect(countyTopic(bad), JSON.stringify(bad)).toBeNull();
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { adsConfig, adsFeature, adsTeam, campaignWindow, failingPlatforms, flightAttempts, flightBudget, leastFlightDays, reachFeature, rosterTargets, takesFlight } from './index.mjs';
+import { adTargets, adsConfig, adsFeature, adsTeam, campaignWindow, failingPlatforms, flightAttempts, flightBudget, leastFlightDays, reachFeature, rosterTargets, takesFlight } from './index.mjs';
 import { handoverFeature } from '../handover.mjs';
 
 // Ad budget flights (Settings → Paid ads → "Run each month's campaign as a short flight", 2026-11-16): the month's number spent in one
@@ -277,6 +277,33 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
   it('names the roster\'s states, not a hard-coded place, for each platform\'s own lookup', () => {
     expect(rosterTargets(['pa', 'NJ', 'PA', 'XX'])).toEqual([{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }]);
     expect(rosterTargets(null)).toEqual([]);
+  });
+
+  it('leaves Puerto Rico out of the ad locations, keeping it when it is all the roster has', () => {
+    expect(adTargets(['PA', 'PR', 'NJ'])).toEqual([{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }]);
+    expect(adTargets(['PR'])).toEqual([{ code: 'PR', name: 'Puerto Rico' }]);
+    expect(adTargets(['DC', 'TX'])).toEqual([{ code: 'DC', name: 'District of Columbia' }, { code: 'TX', name: 'Texas' }]);
+    expect(adTargets(null)).toEqual([]);
+  });
+
+  it('runs a campaign in the other roster states when one of them is Puerto Rico, and tells the owner it was left out', async () => {
+    const h = reachSetup({ values: { 'growth.roster_states': ['PA', 'PR', 'NJ'] } });
+    await h.handlers['ads.plan'](task(), { now: monday });
+    const preview = h.store.proposeAction.mock.calls[0][0].preview;
+    expect(preview).toContain('in Pennsylvania, New Jersey in Hospitals and Health Care');
+    expect(preview).toContain('Not Puerto Rico: the ad platforms cannot target it as a US state.');
+    await h.executors['social.campaign_create']({ id: 'a1', kind: 'social.campaign_create', input: metaFlight });
+    expect(h.meta.createCampaign.mock.calls[0][0].states).toEqual([{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }]);
+  });
+
+  it('never turns a roster of Puerto Rico alone into a campaign for the whole country', async () => {
+    const h = reachSetup({ values: { 'growth.roster_states': ['PR'] } });
+    await h.handlers['ads.plan'](task(), { now: monday });
+    const preview = h.store.proposeAction.mock.calls[0][0].preview;
+    expect(preview).toContain('in Puerto Rico in Hospitals and Health Care');
+    expect(preview).not.toContain('United States');
+    await h.executors['social.campaign_create']({ id: 'a1', kind: 'social.campaign_create', input: metaFlight });
+    expect(h.meta.createCampaign.mock.calls[0][0].states).toEqual([{ code: 'PR', name: 'Puerto Rico' }]);
   });
 
   it('limits every new campaign to the roster\'s states, and says so in the proposal', async () => {

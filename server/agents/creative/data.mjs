@@ -10,6 +10,8 @@
  * sends the reader to the free market report for their own agency. Counties are every county in the roster's states, the least recently
  * pictured first (creative_data_counties), so a county with no agency located in it is pictured too.
  */
+import { placeName } from '../places.mjs';
+
 export const dataBriefSources = Object.freeze(['data.county', 'data.release', 'observance']);
 export const snapshotSettings = Object.freeze(['home_health', 'hospice']);
 const statMax = 20, labelMax = 100, sourceMax = 80;
@@ -45,14 +47,8 @@ export const figureOrders = Object.freeze(Object.fromEntries(snapshotSettings.ma
   ...Object.keys(figures).filter(key => figures[key].setting === setting),
   ...Object.keys(figures).filter(key => figures[key].setting === 'general'),
 ])])));
-const placeWords = /\b(County|Parish|Borough|Census Area|Municipality|Region|City and Borough|city)\b/;
-
-/** The county as people write it: "Allegheny County, PA"; a parish, borough or planning region keeps its own word. */
-export function placeName(name, state) {
-  const base = String(name ?? '').trim();
-  if (!base) return null;
-  return `${placeWords.test(base) ? base : `${base} County`}, ${state}`;
-}
+// The county as people write it ("Allegheny County, PA"); one rule for every state, shared with the county articles.
+export { placeName };
 
 /** The figure as printed, or null when it would mislead or not fit: no zeros, no declines shown as growth. */
 export function formatFigure(value, format) {
