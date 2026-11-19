@@ -97,6 +97,10 @@ describe('creative routes', () => {
       video: vi.fn(async () => ({ briefId: '11111111-1111-4111-8111-111111111111', already: false, assets: [] })),
       file: vi.fn(async () => ({ contentType: 'video/mp4', bytes: Buffer.from('0123456789'), fileName: 'caremetric-video.mp4' })) },
     publicFile: vi.fn(async value => (value === token64 ? { contentType: 'image/png', bytes: Buffer.from('png') } : null)),
+    publicJpeg: vi.fn(async value => {
+      if (value === 'd'.repeat(64)) throw Object.assign(new Error('ffmpeg failed'), { code: 'jpeg_failed' });
+      return value === token64 ? { contentType: 'image/jpeg', bytes: Buffer.from([0xff, 0xd8, 0xff, 0xe0]) } : null;
+    }),
   };
   let server, base;
   beforeAll(async () => {
@@ -114,6 +118,23 @@ describe('creative routes', () => {
     expect((await fetch(`${base}/api/creative/a/${'c'.repeat(64)}.png`)).status).toBe(404);
     expect((await fetch(`${base}/api/creative/a/${token64}.mp4`)).status).toBe(404);
     expect((await fetch(`${base}/api/creative/a/${token64}.png?x=1`)).status).toBe(404);
+  });
+
+  // Review 2026-11-19: Instagram publishes JPEG only. The .jpg answers under the same token and the same conditions as the PNG.
+  it('serves the same approved image as a JPEG for Instagram, and nothing for anything else', async () => {
+    const ok = await fetch(`${base}/api/creative/a/${token64}.jpg`);
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('content-type')).toBe('image/jpeg');
+    expect([...new Uint8Array(await ok.arrayBuffer())].slice(0, 2)).toEqual([0xff, 0xd8]);
+    expect((await fetch(`${base}/api/creative/a/${token64}.jpg`, { method: 'HEAD' })).status).toBe(200);
+    expect((await fetch(`${base}/api/creative/a/${'c'.repeat(64)}.jpg`)).status).toBe(404);
+    expect((await fetch(`${base}/api/creative/a/${token64}.jpg?x=1`)).status).toBe(404);
+    expect((await fetch(`${base}/api/creative/a/${token64}.jpeg`)).status).toBe(404);
+    expect((await fetch(`${base}/api/creative/a/${token64}.jpg`, { method: 'POST' })).status).toBe(405);
+    // A conversion that fails says nothing about why.
+    const failed = await fetch(`${base}/api/creative/a/${'d'.repeat(64)}.jpg`);
+    expect(failed.status).toBe(503);
+    expect(await failed.text()).not.toContain('ffmpeg');
   });
 
   it('runs the owner\'s actions as same-origin POSTs with the session', async () => {

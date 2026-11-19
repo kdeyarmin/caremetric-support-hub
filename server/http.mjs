@@ -224,11 +224,19 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           res.statusCode=200; res.setHeader('Content-Type','text/html; charset=utf-8'); return res.end(html);
         }
         // An approved Creative Director asset, for Meta and LinkedIn to fetch: the unguessable token in the path is the only authority,
-        // and it answers only while the asset is approved or live (a retired or rejected asset is gone).
-        const creativePublic=/^\/api\/creative\/a\/([0-9a-f]{64})\.(png|mp4)$/.exec(path);
+        // and it answers only while the asset is approved or live (a retired or rejected asset is gone). `.jpg` is the same image as a
+        // JPEG, for Instagram, which publishes JPEG only (review 2026-11-19); it answers under exactly the same conditions as the PNG.
+        const creativePublic=/^\/api\/creative\/a\/([0-9a-f]{64})\.(png|mp4|jpg)$/.exec(path);
         if(creativePublic) {
           if(!['GET','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
           if(url.search || !creative?.publicFile) throw new HttpError(404,'Unavailable.');
+          if(creativePublic[2]==='jpg') {
+            if(!creative.publicJpeg) throw new HttpError(404,'Unavailable.');
+            let jpeg;
+            try { jpeg=await creative.publicJpeg(creativePublic[1]); } catch { throw new HttpError(503,'Unavailable.'); }
+            if(!jpeg) throw new HttpError(404,'Unavailable.');
+            return sendBytes(req,res,{contentType:'image/jpeg',bytes:jpeg.bytes,cache:'public, max-age=300'});
+          }
           const file=await creative.publicFile(creativePublic[1]);
           if(!file || file.contentType!==(creativePublic[2]==='png'?'image/png':'video/mp4')) throw new HttpError(404,'Unavailable.');
           return sendBytes(req,res,{contentType:file.contentType,bytes:file.bytes,cache:'public, max-age=300'});

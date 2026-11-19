@@ -320,3 +320,28 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
     expect(seen.some(([what]) => what.startsWith('POST'))).toBe(false);
   });
 });
+
+// Review 2026-11-19: Instagram publishes JPEG only. A Creative Director image's PNG address on the Hub becomes its JPEG copy for Instagram;
+// Facebook keeps the PNG, and any other address is sent as it is.
+describe('Instagram images', () => {
+  const pngUrl = `https://help.caremetric.ai/api/creative/a/${'e'.repeat(64)}.png`;
+  const jpgUrl = `https://help.caremetric.ai/api/creative/a/${'e'.repeat(64)}.jpg`;
+  const sent = [];
+  const fetchImpl = route([
+    [/^GET \/v23\.0\/1111$/, { access_token: 'EAAG-page-token-abcdefghijklmnop' }],
+    [/^POST \/v23\.0\/2222\/media$/, (url, params) => { sent.push(['instagram', params.get('image_url'), params.get('media_type')]); return json({ id: '777' }); }],
+    [/^POST \/v23\.0\/2222\/media_publish$/, { id: '778' }],
+    [/^POST \/v23\.0\/1111\/photos$/, (url, params) => { sent.push(['facebook', params.get('url'), null]); return json({ id: '55', post_id: '1111_55' }); }],
+  ]);
+
+  it('sends Instagram the JPEG copy of a creative image, in a post and in a story', async () => {
+    sent.length = 0;
+    const meta = client(fetchImpl);
+    await meta.publishPost({ platform: 'instagram', message: 'Where does your agency rank?', imageUrl: pngUrl });
+    await meta.publishStory({ platform: 'instagram', imageUrl: pngUrl });
+    await meta.publishPost({ platform: 'instagram', message: 'Brand card', imageUrl: 'https://caremetricadvisors.com/assets/social-card.jpg' });
+    await meta.publishPost({ platform: 'facebook', message: 'Where does your agency rank?', imageUrl: pngUrl });
+    expect(sent).toEqual([['instagram', jpgUrl, null], ['instagram', jpgUrl, 'STORIES'],
+      ['instagram', 'https://caremetricadvisors.com/assets/social-card.jpg', null], ['facebook', pngUrl, null]]);
+  });
+});
