@@ -222,3 +222,28 @@ it('checks ad reads even when the Page token fails and reports advertising permi
   expect(denied.message).toContain('rw_conversions');
   expect(JSON.stringify(denied)).not.toContain(token);
 });
+
+// Review 2026-11-19: the check now says what the ads person's role on the ad account allows, still with GET requests only.
+it('reports the role on the LinkedIn ad account and whether it can create campaigns', async () => {
+  const { service, state, fetchImpl } = harness({ environment: { HUB_LINKEDIN_ACCESS_TOKEN: token, HUB_LINKEDIN_ADS_ACCESS_TOKEN: 'separate-ad-test-token' } });
+  state.values.find(row => row.key === 'social.linkedin_ad_account_id').value = '559389115';
+  const roleIs = role => fetchImpl.mockImplementation(async url => new Response(JSON.stringify(new URL(url).pathname === '/rest/adAccountUsers'
+    ? { elements: role ? [{ account: 'urn:li:sponsoredAccount:559389115', role, user: 'urn:li:person:x' }] : [] } : { elements: [] }), { status: 200 }));
+  roleIs('CAMPAIGN_MANAGER');
+  const able = await service.check('owner', 'linkedin');
+  expect(able.ok).toBe(true);
+  expect(able.message).toContain('Ad account role: Campaign manager on ad account 559389115, which can create campaigns.');
+  expect(able.message).toContain("the token's own campaign-write permission (rw_ads)");
+  expect(fetchImpl.mock.calls.every(([, options]) => options.method === 'GET')).toBe(true);
+  roleIs('VIEWER');
+  const viewer = await service.check('owner', 'linkedin');
+  expect(viewer.ok).toBe(false);
+  expect(viewer.message).toContain('Ad account role: Viewer on ad account 559389115, which cannot create campaigns.');
+  expect(viewer.message).toContain('Manage access');
+  roleIs(null);
+  const none = await service.check('owner', 'linkedin');
+  expect(none.ok).toBe(false);
+  expect(none.message).toContain('has no role on ad account 559389115');
+  // Meta has no such check.
+  expect((await service.check('owner', 'meta')).message).not.toContain('Ad account role');
+});

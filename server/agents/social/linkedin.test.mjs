@@ -582,3 +582,29 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
     expect(calls.some(([, init]) => init.method === 'POST')).toBe(false);
   });
 });
+
+// Review 2026-11-19: November's campaign creation was refused for permission, and nothing could say which role the ads token held.
+describe('the ad account role', () => {
+  const adsToken = 'AQX-advertising-app-token-0123456789';
+  const users = elements => route([[/^GET \/rest\/adAccountUsers$/, (url, init) => {
+    expect(url.searchParams.get('q')).toBe('authenticatedUser');
+    expect(init.headers.Authorization).toBe(`Bearer ${adsToken}`);
+    return json({ elements });
+  }]]);
+  const row = (account, role) => ({ account: `urn:li:sponsoredAccount:${account}`, role, user: 'urn:li:person:abc123' });
+
+  it('reads, with the ads token, the role on this ad account only', async () => {
+    const fetchImpl = users([row('9990001', 'ACCOUNT_BILLING_ADMIN'), row('5080001', 'CAMPAIGN_MANAGER')]);
+    expect(await client(fetchImpl, { adsToken }).adAccountRole()).toEqual({ role: 'CAMPAIGN_MANAGER', canCreateCampaigns: true });
+    expect(fetchImpl.mock.calls.every(([, init]) => (init.method ?? 'GET') === 'GET')).toBe(true);
+  });
+
+  it('says when the role cannot create campaigns, or there is none on this account', async () => {
+    for (const role of ['VIEWER', 'CREATIVE_MANAGER']) {
+      expect(await client(users([row('5080001', role)]), { adsToken }).adAccountRole()).toEqual({ role, canCreateCampaigns: false });
+    }
+    expect(await client(users([row('9990001', 'ACCOUNT_MANAGER')]), { adsToken }).adAccountRole()).toEqual({ role: null, canCreateCampaigns: false });
+    expect(await client(users([row('5080001', 'SOMETHING_NEW')]), { adsToken }).adAccountRole()).toEqual({ role: null, canCreateCampaigns: false });
+    await expect(client(users([]), { adAccountId: '' }).adAccountRole()).rejects.toMatchObject({ code: 'linkedin_not_configured' });
+  });
+});

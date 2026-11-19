@@ -350,6 +350,13 @@ renewal credentials. Reporting leads through the Conversions API additionally re
 `rw_conversions` on the advertising token (alongside `r_ads`). The **LinkedIn API version** (default `202609`) and **LinkedIn API tier** (default Development) settings
 remain below the cards.
 
+**Save and check** also reports the role on the ad account of the person whose token the advertising connection uses (since November 19,
+2026; LinkedIn's [Ad Account Users](https://learn.microsoft.com/en-us/linkedin/marketing/integrations/ads/account-structure/create-and-manage-account-users)
+"find by authenticated user", a read). New campaigns need a **Campaign manager**, **Account manager** or **Billing admin**; a
+**Creative manager** can only make ads and a **Viewer** can only read, so either fails the check, as does no role on the account. Change
+the role in Campaign Manager → Account settings → Manage access. The check cannot see whether the token itself carries `rw_ads`:
+LinkedIn says so only when a write is refused (November 16: campaign creation refused as `linkedin_permission`).
+
 Official sources checked November 11, 2026: [create an app](https://www.linkedin.com/help/linkedin/answer/a1667239),
 [verify its Page association](https://www.linkedin.com/help/linkedin/answer/a1665329),
 [Community Management approval and tiers](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-api-migration-guide),
