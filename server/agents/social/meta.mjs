@@ -31,6 +31,27 @@ export const metaId = value => (typeof value === 'string' && idPattern.test(valu
  * address on the Hub (/api/creative/a/<token>.png) becomes the same image's JPEG copy (.jpg). Any other address is sent as it is.
  */
 export const instagramImageUrl = url => (typeof url === 'string' && /^https:\/\/[^/?#@]+\/api\/creative\/a\/[0-9a-f]{64}\.png$/.test(url) ? `${url.slice(0, -4)}.jpg` : url);
+/**
+ * What kind of ad a creative makes, for the daily review's receipt (review 2026-11-19: the review could not read the link of the ads in 18
+ * active ad sets, and nothing said what they were). Read from the creative's own fields: a lead form, a video or carousel ad, a link ad,
+ * a photo or text post written into the ad, or an existing Page post the ad promotes (a boosted post). Anything else (a dynamic or
+ * catalog creative, an Instagram post) is `other`. Only a `link` ad has a link the review reads.
+ */
+export function creativeShape(creative) {
+  const spec = creative?.object_story_spec;
+  if (spec && typeof spec === 'object') {
+    const link = spec.link_data && typeof spec.link_data === 'object' ? spec.link_data : null;
+    const video = spec.video_data && typeof spec.video_data === 'object' ? spec.video_data : null;
+    if (link?.call_to_action?.value?.lead_gen_form_id || video?.call_to_action?.value?.lead_gen_form_id) return 'lead_form';
+    if (video) return 'video';
+    if (Array.isArray(link?.child_attachments) && link.child_attachments.length) return 'carousel';
+    if (typeof link?.link === 'string') return 'link';
+    if (spec.photo_data) return 'photo';
+    if (spec.text_data) return 'text';
+  }
+  if (typeof creative?.object_story_id === 'string' && creative.object_story_id) return 'existing_post';
+  return 'other';
+}
 
 export function metaClient({ token = '', pageId = '', instagramId = '', adAccountId = '', version = 'v23.0', fetchImpl = fetch, timeoutMs = 15_000 } = {}) {
   const page = metaId(pageId);
@@ -338,14 +359,15 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
       const windows = [[new Date(until.getTime() - 6 * 86_400_000), until], [new Date(until.getTime() - 13 * 86_400_000), new Date(until.getTime() - 7 * 86_400_000)]];
       const [adsets, ads, current, previous] = await Promise.all([
         get(`act_${account}/adsets`, { fields: 'id,name,status,effective_status,daily_budget,lifetime_budget,campaign{name,objective}', limit: 100 }, { signal }),
-        get(`act_${account}/ads`, { fields: 'id,name,status,effective_status,adset_id,created_time,creative{id,image_hash,object_story_spec}', limit: 200 }, { signal }),
+        get(`act_${account}/ads`, { fields: 'id,name,status,effective_status,adset_id,created_time,creative{id,image_hash,object_story_spec,object_story_id}', limit: 200 }, { signal }),
         ...windows.map(([since, end]) => get(`act_${account}/insights`, { level: 'ad', fields: 'ad_id,impressions,inline_link_clicks,spend,frequency,actions', time_range: { since: day(since), until: day(end) }, limit: 500 }, { signal })),
       ]);
       return {
-        adsets: list(adsets).map(item => ({ id: String(item.id), name: String(item.name ?? ''), active: item.effective_status === 'ACTIVE', dailyBudget: item.daily_budget ? Number(item.daily_budget) : null, objective: item.campaign?.objective ?? null, campaign: item.campaign?.name ?? '' })),
+        adsets: list(adsets).map(item => ({ id: String(item.id), name: String(item.name ?? ''), active: item.effective_status === 'ACTIVE', dailyBudget: item.daily_budget ? Number(item.daily_budget) : null,
+          lifetimeBudget: item.lifetime_budget ? Number(item.lifetime_budget) : null, objective: item.campaign?.objective ?? null, campaign: item.campaign?.name ?? '' })),
         ads: list(ads).map(item => {
           const link = item.creative?.object_story_spec?.link_data ?? {};
-          return { id: String(item.id), name: String(item.name ?? ''), adsetId: String(item.adset_id ?? ''), active: item.effective_status === 'ACTIVE', createdAt: at(item.created_time),
+          return { id: String(item.id), name: String(item.name ?? ''), adsetId: String(item.adset_id ?? ''), active: item.effective_status === 'ACTIVE', createdAt: at(item.created_time), shape: creativeShape(item.creative),
             imageHash: typeof link.image_hash === 'string' ? link.image_hash : (typeof item.creative?.image_hash === 'string' ? item.creative.image_hash : null),
             copy: { message: String(link.message ?? ''), headline: String(link.name ?? ''), description: String(link.description ?? ''), link: typeof link.link === 'string' ? link.link : null } };
         }),

@@ -230,6 +230,20 @@ read, the platform's own `skips`, and for an ad that leads elsewhere only the ho
 existing post, a video or carousel ad, or a lead form carries no link the review reads; it was counted as `leads_elsewhere` before and
 is `no_ad_link` now.
 
+Since November 19 each platform's part of the result also lists the ad sets it read (`adsetList`; on LinkedIn, campaigns), because 18
+active Meta ad sets were skipped as `no_ad_link` and the result could not say what they spent. Each row has the ad set's id and name,
+whether it is active, its daily or lifetime budget in cents (`dailyBudgetCents`, `lifetimeBudgetCents`), its active ads, and the last
+seven days' impressions, link clicks, spend in cents and results, the same window the rules judge. A row also says what kind each of its
+active ads is when the review cannot read that ad's link (`noLink`), and why its recommendations were skipped (`skips`). The kinds are
+`existing_post` (an existing Page post the ad promotes, as a boosted post does), `video`, `carousel`, `lead_form`, `photo`, `text`,
+`other`, or `unknown` where the platform does not say. `noLinkKinds` counts the same kinds over all the platform's ads.
+
+Active ad sets come first, the biggest spenders at the top, and a budget or count that is empty is left out. A task's result may take
+at most 16 KB as stored, so the rows of both platforms share 7,000 bytes of JSON. Meta goes first and leaves room for LinkedIn. A large
+account lists its biggest spenders, and `adsets` still gives the full count. No ad copy, audience or person is kept: names are the
+owner's own labels in the ad account. The kinds come from the Meta creative's own fields, `object_story_spec` and `object_story_id`.
+The review still takes a recommendation only for an ad whose link it reads.
+
 Results are leads and sign-ups as Meta and LinkedIn report them (LinkedIn: website conversions and Lead Gen Form leads). On LinkedIn a
 campaign plays the part of an ad set (it holds the daily budget) and a creative the part of an ad, and the same rules apply. A new ad
 runs inside the ad set's or campaign's existing budget, so pausing and adding ads never raises spend.

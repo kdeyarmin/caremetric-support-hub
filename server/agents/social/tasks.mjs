@@ -88,6 +88,42 @@ const skip = (counts, reason) => {
   counts.skipped += 1; counts.skips[reason] = (counts.skips[reason] ?? 0) + 1;
   const mine = counts.platform ? counts.platforms?.[counts.platform] : null;
   if (mine) mine.skips[reason] = (mine.skips[reason] ?? 0) + 1;
+  // And on the ad set the recommendation was for, when it is one of the ad sets the receipt lists.
+  const row = mine && counts.adset !== null ? mine.adsetList.find(item => item.id === counts.adset) : null;
+  if (row?.skips) row.skips[reason] = (row.skips[reason] ?? 0) + 1;
+};
+/**
+ * The ad sets (LinkedIn campaigns) the review read, for its receipt (review 2026-11-19: 18 active Meta ad sets were skipped as no_ad_link
+ * and the receipt could not say what they spent or what their ads were). One row each: its name, whether it is active, its budget, its
+ * active ads, the last seven days' impressions, link clicks, spend and results (the window the rules judge), the kind of each active ad
+ * whose link the review cannot read (`noLink`) and why its recommendations were skipped (`skips`). Active ones first, then by spend.
+ * A task's result is limited to 16 KB as stored (about 1.45 times its JSON), so the rows of all platforms share ADSET_LIST_BYTES of JSON:
+ * Meta first, leaving ADSET_LIST_RESERVE for each platform still to come, at most MAX_ADSET_ROWS each, and a budget or count that is
+ * empty is left out; `adsets` is the full count. Names are the owner's own labels in the ad account; no ad copy, audience or person is kept.
+ */
+const MAX_ADSET_ROWS = 30;
+const ADSET_LIST_BYTES = 7000;
+const ADSET_LIST_RESERVE = 1200;
+const adShapes = new Set(['link', 'existing_post', 'video', 'carousel', 'lead_form', 'photo', 'text', 'other']);
+const shapeOf = ad => (adShapes.has(ad?.shape) ? ad.shape : 'unknown');
+const whole = value => (Number.isFinite(value) ? Math.round(value) : 0);
+const unreadKinds = ads => {
+  const kinds = {};
+  for (const ad of ads) if (hostOf(ad.copy?.link) === null) kinds[shapeOf(ad)] = (kinds[shapeOf(ad)] ?? 0) + 1;
+  return kinds;
+};
+const adsetList = (summaries, ads) => summaries
+  .map(set => ({ id: String(set.id), name: String(set.name ?? '').slice(0, 60), active: set.active === true,
+    ...(Number.isFinite(set.dailyBudget) ? { dailyBudgetCents: set.dailyBudget } : {}), ...(Number.isFinite(set.lifetimeBudget) ? { lifetimeBudgetCents: set.lifetimeBudget } : {}),
+    activeAds: whole(set.activeAds), impressions: whole(set.impressions), clicks: whole(set.clicks), spendCents: whole(set.spendCents), results: whole(set.results),
+    noLink: unreadKinds(ads.filter(ad => ad.adsetId === set.id && ad.active)), skips: {} }))
+  .sort((a, b) => Number(b.active) - Number(a.active) || b.spendCents - a.spendCents || a.id.localeCompare(b.id))
+  .slice(0, MAX_ADSET_ROWS);
+/** Once a platform's recommendations are done: its rows without empty counts, cut from the end to the bytes left. Returns the bytes used. */
+const settleAdsetList = (rows, bytes) => {
+  for (const row of rows) for (const key of ['noLink', 'skips']) if (!Object.keys(row[key] ?? {}).length) delete row[key];
+  while (rows.length && JSON.stringify(rows).length > bytes) rows.pop();
+  return rows.length ? JSON.stringify(rows).length : 0;
 };
 // Where an ad that leads elsewhere sends people: its host only (a public ad's destination, never a path or a query), counted by platform.
 const MAX_ELSEWHERE_HOSTS = 10;
@@ -526,12 +562,13 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const today = easternDate(moment);
     // Why each recommendation was skipped is counted by reason (review 2026-11-17: 18 of 18 were skipped daily and nothing said why), and
     // the access error each platform answered is kept by platform, for the flight planner (ads/index.mjs) and the watchdog.
-    const counts = { pause: 0, budget: 0, create: 0, skipped: 0, rejected: 0, skips: {}, platforms: {}, platform: null };
+    const counts = { pause: 0, budget: 0, create: 0, skipped: 0, rejected: 0, skips: {}, platforms: {}, platform: null, adset: null };
     let adsetCount = 0;
     let recommendationCount = 0;
+    let listBytes = ADSET_LIST_BYTES;
     const refused = [];
     const refusedBy = {};
-    for (const source of sources) {
+    for (const [index, source] of sources.entries()) {
       let overview;
       try { overview = await source.client.adsOverview({ signal, now: moment }); }
       catch (error) {
@@ -545,14 +582,17 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       adsetCount += adsets.length;
       recommendationCount += recommendations.length;
       // What this platform read and why its recommendations were skipped. `noLink` counts the ads whose link the review could not read
-      // (a boosted post, a video or carousel ad, a lead form): those are never taken for an ad that leads elsewhere.
+      // (a boosted post, a video or carousel ad, a lead form): those are never taken for an ad that leads elsewhere. `noLinkKinds` says
+      // which kinds they are, and `adsetList` what each ad set spent (review 2026-11-19).
       counts.platform = source.platform;
       counts.platforms[source.platform] = { adsets: adsets.length, recommendations: recommendations.length, ads: overview.ads.length,
-        noLink: overview.ads.filter(ad => hostOf(ad.copy?.link) === null).length, skips: {}, elsewhere: {} };
+        noLink: overview.ads.filter(ad => hostOf(ad.copy?.link) === null).length, noLinkKinds: unreadKinds(overview.ads), skips: {}, elsewhere: {},
+        adsetList: adsetList(adsets, overview.ads) };
       const platform = source.platform === 'linkedin' ? { platform: 'linkedin' } : {};
       const where = source.platform === 'linkedin' ? 'LinkedIn campaign' : 'ad set';
       for (const rec of recommendations) {
         signal?.throwIfAborted();
+        counts.adset = String(rec.adsetId ?? '');
         if (rec.kind === 'pause') {
           if (targets.has(`social.ad_pause:${source.key(rec.adId)}`)) { skip(counts, 'already_proposed'); continue; }
           if (await propose(task, { kind: 'social.ad_pause', targetKind: 'social_ad', targetId: source.key(rec.adId),
@@ -575,6 +615,8 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
           counts.create += await refresh(task, rec, overview, today, signal, counts, source, marketedList);
         }
       }
+      counts.adset = null;
+      listBytes -= settleAdsetList(counts.platforms[source.platform].adsetList, listBytes - (sources.length - 1 - index) * ADSET_LIST_RESERVE);
     }
     if (!adsetCount && refused.length === sources.length) return { result: { skipped: refused[0], refusedBy } };
     const proposed = counts.pause + counts.budget + counts.create;
@@ -588,7 +630,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     // The review finishes once it has proposed: its proposals wait on the Team screen, and tomorrow's review is not held back by them.
     // A budget change is never approved on its own, so a task that waited for it would stop the daily review, and with it the pausing
     // of ads that are losing money, for up to seven days. What is already proposed is skipped above (`targets`), never proposed twice.
-    const { platform: _reading, ...tally } = counts;
+    const { platform: _reading, adset: _adset, ...tally } = counts;
     return { status: 'done', result: { adsets: adsetCount, recommendations: recommendationCount, ...tally, ...(refused.length ? { refused, refusedBy } : {}) } };
   }
 
