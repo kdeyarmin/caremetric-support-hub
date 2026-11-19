@@ -26,6 +26,11 @@ function codeFor(status, error) {
   return failure('meta_error');
 }
 export const metaId = value => (typeof value === 'string' && idPattern.test(value) ? value : null);
+/**
+ * The image address Instagram is given (review 2026-11-19). Instagram publishes JPEG only, and a Creative Director image is a PNG: its
+ * address on the Hub (/api/creative/a/<token>.png) becomes the same image's JPEG copy (.jpg). Any other address is sent as it is.
+ */
+export const instagramImageUrl = url => (typeof url === 'string' && /^https:\/\/[^/?#@]+\/api\/creative\/a\/[0-9a-f]{64}\.png$/.test(url) ? `${url.slice(0, -4)}.jpg` : url);
 
 export function metaClient({ token = '', pageId = '', instagramId = '', adAccountId = '', version = 'v23.0', fetchImpl = fetch, timeoutMs = 15_000 } = {}) {
   const page = metaId(pageId);
@@ -242,7 +247,7 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
       }
       if (platform === 'facebook') return { id: String((await post(`${page}/feed`, { message, ...(link ? { link } : {}) }, { as: 'page', signal })).id ?? '') };
       if (platform === 'instagram') {
-        const created = await post(`${instagram}/media`, { image_url: imageUrl, caption: message }, { signal });
+        const created = await post(`${instagram}/media`, { image_url: instagramImageUrl(imageUrl), caption: message }, { signal });
         return { id: String((await post(`${instagram}/media_publish`, { creation_id: created.id }, { signal })).id ?? '') };
       }
       throw failure('meta_invalid_request');
@@ -254,7 +259,7 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
      */
     async publishStory({ platform, imageUrl }, { signal } = {}) {
       if (platform === 'instagram') {
-        const created = await post(`${instagram}/media`, { image_url: imageUrl, media_type: 'STORIES' }, { signal });
+        const created = await post(`${instagram}/media`, { image_url: instagramImageUrl(imageUrl), media_type: 'STORIES' }, { signal });
         return { id: String((await post(`${instagram}/media_publish`, { creation_id: created.id }, { signal })).id ?? '') };
       }
       if (platform === 'facebook') {

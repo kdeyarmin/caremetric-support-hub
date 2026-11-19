@@ -45,6 +45,7 @@ import { nativeVisitorReader } from './agents/scorecard/visitors.mjs';
 import { googleAnalyticsReader, websiteVisitors } from './agents/scorecard/google-analytics.mjs';
 import { creativeConfig } from './agents/creative/index.mjs';
 import { creativeAdmin } from './agents/creative/admin.mjs';
+import { creativeJpegFiles } from './agents/creative/jpeg.mjs';
 import { learningMediaImport, mediaImportFeature } from './learning-media-import.mjs';
 import { hubSettings } from './hub-settings.mjs';
 import { socialConnections } from './social-connections.mjs';
@@ -240,7 +241,9 @@ console.info(`Public article feed: ${publicArticles?'answering':'waiting for the
 // address as canonical and leaves the sitemap. Before, the help center stays every article's home.
 const help=helpCenter({load:()=>api.rpc('list_published_content',{}),...(publicArticles?{loadProducts:()=>api.rows('products'),elsewhere:(product,key)=>servedElsewhere(product)?articleHomeUrl(product,key):null}:{}),origin:helpCenterOrigin});
 // The Creative screen and the approved-asset addresses Meta and LinkedIn fetch (platform.agents.creative.v1).
-const creativeWeb=features.has('platform.agents.creative.v1')?{admin:creativeAdmin({pool,kick:()=>team.tick()}),publicFile:token=>team.store.creativePublicFile(token)}:null;
+const creativePublicFile=token=>team.store.creativePublicFile(token);
+// Instagram publishes JPEG only: the same approved image, re-encoded on request (server/agents/creative/jpeg.mjs).
+const creativeWeb=features.has('platform.agents.creative.v1')?{admin:creativeAdmin({pool,kick:()=>team.tick()}),publicFile:creativePublicFile,publicJpeg:creativeJpegFiles({publicFile:creativePublicFile})}:null;
 const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,settings,socialConnections:connections,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,publicArticles,creative:creativeWeb});
 let cleanupRunning=false;
 const cleanup=async()=>{

@@ -29,6 +29,14 @@ LinkedIn image posts use the same fallback images as the thumbnail of their link
 through its API, so the image is uploaded with the post. New ad copy reuses approved creative images or the image of the ad set's
 (or LinkedIn campaign's) best ad.
 
+Instagram publishes JPEG images only, and every Creative Director image is a PNG. So an Instagram post or story with an approved image is
+sent the image's JPEG copy: the Hub's `/api/creative/a/<token>.jpg`, the same approved image re-encoded with the ffmpeg the Hub already
+uses for video (`server/agents/creative/jpeg.mjs`). It answers under the same token and only while the asset is approved or live, like
+the PNG; a few conversions run at once, each within 15 seconds and Instagram's 8 MB, and the last few are kept for ten minutes. Facebook,
+LinkedIn and ads keep the PNG. An "Approved brand image" on another site is sent as it is, so it must already be a JPEG for Instagram.
+(November 18: the first creative image sent to Instagram, a story, was refused as `meta_invalid_request`; the JPEG brand card had always
+published.)
+
 ## Events, stories, articles, your own profile and new campaigns (2026-11-13)
 
 - **Event posts** (Settings → Social media → Post about new CMS data and observances): the weekly plan sees the releases Intel loaded in
