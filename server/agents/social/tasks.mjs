@@ -113,7 +113,8 @@ const unreadKinds = ads => {
   return kinds;
 };
 const adsetList = (summaries, ads) => summaries
-  .map(set => ({ id: String(set.id), name: String(set.name ?? '').slice(0, 60), active: set.active === true,
+  // Cut by whole characters: half of an emoji's surrogate pair is JSON Postgres refuses, and the review's result would never be saved.
+  .map(set => ({ id: String(set.id), name: Array.from(String(set.name ?? '')).slice(0, 60).join(''), active: set.active === true,
     ...(Number.isFinite(set.dailyBudget) ? { dailyBudgetCents: set.dailyBudget } : {}), ...(Number.isFinite(set.lifetimeBudget) ? { lifetimeBudgetCents: set.lifetimeBudget } : {}),
     activeAds: whole(set.activeAds), impressions: whole(set.impressions), clicks: whole(set.clicks), spendCents: whole(set.spendCents), results: whole(set.results),
     noLink: unreadKinds(ads.filter(ad => ad.adsetId === set.id && ad.active)), skips: {} }))

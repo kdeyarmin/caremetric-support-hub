@@ -644,6 +644,11 @@ describe('approved creative from the Creative Director', () => {
       impressions: 700, clicks: 10, spendCents: 1500, results: 1, noLink: { video: 1 } });
     expect(meta.adsetList[1]).toMatchObject({ id: '40', dailyBudgetCents: 2000, activeAds: 1, spendCents: 900, noLink: { existing_post: 1 }, skips: { no_ad_link: 1 } });
     expect(meta.adsetList[1].name).toHaveLength(60);
+    // Codex review 2026-11-19: a name cut inside an emoji left half a surrogate pair, which Postgres refuses as JSON.
+    const emoji = { ...overview, adsets: [{ id: '40', name: `${'a'.repeat(59)}😀 and more`, active: true, dailyBudget: 2000 }] };
+    const cut = (await harness({ meta: metaOf({ adsOverview: vi.fn(async () => emoji) }), model: null }).handlers['social.ads'](task('social.ads'), { now })).result.platforms.meta.adsetList[0].name;
+    expect(cut).toBe(`${'a'.repeat(59)}😀`);
+    expect(JSON.stringify(cut)).not.toMatch(/\\ud[89ab]/i);
     expect(meta.adsetList[2]).toEqual({ id: '42', name: 'Old test', active: false, dailyBudgetCents: 1000, activeAds: 0, impressions: 0, clicks: 0, spendCents: 0, results: 0 });
     // The receipt keeps the owner's labels and the numbers, never an ad's copy, and nothing of the review's own bookkeeping.
     expect(JSON.stringify(result)).not.toContain('Words only the ad carries');
