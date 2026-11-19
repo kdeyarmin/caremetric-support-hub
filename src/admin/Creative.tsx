@@ -16,7 +16,7 @@ import "./admin.css";
 import "./creative.css";
 
 type Notice = { ok: boolean; text: string } | null;
-type Change = (id: string, work: () => Promise<unknown>, success: string) => Promise<void>;
+type Change = (id: string, work: () => Promise<unknown>, success: string) => Promise<boolean>;
 const failureText = (error: unknown) => error instanceof TeamApiError ? error.message
   : "The result could not be confirmed, so the change may have gone through. Refresh and check before you try again.";
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -130,9 +130,9 @@ function BriefForm({ client, busy, change }: { client: CreativeClient; busy: str
     if (!brief.platforms.length || !brief.formats.length) { setError("Choose at least one platform and one format."); return; }
     key.current ??= crypto.randomUUID();
     const requestKey = key.current;
-    await change("brief", () => client.createBrief({ ...brief, videoLengths: brief.formats.includes("video") ? (brief.videoLengths.length ? brief.videoLengths : ["15s"]) : [], requestKey }),
+    const ok = await change("brief", () => client.createBrief({ ...brief, videoLengths: brief.formats.includes("video") ? (brief.videoLengths.length ? brief.videoLengths : ["15s"]) : [], requestKey }),
       "Brief saved. The Creative Director drafts it now; finished assets appear here for your approval.");
-    setBrief(emptyBrief(brief.product)); key.current = null;
+    if (ok) { setBrief(emptyBrief(brief.product)); key.current = null; }
   };
   return <section className="panel creative-brief-form" aria-labelledby="creative-brief-title">
     <div className="admin-section-title"><div><h2 id="creative-brief-title">New brief</h2><p>Ask for creative on demand. Facts come only from your fact sheet; offers only from billing.</p></div></div>
@@ -195,9 +195,9 @@ function VideoUpload({ client, busy, change }: { client: CreativeClient; busy: s
     key.current ??= crypto.randomUUID();
     const requestKey = key.current;
     const places = chosen.map(item => fits.find(fit => fit.key === item)?.label ?? placementLabel(item)).join(" and ");
-    await change("video", () => client.uploadVideo({ product, placements: chosen, label: label.trim(), attested, requestKey, file }),
+    const ok = await change("video", () => client.uploadVideo({ product, placements: chosen, label: label.trim(), attested, requestKey, file }),
       `Added to the library, approved for ${places}. The Social Media Manager uses it in its next weekly plan; each post still waits for your approval.`);
-    setFile(null); setInfo(null); setChosen([]); setLabel(""); setAttested(false); key.current = null;
+    if (ok) { setFile(null); setInfo(null); setChosen([]); setLabel(""); setAttested(false); key.current = null; }
   };
   return <section className="panel creative-video-upload" aria-labelledby="creative-video-title">
     <div className="admin-section-title"><div><h2 id="creative-video-title"><Clapperboard size={16} aria-hidden="true" /> Add a finished video</h2>
@@ -248,9 +248,9 @@ function BrandKitEditor({ kit, theme, client, busy, change }: { kit: BrandKit; t
   } }), `${productLabels[kit.product]} brand kit saved.`);
   const upload = (kind: "logo" | "screenshot") => async (file: File | undefined) => {
     if (!file) return;
-    await change(`file:${kit.product}`, async () => client.addBrandFile({ product: kit.product, kind, data: await fileAsBase64(file), attested: kind === "screenshot" ? attested : false, ...(label.trim() ? { label: label.trim() } : {}) }),
+    const ok = await change(`file:${kit.product}`, async () => client.addBrandFile({ product: kit.product, kind, data: await fileAsBase64(file), attested: kind === "screenshot" ? attested : false, ...(label.trim() ? { label: label.trim() } : {}) }),
       kind === "logo" ? "Logo saved." : "Screenshot saved.");
-    setLabel(""); setAttested(false);
+    if (ok) { setLabel(""); setAttested(false); }
   };
   return <section className="panel creative-kit" aria-labelledby={`kit-${kit.product}`}>
     <div className="admin-section-title"><div><h2 id={`kit-${kit.product}`}><Palette size={16} aria-hidden="true" /> {productLabels[kit.product]} brand kit</h2>
@@ -339,10 +339,11 @@ export function Creative({ client = creativeClient }: { client?: CreativeClient 
   const shown = state.status === "ready" ? state.data : kept;
 
   const change: Change = async (id, work, success) => {
-    if (changing.current) return;
+    if (changing.current) return false;
     changing.current = true;
     setBusy(id); setNotice(null);
-    try { await work(); setNotice({ ok: true, text: success }); } catch (error) { setNotice({ ok: false, text: failureText(error) }); }
+    try { await work(); setNotice({ ok: true, text: success }); return true; }
+    catch (error) { setNotice({ ok: false, text: failureText(error) }); return false; }
     finally { changing.current = false; setBusy(""); reload(); }
   };
   const decide = (asset: CreativeAsset, decision: "approve" | "reject" | "revise", note: string) => {

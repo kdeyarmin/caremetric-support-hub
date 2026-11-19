@@ -20,7 +20,7 @@ export function CourseLibrary({ products }: { products: Product[] }) {
     try { const access = await learningApi.editorAccess(); const drafts = access ? await learningApi.drafts() : []; if (active) { setAllowed(access); setRows(drafts); setLoaded(true); } }
     catch (caught) { if (active) setError(message(caught)); }
   })(); return () => { active = false; }; }, []);
-  return <div className="learning-workspace"><nav className="learning-links"><Link to="/learn">Browse courses</Link><Link to="/learn/my">My learning</Link>{allowed && <Link to="/imports/docstudio">Review material imports</Link>}</nav><header><p className="eyebrow">Shared learning library</p><h1>Create once. Teach across CareMetric.</h1><p>Create courses, upload captioned video lessons, and publish to the products you choose. The Hub handles delivery, quizzes, and completion records.</p></header><SimpleCourseCreator />{error && <p role="alert" className="learning-error">{error}</p>}{allowed && <Link className="button button-primary" to="/library/courses/new">Create course</Link>}{loaded && !allowed && <p>Course editing requires shared content permission and SMS sign-in.</p>}{allowed && !rows.length && <p>No course drafts yet.</p>}{rows.map(row => <article className="panel learning-notice" key={row.itemId}><div><h2>{row.title}</h2><p>{row.published ? "Published · working draft" : "Draft"} · revision {row.draftVersion}</p></div><Link className="button button-secondary" to={`/library/courses/${row.itemId}`}>Edit course</Link></article>)}{allowed && <><ImportPanel products={products} onImported={async () => setRows(await learningApi.drafts())} /><MediaImportPanel /><ReceiptPanel /></>}</div>;
+  return <div className="learning-workspace"><nav className="learning-links"><Link to="/learn">Browse courses</Link><Link to="/learn/my">My learning</Link>{allowed && <Link to="/imports/docstudio">Review material imports</Link>}</nav><header><p className="eyebrow">Shared learning library</p><h1>Create once. Teach across CareMetric.</h1><p>Create courses, upload captioned video lessons, and publish to the products you choose. The Hub handles delivery, quizzes, and completion records.</p></header>{allowed && <SimpleCourseCreator />}{error && <p role="alert" className="learning-error">{error}</p>}{allowed && <Link className="button button-primary" to="/library/courses/new">Create course</Link>}{loaded && !allowed && <p>Course editing requires shared content permission and SMS sign-in.</p>}{allowed && !rows.length && <p>No course drafts yet.</p>}{rows.map(row => <article className="panel learning-notice" key={row.itemId}><div><h2>{row.title}</h2><p>{row.published ? "Published · working draft" : "Draft"} · revision {row.draftVersion}</p></div><Link className="button button-secondary" to={`/library/courses/${row.itemId}`}>Edit course</Link></article>)}{allowed && <><ImportPanel products={products} onImported={async () => setRows(await learningApi.drafts())} /><MediaImportPanel /><ReceiptPanel /></>}</div>;
 }
 
 export function CourseEditor({ products }: { products: Product[] }) {
@@ -115,6 +115,12 @@ function QuizEditor({ unit, onChange }: { unit: QuizUnit; onChange: (unit: QuizU
     const keys = question.correctOptionIds.includes(optionId) ? question.correctOptionIds.filter(key => key !== optionId) : [...question.correctOptionIds, optionId];
     return keys.length ? withKeys(question, keys, true) : question;
   };
+  const removeOption = (question: QuizQuestion, optionId: string): QuizQuestion => {
+    if (question.options.length <= 2) return question;
+    const options = question.options.filter(o => o.id !== optionId);
+    const kept = correctKeys(question).filter(key => key !== optionId);
+    return withKeys({ ...question, options }, kept.length ? kept : [options[0].id], "correctOptionIds" in question);
+  };
   return <><label>Quiz instructions<textarea rows={4} maxLength={60000} value={unit.body} onChange={e => onChange({ ...unit, body: e.target.value })} /></label>
     <div className="learning-fields"><label>Passing score (%)<input type="number" min={1} max={100} value={unit.passingScore} onChange={e => onChange({ ...unit, passingScore: Number(e.target.value) })} /></label></div><p className="muted">Learners can retake this quiz as many times as they need; the questions are shown in a new order on each attempt.</p>
     {unit.questions.map((question, index) => {
@@ -125,6 +131,7 @@ function QuizEditor({ unit, onChange }: { unit: QuizUnit; onChange: (unit: QuizU
         {question.options.map((option, optionIndex) => <div className="learning-option" key={option.id}>
           <input aria-label={`Correct answer: option ${optionIndex + 1}`} type={multiple ? "checkbox" : "radio"} name={`correct-${question.id}`} checked={keys.includes(option.id)} onChange={() => update(question.id, q => choose(q, option.id))} />
           <input aria-label={`Option ${optionIndex + 1}`} required value={option.text} onChange={e => update(question.id, q => ({ ...q, options: q.options.map(o => o.id === option.id ? { ...o, text: e.target.value } : o) }))} />
+          {question.options.length > 2 && <button type="button" onClick={() => update(question.id, q => removeOption(q, option.id))}>Remove option {optionIndex + 1}</button>}
         </div>)}
         <div className="learning-links"><button type="button" disabled={question.options.length >= 8} onClick={() => update(question.id, q => ({ ...q, options: [...q.options, { id: crypto.randomUUID(), text: "" }] }))}>Add answer option</button><button type="button" disabled={unit.questions.length === 1} onClick={() => onChange({ ...unit, questions: unit.questions.filter(q => q.id !== question.id) })}>Remove question</button></div>
       </fieldset>;

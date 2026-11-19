@@ -138,6 +138,28 @@ describe('Customer billing', () => {
     expect(screen.getByRole('status').textContent).toMatch(/could not.*cop|copy.*manually/i);
     expect(screen.getByRole('status').textContent).not.toContain('Payment link copied');
   });
+
+  it('filters promotion codes by application and customer and disables saving an unchanged subscription item', async () => {
+    const workspace = fixtureWorkspace();
+    workspace.coupons.push({ ...workspace.coupons[0], id: 'co_carebase', name: 'CareBase launch', app: 'carebase' });
+    workspace.promotion_codes.push(
+      { ...workspace.promotion_codes[0], id: 'promo_cb', code: 'CAREBASE25', coupon: 'co_carebase', customer: null },
+      { ...workspace.promotion_codes[0], id: 'promo_other', code: 'OTHERCUST', coupon: 'co_carebase', customer: 'cus_other' },
+    );
+    const client = adminClient({ workspace: vi.fn(async () => workspace) });
+    renderCustomer(client);
+    fireEvent.click(await screen.findByRole('button', { name: 'Discounts' }));
+    const applySelect = within(screen.getByRole('dialog')).getByLabelText('Apply');
+    expect(within(applySelect).getByText('Code · CAREBASE25')).toBeTruthy();
+    expect(within(applySelect).queryByText('Code · FOUNDING')).toBeNull();
+    expect(within(applySelect).queryByText('Code · OTHERCUST')).toBeNull();
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    const saveBtn = within(screen.getByRole('dialog')).getByRole('button', { name: 'Save change' }) as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+    fireEvent.change(within(screen.getByRole('dialog')).getByLabelText(/Quantity/), { target: { value: '4' } });
+    expect(saveBtn.disabled).toBe(false);
+  });
 });
 
 describe('My billing', () => {

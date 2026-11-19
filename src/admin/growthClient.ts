@@ -15,7 +15,7 @@ export const rosterSchema=z.object({sync:z.object({period:z.string().nullable(),
   siteSearchedAt:z.string().nullable().optional(),suggested:z.array(z.string()).default([])})),
  services:z.object({feed:z.object({declared:z.boolean(),enabled:z.boolean(),signing:z.boolean()}),states:z.array(z.string()),daily:z.number(),research:z.boolean(),companyList:z.boolean().default(false)})});
 export const companiesSchema=z.object({companies:z.array(z.object({name:z.string(),domain:z.string().nullable(),city:z.string().nullable(),state:z.string(),zip:z.string().nullable()}))});
-const csvCell=(value:string|null)=>/[",\n]/.test(value??'')?`"${String(value).replace(/"/g,'""')}"`:(value??'');
+const csvCell=(value:string|null)=>{const raw=value??'';const safe=/^[=+@\-\t\r]/.test(raw)?`'${raw}`:raw;return /[",\n\r]/.test(safe)?`"${safe.replace(/"/g,'""')}"`:safe;};
 /** The roster's agencies in LinkedIn's company-list template (Campaign Manager → Audiences → Upload a list → Company). */
 export function companyListCsv(rows:z.infer<typeof companiesSchema>['companies']):string {
  const header=['companyname','companywebsite','companyemaildomain','city','state','zipcode','companycountry'];
@@ -53,6 +53,7 @@ export function importRows(csv:string):{rows:Record<string,string>[];error:strin
  if(!header.includes('name')||!header.includes('domain'))return {rows:[],error:'The header row must name the name and domain columns.'};
  if(lines.length>501)return {rows:[],error:'Import at most 500 prospects at a time.'};
  const rows=lines.slice(1).map(cells=>Object.fromEntries(header.map((key,i)=>[key,(cells[i]??'').trim()]).filter(([key,value])=>key&&value)));
+ if(rows.some(r=>!r.name||!r.domain))return {rows:[],error:'Every row must include a name and a domain.'};
  return {rows:rows.map(r=>({...r,...(r.product&&!['carebase','caremetric-intel'].includes(r.product)?{product:'caremetric-intel'}:{})})),error:null};
 }
 export async function growthPost<S extends z.ZodType>(operation:string,data:unknown,schema:S,signal?:AbortSignal):Promise<z.infer<S>> {

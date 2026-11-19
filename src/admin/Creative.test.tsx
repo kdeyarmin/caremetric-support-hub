@@ -137,8 +137,14 @@ describe("the Creative screen", () => {
     expect(await screen.findByText(/never by a health condition/)).toBeTruthy();
     expect(client.createBrief).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Audience"), { target: { value: "Marketing leaders at hospitals and nursing homes" } });
+    client.createBrief.mockRejectedValueOnce(new TeamApiError(503, "Temporary outage."));
     fireEvent.click(screen.getByRole("button", { name: "Start this brief" }));
-    await waitFor(() => expect(client.createBrief).toHaveBeenCalledWith(expect.objectContaining({ product: "caremetric-intel", goal: "Drive free-trial starts", platforms: ["meta"], formats: ["static"], videoLengths: [] })));
+    expect(await screen.findByText("Temporary outage.")).toBeTruthy();
+    expect((screen.getByLabelText("Goal") as HTMLInputElement).value).toBe("Drive free-trial starts");
+    fireEvent.click(screen.getByRole("button", { name: "Start this brief" }));
+    await waitFor(() => expect(client.createBrief).toHaveBeenCalledTimes(2));
+    expect(client.createBrief.mock.calls[0][0].requestKey).toBe(client.createBrief.mock.calls[1][0].requestKey);
+    expect(client.createBrief).toHaveBeenLastCalledWith(expect.objectContaining({ product: "caremetric-intel", goal: "Drive free-trial starts", platforms: ["meta"], formats: ["static"], videoLengths: [] }));
   });
 
   it("adds the owner's own finished video for each placement it fits, once attested", async () => {

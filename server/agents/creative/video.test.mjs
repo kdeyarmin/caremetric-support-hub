@@ -42,14 +42,17 @@ afterEach(async () => {
 
 describe('the ffmpeg process behind a video', () => {
   it('reports a video ffmpeg stopped making, instead of an uncaught broken pipe', async () => {
-    // ffmpeg fails before the first frame reaches it (a bad music file, an encoder error): every frame is written to a closed pipe.
+    // ffmpeg fails before the first frame reaches it (a bad music file, an encoder error): drawing stops once it exits.
     const { path, pidFile } = await fakeFfmpeg('echo $$ > "$FOLDER/pid"\nexit 1');
+    let framesDrawn = 0;
     drawing.before = async () => {
+      framesDrawn += 1;
       await waitForFile(pidFile);
       const pid = Number(await readFile(pidFile, 'utf8'));
       while (running(pid)) await new Promise(resolve => setTimeout(resolve, 10));
     };
     await expect(renderVideo({ ...video, ffmpeg: path })).rejects.toMatchObject({ code: 'video_encode_failed' });
+    expect(framesDrawn).toBe(1);
   }, 30_000);
 
   it('keeps a video ffmpeg finished, even when it closed its input before the last frame', async () => {

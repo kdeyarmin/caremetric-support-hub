@@ -38,6 +38,9 @@ it("allows adding an incomplete draft lesson and explicitly previews all descend
   fireEvent.click(screen.getByRole("button", { name: "Remove lesson 2" }));
   fireEvent.change(screen.getByLabelText("New lesson type"), { target: { value: "quiz" } });
   fireEvent.click(screen.getByRole("button", { name: "Add lesson" }));
+  const durations = screen.getAllByLabelText("Lesson duration (minutes)");
+  fireEvent.change(durations[durations.length - 1]!, { target: { value: "10" } });
+  fireEvent.change(durations[durations.length - 1]!, { target: { value: "" } });
   fireEvent.click(screen.getByRole("button", { name: "Preview lesson and assessment changes" }));
   expect(preview.mock.calls[0]![0]).toEqual([
     { operation: "removeLesson", blockId: removed.id, removedQuestionIds: removed.quiz!.questions.map(question => question.id) },

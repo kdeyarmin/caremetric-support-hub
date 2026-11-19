@@ -24,4 +24,9 @@ describe('immediate human support', () => {
     expect(request.mock.calls[1]).toEqual(request.mock.calls[0]);
     await screen.findByRole('status');
   });
+  it('shows the requested confirmation when automated attempts are already halted or exhausted', () => {
+    render(<RequestHumanSupport caseId="synthetic-case" aiStage="halted" onChanged={() => {}} />);
+    expect(screen.getByRole('status').textContent).toContain('Human support has been requested');
+    expect(screen.queryByRole('button', { name: 'Request human support' })).toBeNull();
+  });
 });

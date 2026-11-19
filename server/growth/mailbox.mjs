@@ -150,8 +150,15 @@ function readReply(lines) {
 /** Opportunistic TLS over a connected socket, as mail servers use it between themselves: the certificate is not checked. */
 const startTlsOn = (socket, servername) => new Promise((resolve, reject) => {
   const secure = tlsConnect({ socket, servername, rejectUnauthorized: false });
-  secure.once('secureConnect', () => resolve(secure));
-  secure.once('error', reject);
+  const onClose = () => reject(Object.assign(new Error('TLS connection closed'), { code: 'ECONNRESET' }));
+  const onError = error => { secure.off('close', onClose); reject(error); };
+  secure.once('secureConnect', () => {
+    secure.off('error', onError);
+    secure.off('close', onClose);
+    resolve(secure);
+  });
+  secure.once('error', onError);
+  secure.once('close', onClose);
 });
 
 /** One SMTP conversation over `socket`: send a line, read one whole (possibly multi-line) reply. */
@@ -182,7 +189,8 @@ function conversation(socket, timeoutMs) {
     }
   };
   socket.setEncoding?.('latin1');
-  socket.setTimeout?.(timeoutMs, () => socket.destroy(Object.assign(new Error('SMTP timeout'), { code: 'ETIMEDOUT' })));
+  const onTimeout = () => socket.destroy(Object.assign(new Error('SMTP timeout'), { code: 'ETIMEDOUT' }));
+  socket.setTimeout?.(timeoutMs, onTimeout);
   const onData = chunk => {
     bytes += chunk.length;
     if (bytes > replyBytes) { socket.destroy(Object.assign(new Error('SMTP reply too large'), { code: 'EPROTO' })); return; }
@@ -198,7 +206,12 @@ function conversation(socket, timeoutMs) {
   return {
     reply,
     /** Stops reading `socket`, before TLS takes it over. */
-    detach() { socket.off('data', onData); socket.off('error', onError); socket.off('close', onClose); },
+    detach() {
+      socket.setTimeout?.(0, onTimeout);
+      socket.off('data', onData);
+      socket.off('error', onError);
+      socket.off('close', onClose);
+    },
     async command(line) {
       if (/[\r\n]/.test(line)) throw new Error('A command is one line');
       socket.write(`${line}\r\n`);
@@ -277,11 +290,12 @@ export function mailboxChecker({ heloName = '', resolveMx = dnsResolveMx, lookup
       if (failures >= restAfterFailures) { restingUntil = now() + restMs; reachable = false; failures = 0; }
       return { result: 'unreachable' };
     }
+    let activeSocket = socket;
     let smtp = conversation(socket, timeoutMs);
-    const stop = () => socket.destroy();
+    const stop = () => activeSocket.destroy();
     signal?.addEventListener('abort', stop, { once: true });
     // A server may slow every refused address down; the whole conversation still ends within `deadlineMs`.
-    const deadline = setTimeout(() => socket.destroy(Object.assign(new Error('SMTP deadline'), { code: 'ETIMEDOUT' })), deadlineMs);
+    const deadline = setTimeout(() => activeSocket.destroy(Object.assign(new Error('SMTP deadline'), { code: 'ETIMEDOUT' })), deadlineMs);
     try {
       const greeting = await smtp.reply();
       failures = 0; reachable = true;
@@ -296,7 +310,12 @@ export function mailboxChecker({ heloName = '', resolveMx = dnsResolveMx, lookup
         if (ready.code === 220) {
           smtp.detach();
           let secure;
-          try { secure = await startTls(socket, server); } catch { socket.destroy(); return failure('tls_failed'); }
+          try { secure = await startTls(socket, server); } catch (error) {
+            socket.destroy();
+            if (signal?.aborted) throw signal.reason ?? error;
+            return failure('tls_failed');
+          }
+          activeSocket = secure;
           smtp = conversation(secure, timeoutMs);
           hello = await smtp.command(`EHLO ${helo}`);
           if (hello.code !== 250) return failure(hello.policy ? 'blocked' : 'refused');
