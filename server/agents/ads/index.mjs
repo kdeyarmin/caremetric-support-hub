@@ -155,6 +155,47 @@ export function flightBudget({ monthlyBudgetCents, maxDailyBudgetCents, flightDa
 
 const addDays = (date, days) => { const [y, m, d] = date.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10); };
 
+/** Days a Google campaign may serve with no impression before the team says so: Google's ad review usually ends within one business day. */
+export const googleQuietDays = 2;
+// What the owner must look at in Google Ads; the rest is recorded on the plan's receipt only.
+const googleAlarms = new Set(['ad_disapproved', 'no_enabled_ads', 'not_serving', 'no_impressions', 'outside_states']);
+const googleIssueWords = {
+  ad_disapproved: 'Google disapproved an ad', ads_limited: 'an ad is approved with limits', ads_under_review: 'its ads are still in Google\'s review',
+  no_enabled_ads: 'it has no enabled ad', not_serving: 'Google is not serving it', no_impressions: `it has had no impression in ${googleQuietDays} days of serving`,
+  outside_states: 'it targets places other than the roster\'s states',
+};
+
+/**
+ * What the read-back of Google says needs a look (review 2026-11-18): per enabled campaign, its `issues`, and its places named by state
+ * where they are the roster's (`expected`, Google's location for each roster state, from stateTargets: Map resource → state name; null
+ * when not known). Account-wide: auto-tagging off (no gclid reaches a lead form; the landing page's utm_ tags still do) and conversion
+ * tracking not set up in Google Ads. A campaign that has ended, or has not started, is not expected to serve.
+ */
+export function googleDeliveryFindings(report, { today, expected = null } = {}) {
+  const account = [];
+  if (report?.account?.autoTagging === false) account.push('auto_tagging_off');
+  if (report?.account?.conversionTracking === 'NOT_CONVERSION_TRACKED') account.push('conversions_not_tracked');
+  const campaigns = (Array.isArray(report?.campaigns) ? report.campaigns : []).map(campaign => {
+    const issues = [];
+    const ads = campaign.ads ?? {};
+    const inFlight = (!campaign.startDay || campaign.startDay <= today) && (!campaign.endDay || campaign.endDay >= today) && campaign.serving !== 'ENDED';
+    if (ads.disapproved > 0) issues.push('ad_disapproved');
+    if (ads.limited > 0) issues.push('ads_limited');
+    if (ads.underReview > 0 && !ads.approved && !ads.limited) issues.push('ads_under_review');
+    if (inFlight && !(ads.approved + ads.limited + ads.disapproved + ads.underReview + ads.other)) issues.push('no_enabled_ads');
+    if (inFlight && campaign.serving && !['SERVING', 'PENDING', 'ENDED'].includes(campaign.serving)) issues.push('not_serving');
+    if (inFlight && campaign.serving === 'SERVING' && campaign.startDay && addDays(campaign.startDay, googleQuietDays) <= today && !campaign.impressions) issues.push('no_impressions');
+    const places = (campaign.locations ?? []).map(place => expected?.get(place) ?? place);
+    // With roster states known, every place must be one of them and none may be missing; no place at all is the whole world.
+    if (expected?.size && (!campaign.locations?.length || campaign.locations.some(place => !expected.has(place)) || [...expected.keys()].some(place => !campaign.locations.includes(place)))) {
+      issues.push('outside_states');
+    }
+    const { locations: _resources, ...rest } = campaign;
+    return { ...rest, places, issues };
+  });
+  return { read: true, since: report?.since ?? null, until: report?.until ?? null, account: { ...(report?.account ?? {}), issues: account }, campaigns };
+}
+
 /**
  * When a campaign started at `moment` stops: a flight of `days` (today counted) ends on its own after its last day, never past the month;
  * any other campaign at its month's end (monthLeft). Same shape as monthLeft.
@@ -226,7 +267,52 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         return null;
       }
 
-      async function plan(task, { signal, now = () => new Date() } = {}) {
+      /**
+       * The daily read-back of Google (review 2026-11-18: the month's Google flight was created, and its approval, delivery and conversion
+       * tracking could be checked only in a browser session Google refused). Read only, with the same API access that created it; its
+       * findings go on each plan's receipt, and a campaign that needs the owner (an ad disapproved, no ad, not served, no impression after
+       * googleQuietDays, places other than the roster's) is told once per campaign and problem. A failed read is recorded, never retried
+       * here and never stops the plan. Null while the Google Ads API is not set up.
+       */
+      async function googleDelivery(task, moment, signal) {
+        const client = google();
+        if (!client.configured || typeof client.deliveryReport !== 'function') return null;
+        const today = easternDate(moment);
+        let report;
+        try { report = await client.deliveryReport({ since: addDays(today, -29), until: today }, { signal }); }
+        catch (error) {
+          if (signal?.aborted) throw error;
+          return { read: false, code: codeOf(error), ...(/^[a-zA-Z]{1,40}\.[A-Z][A-Z0-9_]{0,59}$/.test(error?.reason ?? '') ? { reason: error.reason } : {}) };
+        }
+        const wanted = states();
+        let expected = null;
+        if (wanted.length && typeof client.stateTargets === 'function') {
+          try { expected = new Map((await client.stateTargets(wanted, signal)).map((place, index) => [place, wanted[index].name])); }
+          catch (error) { if (signal?.aborted) throw error; expected = null; }
+        }
+        const found = googleDeliveryFindings(report, { today, expected });
+        for (const campaign of found.campaigns) {
+          const alarms = campaign.issues.filter(issue => googleAlarms.has(issue));
+          if (!alarms.length) continue;
+          const name = campaign.name || `campaign ${campaign.id}`;
+          await notifier.send({ severity: 'warning', subject: `Google search campaign needs a look: ${name}`.slice(0, 200),
+            body: `Google Ads reports that ${alarms.map(issue => googleIssueWords[issue]).join('; ')}. Since ${found.since}: ${campaign.impressions} impressions, ${campaign.clicks} clicks, `
+              + `${money(campaign.costCents)} spent. Its places: ${campaign.places.length ? campaign.places.join(', ') : 'none set (everywhere)'}. Open the campaign in Google Ads to fix or pause it; `
+              + 'the team changes nothing there on its own.',
+            dedupeKey: `ads:google:delivery:${campaign.id}:${alarms.join('+')}`, agentKey: task.agentKey, taskId: task.id, attention: 'now' })
+            .catch(error => { if (error?.transient) throw error; log(JSON.stringify({ event: 'hub_ads_google_delivery_unsent', code: codeOf(error) })); });
+        }
+        return found;
+      }
+
+      async function plan(task, options = {}) {
+        const outcome = await planCampaigns(task, options);
+        // Read after planning, so a campaign launched by this run is on its receipt too.
+        const delivery = await googleDelivery(task, (options.now ?? (() => new Date()))(), options.signal);
+        return delivery ? { ...outcome, result: { ...outcome.result, google: delivery } } : outcome;
+      }
+
+      async function planCampaigns(task, { signal, now = () => new Date() } = {}) {
         if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
         const moment = now();
         const monthly = config().monthlyBudgetCents;

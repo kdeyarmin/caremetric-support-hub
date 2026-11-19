@@ -16,7 +16,7 @@ This follows the earlier [creative review](ADS_CREATIVE_REVIEW_2026-11-18.md), w
 - Ad refreshes search the full approved creative snapshot and require the same destination as the existing ad. UTM differences and trailing slashes are allowed; different offers, query parameters and fragments are not.
 - Generated refresh copy also preserves its destination. Unsupported destinations stop the proposal instead of falling back to a default product page.
 - Immediately before creating an ad from approved creative, the executor rechecks status, product, platform, placement, copy, CTA, destination and public image identity. A changed or unavailable snapshot fails before a provider write.
-- Missing ad destinations are reported as `destination_unread`, separately from readable external destinations. An ad set with an unread destination cannot receive a budget-increase proposal.
+- Missing ad destinations are reported as `no_ad_link` (the reason main already uses for the daily review), separately from readable external destinations. An ad set whose active ads include an unread destination cannot receive a budget-increase proposal; paused ads, whose LinkedIn links are never read, do not block it.
 - Connection checks test Page reads and advertising data reads independently. Success explicitly does not certify campaign writes, conversion submission or delivery.
 - Railway pre-deploy and server startup check installed database prerequisites before the new server's workers start. The check never applies migrations or contacts ad providers. CI exercises it through the application role on its disposable database.
 

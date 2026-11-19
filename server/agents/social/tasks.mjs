@@ -80,8 +80,24 @@ const leadsElsewhere = (url, marketedList) => hostOf(url) !== null && !(productO
 // Story images (the Creative Director's 1080×1920 meta.story placement) proposed a week, at most, across Instagram and Facebook.
 export const storiesPerWeek = 2;
 
-/** One skipped ad recommendation, counted in all and by its reason. */
-const skip = (counts, reason) => { counts.skipped += 1; counts.skips[reason] = (counts.skips[reason] ?? 0) + 1; };
+/**
+ * One skipped ad recommendation, counted in all and by its reason, and by platform once the review is reading one (review 2026-11-18:
+ * 18 of 18 were skipped as leads_elsewhere every day, and the receipt could not say on which platform or why).
+ */
+const skip = (counts, reason) => {
+  counts.skipped += 1; counts.skips[reason] = (counts.skips[reason] ?? 0) + 1;
+  const mine = counts.platform ? counts.platforms?.[counts.platform] : null;
+  if (mine) mine.skips[reason] = (mine.skips[reason] ?? 0) + 1;
+};
+// Where an ad that leads elsewhere sends people: its host only (a public ad's destination, never a path or a query), counted by platform.
+const MAX_ELSEWHERE_HOSTS = 10;
+const noteElsewhere = (counts, url) => {
+  const host = hostOf(url);
+  const mine = counts.platform ? counts.platforms?.[counts.platform] : null;
+  if (!host || !mine || !/^[a-z0-9.-]{1,253}$/.test(host)) return;
+  if (mine.elsewhere[host] === undefined && Object.keys(mine.elsewhere).length >= MAX_ELSEWHERE_HOSTS) return;
+  mine.elsewhere[host] = (mine.elsewhere[host] ?? 0) + 1;
+};
 
 export function socialHandlers({ store, notifier, model = null, meta, linkedin = null, settings = {}, imageUrls: imageUrlsOption = [], customerTextToAi = false, publicOrigin = null, marketed = null, log = line => console.warn(line), creative = null, feed = null }) {
   // The approved brand images (Settings → Social media) may be a function, read each time they are used.
@@ -510,7 +526,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const today = easternDate(moment);
     // Why each recommendation was skipped is counted by reason (review 2026-11-17: 18 of 18 were skipped daily and nothing said why), and
     // the access error each platform answered is kept by platform, for the flight planner (ads/index.mjs) and the watchdog.
-    const counts = { pause: 0, budget: 0, create: 0, skipped: 0, rejected: 0, skips: {} };
+    const counts = { pause: 0, budget: 0, create: 0, skipped: 0, rejected: 0, skips: {}, platforms: {}, platform: null };
     let adsetCount = 0;
     let recommendationCount = 0;
     const refused = [];
@@ -528,6 +544,11 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
       const { recommendations, adsets } = evaluateAds({ ...overview, now: moment, settings });
       adsetCount += adsets.length;
       recommendationCount += recommendations.length;
+      // What this platform read and why its recommendations were skipped. `noLink` counts the ads whose link the review could not read
+      // (a boosted post, a video or carousel ad, a lead form): those are never taken for an ad that leads elsewhere.
+      counts.platform = source.platform;
+      counts.platforms[source.platform] = { adsets: adsets.length, recommendations: recommendations.length, ads: overview.ads.length,
+        noLink: overview.ads.filter(ad => hostOf(ad.copy?.link) === null).length, skips: {}, elsewhere: {} };
       const platform = source.platform === 'linkedin' ? { platform: 'linkedin' } : {};
       const where = source.platform === 'linkedin' ? 'LinkedIn campaign' : 'ad set';
       for (const rec of recommendations) {
@@ -538,11 +559,14 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
             preview: `Pause the ${source.name} ad "${rec.adName}" in the ${where} "${rec.adsetName}": it ${rec.reason}.`, input: { adId: rec.adId, adsetId: rec.adsetId, reason: rec.reason, ...platform } })) counts.pause += 1;
         } else if (rec.kind === 'budget') {
           if (targets.has(`social.ad_budget:${source.key(rec.adsetId)}`)) { skip(counts, 'already_proposed'); continue; }
-          // A missing destination is not permission to increase an ad set's spend.
-          const setAds = overview.ads.filter(ad => ad.adsetId === rec.adsetId);
-          if (!setAds.length || setAds.some(ad => hostOf(ad.copy?.link) === null)) { skip(counts, 'destination_unread'); continue; }
+          // A missing destination is not permission to increase an ad set's spend. Only the ads that can spend count: LinkedIn's overview
+          // reads the link of active creatives only, so a paused creative never has one and must not hold back the ad set.
+          const spending = overview.ads.filter(ad => ad.adsetId === rec.adsetId && ad.active);
+          if (!spending.length) { skip(counts, 'no_active_ad'); continue; }
+          if (spending.some(ad => hostOf(ad.copy?.link) === null)) { skip(counts, 'no_ad_link'); continue; }
           // No more money for an ad set that sends people to a product the team is not marketing.
-          if (overview.ads.some(ad => ad.adsetId === rec.adsetId && leadsElsewhere(ad.copy?.link, marketedList))) { skip(counts, 'leads_elsewhere'); continue; }
+          const away = overview.ads.find(ad => ad.adsetId === rec.adsetId && leadsElsewhere(ad.copy?.link, marketedList));
+          if (away) { skip(counts, 'leads_elsewhere'); noteElsewhere(counts, away.copy.link); continue; }
           if (await propose(task, { kind: 'social.ad_budget', targetKind: 'social_adset', targetId: source.key(rec.adsetId),
             preview: `Raise the daily budget of the ${source.name} ${where} "${rec.adsetName}" from ${money(rec.from)} to ${money(rec.to)}: ${rec.reason}. Your cap is ${money(settings.maxDailyBudgetCents)} a day. Only you can approve a budget change.`,
             input: { adsetId: rec.adsetId, from: rec.from, to: rec.to, reason: rec.reason, ...platform } })) counts.budget += 1;
@@ -564,16 +588,19 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     // The review finishes once it has proposed: its proposals wait on the Team screen, and tomorrow's review is not held back by them.
     // A budget change is never approved on its own, so a task that waited for it would stop the daily review, and with it the pausing
     // of ads that are losing money, for up to seven days. What is already proposed is skipped above (`targets`), never proposed twice.
-    return { status: 'done', result: { adsets: adsetCount, recommendations: recommendationCount, ...counts, ...(refused.length ? { refused, refusedBy } : {}) } };
+    const { platform: _reading, ...tally } = counts;
+    return { status: 'done', result: { adsets: adsetCount, recommendations: recommendationCount, ...tally, ...(refused.length ? { refused, refusedBy } : {}) } };
   }
 
   async function refresh(task, rec, overview, today, signal, counts, source, marketedList) {
     const base = overview.ads.find(ad => ad.id === rec.basedOn);
     const product = productOf(base?.copy?.link);
     if (!base) { skip(counts, 'no_base_ad'); return 0; }
-    if (hostOf(base.copy?.link) === null) { skip(counts, 'destination_unread'); return 0; }
-    // An ad that links to no CareMetric product page (an ad the Hub did not make, a lead form) or to a product the team is not marketing.
-    if (!product) { skip(counts, 'leads_elsewhere'); return 0; }
+    // An ad whose link the review cannot read (a boosted post, a video or carousel ad, a lead form, or a sponsored post it could not
+    // open) is not known to lead elsewhere: say so, rather than count it with the ads that do.
+    if (hostOf(base.copy?.link) === null) { skip(counts, 'no_ad_link'); return 0; }
+    // An ad that links to no CareMetric product page (an ad the Hub did not make) or to a product the team is not marketing.
+    if (!product) { skip(counts, 'leads_elsewhere'); noteElsewhere(counts, base.copy.link); return 0; }
     if (!markets(marketedList, product)) { skip(counts, 'product_not_marketed'); return 0; }
     // Approved Creative Director creative for this product and platform is used before writing new copy: its words already passed the
     // creative checks, its image is the one the owner approved, and its link carries the asset's id for the weekly report.

@@ -300,8 +300,21 @@ describe('the daily ad review', () => {
     const winning = { ...overview, ads: overview.ads.map((ad, index) => index ? { ...ad, copy: { ...ad.copy, link: null } } : ad),
       current: [overview.current[0], { adId: '51', impressions: 6000, clicks: 110, spendCents: 3000, frequency: 1.6, results: 4 }] };
     const h = harness({ settings: { targetCostCents: 2000, maxDailyBudgetCents: 3000 }, meta: metaOf({ adsOverview: vi.fn(async () => winning) }) });
-    expect((await h.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0, skips: { destination_unread: 1 } });
+    expect((await h.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0, skips: { no_ad_link: 1 } });
     expect(h.store.proposeAction).not.toHaveBeenCalled();
+  });
+
+  // Review 2026-11-18: LinkedIn reads the link of active creatives only, so a paused creative has none and must not block the ad set.
+  it('ignores ads that cannot spend when checking destinations before a budget increase', async () => {
+    const paused = { id: '52', name: 'Paused', adsetId: '40', active: false, createdAt: '2026-10-01T00:00:00Z', copy: { message: '', headline: '', description: '', link: null } };
+    const current = [overview.current[0], { adId: '51', impressions: 6000, clicks: 110, spendCents: 3000, frequency: 1.6, results: 4 }];
+    const settings = { targetCostCents: 2000, maxDailyBudgetCents: 3000 };
+    const h = harness({ settings, meta: metaOf({ adsOverview: vi.fn(async () => ({ ...overview, ads: [...overview.ads, paused], current })) }) });
+    await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(h.store.proposeAction.mock.calls[0][0]).toMatchObject({ kind: 'social.ad_budget', targetId: '40', input: { adsetId: '40', from: 2000, to: 2400 } });
+    const idle = harness({ settings, meta: metaOf({ adsOverview: vi.fn(async () => ({ ...overview, ads: overview.ads.map(ad => ({ ...ad, active: false })), current })) }) });
+    expect((await idle.handlers['social.ads'](task('social.ads'), { now })).result).toMatchObject({ budget: 0, skips: { no_active_ad: 1 } });
+    expect(idle.store.proposeAction).not.toHaveBeenCalled();
   });
 
   it.each(['https://www.caremetricintel.com/market-review?offer=county', 'https://www.caremetricintel.com/articles/report'])('does not replace unsupported destination %s with a default page', async link => {
@@ -577,10 +590,18 @@ describe('approved creative from the Creative Director', () => {
     });
     const result = async (link, marketed = undefined) => (await harness({ meta: metaOf({ adsOverview: vi.fn(async () => overviewOf(link)) }), model: null, ...(marketed ? { marketed } : {}) })
       .handlers['social.ads'](task('social.ads'), { now })).result;
-    expect(await result(null)).toMatchObject({ skipped: 1, skips: { destination_unread: 1 } });
-    expect(await result('not a URL')).toMatchObject({ skipped: 1, skips: { destination_unread: 1 } });
-    expect(await result('https://example.com/form')).toMatchObject({ skipped: 1, skips: { leads_elsewhere: 1 } });
+    expect(await result('not a URL')).toMatchObject({ skipped: 1, skips: { no_ad_link: 1 } });
+    expect(await result('https://example.com/form?campaign=x')).toMatchObject({ skipped: 1, skips: { leads_elsewhere: 1 } });
     expect(await result('https://www.cmcarebase.com/', ['caremetric-intel'])).toMatchObject({ skipped: 1, skips: { product_not_marketed: 1 } });
+    // Review 2026-11-18: an ad whose link the review cannot read (a boosted post, a video ad) is not one that leads elsewhere, and the
+    // receipt says which platform each came from and, for one that leads elsewhere, only the host it leads to.
+    const unread = await result(null);
+    expect(unread).toMatchObject({ skipped: 1, skips: { no_ad_link: 1 }, platforms: { meta: { adsets: 1, ads: 1, noLink: 1, skips: { no_ad_link: 1 }, elsewhere: {} } } });
+    expect(unread.skips).not.toHaveProperty('leads_elsewhere');
+    expect(unread).not.toHaveProperty('platform');
+    const away = await result('https://example.com/form?campaign=x');
+    expect(away.platforms.meta).toMatchObject({ noLink: 0, skips: { leads_elsewhere: 1 }, elsewhere: { 'example.com': 1 } });
+    expect(JSON.stringify(away)).not.toContain('/form');
   });
 });
 

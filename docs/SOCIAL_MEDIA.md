@@ -127,6 +127,17 @@ short flight** set (3 to 30 days; empty is off), the month's number funds one ca
 with the budget reservation retained and a notice to check Google Ads. State-scoped campaigns use presence targeting; Google Ads
 Editor exports also preserve the roster states instead of silently switching to the whole country.
 
+**Reading Google back (2026-11-18).** Creating a campaign proves only that Google accepted it. Each daily `ads.plan` run now reads the
+Google Ads account back through the same API access, after its planning, and changes nothing there: the account's auto-tagging and
+conversion tracking status; each enabled campaign's status, serving status, budget and dates; its impressions, clicks, cost and
+conversions over the last 30 days; its enabled ads' policy approval; and the places it targets, named by state where they are the
+roster's. The findings are on the run's result as `google` (`read: false` with a fixed `code`, and Google's error enum as `reason`,
+when the read fails; nothing Google writes in an error is kept). A campaign with a disapproved ad, no enabled ad, not being served,
+no impression after two days of serving, or places other than the roster's states is told to you once per campaign and problem
+(attention `now`), to fix in Google Ads. `auto_tagging_off` (no `gclid` reaches the lead form; the landing page's `utm_` tags still
+do) and `conversions_not_tracked` are recorded on the result only. The Hub reports leads back to Meta and LinkedIn, not to Google, so
+Google's own conversion count depends on tracking set up in Google Ads.
+
 ## Approved video posts
 
 The weekly plan selects approved MP4 creative for the same product and platform when video publication is installed. Facebook accepts
@@ -177,10 +188,15 @@ only after three days and 1,000 impressions or $20 of spend in the last seven da
   the owner's cap, Settings → Social media → "Most any ad may spend per day". With no cap set, no increase is ever proposed.
   The executor re-checks the cap, refuses a step over 25%, and refuses if the budget changed since the proposal. The database refuses any automatic approval of a budget change.
 
-Each run's result counts what it skipped by reason (`skips`: `already_proposed`, `destination_unread` for an absent or unreadable link, `destination_not_supported` when generated copy cannot retain the base destination, `leads_elsewhere` for a readable ad link to no CareMetric
-product page, `product_not_marketed`, `no_base_ad`, `model_not_configured`, `model_<outcome>`) and keeps the access error each platform
-answered (`refusedBy`), which the flight planner reads (2026-11-17: the review skipped 18 of 18 recommendations every day and nothing
-said why).
+Each run's result counts what it skipped by reason (`skips`: `already_proposed`, `leads_elsewhere` for an ad that links to no CareMetric
+product page, `no_ad_link` for an ad whose link the review cannot read, `destination_not_supported` when generated copy cannot retain
+the base ad's destination, `no_active_ad` for a budget increase on an ad set with no ad that can spend, `product_not_marketed`,
+`no_base_ad`, `model_not_configured`, `model_<outcome>`) and keeps the access error each platform answered (`refusedBy`), which the
+flight planner reads (2026-11-17: the review skipped 18 of 18 recommendations every day and nothing said why). Since November 18 the
+result also breaks this down by platform (`platforms.meta`, `platforms.linkedin`: ad sets, ads, `noLink` ads whose link could not be
+read, the platform's own `skips`, and for an ad that leads elsewhere only the host it leads to, `elsewhere`). A Meta ad built from an
+existing post, a video or carousel ad, or a lead form carries no link the review reads; it was counted as `leads_elsewhere` before and
+is `no_ad_link` now.
 
 Results are leads and sign-ups as Meta and LinkedIn report them (LinkedIn: website conversions and Lead Gen Form leads). On LinkedIn a
 campaign plays the part of an ad set (it holds the daily budget) and a creative the part of an ad, and the same rules apply. A new ad
@@ -417,7 +433,8 @@ The database prerequisite check and CI gate serve different purposes; both are n
 Ad refreshes preserve the destination of the base ad, ignoring only UTM tags and trailing slashes. Approved images for a
 trial, article or report cannot substitute for another offer. The refresh searches the full approved snapshot, and the
 executor rechecks the current approved/live copy, image and CTA before a provider write. Missing links are reported as
-`destination_unread`; they cannot justify budget increases.
+`no_ad_link`; an ad set whose active ads include one cannot receive a budget increase. Paused ads are not checked: LinkedIn's
+overview reads the link of active creatives only.
 
 **Settings → Social media → Save and check** tests Page reads and advertising data reads independently, including
 reporting and ad destinations. An organic failure cannot hide a working separate advertising connection. The result
