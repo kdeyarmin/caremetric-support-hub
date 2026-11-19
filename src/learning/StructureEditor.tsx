@@ -62,9 +62,9 @@ export function StructureEditor({ material, busy, reasonReady, onChange, onPrevi
   function edit(block: Lesson) { update(blocks.map(value => value.id === block.id ? block : value)); }
   function field(block: Lesson, key: BodyKey, label: string) {
     if (!fieldEditable(block, key)) return <p key={key}>{label} uses an existing format that must be edited in CareBase.</p>;
-    const value = bodyValue(block, key);
+    const value = bodyValue(block, key), before = material.blocks.find(item => item.id === block.id);
     if (key === "estimatedMinutes") return <label key={key}>{label}<input type="number" min={0} max={1440} step={1} value={typeof value === "number" && !Number.isNaN(value) ? value : ""}
-      onChange={event => edit(updateBody(block, key, event.target.value === "" ? Number.NaN : Number(event.target.value)))} /></label>;
+      onChange={event => edit(updateBody(block, key, event.target.value === "" ? (before && bodyValue(before, key) !== undefined ? Number.NaN : undefined) : Number(event.target.value)))} /></label>;
     if (key === "activityType") return <label key={key}>{label}<select value={typeof value === "string" ? value : ""} onChange={event => edit(updateBody(block, key, event.target.value))}>
       <option value="" disabled>Select an activity</option>{activityTypeSchema.options.map(option => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
     </select></label>;

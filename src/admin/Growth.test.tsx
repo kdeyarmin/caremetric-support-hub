@@ -140,11 +140,13 @@ it('leaves the roster out until its migration is live',async()=>{
  expect(request.mock.calls.every(([,init])=>JSON.parse(String(init.body)).operation!=='roster')).toBe(true);
 });
 it('reads a CSV of prospects, quoted fields included, and refuses one without its key columns',async()=>{
- const {importRows}=await import('./growthClient');
+ const {importRows,companyListCsv}=await import('./growthClient');
  expect(importRows('Name,Website,Email,Contact Name,Title\n"Valley Hospice, Inc.",valleyhospice.org,jane@valleyhospice.org,Jane Doe,Administrator\nCounty Care,countycare.org,,,\n')).toEqual({error:null,rows:[
   {name:'Valley Hospice, Inc.',domain:'valleyhospice.org',email:'jane@valleyhospice.org',contactName:'Jane Doe',role:'Administrator'},{name:'County Care',domain:'countycare.org'}]});
  expect(importRows('email\njane@x.org').error).toMatch(/name and domain/);
  expect(importRows('name,domain').error).toMatch(/at least one/);
+ expect(importRows('name,domain\nOnly Name,').error).toMatch(/Every row must include a name and a domain/);
+ expect(companyListCsv([{name:'=CMD()',domain:'valley.org',city:'PA',state:'PA',zip:'19103'}])).toContain("'=CMD()");
 });
 it('lists found people for the owner to permit, once the people migration is live',async()=>{
  const people={waiting:2,creditsToday:3,creditCap:10,items:[
@@ -152,7 +154,7 @@ it('lists found people for the owner to permit, once the people migration is liv
   {id:'c2',name:'Sam Lee',role:'Owner',email:'sam.lee@countycare.org',source:'enriched',found:'mail_server',sourceUrl:null,organization:'County Care',domain:'countycare.org',foundAt:'2026-11-13T12:05:00Z'},
   {id:'c3',name:'Pat Kim',role:'Administrator',email:'pkim@riverhome.org',source:'enriched',found:'service',sourceUrl:null,organization:'River Home Care',domain:'riverhome.org',foundAt:'2026-11-17T12:05:00Z'}],
   services:{finder:true,mode:'verify',mailServer:'unreachable'}};
- const request=vi.fn(async(_url:unknown,init:RequestInit)=>{const op=JSON.parse(String(init.body)).operation;return new Response(JSON.stringify(op==='people'?people:op==='peopleDecide'?{decided:1}:{...empty,services:{...empty.services,people:true}}));});
+ const request=vi.fn(async(_url:unknown,init:RequestInit)=>{const op=JSON.parse(String(init.body)).operation;if(op==='import')return new Response(JSON.stringify({error:'Import rejected.'}),{status:503});return new Response(JSON.stringify(op==='people'?people:op==='peopleDecide'?{decided:1}:{...empty,policies:[{product:'carebase',enabled:true,auto_send:false,experiment_enabled:false,daily_limit:10,min_gap_hours:72,max_touches:2,booking_url:'https://caremetric.ai/book',approved_claim:'Approved benefit',version:3}],services:{...empty.services,people:true}}));});
  vi.stubGlobal('fetch',request);render(<MemoryRouter><Growth/></MemoryRouter>);
  expect(await screen.findByText(/Decision-makers to review · 2/)).toBeTruthy();
  expect(screen.getByText(/3 of 10 checks used today/)).toBeTruthy();
@@ -165,6 +167,15 @@ it('lists found people for the owner to permit, once the people migration is liv
  await waitFor(()=>expect(request.mock.calls.some(([,init])=>JSON.parse(String(init.body)).operation==='peopleDecide')).toBe(true));
  const decided=request.mock.calls.map(([,init])=>JSON.parse(String(init.body))).find(body=>body.operation==='peopleDecide');
  expect(decided.data).toEqual({ids:['c1'],decision:'permit'});
+ const csvInput=screen.getByLabelText('Prospects (CSV)') as HTMLTextAreaElement;
+ fireEvent.change(csvInput,{target:{value:'name,domain\nValley Hospice,valleyhospice.org'}});
+ fireEvent.click(screen.getByRole('button',{name:'Import 1 prospects'}));
+ await waitFor(()=>expect(screen.getByRole('alert').textContent).toBe('Import rejected.'));
+ expect(csvInput.value).toBe('name,domain\nValley Hospice,valleyhospice.org');
+ fireEvent.click(screen.getByRole('button',{name:'Save policy'}));
+ await waitFor(()=>expect(request.mock.calls.some(([,init])=>JSON.parse(String(init.body)).operation==='policy')).toBe(true));
+ const policyCall=request.mock.calls.map(([,init])=>JSON.parse(String(init.body))).find(body=>body.operation==='policy');
+ expect(policyCall.data.bookingUrl).toBe('https://caremetric.ai/book');
 });
 it('shows the weekly memos and uses one only when the owner chooses it, once the learning migration is live',async()=>{
  const learning={memos:[{id:'m1',product:'caremetric-intel',version:2,memo:'What the last 90 days show.\n- The owner turned down recent drafts with these notes: "Too long".',status:'proposed',createdAt:'2026-11-16T12:00:00Z',stats:{sent:40,replied:5}}],services:{enabled:false}};

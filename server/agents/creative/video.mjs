@@ -238,10 +238,13 @@ export async function renderVideo({ id = 'video', width, height, product, conten
     // Writing to an ffmpeg that has stopped is EPIPE on its input; with no listener that error is uncaught and stops the process. It only
     // ends the writing: ffmpeg's exit code says whether the video was made (it may close its input once it has the frames it needs).
     let inputClosed = false;
-    child.stdin.on('error', () => { inputClosed = true; });
+    const drainControl = new AbortController();
+    const closeInput = () => { inputClosed = true; drainControl.abort(); };
+    child.stdin.on('error', closeInput);
+    child.stdin.on('close', closeInput);
     child.stderr.resume();
     // 'close' follows every end, a failed start included, so this never rejects (events.once would, on 'error', with nobody listening).
-    const exit = new Promise(resolve => { child.once('close', code => resolve([code])); });
+    const exit = new Promise(resolve => { child.once('close', code => { closeInput(); resolve([code]); }); });
     const stop = () => child.kill('SIGKILL');
     signal?.addEventListener('abort', stop, { once: true });
     try {
@@ -266,7 +269,9 @@ export async function renderVideo({ id = 'video', width, height, product, conten
           drawn.clear();
           drawn.set(key, png);
         }
-        if (!child.stdin.write(png)) await Promise.race([once(child.stdin, 'drain'), exit]).catch(() => { inputClosed = true; });
+        if (!inputClosed && !child.stdin.write(png)) {
+          await once(child.stdin, 'drain', { signal: drainControl.signal }).catch(() => { inputClosed = true; });
+        }
       }
       child.stdin.end();
       const [code] = await exit;

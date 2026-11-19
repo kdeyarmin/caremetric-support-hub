@@ -83,6 +83,12 @@ describe('asking the business\'s mail server', () => {
     expect(broken.commands.some(command => command.startsWith('MAIL'))).toBe(false);
     const wants = await mailServer({ mailFrom: '530 5.7.0 Must issue a STARTTLS command first' });
     expect(await checker(wants.port).check('valleyhospice.org', guesses)).toEqual({ result: 'unknown', reason: 'tls_required' });
+    // Aborting while the TLS handshake is waiting on a silent peer rejects with the abort instead of hanging or reporting tls_failed.
+    const silentTls = await mailServer({ ehlo: '250-mx.valleyhospice.org\r\n250 STARTTLS' });
+    const controller = new AbortController();
+    const pending = checker(silentTls.port).check('valleyhospice.org', guesses, { signal: controller.signal });
+    setTimeout(() => controller.abort(new Error('task_cancelled')), 30);
+    await expect(pending).rejects.toThrow('task_cancelled');
   });
 
   it('confirms the address its server accepts after refusing a made-up one, and never sends a message', async () => {

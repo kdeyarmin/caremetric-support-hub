@@ -19,7 +19,8 @@ export function useBillingAction() {
       pending.current = null;
       return result;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'The billing change could not be confirmed. Retry to check its result.');
+      const issue = caught && typeof caught === 'object' && 'issues' in caught && Array.isArray(caught.issues) && caught.issues[0] && typeof caught.issues[0] === 'object' && 'message' in caught.issues[0] && typeof caught.issues[0].message === 'string' ? caught.issues[0].message : null;
+      setError(issue ?? (caught instanceof Error ? caught.message : 'The billing change could not be confirmed. Retry to check its result.'));
       return null;
     } finally { setBusy(false); }
   }

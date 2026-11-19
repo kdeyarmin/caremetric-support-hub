@@ -10,16 +10,16 @@ const value=(form:FormData,key:string)=>String(form.get(key)??'').trim();
 const iso=(input:string)=>input?new Date(input).toISOString():'';
 const local=(input:string|null)=>input?new Date(new Date(input).getTime()-new Date(input).getTimezoneOffset()*60000).toISOString().slice(0,16):'';
 /** Records the provider's verified outcome of a send that may or may not have gone out. */
-function ReconcileForm({id,onSave}:{id:string;onSave:(op:string,data:unknown)=>Promise<void>}) {
+function ReconcileForm({id,onSave}:{id:string;onSave:(op:string,data:unknown)=>Promise<boolean>}) {
  return <form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void onSave('reconcile',{id,status:value(f,'status'),reference:value(f,'reference')});}}><label>Verified provider outcome<select name="status"><option value="delivered">Delivered</option><option value="failed">Failed</option></select></label><label>Provider log or support reference<input name="reference" minLength={3} maxLength={500} required/></label><button>Record verified outcome</button></form>;
 }
 /** Who one touch went to: its contact, then the other decision-makers at the business, each with the state of their own email. */
-function Recipients({message,onSave}:{message:z.infer<typeof detailSchema>['messages'][number];onSave:(op:string,data:unknown)=>Promise<void>}) {
+function Recipients({message,onSave}:{message:z.infer<typeof detailSchema>['messages'][number];onSave:(op:string,data:unknown)=>Promise<boolean>}) {
  if(message.recipients.length<2)return null;
  return <><p>Sent as separate emails to {message.recipients.length} people:</p><ul>{message.recipients.map(r=><li key={r.id}>{r.name||r.role||r.email}{r.name&&r.role&&` (${r.role})`} · {r.email} · {r.status}{r.primary?' · first contact':''}
   {!r.primary&&r.status==='unknown'&&<ReconcileForm id={r.id} onSave={onSave}/>}</li>)}</ul></>;
 }
-function OpportunityEditor({item,onSave}:{item:GrowthOpportunity;onSave:(op:string,data:unknown)=>Promise<void>}) {
+function OpportunityEditor({item,onSave}:{item:GrowthOpportunity;onSave:(op:string,data:unknown)=>Promise<boolean>}) {
  return <form onSubmit={event=>{event.preventDefault();const f=new FormData(event.currentTarget);void onSave('opportunity',{id:item.id,version:item.version,internal:f.has('internal'),tenantId:value(f,'tenantId'),stage:value(f,'stage'),goal:value(f,'goal'),nextAction:value(f,'nextAction'),nextAt:iso(value(f,'nextAt')),trialEnd:iso(value(f,'trialEnd')),renewalAt:iso(value(f,'renewalAt')),memory:{promises:value(f,'promises'),blockers:value(f,'blockers'),objections:value(f,'objections'),lossReason:value(f,'lossReason')}});}}>
  <label>Stage<select name="stage" defaultValue={item.stage}>{stages.map(s=><option key={s}>{s}</option>)}</select></label>
  <label>Hub tenant ID<input name="tenantId" defaultValue={item.tenant_id??''}/></label>
@@ -32,9 +32,9 @@ function OpportunityEditor({item,onSave}:{item:GrowthOpportunity;onSave:(op:stri
  {['promises','blockers','objections','lossReason'].map(key=><label key={key}>{key==='lossReason'?'Loss or churn reason':key}<textarea name={key} defaultValue={String(item.memory[key]??'')} maxLength={2000}/></label>)}
  <button className="button button-primary">Save next steps</button></form>;
 }
-function PolicyEditor({policy,onSave}:{policy:GrowthPolicy;onSave:(op:string,data:unknown)=>Promise<void>}) {
+function PolicyEditor({policy,onSave}:{policy:GrowthPolicy;onSave:(op:string,data:unknown)=>Promise<boolean>}) {
  return <details className="panel"><summary>{names[policy.product]} campaign policy · {policy.enabled?'Enabled':'Paused'}</summary>
- <form onSubmit={event=>{event.preventDefault();const f=new FormData(event.currentTarget);void onSave('policy',{product:policy.product,version:policy.version,enabled:f.has('enabled'),autoSend:f.has('autoSend'),experimentEnabled:f.has('experimentEnabled'),dailyLimit:Number(f.get('dailyLimit')),minGapHours:Number(f.get('minGapHours')),maxTouches:Number(f.get('maxTouches')),bookingUrl:'',approvedClaim:value(f,'approvedClaim')});}}>
+ <form onSubmit={event=>{event.preventDefault();const f=new FormData(event.currentTarget);void onSave('policy',{product:policy.product,version:policy.version,enabled:f.has('enabled'),autoSend:f.has('autoSend'),experimentEnabled:f.has('experimentEnabled'),dailyLimit:Number(f.get('dailyLimit')),minGapHours:Number(f.get('minGapHours')),maxTouches:Number(f.get('maxTouches')),bookingUrl:policy.booking_url??'',approvedClaim:value(f,'approvedClaim')});}}>
  <label>Approved product benefit<textarea name="approvedClaim" defaultValue={policy.approved_claim} maxLength={1000}/></label>
  <label>Maximum messages per day<input name="dailyLimit" type="number" min={1} max={100} defaultValue={policy.daily_limit}/></label>
  <label>Minimum hours between contact across products<input name="minGapHours" type="number" min={24} max={720} defaultValue={policy.min_gap_hours}/></label>
@@ -85,7 +85,7 @@ function foundHow(p:z.infer<typeof peopleSchema>['items'][number]) {
  return 'Found';
 }
 /** Decision-makers the team found or the owner imported, waiting for the owner before anything is sent to them. */
-function PeoplePanel({revision,onSave}:{revision:number;onSave:(op:string,data:unknown)=>Promise<void>}) {
+function PeoplePanel({revision,onSave}:{revision:number;onSave:(op:string,data:unknown)=>Promise<boolean>}) {
  const [data,setData]=useState<z.infer<typeof peopleSchema>|null>(null),[failure,setFailure]=useState(''),[chosen,setChosen]=useState<string[]>([]),[csv,setCsv]=useState(''),[note,setNote]=useState('');
  useEffect(()=>{const c=new AbortController();void growthPost('people',{offset:0},peopleSchema,c.signal).then(d=>{if(!c.signal.aborted){setData(d);setFailure('');setChosen([]);}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'Found people could not be loaded.');});return()=>c.abort();},[revision]);
  const decide=(decision:'permit'|'refuse',ids:string[])=>{if(ids.length)void onSave('peopleDecide',{ids,decision});};
@@ -103,15 +103,15 @@ function PeoplePanel({revision,onSave}:{revision:number;onSave:(op:string,data:u
   <details><summary>Import a list of prospects</summary>
    <p>A CSV with a header row: name and domain (the business's own website), and optionally product, email (a work address on that domain), contactName and role. Addresses wait for your review here; anyone who unsubscribed is skipped.</p>
    <label htmlFor="growth-import-csv">Prospects (CSV)</label>
-   <textarea id="growth-import-csv" aria-labelledby="growth-import-csv" rows={6} value={csv} onChange={e=>setCsv(e.target.value)} placeholder={'name,domain,email,contactName,role\nValley Hospice,valleyhospice.org,jane@valleyhospice.org,Jane Doe,Administrator'}/>
+   <textarea id="growth-import-csv" rows={6} value={csv} onChange={e=>setCsv(e.target.value)} placeholder={'name,domain,email,contactName,role\nValley Hospice,valleyhospice.org,jane@valleyhospice.org,Jane Doe,Administrator'}/>
    {parsed?.error&&<p role="alert">{parsed.error}</p>}{note&&<p role="status">{note}</p>}
-   <button className="button" disabled={!parsed||Boolean(parsed.error)} onClick={()=>{if(parsed&&!parsed.error){void onSave('import',{rows:parsed.rows}).then(()=>{setNote(`Imported ${parsed.rows.length} rows.`);setCsv('');});}}}>Import {parsed&&!parsed.error?parsed.rows.length:''} prospects</button>
+   <button className="button" disabled={!parsed||Boolean(parsed.error)} onClick={()=>{if(parsed&&!parsed.error){void onSave('import',{rows:parsed.rows}).then(ok=>{if(ok){setNote(`Imported ${parsed.rows.length} rows.`);setCsv('');}});}}}>Import {parsed&&!parsed.error?parsed.rows.length:''} prospects</button>
   </details>
  </section>;
 }
 const memoStatus:Record<string,string>={proposed:'Waiting for you',active:'In use',retired:'Replaced',rejected:'Turned down'};
 /** The weekly "what is working" memos: written by code from the team's own counts, used in drafts only after the owner chooses one. */
-function LearningPanel({revision,onSave}:{revision:number;onSave:(op:string,data:unknown)=>Promise<void>}) {
+function LearningPanel({revision,onSave}:{revision:number;onSave:(op:string,data:unknown)=>Promise<boolean>}) {
  const [data,setData]=useState<z.infer<typeof learningSchema>|null>(null),[failure,setFailure]=useState('');
  useEffect(()=>{const c=new AbortController();void growthPost('learning',{},learningSchema,c.signal).then(d=>{if(!c.signal.aborted){setData(d);setFailure('');}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'The memos could not be loaded.');});return()=>c.abort();},[revision]);
  return <section className="panel" aria-labelledby="growth-learning-title"><h2 id="growth-learning-title">What is working</h2>
@@ -134,7 +134,7 @@ function BriefPanel({id,revision}:{id:string;revision:number}) {
   {failure&&<p>{failure}</p>}{!entry&&!failure&&<p role="status">Loading the account brief…</p>}
   {entry?.id===id&&!brief&&<p>No brief yet. Agencies about to be written to are briefed first.</p>}
   {brief&&<><p>{brief.writer.summary}{brief.writer.serviceArea?` Serves ${brief.writer.serviceArea}.`:''}{brief.writer.ownership?` ${brief.writer.ownership}.`:''}</p>
-   {brief.writer.triggers.length>0&&<><p>Why now:</p><ul>{brief.writer.triggers.map(t=><li key={t.sourceUrl+t.fact}>{t.fact}{t.date?` (${t.date})`:''} <a href={t.sourceUrl} target="_blank" rel="noreferrer">source</a></li>)}</ul></>}
+   {brief.writer.triggers.length>0&&<><p>Why now:</p><ul>{brief.writer.triggers.map(t=><li key={t.sourceUrl+t.fact}>{t.fact}{t.date?` (${t.date})`:''}{t.sourceUrl.startsWith('https://')&&<> <a href={t.sourceUrl} target="_blank" rel="noopener noreferrer">source</a></>}</li>)}</ul></>}
    {brief.writer.hook&&<p>Opening: {brief.writer.hook.sentence}</p>}
    {brief.writer.countyFact&&<p>County figure: {brief.writer.countyFact.claim}</p>}
    {brief.writer.pains.length>0&&<><p>Questions to ask:</p><ul>{brief.writer.pains.map(p=><li key={p.question}>{p.question}{p.capability?` (${p.capability})`:''}</li>)}</ul></>}
@@ -146,7 +146,7 @@ function BriefPanel({id,revision}:{id:string;revision:number}) {
  </section>;
 }
 const checkModes:Record<string,string>={off:'Off',check:'On: never write to a mailbox that does not exist',strict:'Strict: also hold an address no server answered for'};
-function SendGuardPanel({revision,onSave}:{revision:number;onSave:(op:string,data:unknown)=>Promise<void>}) {
+function SendGuardPanel({revision,onSave}:{revision:number;onSave:(op:string,data:unknown)=>Promise<boolean>}) {
  const [data,setData]=useState<z.infer<typeof sendGuardSchema>|null>(null),[failure,setFailure]=useState('');
  useEffect(()=>{const c=new AbortController();void growthPost('sendGuard',{},sendGuardSchema,c.signal).then(d=>{if(!c.signal.aborted){setData(d);setFailure('');}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'The send guard could not be loaded.');});return()=>c.abort();},[revision]);
  return <section className="panel" aria-labelledby="growth-guard-title"><h2 id="growth-guard-title">Send guard</h2>
@@ -168,7 +168,7 @@ export function Growth() {
  const detailError=detailFailure?.id===selected&&detailFailure?.revision===revision?detailFailure.message:'';
  useEffect(()=>{const c=new AbortController();void growthPost('workspace',{offset},workspaceSchema,c.signal).then(data=>{if(!c.signal.aborted){setWorkspace({offset,data});setWorkspaceFailure(null);}}).catch(e=>{if(!c.signal.aborted)setWorkspaceFailure({offset,revision,message:e instanceof Error?e.message:'Customer growth could not be loaded.'});});return()=>c.abort();},[offset,revision]);
  useEffect(()=>{if(!selected)return;const c=new AbortController();void growthPost('detail',{id:selected},detailSchema,c.signal).then(data=>{if(!c.signal.aborted){setDetail({id:selected,revision,data});setDetailFailure(null);}}).catch(e=>{if(!c.signal.aborted)setDetailFailure({id:selected,revision,message:e instanceof Error?e.message:'Organization details could not be loaded.'});});return()=>c.abort();},[selected,revision]);
- const save=useCallback(async(op:string,input:unknown)=>{setBusy(true);setError('');try{await growthMutation(op,input);setRevision(n=>n+1);}catch(e){setError(e instanceof Error?e.message:'Result unconfirmed. Refresh before retrying.');}finally{setBusy(false);}},[]);
+ const save=useCallback(async(op:string,input:unknown):Promise<boolean>=>{setBusy(true);setError('');try{await growthMutation(op,input);setRevision(n=>n+1);return true;}catch(e){setError(e instanceof Error?e.message:'Result unconfirmed. Refresh before retrying.');return false;}finally{setBusy(false);}},[]);
  const item=data?.items.find(i=>i.id===selected);
  return <div className="admin-workspace growth-workspace"><header className="admin-page-header"><h1>Customer growth</h1><p>Acquire, activate and retain CareBase and CareMetric Intel customers. Breathe is deferred.</p><Link to="/admin/team">Review message approvals and agent controls</Link></header>
  {error&&<p role="alert">{error}</p>}{workspaceError&&<p role="alert">{workspaceError}</p>}{!data&&!workspaceError&&<p role="status">Loading customer growth…</p>}
@@ -196,7 +196,7 @@ export function Growth() {
  {item.contact_id&&<form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('contact',{id:item.contact_id,version:item.contact_version,eligibility:value(f,'eligibility'),verified:f.has('verified'),sourceUrl:value(f,'sourceUrl')});}}>
  <h3>Contact eligibility</h3><select aria-label="Contact eligibility" name="eligibility" defaultValue={item.eligibility??'review'}><option value="review">Needs review</option><option value="permitted">Outreach permitted</option><option value="opted_out">Do not contact</option><option value="undeliverable">Mailbox does not exist</option></select>
  <label>Verification source<input name="sourceUrl" type="url"/></label><label><input type="checkbox" name="verified" defaultChecked={Boolean(item.verified_at)}/> Business contact and channel eligibility verified</label><button>Save contact review</button></form>}
- <h3>Evidence</h3>{detail?.evidence.map(e=><p key={e.id}><a href={e.source_url} target="_blank" rel="noreferrer">Source</a> · {e.confidence} · {new Date(e.observed_at).toLocaleDateString()} · {e.claim}</p>)}
+ <h3>Evidence</h3>{detail?.evidence.map(e=><p key={e.id}>{e.source_url.startsWith('https://')?<a href={e.source_url} target="_blank" rel="noopener noreferrer">Source</a>:'Source'} · {e.confidence} · {new Date(e.observed_at).toLocaleDateString()} · {e.claim}</p>)}
  <form onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);void save('evidence',{opportunityId:item.id,sourceUrl:value(f,'sourceUrl'),claim:value(f,'claim'),confidence:value(f,'confidence'),observedAt:new Date().toISOString()});}}><label>Source URL<input name="sourceUrl" type="url" required/></label><label>Verified fact<textarea name="claim" maxLength={4000} required/></label><select aria-label="Evidence confidence" name="confidence"><option>low</option><option>medium</option><option>high</option></select><button>Add evidence</button></form>
  <h3>Message history</h3>{detail?.messages.map(m=><details key={m.id}><summary>{m.subject} · {m.status}{m.recipients.length>1?` · ${m.recipients.length} people`:''}</summary><p style={{whiteSpace:'pre-wrap'}}>{m.body}</p><p>{m.model_generated?'Model draft — individual approval required':'Approved-template draft'}</p><Recipients message={m} onSave={save}/>{m.status==='unknown'&&<ReconcileForm id={m.id} onSave={save}/>}</details>)}
  <h3>Verified activity</h3>{detail?.events.map((e,i)=><p key={i}>{e.kind} · {new Date(e.occurred_at).toLocaleString()}</p>)}

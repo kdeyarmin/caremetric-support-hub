@@ -921,7 +921,7 @@ function CaseDetail({ supportCase, thread, threadStatus, threadError, threadStal
           );
         })}
       </div>
-      {!staff && !['resolved', 'closed'].includes(supportCase.status) && <RequestHumanSupport key={supportCase.id} caseId={supportCase.id} onChanged={onChanged} />}
+      {!staff && !['resolved', 'closed'].includes(supportCase.status) && <RequestHumanSupport key={supportCase.id} caseId={supportCase.id} aiStage={supportCase.aiStage} onChanged={onChanged} />}
       {!staff && supportCase.aiStage === "awaiting_response" && (
         <AiResolutionPrompt caseId={supportCase.id} onChanged={onChanged} />
       )}
