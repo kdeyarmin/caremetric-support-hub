@@ -97,6 +97,17 @@ export function mimeMessage({ from, fromName = '', to, replyTo = null, subject, 
  * 2026). That answer means SES did not accept the message, so it is sent again after these waits (each stretched by up to half again,
  * so concurrent senders spread out) before it counts as failed. Bulk email sends five at a time and can briefly run faster than that.
  */
+/**
+ * Why SES refused a message, for the server log: the HTTP status, SES's error type and its message, with any email address removed and
+ * cut to 300 characters. Without it a refused send can't be told apart from a missing permission or an unverified sender.
+ */
+export async function sesRefusal(response) {
+  const type = String(response.headers?.get?.('x-amzn-errortype') ?? '').split(':')[0];
+  const body = await response.json().catch(() => ({}));
+  const message = String(body?.message ?? body?.Message ?? '').replace(/[^\s@<>"'(),;:]+@[^\s@<>"'(),;:]+/g, '[address]');
+  return [response.status, type, message].filter(Boolean).join(' ').replace(/\s+/g, ' ').slice(0, 300);
+}
+
 const throttleWaitsMs = [1000, 2000, 4000];
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -129,7 +140,10 @@ function sesClient({ accessKeyId, secretAccessKey, sessionToken = null, region, 
           await wait(base + Math.floor(Math.random() * base / 2));
           continue;
         }
-        if (response.status >= 400 && response.status < 500) return { delivery: 'failed', id: null };
+        if (response.status >= 400 && response.status < 500) {
+          console.warn(`Amazon SES refused a message: ${await sesRefusal(response)}`);
+          return { delivery: 'failed', id: null };
+        }
         if (response.status !== 200) return { delivery: 'unknown', id: null };
         const id = (await response.json().catch(() => ({})))?.MessageId;
         return { delivery: 'sent', id: typeof id === 'string' && /^[A-Za-z0-9._-]{1,200}$/.test(id) ? id : null };

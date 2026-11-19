@@ -106,6 +106,19 @@ describe('sending through SES', () => {
     expect(wait).toHaveBeenCalledTimes(3);
   });
 
+  it('logs why SES refused a message, without the address', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const refused = { status: 403, headers: new Headers({ 'x-amzn-ErrorType': 'AccessDeniedException:http://internal.amazon.com/coral/com.amazon.coral.service/' }),
+      json: async () => ({ message: "User 'arn:aws:iam::1:user/ses-sender-hub' is not authorized to perform 'ses:SendRawEmail' on resource 'identity/caremetric.ai' for pat@example.org" }) };
+    await expect(sesMail({ ...access, fetchImpl: vi.fn(async () => refused) }).send('pat@example.org', 'Hi', 'Text')).resolves.toEqual({ delivery: 'failed', id: null });
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [line] = warn.mock.calls[0];
+    expect(line).toContain('Amazon SES refused a message: 403 AccessDeniedException User');
+    expect(line).toContain("on resource 'identity/caremetric.ai'");
+    expect(line).not.toContain('pat@example.org');
+    warn.mockRestore();
+  });
+
   it('is not configured without a usable key or sender', () => {
     expect(sesMail({ ...access, accessKeyId: '' }).configured).toBe(false);
     expect(sesMail({ ...access, secretAccessKey: 'short' }).configured).toBe(false);

@@ -22,6 +22,8 @@ posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is 
   the Hub sent faster than the account's rate (14 a second), so SES did not take the message. It is sent again after about
   1, 2 and 4 seconds (each wait stretched at random by up to half, so the five bulk senders spread out) and counts as
   `failed` only if SES still refuses it. Nothing else is ever sent twice.
+  Every refusal is logged as `Amazon SES refused a message:` with the status, SES's error type and its message (any
+  email address removed), so a missing permission or an unverified sender shows in the Railway log.
 - **Tracking:** every SES request explicitly disables open and click tracking, including when the account or configuration
   set enables it. Support links remain direct and no tracking pixel is added.
 - **Delivery events** (`POST /api/growth/delivery/ses`): the configuration set publishes Delivery, Bounce, Complaint and
@@ -57,6 +59,9 @@ posts to `/api/channels/email/inbound`. Moving inbound mail to SES receiving is 
 5. **Region.** **Settings → Email → Amazon SES region** is `us-east-2` unless the domains are verified elsewhere.
 6. **Switch.** Choose **Amazon SES** in **Settings → Email → Email service**. Send a test reply from Communications and
    check it arrives signed by the domain (DKIM pass). To go back, choose SendGrid.
+
+   On November 19, 2026 the first switch was undone within a minute: a bulk email test through SES was refused (no SES
+   event arrived) and the reason was not logged. Look for `Amazon SES refused a message` in the log on the next try.
 
 ## Verification
 
