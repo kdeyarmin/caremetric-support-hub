@@ -85,6 +85,12 @@ open brings the second email forward, and the memo's facts count report opens pe
 closed. The Hub server passes a deferral's reason, lists quiet prospects and gives the Sales Executive its context only when the feature
 is declared; the short first email it once gated is every Intel agency's first email since 2026-11-17, with or without the feature ([AI workforce review, November 17](AI_WORKFORCE_REVIEW_2026-11-17.md), stage 2).
 
+`20261118130000_growth_local_send_time.sql` declares no feature: the Hub server calls the same claim and deferral as before, and they read
+the send hours in the agency's own time zone only while the owner's "Send cold email in each agency's own time zone"
+(`growth.send_local_time`, off) is on. The migration checks its own result and fails closed: the setting has a row, every state, DC and
+territory has a zone the database knows, the send claim and the deferral read the agency's zone (and the claim still holds cold email
+outside the hours), the deferral stays executable by `hub_app_server` alone, and the zone helpers and table are closed to every role.
+
 `20261117210100_growth_reach_contract.sql` declares `platform.agents.growth-reach.v1` once the growth priority, roster and learning
 features are declared, `private.growth_roster_site_next`, `private.growth_roster_site_record`, `private.growth_live_eval_state`,
 `private.growth_live_eval_record` and `private.growth_live_evaluation_latest` are executable by `hub_app_server` alone and require its
