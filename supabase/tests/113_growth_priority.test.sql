@@ -79,7 +79,7 @@ insert into private.growth_messages(opportunity_id, contact_id, purpose, subject
     1, 1, 1, 'accepted', repeat('a', 64), now() - interval '2 days', true, 'report', '{"length":"report","length_basis":"applied_v1","trigger":"cms_record","weakness":"too_long"}'),
   ('e1120000-0000-4000-8000-0000000007c2', 'e1120000-0000-4000-8000-0000000007b2', 'marketing', 'Your county', 'Your report: https://www.caremetricintel.com/report/xyz.defghijklmnopqrstuvwx',
     1, 1, 1, 'accepted', repeat('b', 64), now() - interval '2 days', true, 'report', '{"length":"report","length_basis":"applied_v1","trigger":"cms_record","weakness":"too_long"}'),
-  ('e1120000-0000-4000-8000-0000000007c3', 'e1120000-0000-4000-8000-0000000007b3', 'marketing', 'Your county', 'A free review: https://www.caremetricintel.com/market-review',
+  ('e1120000-0000-4000-8000-0000000007c3', 'e1120000-0000-4000-8000-0000000007b3', 'marketing', 'Your county', 'A free county report: https://www.caremetricintel.com/county-report',
     1, 1, 1, 'accepted', repeat('c', 64), now() - interval '2 days', true, 'control', '{"length":"control","length_basis":"applied_v1","trigger":"web","weakness":"none"}'),
   ('e1120000-0000-4000-8000-0000000007c3', 'e1120000-0000-4000-8000-0000000007b3', 'marketing', 'Your county', 'A draft nobody sent.',
     2, 1, 1, 'draft', repeat('d', 64), null, true, 'control', '{"length":"control","length_basis":"applied_v1","trigger":"web","weakness":"generic_opening"}');

@@ -11,7 +11,8 @@
  * things can hold any stage: the Marketing Manager's daily budget and the owner's own approvals.
  */
 
-export const strategistVersion = 'strategist.3';
+// strategist.4 (2026-11-19): Intel is described as for every kind of organization that depends on referrals, not home health and hospice alone.
+export const strategistVersion = 'strategist.4';
 
 /** The constraints the strategist can name, in funnel order, with the label the scorecard shows. */
 export const constraintLabels = Object.freeze({

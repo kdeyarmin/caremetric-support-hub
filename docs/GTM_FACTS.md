@@ -225,11 +225,18 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   diagnostics, dialysis and DME suppliers. Intel serves them too, and its site lists them after the primary five, but no outreach,
   content or ads are aimed at them until the primary audience has been thoroughly marketed to.
 - **Prospect discovery** (`discoveryGrid` in `server/growth/playbook.mjs`) searches for home health and hospice agencies and, since
-  2026-11-16 (owner decision), nursing homes. Intel's free reports (an agency's own market report, the market review and the county
-  report) cover home health and hospice agencies only, so a prospect whose own name or research shows it is a nursing home gets emails
-  written for a nursing home instead (its hospital sources, the homes around it, its county, the free trial), and is never offered those
-  report pages (`intelSetting`, `nursingHomeAngles` and `campaign.mjs`). Hospitals and personal care homes are not searched yet: widening discovery to them
-  is a separate owner decision.
+  2026-11-16 (owner decision), nursing homes. An agency's own market report covers home health and hospice agencies only, so a prospect
+  whose own name or research shows it is a nursing home gets emails written for a nursing home instead (its hospital sources, the homes
+  around it, its county, the free trial), with no report in them (`intelSetting`, `nursingHomeAngles` and `campaign.mjs`). Hospitals
+  and personal care homes are not searched yet: widening discovery to them is a separate owner decision.
+- **Intel's free report** (owner direction 2026-11-19: Intel is not just for home health agencies, nothing promotes them over any other
+  organization, and nobody is asked for a CCN or an agency's name): the county report at `/county-report`, for every kind of
+  organization. The visitor chooses a state and a county and enters an email address, and the report is emailed as a PDF: the county
+  at a glance (residents 65 and older, growth since 2020, Medicare beneficiaries, Medicare Advantage share), the hospitals the county's
+  residents use most, and the nursing homes, home health agencies, hospices and personal care and assisted living homes located in the
+  county. The market review that asked for an agency's name or CCN (`/market-review`) is retired and redirects to it. An agency the
+  roster names still gets its own signed market report link (`server/growth/report-link.mjs`); any other agency's first email offers
+  the county report (`reviewTouchAngle`).
 - **What it does:** targeted marketing, marketing analysis and territory analysis from Medicare, Census and other healthcare data,
   plus a marketing CRM that keeps outreach, follow-up and the referrals the organization records in one place. Its AI features
   (briefs, supported reporting questions, drafted outreach) are text.
@@ -313,7 +320,7 @@ CareMetric Intel runs a healthcare organization's whole marketing program in one
 - Daily field work: a Today page with tasks, progress on goals and the accounts to visit this week, each with a reason; a weekly schedule and call plan; a suggested route built from due follow-ups, slipping sources and key accounts not visited lately; a visit log built for a phone, with check-in, visit templates and a dated next step; a pre-visit card; directions to each account; business card scanning; county call sheets; follow-up emails that book the next visit; calendar sync; and a weekly digest for each marketer.
 - Expenses, mileage and reimbursement: spend logged against the referral source it was for, receipt capture, per-person value for shared meals, each physician's running total against the Stark nonmonetary-compensation limit, policy totals for discharge planners and other non-physician sources, policy checks and flags, an approval workflow, reimbursement tracking, budgets, register, compliance and payroll exports, and a mileage log built from visit check-ins. These tools support the organization's compliance program; they are not legal advice. A small part of the workspace, never the point of it.
 - Referral and admission tracking: referrals logged on the account they came from, with the service, payer and outcome; response time from arrival to first answer and decision; referral and admission reports imported from EMR exports as CSV files, with patient-identifying columns dropped; a referral funnel by account and marketer; drop-off alerts when a top source slips, and what the book shows about why, with the next step as a task; a quarterly outcomes packet to share with a hospital or facility; a shareable profile page for referral sources with intake details, current availability and CMS ratings; lost reasons; an admissions forecast [Pro]; and dated confirmations of what new referrals the organization can take.
-- Competitor intelligence: the home health agencies, hospices and nursing homes in the territory ranked by Medicare share, with star ratings; a watchlist with alerts when a rating, owner or service area changes or a new provider opens nearby; side-by-side comparison and trends; a county roll-up and a scheduled leadership brief; a plain-language card on how the agency compares with the largest in its county; and a free agency market review anyone can request on Intel's site.
+- Competitor intelligence: the home health agencies, hospices and nursing homes in the territory ranked by Medicare share, with star ratings; a watchlist with alerts when a rating, owner or service area changes or a new provider opens nearby; side-by-side comparison and trends; a county roll-up and a scheduled leadership brief; a plain-language card on how the agency compares with the largest in its county; and a free county report anyone can request on Intel's site for any county, emailed as a PDF.
 - Manager and team tools: monthly visit and referral goals with a leaderboard [setting targets: Growth and Pro]; a review of each marketer's week; activity reports and a weekly email; ride-along notes and coaching; locations [Growth and Pro]; book balance across marketers [Pro]; account briefs and decision briefs; Ask the book for supported questions about the book; an AI Assistant that answers typed questions about the market, the book and the day and proposes lists, visits, tasks and drafts that are saved only when someone confirms [Growth and Pro]; an AI playbook of pitch pillars, service lines and words to avoid; connecting an AI app that supports MCP to read Intel [Growth and Pro]; friendly activity challenges and a monthly report card, never on referrals or admissions; a calendar of healthcare observances; and a materials library that shows who opened each file.
 - Reports and analytics: results reports (performance scorecard, field activity, follow-up, mileage, referrals and admissions, top sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment), filtered and grouped by person, location, line of business, county, payer or period, each person seeing their own scope, downloaded as PDF, Excel or CSV; source quality after admission, by referral source, marketer or location (how long patients stay, short stays, hospice live discharges and revocations, home health returns to the hospital, and average daily census against each location's budget) [loading reports: owners]; and a custom report builder with scheduled email.
 - Email campaigns [Growth and Pro]: campaigns to a lead list or the contacts on the book, with delivery tracking, sender settings and automatic unsubscribe handling. Nurture sequences of calls, visits, emails and tasks on an account, which stop on a referral, a contact leaving or a marked reply, are on every plan. One part of the workspace, never the point of it.
@@ -901,8 +908,9 @@ Use the linked training-requirement guide and official sources for exact deadlin
 An owner or location-manager label is required authority, not a feature available to every user. Configured-service conditions also apply where described.
 The source describes Pro feature access during the trial within its one-county footprint; the reviewed trial seats, location, service lines and duration above remain the limits.
 The rows below are Intel's own site, word for word, as `npm run refresh:features` last read it (2026-11-17, after the site named its data
-by its source without the word "public"). "The public site" in the free market review row is the website, not the data. The AI team is
-held to `dataMention` and the `public_data` check whatever a row says.
+by its source without the word "public"), except the free county report row, rewritten on 2026-11-19 when Intel retired its market
+review (refresh it from the site once Intel's features page lists the county report). "The public site" in that row is the website, not
+the data. The AI team is held to `dataMention` and the `public_data` check whatever a row says.
 
 #### Healthcare marketing CRM
 
@@ -1053,7 +1061,7 @@ Who you compete with for referrals, how they are moving, and what to say about i
 | Scheduled leadership brief | Email the county roll-up as a PDF to your managers daily, weekly or monthly. | Owners & location managers |
 | What to say | On a home health agency, hospice or nursing home, a card lines your organization up with the three largest in the county on star rating and Medicare patient totals (and patient survey for agencies), in plain sentences. | All plans; subject to scope |
 | Personal care and assisted living ranking | For personal care and assisted living organizations: the state-licensed homes in your territory, largest first by licensed beds, with each one’s share of the licensed beds and yours marked. Download it as CSV. | All plans; subject to scope |
-| Free agency market review | On the public site, anyone can type a home health or hospice CCN and get a PDF by email: the agency's Medicare patients, share and rank in its county and state, the largest local agencies and its CMS ratings. | All plans; subject to scope |
+| Free county report | On the public site, anyone can choose a state and a county, enter an email address and get a PDF by email: the county at a glance (residents 65 and older, growth since 2020, Medicare beneficiaries and Medicare Advantage share), the hospitals the county's residents use most, and the nursing homes, home health agencies, hospices and personal care and assisted living homes located in the county. | All plans; subject to scope |
 
 #### Manager and team tools
 

@@ -1218,7 +1218,8 @@ the ad rules, the checks and the Meta and LinkedIn permissions are in [Social me
 **Reach** (`platform.agents.reach.v1`, [team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 6):
 - Each post carries its own `utm_content` (an approved creative's id, or `post-<week>-<platform>-<n>`), and the weekly plan is told
   which recent posts brought website leads. The weekly report counts those leads and the comments read as interest.
-- Intel's call to action in posts and replies is the free market report (or the county report), never the trial first.
+- Intel's call to action in posts and replies is its free county report (since 2026-11-19: any state and county, emailed as a PDF, for
+  every kind of organization), never the trial first.
 - A Facebook post with an approved image goes out as a photo whose caption carries the tagged link.
 - While LinkedIn refuses the team, its posts are emailed to paste instead of queued to fail, and a LinkedIn post refused at
   publishing is emailed to paste, link included.
@@ -1280,11 +1281,11 @@ expired or failed proposal may be tried again). Among the rest, priority leads; 
 in the last 90 days (counted by product and inquiry type, never read) come next; the product of the last article steps back.
 
 With `platform.agents.reach.v1` ([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 6): every Intel
-article's suggested pages start with the free market report; Search Console's recent queries (the SEO Analyst's properties) nudge a
+article's suggested pages start with the free county report; Search Console's recent queries (the SEO Analyst's properties) nudge a
 topic whose keywords people search; a topic published more than a quarter ago is written again, afresh, under the quarter's own
 address (`<address>-2027-q1`). With **Settings → AI team → Write articles about the roster's counties** on, the twelve counties with
 the most roster agencies are topics too, named from Intel's county list: what an agency there should look at in its market, with no
-figure, linking to the county report and the market report.
+figure, linking to the county report.
 
 **What the model is asked for** (`prompt.mjs`, prompt version `content.1`, draft tier): one object with a title, an address
 (slug), a meta description, a summary, an outline, the body in Markdown, questions and answers, internal links (ids of the
@@ -1408,9 +1409,9 @@ plan, ad copy and replies (a request about both products carries both). Each pro
 reader and why it matters, stay inside what the catalog says (plan and module labels), never present Medicare data as confirmed referrals or call Intel's data public (the fact sheet's `dataMention`, refused in code as `public_data` on every surface),
 a tool as making anyone compliant or survey-ready, or a readiness score as a prediction, never promise savings, and quote none of its
 percentages. Each agent's checks allow the numbers a catalog states for text about its own product only; a catalog vouches for no claim.
-Prompt versions: `content.5`, `outreach.6`, `sales.8`, `social-plan.9`, `social-ads.6`, `social-reply.6`, `creative-concept.10`,
-`creative-variants.10`, `creative-vision.1`, `google-search.2`, `research.1`, the growth writer's `growth.8` (`growth.8-r` for its one repair pass and
-`growth.8-mN` when it writes with the owner-approved memo N), `growth-fit.3` and `sales-playbook.3`.
+Prompt versions: `content.5`, `outreach.6`, `sales.8`, `social-plan.10`, `social-ads.7`, `social-reply.7`, `creative-concept.11`,
+`creative-variants.11`, `creative-vision.1`, `google-search.2`, `research.1`, the growth writer's `growth.19` (`growth.19-r` for its one repair pass and
+`growth.19-mN` when it writes with the owner-approved memo N), `growth-fit.3` and `sales-playbook.7`.
 
 **The bigger picture, the founder and plain words (owner direction 2026-11-12).** Every writer on the team reads the fact sheet, so the
 owner's direction lives there (`server/agents/content/facts.mjs`, docs/GTM_FACTS.md):

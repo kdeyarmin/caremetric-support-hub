@@ -658,8 +658,10 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const used = new Set(overview.ads.filter(ad => ad.adsetId === rec.adsetId).flatMap(ad => {
       try { return [new URL(ad.copy?.link).searchParams.get('utm_content')]; } catch { return []; }
     }));
+    // Creative approved for a page the product no longer lists (Intel's market review, retired 2026-11-19) is never published again.
+    const pages = socialLinks(product).map(link => link.url);
     for (const asset of assets) {
-      if (used.has(asset.id) || !sameAdDestination(asset.landingUrl, destination)) continue;
+      if (used.has(asset.id) || !sameAdDestination(asset.landingUrl, destination) || !pages.some(url => sameAdDestination(url, asset.landingUrl))) continue;
       // Each platform's own lengths: LinkedIn creative is written longer than a Meta headline allows (content.mjs adCopyFromCreative).
       const copy = adCopyFromCreative(asset, { product, linkedin: linkedinAd });
       if (!copy) continue;

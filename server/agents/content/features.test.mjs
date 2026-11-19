@@ -58,6 +58,15 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(featuresText('advisors')).toBe('');
   });
 
+  it('describes Intel\'s free county report for every kind of organization, never the retired market review (owner direction 2026-11-19)', () => {
+    const features = intel.areas.flatMap(area => area.features);
+    const report = features.find(feature => feature.name === 'Free county report');
+    expect(report.does).toMatch(/choose a state and a county, enter an email address and get a PDF by email/);
+    expect(report.does).toContain('the nursing homes, home health agencies, hospices and personal care and assisted living homes located in the county');
+    expect(features.some(feature => /market review/i.test(feature.name))).toBe(false);
+    expect(featuresText('caremetric-intel')).not.toMatch(/type a home health or hospice CCN|market review/i);
+  });
+
   it('leads a planned brief with the part of Intel its text is about, else the next in turn, never twice in one plan', () => {
     expect(focusFor('caremetric-intel', 'Which competitors gained market share?', 0).title).toBe('Know the competition');
     expect(focusFor('caremetric-intel', 'Referrals and admissions by source', 0).title).toBe('Connect effort to outcomes');

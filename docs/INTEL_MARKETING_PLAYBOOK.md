@@ -166,7 +166,7 @@ honestly offer today.
 | Data-scale numbers as proof | Users, claims analyzed, provider counts | Name the publishers (CMS, NPPES, Census Bureau and the rest). Use counts only after they are added to the fact sheet (section 15). |
 | Customer results and logos | Percent lifts, hours saved, named customers | None are approved. Show the product instead: a real screenshot, a county snapshot printed from Medicare or Census data, the free county report, the trial in the reader's own county. |
 | "Request a demo" everywhere | A sales meeting is the next step | The 30-day free trial, the walkthrough at `/#how-it-works`, the free county report at `/county-report`, and written answers by email. Never a call, demo or meeting. |
-| A free personalized market review | A custom report that leads into a sales meeting | The free market report for the reader's own agency at `/market-review` (share and rank in its county, the county's largest agencies, three moves) and the free county report: both instant, self-serve and by email, never a meeting. New paid campaigns and county snapshot images send home health agencies and hospices to the market report (2026-11-16). Follow with the trial in that same county. |
+| A free personalized market review | A custom report that leads into a sales meeting | The free county report at `/county-report`, for every kind of organization: choose a state and a county, enter an email address, and the report (the county at a glance, the hospitals its residents use most, and the nursing homes, home health agencies, hospices and personal care and assisted living homes located there) is emailed as a PDF. Self-serve and by email, never a meeting, and nobody is asked for a CCN or an agency's name (owner direction 2026-11-19; the market review at `/market-review` is retired). New paid campaigns and county snapshot images send people to it. An agency the roster names also gets its own market report link in the team's email. Follow with the trial in that same county. |
 | A flagship annual report | Gated, interactive, announced by press release | Recurring posts on new CMS data Intel just loaded and on observances, plus county snapshot images. Section 15 suggests a quarterly public-data article. |
 | Tools that ride a new rule | An SSVI lookup after the hospice rule | Explainer articles on SSVI, HHVBP and TEAM that cite cms.gov and show the Intel page where the score appears. |
 | Pages by role and care setting | Separate pitches for each buyer | Use Intel's own pages: targeted marketing, territory analysis, referral measurement and the manager playbook. Match the page to the reader. |
@@ -176,7 +176,9 @@ honestly offer today.
 
 ## 7. Positioning and the five message pillars
 
-**Positioning:** For home health and hospice teams that win referrals in the field, CareMetric Intel is one workspace that shows who to
+**Positioning:** For healthcare teams that win referrals in the field (home health agencies, hospices, hospitals, nursing homes,
+personal care and assisted living homes and others; owner direction 2026-11-19: Intel is not just for home health agencies, and no
+message promotes one kind of organization over another), CareMetric Intel is one workspace that shows who to
 call on, keeps every relationship moving, and connects the team's work to the referrals it records. It was custom built by someone who
 uses it every day. Its data is public and clearly sourced, its prices are on the website, and the trial is free.
 
@@ -235,8 +237,8 @@ Each agent keeps its existing controls and approval steps. This section only say
   signals.
 - **The three touches to a home health agency or hospice** (owner direction 2026-11-17) are designed marketing emails in Intel's
   look. The writer writes only each one's short opening for that agency; the rest is written for its kind of business (a home health
-  agency reads about home health agencies, a hospice about hospices) and comes from the fact sheet. Touch 1: the agency's free market report first, then what Intel does in five points, the founder's story and the
-  free trial. Touch 2: a week of the work in Intel, the Founders Sale and the trial. Touch 3: a short close that leaves the report
+  agency reads about home health agencies, a hospice about hospices) and comes from the fact sheet. Touch 1: the agency's free market report first (Intel's free county report for an agency without its own), then what
+  Intel does in five points, the founder's story and the free trial. Touch 2: a week of the work in Intel, the Founders Sale and the trial. Touch 3: a short close that leaves the report
   with them. No price in any of them, and no card terms. [Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report) has
   the form and its checks.
 - **The three touches to a nursing home** are the same designed emails in a nursing home's words: its hospital sources, the homes

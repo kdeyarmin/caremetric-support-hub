@@ -43,7 +43,7 @@ describe('the Google search plan', () => {
 
   it('keeps the roster states in the Editor import instead of silently targeting the whole country', () => {
     const csv = editorCsv(checkGooglePlan(plan(), { factsKey: 'intel' }).plan, {
-      name: 'Intel search', finalUrl: 'https://www.caremetricintel.com/market-review', dailyBudgetCents: 500,
+      name: 'Intel search', finalUrl: 'https://www.caremetricintel.com/county-report', dailyBudgetCents: 500,
       states: [{ code: 'PA', name: 'Pennsylvania' }, { code: 'NJ', name: 'New Jersey' }],
     });
     const lines = csv.split('\n');
@@ -51,11 +51,11 @@ describe('the Google search plan', () => {
     expect(lines[2]).toMatch(/^Intel search,,,,,"New Jersey, United States",/);
     expect(csv).not.toMatch(/,United States(?:,|$)/);
     expect(csv).toContain('home health crm,Exact');
-    expect(lines.at(-1)).toContain('https://www.caremetricintel.com/market-review');
+    expect(lines.at(-1)).toContain('https://www.caremetricintel.com/county-report');
   });
 
   it('treats a successful response without a valid campaign receipt as unconfirmed, never as launched', async () => {
-    const campaign = { name: 'Intel search', dailyBudgetCents: 500, finalUrl: 'https://www.caremetricintel.com/market-review',
+    const campaign = { name: 'Intel search', dailyBudgetCents: 500, finalUrl: 'https://www.caremetricintel.com/county-report',
       plan: checkGooglePlan(plan(), { factsKey: 'intel' }).plan, live: true, endDate: '2026-11-30' };
     for (const response of [null, {}, { mutateOperationResponses: {} }, { mutateOperationResponses: [{}] },
       { mutateOperationResponses: [{ campaignResult: { resourceName: 'customers/0987654321/campaigns/55' } }] },
@@ -139,7 +139,7 @@ describe('the Google search plan', () => {
     const fetchImpl = vi.fn(async url => new Response(JSON.stringify(String(url).includes('oauth2') ? { access_token: 'ya29.token' }
       : { mutateOperationResponses: [{ campaignResult: { resourceName: 'customers/1234567890/campaigns/55' } }] })));
     const client = googleAdsClient({ clientId: 'client.apps', clientSecret: 'secret-0123456789', refreshToken: '1//refresh-token-0123456789', customerId: '1234567890', fetchImpl });
-    const campaign = { name: 'Intel flight', dailyBudgetCents: 500, totalBudgetCents: 5000, finalUrl: 'https://www.caremetricintel.com/market-review',
+    const campaign = { name: 'Intel flight', dailyBudgetCents: 500, totalBudgetCents: 5000, finalUrl: 'https://www.caremetricintel.com/county-report',
       plan: checkGooglePlan(plan(), { factsKey: 'intel' }).plan, live: true, startDate: '2026-11-16', endDate: '2026-11-25' };
     await client.createSearchCampaign(campaign);
     const operations = JSON.parse(fetchImpl.mock.calls.at(-1)[1].body).mutateOperations;

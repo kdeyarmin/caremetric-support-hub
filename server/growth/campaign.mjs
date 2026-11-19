@@ -13,8 +13,12 @@
  * recipient's business industry"; a hospice does not care how home health agencies rank). `campaignSettings` names the kinds:
  * a home health agency, a hospice, an organization that is both, an agency whose kind is not known, and a nursing home. Each reads
  * only about its own competitors and its own referral sources, from the fact sheet's row for that industry (facts.mjs
- * `industryUseCases`). A nursing home reads about the nursing homes it competes with, ranked the same way. It has no market report
- * (Intel's free reports cover home health and hospice), so its emails carry none.
+ * `industryUseCases`). A nursing home reads about the nursing homes it competes with, ranked the same way. It has no market report of
+ * its own (an agency's report covers home health and hospice agencies), so its emails carry none.
+ *
+ * An agency without its own report link is offered Intel's free county report instead (`reviewPage`; 2026-11-19, owner direction: the
+ * market review that asked for an agency's name or certification number was retired, and the county report, emailed for any state and
+ * county, serves every kind of organization).
  *
  * Every line here keeps the rules a written email keeps (draft.mjs): nothing an organization could read as its own rank, share or
  * rating, no card terms, the data named by its source without the word "public", no data file or year cited, no demo or call offered,
@@ -31,8 +35,8 @@ import { linkablePages, playbookFor } from './playbook.mjs';
 
 export const campaignProduct = 'caremetric-intel';
 
-/** The page where any agency gets its own market report (an agency with no roster record has no link of its own). */
-export const reviewPage = () => linkablePages(campaignProduct).find(page => /\/market-review\/?$/.test(page.url))?.url ?? null;
+/** Intel's free county report page, offered to an agency with no report link of its own (one with no roster record). */
+export const reviewPage = () => linkablePages(campaignProduct).find(page => page.id === 'intel-county-report')?.url ?? null;
 const trialPage = () => playbookFor(campaignProduct)?.nextStep?.url ?? null;
 const trialDays = () => facts.intel.trialDays;
 
@@ -56,7 +60,7 @@ export const dataFigures = Object.freeze([
  */
 export const campaignSettings = Object.freeze(['home_health', 'hospice', 'both', 'agency', 'nursing_home']);
 const settingOf = setting => (campaignSettings.includes(setting) ? setting : 'agency');
-/** Whether this kind of organization has a market report: Intel's reports cover home health and hospice agencies only. */
+/** Whether this kind of organization's emails carry a report: an agency's own market report covers home health and hospice agencies only. */
 export const hasReport = setting => settingOf(setting) !== 'nursing_home';
 
 // What changes with the kind of organization: what it is called, who it competes with, who does its field work and where its
@@ -107,7 +111,7 @@ function agencyCopy(setting) {
 }
 // A nursing home (facts.mjs `industryUseCases`): hospital-source research, the nursing homes in its territory ranked by Medicare
 // share with alerts (Intel ranks nursing homes since 2026-11-17, and the owner asked for the email to say so), its county's use and
-// supply of skilled nursing, and the same field work. Intel's free market report covers home health and hospice only, so none is offered.
+// supply of skilled nursing, and the same field work. An agency's own market report covers home health and hospice only, so none is offered.
 const nursingHomeCopy = {
   eyebrows: ['For your admissions and marketing team', 'From a list to a week of visits', 'A last note'],
   heading: 'What CareMetric Intel does for your nursing home, every day',
@@ -149,9 +153,9 @@ const shared = {
   offerText: 'Half off your plan\'s price for your first 12 months as a paying customer. It\'s applied on its own when your paid plan starts. No code needed.',
   weekCloseTitle: () => `Try it on your county, free for ${trialDays()} days`,
   weekCloseText: 'Your own county, your own team. No demo to sit through, and the prices are on our website.',
-  reportStill: { own: 'Your market report is still here:', page: 'Your free market report is one step away:' },
+  reportStill: { own: 'Your market report is still here:', page: 'Your free county report is one step away:' },
   lastHeading: 'What CareMetric Intel does',
-  reportLast: { own: 'Your market report:', page: 'Your free market report:' },
+  reportLast: { own: 'Your market report:', page: 'Your free county report:' },
   trialLead: () => `Whenever the time is right, start a ${trialDays()}-day free trial on one county:`,
 };
 export const campaignTouches = Object.freeze([1, 2, 3]);
@@ -263,8 +267,8 @@ export function campaignBlocks(campaign, { links = [] } = {}) {
   const message = { type: 'message', text: openingLines.join('\n').replace(/\n{3,}/g, '\n\n').trim(), links };
   const reportAction = reportUrl ? {
     type: 'action', url: reportUrl,
-    label: ownReport ? 'Open your market report' : 'Get your free market report',
-    note: ownReport ? 'Opens as a PDF. Nothing to sign up for.' : 'Enter your agency\'s Medicare certification number and it is emailed to you as a PDF.',
+    label: ownReport ? 'Open your market report' : 'Get your free county report',
+    note: ownReport ? 'Opens as a PDF. Nothing to sign up for.' : 'Choose your state and county and it is emailed to you as a PDF.',
   } : null;
   const trialButton = { label: 'Start your free trial', url: trialUrl };
   if (touch === 1) {
@@ -285,7 +289,7 @@ export function campaignBlocks(campaign, { links = [] } = {}) {
       { type: 'offer', eyebrow: shared.offerEyebrow.toUpperCase(), title: shared.offerTitle, text: shared.offerText },
       { type: 'panel', title: shared.weekCloseTitle(), text: shared.weekCloseText, button: trialButton,
         // The same words to every agency: an email never says or hints whether its report was opened (opens.mjs).
-        ...(reportUrl ? { link: { lead: ownReport ? shared.reportStill.own : shared.reportStill.page, label: ownReport ? 'Open your market report (PDF)' : 'Get your free market report', url: reportUrl } } : {}) },
+        ...(reportUrl ? { link: { lead: ownReport ? shared.reportStill.own : shared.reportStill.page, label: ownReport ? 'Open your market report (PDF)' : 'Get your free county report', url: reportUrl } } : {}) },
     ];
   }
   return [

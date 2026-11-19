@@ -36,7 +36,7 @@ import { agencyReportSubject, agencyTrialUrl } from './agency-campaign.mjs';
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.18';
+export const growthPromptVersion='growth.19';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric about one CareMetric product: outreach to a prospect, written as CareMetric's founder, or a message to a customer from its Account Manager. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -64,10 +64,10 @@ How to write so it gets read and answered:
 - End with one easy next step: a short lead-in line, then the link on its own line (the free trial, or the walkthrough page that shows the part that matters to them). No urgency, no "just checking in", no "hope this finds you well".
 - An email to a CareMetric Intel home health agency, hospice or nursing home is a marketing email with a layout of its own. When "touchPlan" says you write only its opening, your words are the first lines under the greeting, and the email adds the rest below them, in words written for that kind of organization (what the software does for it, your story, the offer, the free trial and its links). Write only what the plan asks for, in the plan's order, and never repeat what it says the email adds. Your first sentence is what the reader sees in their inbox beside the subject.
 - When "reportAccess" is set, use it for any mention of how to get the report. Say Medicare data can help the reader research potential outreach accounts. It cannot identify who referred patients to their agency.
-- A market report is the heart of the first email to a CareMetric Intel agency ("touchPlan" says how). Intel draws the report from CMS and Census data: where an agency stands among the agencies located in its county, the county's largest agencies, the hospitals its residents use, the highest-ranked physicians for outreach, its CMS ratings and up to three suggested moves. When "report" is set, CareMetric made this agency's own report, and its link is the one in "links" whose label starts "Free market report for"; otherwise the market report page in "links" lets the agency get its own. In a later touch you may point to the report again, as "touchPlan" says. Never state or hint at a figure, rank or rating from it; the reader opens it to see them. Call it a market report, never an assessment or audit of their performance.
+- A free report is the heart of the first email to a CareMetric Intel agency ("touchPlan" says how). When "report" is set, CareMetric made this agency's own market report from CMS and Census data (where the agency stands among the agencies located in its county, the county's largest agencies, the hospitals its residents use, the highest-ranked physicians for outreach, its CMS ratings and up to three suggested moves), and its link is the one in "links" whose label starts "Free market report for". Otherwise the email offers Intel's free county report, the page in "links" labelled "Free county report from CareMetric Intel": the reader chooses a state and county and gets a report on that county by email, built from Medicare and Census data, with the hospitals its residents use and the providers of every kind located there. Call that one a county report, never the agency's own report, and never ask the reader for the agency's name or any identifier. In a later touch you may point to the report again, as "touchPlan" says. Never state or hint at a figure, rank or rating from either report; the reader opens it to see them. Call it a market report or a county report, never an assessment or audit of their performance.
 - Short paragraphs of one to three sentences with a blank line between them, so it reads well on a phone.
 - One idea and one next step per message, with at most one question, unless "touchPlan" allows more (a second email may carry the report link and the trial link). Respect the length in "style".
-- Subject: three to seven words about their work or the problem, in sentence case, under 60 characters; specific and plain, never clickbait, "Re:" or "Fwd:". In a first outreach touch, leave the product name out of the subject. The subject of a first email built around a market report names the organization or its county and the market report, or asks the question the report answers (who leads the county, where the organization stands in it); it may run past seven words while it stays under 60 characters. In an email to a CareMetric Intel agency the subject is also the headline at the top of the email, so it must read well as one.
+- Subject: three to seven words about their work or the problem, in sentence case, under 60 characters; specific and plain, never clickbait, "Re:" or "Fwd:". In a first outreach touch, leave the product name out of the subject. The subject of a first email built around a report names the organization or its county and the report, or asks the question the report answers (who leads the county, which hospitals its residents use); it may run past seven words while it stays under 60 characters. In an email to a CareMetric Intel agency the subject is also the headline at the top of the email, so it must read well as one.
 - Outreach follows "touchPlan" for its touch number, so a later touch never repeats an earlier one. A customer message follows "play".
 - When "lead" is set, the reader asked for something on the website (what and when are in it): they know CareMetric, so thank them for it and follow up on it instead of introducing yourself as a stranger.
 - When "reask" is set, this is a single brief check-in months after the last message: follow "touchPlan" exactly.
@@ -121,25 +121,26 @@ export const productAmounts=factsKey=>new Set(amountsIn([...(factProducts[factsK
 export function draftLinks(product) {
   return linkablePages(product).map(page=>({label:page.label,url:page.url}));
 }
-/** Intel's free market review and county report, which serve home health and hospice agencies only: never offered to a nursing home. */
-export const agencyOnlyPage=url=>/^https:\/\/www\.caremetricintel\.com\/(?:market-review|county-report)\/?$/.test(url);
 
 /**
  * Why a model draft may not be offered, or null when it passes. Checks the words, the links and the citations, and that it offers no
  * demo, call, meeting or conversation.
  */
-export function draftProblem(answer, { product, sources, outreach, organization = null, extraLinks = [], withoutLinks = [], form = null, formLinks = null }) {
+export function draftProblem(answer, { product, sources, outreach, organization = null, extraLinks = [], form = null, formLinks = null }) {
   if (!answer || answer.needsHuman) return 'needs_human';
   if (!answer.subject.trim() || answer.subject.length>(form==='short'?60:150) || /[\r\n]/.test(answer.subject) || /^(?:re|fwd?):/i.test(answer.subject.trim())) return 'subject';
   if (!answer.body.trim() || answer.body.length>3500) return 'body';
   if (answer.citations.some(id=>!sources.some(s=>s.id===id)) || (outreach && !answer.citations.some(id=>id!=='county'))) return 'citation';
-  // The product's own pages (less any this organization may not be offered), and the agency's own report link when the draft was given one.
-  const allowed=new Set([...draftLinks(product).map(link=>link.url).filter(url=>!withoutLinks.includes(url)),...extraLinks]);
+  // The product's own pages, and the agency's own report link when the draft was given one. Intel's free county report serves every kind
+  // of organization (2026-11-19), so no page is withheld from a nursing home.
+  const allowed=new Set([...draftLinks(product).map(link=>link.url),...extraLinks]);
   // A tagged product link is read as the page it points to; a tag that is not well formed leaves the address as written, and it fails.
   const links=(untagLinks(answer.body).match(/https?:\/\/[^\s<>"]+/g)??[]).map(url=>url.replace(trailing,''));
   if (links.some(url=>!allowed.has(url))) return 'link';
   if (/[<>`]|\]\(|\*\*|^#{1,6}\s/m.test(answer.body)) return 'markup';
   const words=`${answer.subject}\n${answer.body}`.replace(/https?:\/\/[^\s<>"]+/g,' ');
+  // Nobody is asked for an agency's certification number or name to get a report (owner direction 2026-11-19).
+  if (offersRetiredReview(product,words)) return 'retired_page';
   // The first email built around a market report (2026-11-17, `reportTouchAngle`): the report's link and one question, nothing more.
   if (form==='short'&&shortFormProblem(answer.body,{words,links,reportLinks:formLinks??extraLinks})) return 'short_form';
   // The opening of an email with no report (a nursing home's, `nursingHomeAngles`): a few sentences and no link at all.
@@ -206,15 +207,28 @@ const dataCitation=/\([^()\n]*\b(?:19|20)\d\d\b[^()\n]*\)|\b20\d\d\s?Q[1-4]\b|\b
 export const citesDataFile=words=>dataCitation.test(String(words??''));
 
 /**
+ * Whether words about CareMetric Intel offer the free agency market review Intel retired on 2026-11-19 (owner direction: Intel is for
+ * every kind of organization, and nobody is asked for a CCN or an agency's name; `/market-review` now redirects to the county report): a
+ * link to its page, or words asking the reader for the agency's certification number or to search by its name. Intel's free report
+ * is the county report, which needs only a state, a county and an email address.
+ */
+const retiredReviewLink=/https:\/\/(?:www\.)?caremetricintel\.com\/market-review(?:[/?#\s]|$)/i;
+const asksForIdentifier=/\b(?:enter|type|use|give|send)\s+(?:us\s+)?(?:your|the|its|an?)?\s*(?:agency(?:'|’)s\s+)?(?:CMS\s+|Medicare\s+)?(?:certification number|CCN)\b|\bsearch(?:ing)?\s+(?:for\s+(?:your|the|an?)\s+agency\s+by\s+(?:its\s+)?name|by\s+(?:(?:your|the)\s+)?agency(?:(?:'|’)s)?\s+name)\b/i;
+export const offersRetiredReview=(product,text)=>product==='caremetric-intel'&&(retiredReviewLink.test(String(text??''))||asksForIdentifier.test(String(text??'')));
+
+/**
  * Why an email already written may not go out now, or null: the rules every draft passes today that an older draft may not have, read
  * again when it is claimed for sending (worker.mjs), because an approved email can wait days for its turn under the caps and send hours.
  * `trial_terms`: an Intel trial with "no credit card" (Intel's trial needs a card since 2026-11-14, content/validate.mjs);
  * `mentions_open`: as if we saw the reader open what we sent; `jargon`: Intel's internal "the book"; `card_terms`: a prospect email
  * (`purpose` 'marketing') that brings up the card an Intel trial needs, as every trial offer did until 2026-11-17; `public_data`: one
- * that calls Intel's data public, as the report's description did until the same day. Nothing else is
+ * that calls Intel's data public, as the report's description did until the same day; `retired_page`: an Intel email that links the
+ * retired market review page or asks for an agency's certification number or name (`offersRetiredReview`), as every first email to an
+ * agency without its own report did until 2026-11-19. Nothing else is
  * re-judged here: the numbers and claims were checked against the sources the draft was given, which the send step does not have.
  */
 export function outdatedWords({ product, subject, body, purpose = null }) {
+  if (offersRetiredReview(product,`${subject??''}\n${body??''}`)) return 'retired_page';
   const words=`${subject??''}\n${body??''}`.replace(/https?:\/\/[^\s<>"]+/g,' ');
   if (textProblems(words,{product:playbookFor(product)?.factsKey??null}).includes('trial_terms')) return 'trial_terms';
   if (mentionsOpen(words)) return 'mentions_open';
@@ -244,6 +258,7 @@ export const problemHints=Object.freeze({
   public_data:'Name where the data comes from (Medicare, CMS, the U.S. Census Bureau) without the word "public": write "Medicare data", not "public Medicare data" or "publicly available data". Do not call it proprietary, exclusive or licensed either.',
   card_terms:'Offer the free trial in plain words, without bringing up the credit card or how billing starts. Never say that no card is needed.',
   data_citation:'Do not cite a data file or its year: no year in brackets, no quarter and no file\'s name. Say "by CMS\'s count" or "from Medicare data" and leave the detail to the report.',
+  retired_page:'Never ask the reader for the agency\'s name or any identifier: Intel\'s free county report needs only a state, a county and an email address, and is emailed as a PDF.',
 });
 /**
  * Why the opening the writer wrote for a first email built around a market report is not that opening, or null: more than
@@ -304,7 +319,7 @@ const usableMemo=memo=>memo&&Number.isInteger(memo.version)&&memo.version>0&&typ
  * what the writer was given (the brief's writer part) and the rules the writer keeps, so it judges the email against its brief and never
  * scores it down for keeping a rule. Only the scores and the code are kept (`arms`), never text.
  */
-export const criticPromptVersion='critic.4';
+export const criticPromptVersion='critic.5';
 export const criticWeaknesses=Object.freeze(['none','generic_opening','about_sender','too_long','too_many_asks','unclear_ask','wrong_problem','no_reason_now','reads_as_template']);
 /** What each weakness means, as the reader is told it and as the rewrite names it. */
 export const weaknessMeanings=Object.freeze({
@@ -324,7 +339,7 @@ export const criticRules=Object.freeze([
   'Never offer a demo, a call, a meeting or a conversation: CareMetric is self-serve.',
   'Never state the agency\'s own share, rank, star ratings, scores or patient counts; a county figure stated about the county is allowed.',
   'Never name a physician, give an NPI or mention the SSVI.',
-  'A report link is the agency\'s own free market report from Medicare data; the email never says whether anyone opened it.',
+  'A report link is the agency\'s own free market report from Medicare data, or Intel\'s free county report, which the reader gets by email for any county; the email never says whether anyone opened it.',
   'No promise or guarantee, no competitor named, and no number the product\'s fact sheet or the agency\'s own sources do not state.',
   'The email names where the data comes from (Medicare, CMS, the Census Bureau) without calling it public: that is a rule, not a weakness.',
   'Never addressed to a person by name: the greeting and the signature are added later.',
@@ -395,10 +410,10 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   const briefed=work.kind==='outreach'&&brief&&typeof brief==='object'&&Number(o.touches??0)===0&&!o.memory?.reengagedAt&&!o.memory?.lead?brief:null;
   // An agency's own market report (report-link.mjs) is the first touch's next step when there is one.
   const offered=work.kind==='outreach'&&report?.url&&/^https:\/\/www\.caremetricintel\.com\/report\/[A-Za-z0-9_.-]+(?:\/view)?$/.test(report.url)?report:null;
-  // Intel's reports cover home health and hospice agencies only: a nursing home (owner decision 2026-11-16) gets its own emails, with no
-  // report and none of the agency-only report pages. Anything not clearly a nursing home keeps the agency's report-led email.
+  // An agency's own market report covers home health and hospice agencies only: a nursing home (owner decision 2026-11-16) gets its own
+  // emails, with no report in them. Intel's free county report serves every kind of organization (2026-11-19), so its page stays among a
+  // nursing home's links. Anything not clearly a nursing home keeps the agency's report-led email.
   const nursingHome=o.product==='caremetric-intel'&&!offered&&intelSetting({name:o.name,evidence:sources})==='nursing_home';
-  const withoutLinks=nursingHome?draftLinks(o.product).map(link=>link.url).filter(agencyOnlyPage):[];
   // The brief's county figure goes in only when the brief was written for the same kind of organization this email is to: a nursing home
   // never reads an agency's figures, nor an agency a nursing home's.
   const sameSetting=briefed&&(nursingHome?briefed.setting==='nursing_home':briefed.setting!=='nursing_home');
@@ -411,10 +426,11 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   // never read as a nursing home, whatever its name says.
   const said=o.product==='caremetric-intel'?prospectKind({name:o.name,evidence:sources,briefSetting:brief?.setting??null}):null;
   const kind=nursingHome?'nursing_home':said==='nursing_home'?'agency':said;
-  // The first leads with the market report (owner direction 2026-11-15): the agency's own report when there is one, otherwise the page
-  // where it can get its report. The writer writes its opening; what the software does and the trial follow it (campaign.mjs).
+  // The first leads with a free report (owner direction 2026-11-15): the agency's own market report when there is one, otherwise Intel's
+  // free county report (2026-11-19: the market review that asked for an agency's name or certification number was retired). The writer
+  // writes its opening; what the software does and the trial follow it (campaign.mjs).
   const reportLed=intelAgency&&outreachTouch===1;
-  const reviewPage=draftLinks(o.product).find(link=>/\/market-review\/?$/.test(link.url))?.url??null;
+  const reviewPage=draftLinks(o.product).find(link=>/^https:\/\/www\.caremetricintel\.com\/county-report\/?$/.test(link.url))?.url??null;
   const reportLink=offered?.url??reviewPage;
   const arms=messageArms(o,sources,{brief:briefed,reportLed});
   const shortForm=arms.form==='short';
@@ -438,15 +454,16 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   if(intelAgency&&reportLink) {
     const named=o.name?.trim()||'your agency';
     if(reportLed) {
-      fallback.subject=agencyReportSubject(o.name);
+      fallback.subject=offered?agencyReportSubject(o.name):'A free report on your county';
       fallback.body=`${offered?`I put together a free market report for ${named} from Medicare data. It compares local agencies and shows hospitals and clinicians to research.`
-        :`A free market report for ${named}, built from Medicare data, is one step away. It compares local agencies and shows hospitals and clinicians to research.`}\n${reportLink}`;
+        :`A free report on the county ${named} serves is one step away, built from Medicare and Census data and emailed to you as a PDF. It shows the hospitals the county's residents use and the providers of every kind located there.`}\n${reportLink}`;
     } else if(outreachTouch===2) {
-      fallback.subject='From your market report to a plan';
+      fallback.subject=offered?'From your market report to a plan':'From your county report to a plan';
       fallback.body=`When you plan outreach for ${named}, which accounts are worth a first visit and which need a follow-up? CareMetric Intel helps your team use Medicare data to research those accounts and log what happens next.`;
     } else {
-      fallback.subject='Your market report is still here';
-      fallback.body=`This is my last note. Keep the report for ${named} handy when you plan your next round of outreach.\n\nIf someone else handles marketing there, forward this to them, or reply with who it is and I will send it.`;
+      fallback.subject=offered?'Your market report is still here':'Your free county report is still here';
+      fallback.body=offered?`This is my last note. Keep the report for ${named} handy when you plan your next round of outreach.\n\nIf someone else handles marketing there, forward this to them, or reply with who it is and I will send it.`
+        :`This is my last note. The free county report is there whenever you plan your next round of outreach for ${named}.\n\nIf someone else handles marketing there, forward this to them, or reply with who it is.`;
     }
   }
   if(nursingOutreach) {
@@ -473,17 +490,17 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
     ?(o.events??[]).some(event=>event.kind==='report_viewed'):null;
   if(viewed!==null)arms.viewed=viewed?'yes':'no';
   // An agency's second email offers the trial, since its first held the report alone: after an open, how Intel turns a report into a
-  // plan; otherwise one page of the report and its link again (or the market report page, when the first email pointed there). Its
+  // plan; otherwise one page of the report and its link again (or the free county report page, when the first email pointed there). Its
   // third is a short close that leaves the report with it.
   const touchPlan=!outreach?null:reask?reaskAngle:lead?inboundAngle(touch):reportLed?(offered?reportTouchAngle:reviewTouchAngle)
     :intelAgency&&touch===2?(viewed?viewedTouchAngle:offered?unviewedTouchAngle:reviewFollowupAngle)
     :intelAgency&&touch>=3?reportCloseAngle:nursingOutreach?nursingHomeAngles[Math.min(touch,nursingHomeAngles.length)-1]:touchAngle(touch);
   const reportAccess = offered?.url.endsWith('/view') ? 'The agency’s report opens online with a PDF download.'
     : offered ? 'The agency’s report opens as a PDF.'
-    : 'Search by agency name and state or use the certification number. The report is emailed.';
+    : 'Intel’s free county report: the reader chooses the state and county and enters an email address, and the report is emailed as a PDF.';
   const input={
     kind:work.kind, product:product.name, style:quietStep?'Keep the body under eighty words.':shortForm||(nursingOutreach&&outreachTouch<3)?`Write two or three sentences, never more than ${shortFormLimits.words} words.`:(intelAgency||nursingOutreach)&&outreachTouch>=3?'Keep the body under seventy words.':variant==='concise'?'Keep the body under eighty words.':'Keep the body under one hundred twenty words.',
-    approvedClaim:approved, links:[...draftLinks(o.product).filter(link=>!withoutLinks.includes(link.url)),...(offered?[{label:offered.label,url:offered.url}]:[])], nextStep:book?.nextStep??null,
+    approvedClaim:approved, links:[...draftLinks(o.product),...(offered?[{label:offered.label,url:offered.url}]:[])], nextStep:book?.nextStep??null,
     ...(offered?{report:true}:{}),
     ...(intelAgency?{reportAccess}:{}),
     ...(outreach?{touch,maxTouches:reask?1:Number(o.policy?.max_touches??3),touchPlan,
@@ -503,7 +520,7 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   if(input.brief&&screenIdentifiers(JSON.stringify(input.brief)).flagged) delete input.brief;
   const draftSources=county?[...sources,county]:sources;
   if(county) input.sources=draftSources;
-  const checks={product:o.product,sources:draftSources,outreach,organization:o.name??null,extraLinks:offered?[offered.url]:[],withoutLinks,form:shortForm?'short':(nursingOutreach||intelAgency)?'opening':null,
+  const checks={product:o.product,sources:draftSources,outreach,organization:o.name??null,extraLinks:offered?[offered.url]:[],form:shortForm?'short':(nursingOutreach||intelAgency)?'opening':null,
     formLinks:shortForm&&reportLink?[reportLink]:null};
   const learned=outreach?usableMemo(memo):null;
   // The product's catalog is its own cached block after the instructions, so they stay one cache entry; the memo, when there is one, comes last.

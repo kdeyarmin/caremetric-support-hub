@@ -59,7 +59,7 @@ const reportCheckTimeoutMs = 20_000;
  * The report links the Marketing Manager may offer. `linkFor(opportunity)` is `{ label, url }` for a CareMetric Intel prospect whose
  * evidence carries its Medicare roster record, or null (another product, no record, no secret). `checkedLinkFor(opportunity)` is the
  * same link only once Intel has answered it with the PDF: an agency Intel has no report for (one Medicare's directory doesn't list
- * yet) gets null, so its email offers the market review page instead of a link that opens "No report for this link". The answer is
+ * yet) gets null, so its email offers Intel's free county report page instead of a link that opens "No report for this link". The answer is
  * kept per agency (`reportOpensMs`, `reportMissingMs`); a timeout or a refused request counts as no report.
  */
 export function reportLinks({ key = null, now = () => Date.now(), fetchImpl = globalThis.fetch } = {}) {

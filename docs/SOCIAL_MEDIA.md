@@ -73,10 +73,10 @@ to the Social Media Manager's list. While it is automatic:
 
 Once a month per marketed product, `ads.plan` proposes a LinkedIn campaign, a Meta retargeting campaign and a Google search campaign
 (`server/agents/ads/index.mjs`). Each waits for your approval and is created paused (LinkedIn as a draft) with no ads, and you add the
-first ad in the platform's ad manager. Since 2026-11-16 Intel's campaigns send people to the free market report for their own agency
-(`/market-review`: its share and rank in its county, the county's largest agencies and three moves, emailed as a PDF), not the county
-report; the report is for home health agencies and hospices, so the LinkedIn proposal says to use the Medicare roster's company list as
-the campaign's audience.
+first ad in the platform's ad manager. Since 2026-11-19 Intel's campaigns send people to its free county report (`/county-report`:
+any state and county, emailed as a PDF, about every kind of provider located there), for every kind of organization; Intel retired the
+agency market review that asked for an agency's name or certification number. The LinkedIn proposal's audience is the roster's states
+in Hospitals and Health Care, manager level or above, as for any product.
 
 **Budget flights (2026-11-16).** A thirtieth of a small monthly number a day is below every platform's least daily budget here
 (LinkedIn $10, Meta and Google $5), so at $50 a month no campaign could run. With **Settings → Paid ads → Run each month's campaign as a

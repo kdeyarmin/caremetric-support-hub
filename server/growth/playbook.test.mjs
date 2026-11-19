@@ -28,6 +28,21 @@ describe('sales playbook', () => {
     expect(linkablePages('breathe')).toEqual([]);
   });
 
+  it('offers Intel\'s free county report, never the retired market review, and names no kind of organization first (owner direction 2026-11-19)', () => {
+    const intel = salesPlaybook['caremetric-intel'];
+    expect(intel.pages).toContain('intel-county-report');
+    expect(intel.pages.some(id => /market-review/.test(id))).toBe(false);
+    expect(linkablePages('caremetric-intel').some(page => /market-review/.test(page.url))).toBe(false);
+    // Intel is for every kind of organization that markets to referral sources: home health is not put first.
+    expect(intel.territory).not.toMatch(/first/);
+    for (const kind of ['home health agencies', 'hospices', 'hospitals', 'nursing homes', 'personal care and assisted living homes']) expect(intel.territory).toContain(kind);
+    // A website lead already has the county report it asked for: no follow-up sends it to a page to enter more.
+    for (const step of inboundSequence.slice(0, 2)) expect(step.angle).toMatch(/If they asked for a county report, it was already emailed to them: never send them to a page to ask for it again or to enter anything more to get a report\./);
+    // No plan asks the reader for an agency's name or certification number.
+    for (const plan of [reportTouchAngle, reviewTouchAngle, viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle, reportCloseAngle, ...inboundSequence.map(step => step.angle), playbookText()])
+      expect(plan).not.toMatch(/market review|market-review|certification number|agency name/i);
+  });
+
   it('keeps CareBase discovery inside Pennsylvania and runs several new searches every day', () => {
     const start = new Date('2026-11-12T13:00:00Z');
     expect(discoveryQueriesPerDay).toBeGreaterThanOrEqual(4);
@@ -104,7 +119,7 @@ describe('sales playbook', () => {
   });
 
   it('gives a CareMetric Intel agency three marketing emails around its market report, and asks the writer for the opening of each (owner direction 2026-11-17)', () => {
-    expect(playbookVersion).toBe('sales-playbook.6');
+    expect(playbookVersion).toBe('sales-playbook.7');
     expect(shortFormLimits).toEqual({ words: 120, questions: 1 });
     // Six plans, each its own job.
     const plans = [reportTouchAngle, reviewTouchAngle, viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle, reportCloseAngle];

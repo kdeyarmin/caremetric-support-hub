@@ -377,7 +377,7 @@ describe('county snapshots', () => {
     expect(reasons).toEqual(['off', 'feed_not_configured', 'feed_unavailable']);
   });
 
-  it('pictures every county of the roster\'s states, each about one care setting, and sends agencies to their own market report', async () => {
+  it('pictures every county of the roster\'s states, each about one care setting, and sends readers to the free county report', async () => {
     const h = harness({ model: modelOf() });
     // Forest County has no agency located in it: it comes from Intel's county list. Erie has only hospices on the roster.
     h.store.creativeDataCountiesAll = vi.fn(async () => [{ countyFips: '42053', state: 'PA', agencies: 0, homeHealth: 0, hospice: 0, lastSetting: 'home_health' },
@@ -397,21 +397,21 @@ describe('county snapshots', () => {
     expect(done.result.snapshots).toBe(2);
     const opened = new Map(h.store.creativeBriefCreate.mock.calls.map(([item]) => item).filter(item => item.source === 'data.county').map(item => [item.facts.countyFips, item]));
     // Forest was pictured for home health last time, so hospice now; Erie has only hospices, so hospice.
-    expect(opened.get('42053')).toMatchObject({ facts: { setting: 'hospice', stat: '6', statLabel: 'hospices billed Medicare for Forest County, PA residents', landing: 'intel-market-review' },
+    expect(opened.get('42053')).toMatchObject({ facts: { setting: 'hospice', stat: '6', statLabel: 'hospices billed Medicare for Forest County, PA residents', landing: 'intel-county-report' },
       audience: 'Owners, administrators and marketers at hospices serving Forest County, PA' });
     expect(opened.get('42049')).toMatchObject({ facts: { setting: 'hospice', figure: 'hospice_top3_share', stat: '72%',
       statLabel: 'of the Medicare patients of Erie County, PA hospices went to the 3 largest' } });
     for (const item of opened.values()) expect(`${item.goal} ${item.angle}`).not.toMatch(/home health/i);
   });
 
-  it('sends a snapshot\'s drafts to the free market report, whatever page the concept chose', async () => {
+  it('sends a snapshot\'s drafts to the free county report, whatever page the concept chose', async () => {
     const snapshotBrief = { ...brief, source: 'data.county', facts: { stat: '9', statLabel: 'home health agencies billed Medicare for Forest County, PA residents', statSource: 'CMS, 2024',
-      dataYear: '2024', place: 'Forest County, PA', setting: 'home_health', landing: 'intel-market-review' } };
+      dataYear: '2024', place: 'Forest County, PA', setting: 'home_health', landing: 'intel-county-report' } };
     const { store, task: make } = setup();
     store.creativeBriefContext.mockResolvedValue({ brief: snapshotBrief, brandKit: fullKit, parent: null, learnings: [], recentHeadlines: [] });
     const withModel = creativeHandlers({ store, notifier: { send: vi.fn() }, model: modelOf(), settings: { dailyRenderCap: 40, videoProvider: 'internal' }, publicOrigin: 'https://help.caremetric.ai', log: () => {} });
     await withModel['creative.request'](make('creative.request', { payload: { briefId } }), { now });
-    expect(store.creativeDraftsSave.mock.calls[0][2].every(row => row.landingBase === 'https://www.caremetricintel.com/market-review')).toBe(true);
+    expect(store.creativeDraftsSave.mock.calls[0][2].every(row => row.landingBase === 'https://www.caremetricintel.com/county-report')).toBe(true);
   });
 
   it('draws every draft of a snapshot brief as the data\'s figure, and the model\'s own numbers block it', async () => {
@@ -434,12 +434,12 @@ describe('county snapshots', () => {
   // sheet does not state. It now checks a snapshot as the draft was checked, against its brief's data.
   it('renders a snapshot\'s stat image against its brief\'s data, and still blocks a figure that differs from it', async () => {
     const facts = { stat: '72%', statLabel: 'of the Medicare patients of Erie County, PA hospices went to the 3 largest', statSource: 'CMS post-acute utilization, 2024',
-      dataYear: '2024', place: 'Erie County, PA', setting: 'hospice', landing: 'intel-market-review' };
+      dataYear: '2024', place: 'Erie County, PA', setting: 'hospice', landing: 'intel-county-report' };
     const asset = { id: assetId, briefId, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static', layout: 'stat', width: 1080, height: 1080,
       variantLabel: 'A', hookType: 'curiosity', headline: 'How crowded is your county?', primaryText: 'See where your hospice stands in its county, from Medicare data.',
-      description: 'Free market report', cta: 'Get the report', altText: `County snapshot: ${facts.stat} ${facts.statLabel}. Source: ${facts.statSource}.`,
+      description: 'Free county report', cta: 'Get the report', altText: `County snapshot: ${facts.stat} ${facts.statLabel}. Source: ${facts.statSource}.`,
       overlay: { kicker: '', stat: facts.stat, statLabel: facts.statLabel, statSource: facts.statSource, quote: '', quoteSource: '', offerLine: '', checklist: [], screenshotId: '', beats: [] },
-      offerCode: null, brandKit: fullKit, landingUrl: 'https://www.caremetricintel.com/market-review?utm_content=x' };
+      offerCode: null, brandKit: fullKit, landingUrl: 'https://www.caremetricintel.com/county-report?utm_content=x' };
     const changed = { ...asset, id: '33333333-3333-4333-8333-333333333333', overlay: { ...asset.overlay, stat: '73%' } };
     const { store, handlers, task: make } = harness({ claimed: [asset, changed] });
     store.creativeBriefContext.mockResolvedValue({ brief: { ...brief, source: 'data.county', facts }, brandKit: fullKit, parent: null, learnings: [], recentHeadlines: [] });

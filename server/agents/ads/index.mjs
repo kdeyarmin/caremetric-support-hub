@@ -14,7 +14,7 @@
  *   monthly number; each ends with its month. Where launching live is not possible (no approved creative that fits, too little of the
  *   month's number left, the month's last day, or the Google Ads API not set up), it falls back to the owner's way: created paused with
  *   no ads (or, for Google, emailed as an import file), and the owner is told.
- * - New Intel campaigns send people to the free market report for their own agency (intel-market-review), CareBase's to its free trial.
+ * - New Intel campaigns send people to Intel's free county report (intel-county-report), CareBase's to its free trial.
  * - `ads.conversions`, every quarter hour while "Report leads to the ad platforms" is on: a county report or trial lead that arrived from a
  *   Meta or LinkedIn ad click (its click ID) is reported to that platform once, by a hashed work email and the click. A lead without that
  *   platform's click ID is never sent to it.
@@ -55,9 +55,9 @@ export const adTargets = value => {
 
 export const adsFeature = 'platform.agents.ads.v1';
 const productNames = { carebase: 'CareBase', 'caremetric-intel': 'CareMetric Intel' };
-// Where new campaigns send people (2026-11-16): Intel's free market report for the reader's own agency (its share and rank in its county,
-// the county's largest agencies and three moves; the strongest reason for an agency to raise its hand), CareBase's free trial.
-const landing = { 'caremetric-intel': 'intel-market-review', carebase: 'carebase-signup' };
+// Where new campaigns send people: Intel's free county report (2026-11-19: any state and county, emailed as a PDF, about every kind of
+// provider located there; it replaced the market review, which asked for an agency's name or certification number), CareBase's free trial.
+const landing = { 'caremetric-intel': 'intel-county-report', carebase: 'carebase-signup' };
 
 export { sameAdDestination } from '../links.mjs';
 
@@ -444,10 +444,9 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           if (platform !== 'google') {
             const link = taggedUrl(page.url, { ...linkTags.social(platform === 'meta' ? 'facebook' : 'linkedin', product, 'ad', { paid: true }) });
             const where = statesWords();
+            // Intel's free county report serves every kind of organization (2026-11-19), so no product's audience is narrowed to agencies.
             const audience = platform === 'meta' ? `your website visitors (Custom Audience ${config().metaAudienceId}) in ${where}`
-              : product === 'caremetric-intel'
-                ? `people in ${where} in Hospitals and Health Care, manager level or above. The free market report is for home health agencies and hospices, so upload the Medicare roster company list (Growth → Medicare roster → Download) as the campaign's company list in Campaign Manager`
-                : `people in ${where} in Hospitals and Health Care, manager level or above (upload the roster company list in Campaign Manager to narrow it further)`;
+              : `people in ${where} in Hospitals and Health Care, manager level or above (upload the roster company list in Campaign Manager to narrow it further)`;
             const ad = slot.firstAd;
             const how = !onItsOwn(kind)
               ? `It is created ${pausedWords[platform]}: nothing runs or spends until you start it. It starts with no ads: add its first ad in ${managers[platform]} (your approved creative is on the Creative screen). Once an ad is running in it, the team's daily ad review can propose more.${flightNote(slot)}`

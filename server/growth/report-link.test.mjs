@@ -97,7 +97,10 @@ describe('agency report links', () => {
       if (touches === 0) expect(text).toContain('For hospice teams');
     }
     const fallback = await draftMessage({ opportunity, work, task: {} });
-    expect(fallback.body).toContain('Search by agency name and state');
+    // Without a report of its own, the agency is offered Intel's free county report: a state, a county and an email address.
+    expect(fallback.body).toContain('\nhttps://www.caremetricintel.com/county-report?');
+    expect(fallback.body).toContain('Get your free county report\nChoose your state and county. We’ll email the report as a PDF.');
+    expect(fallback.body).not.toMatch(/agency name|certification number|market-review/i);
     expect(readCampaign(fallback.body)).toMatchObject({ version: 2, ownReport: false });
   });
 
@@ -184,17 +187,22 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     expect((await second('You can try it free for 30 days. A credit card is required to start the trial:')).sent).toBeNull();
   });
 
-  it('sends an agency with no roster record to the page where it gets its own report', async () => {
+  it('sends an agency with no roster record to Intel\'s free county report, never asking for its name or certification number (owner direction 2026-11-19)', async () => {
     const web = { ...opportunity, evidence: [{ id: 'web-1', source_url: 'https://riverbend.example', observed_at: new Date().toISOString(), confidence: 'medium', claim: 'Riverbend Home Health serves Riverton County.' }] };
-    const model = reply('A free market report for Riverbend Home Health, built from Medicare data, is one step away. Enter your CMS certification number on this page and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/market-review\n\nDoes your team know which agencies lead Riverton County?', ['web-1']);
+    const model = reply('A free report on Riverton County, built from Medicare and Census data, is one step away. Choose the state and county and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/county-report\n\nDoes your team know which hospitals Riverton County residents use?', ['web-1']);
     const draft = await draftMessage({ opportunity: web, work, task: {}, model });
     expect(draft).toMatchObject({ modelGenerated: true, arms: { form: 'short' } });
     const input = JSON.parse(model.run.mock.calls[0][1].user);
     expect(input.touchPlan).toBe(reviewTouchAngle);
-    expect(input.touchPlan).toMatch(/put the market report page's link on its own line/);
-    expect(input.links.map(item => item.url)).toContain('https://www.caremetricintel.com/market-review');
+    expect(input.touchPlan).toMatch(/put the county report page's link on its own line/);
+    expect(input.reportAccess).toBe('Intel’s free county report: the reader chooses the state and county and enters an email address, and the report is emailed as a PDF.');
+    expect(input.links.map(item => item.url)).toContain('https://www.caremetricintel.com/county-report');
+    expect(input.links.map(item => item.url)).not.toContain('https://www.caremetricintel.com/market-review');
+    // The retired market review's page, or words asking for the agency's number, are refused.
+    expect(await draftMessage({ opportunity: web, work, task: {}, model: reply('A free market report for Riverbend Home Health is one step away:\nhttps://www.caremetricintel.com/market-review\n\nDoes your team know which agencies lead Riverton County?', ['web-1']) })).toBeNull();
+    expect(await draftMessage({ opportunity: web, work, task: {}, model: reply('A free report on Riverton County is one step away. Enter your CMS certification number on this page:\nhttps://www.caremetricintel.com/county-report\n\nDoes your team know which hospitals Riverton County residents use?', ['web-1']) })).toBeNull();
     // Its one link is that page: the trial's page in its place, or beside it, is refused.
-    expect(await draftMessage({ opportunity: web, work, task: {}, model: reply('A free market report for Riverbend Home Health is one step away:\nhttps://www.caremetricintel.com/\n\nDoes your team know which agencies lead Riverton County?', ['web-1']) })).toBeNull();
+    expect(await draftMessage({ opportunity: web, work, task: {}, model: reply('A free report on Riverton County is one step away:\nhttps://www.caremetricintel.com/\n\nDoes your team know which hospitals Riverton County residents use?', ['web-1']) })).toBeNull();
     // Its second email points to the page again and offers the trial.
     const second = reply('A different angle.', ['web-1']);
     await draftMessage({ opportunity: { ...web, touches: 1 }, work, task: {}, model: second });
@@ -202,7 +210,7 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     expect(reviewFollowupAngle).toMatch(/different angle/);
   });
 
-  it('gives a nursing home an email in a nursing home\'s own words, with no market report and none of the agency-only report pages (owner decisions 2026-11-16 and 2026-11-17)', async () => {
+  it('gives a nursing home an email in a nursing home\'s own words, with no market report, and never withholds the free county report from it (owner decisions 2026-11-16, 2026-11-17 and 2026-11-19)', async () => {
     const home = { ...opportunity, name: 'Sunrise Nursing & Rehabilitation Center',
       evidence: [{ id: 'web-1', source_url: 'https://sunrise.example', observed_at: new Date().toISOString(), confidence: 'medium', claim: 'Sunrise is a 120-bed nursing home in Riverton County.' }] };
     const opening = 'CareMetric Intel shows an admissions team which hospitals its county\'s residents use.\n\nAre your hospital relationships bringing the admissions you need?';
@@ -223,16 +231,19 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     // An opening that carries a link, or offers the trial itself, is not the opening: the email adds both.
     expect(await draftMessage({ opportunity: home, work, task: {}, model: reply(`${opening}\n\nhttps://www.caremetricintel.com/`, ['web-1']) })).toBeNull();
     expect(input.organization).toMatchObject({ name: 'Sunrise Nursing & Rehabilitation Center', setting: 'nursing home' });
+    // Intel's free county report serves every kind of organization (2026-11-19): it is among a nursing home's pages like any other
+    // organization's. The retired market review is offered to nobody.
     const offered = input.links.map(item => item.url);
+    expect(offered).toContain('https://www.caremetricintel.com/county-report');
     expect(offered).not.toContain('https://www.caremetricintel.com/market-review');
-    expect(offered).not.toContain('https://www.caremetricintel.com/county-report');
-    // A draft that links one anyway is refused; an agency may still be sent there.
+    // The first email's opening carries no link at all, the county report's included: the email's sections follow it.
+    expect(await draftMessage({ opportunity: home, work, task: {}, model: reply(`${opening}\n\nhttps://www.caremetricintel.com/county-report`, ['web-1']) })).toBeNull();
     const linked = reply('Get your free market report:\nhttps://www.caremetricintel.com/market-review', ['web-1']);
     expect(await draftMessage({ opportunity: home, work, task: {}, model: linked })).toBeNull();
     expect(draftProblem({ subject: 'Your market', body: 'See it:\nhttps://www.caremetricintel.com/market-review', citations: ['web-1'], needsHuman: false },
-      { product: 'caremetric-intel', sources: home.evidence, outreach: true, withoutLinks: ['https://www.caremetricintel.com/market-review'] })).toBe('link');
-    expect(draftProblem({ subject: 'Your market', body: 'See it:\nhttps://www.caremetricintel.com/market-review', citations: ['web-1'], needsHuman: false },
-      { product: 'caremetric-intel', sources: home.evidence, outreach: true })).not.toBe('link');
+      { product: 'caremetric-intel', sources: home.evidence, outreach: true })).toBe('link');
+    expect(draftProblem({ subject: 'Your county', body: 'See it:\nhttps://www.caremetricintel.com/county-report', citations: ['web-1'], needsHuman: false },
+      { product: 'caremetric-intel', sources: home.evidence, outreach: true, organization: home.name })).toBeNull();
   });
 });
 

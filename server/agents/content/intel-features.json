@@ -596,8 +596,8 @@
           "access": null
         },
         {
-          "name": "Free agency market review",
-          "does": "On the public site, anyone can type a home health or hospice CCN and get a PDF by email: the agency's Medicare patients, share and rank in its county and state, the largest local agencies and its CMS ratings.",
+          "name": "Free county report",
+          "does": "On the public site, anyone can choose a state and a county, enter an email address and get a PDF by email: the county at a glance (residents 65 and older, growth since 2020, Medicare beneficiaries and Medicare Advantage share), the hospitals the county's residents use most, and the nursing homes, home health agencies, hospices and personal care and assisted living homes located in the county.",
           "access": null
         }
       ]

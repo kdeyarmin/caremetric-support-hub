@@ -61,7 +61,7 @@ describe('the weekly social plan', () => {
     const h = harness({ model });
     const outcome = await h.handlers['social.plan'](task('social.plan'), { now });
     const request = model.run.mock.calls[0][1];
-    expect(request.promptVersion).toBe('social-plan.9');
+    expect(request.promptVersion).toBe('social-plan.10');
     // Each marketed product's published catalog follows the prompt (content/features.mjs).
     expect(request.system.slice(1)).toEqual(catalogBlocks(JSON.parse(request.user).products));
     expect(request.system.length).toBeGreaterThan(1);
@@ -317,7 +317,8 @@ describe('the daily ad review', () => {
     expect(idle.store.proposeAction).not.toHaveBeenCalled();
   });
 
-  it.each(['https://www.caremetricintel.com/market-review?offer=county', 'https://www.caremetricintel.com/articles/report'])('does not replace unsupported destination %s with a default page', async link => {
+  // The retired market review (2026-11-19) is no page of Intel's any more: an ad still pointing to it is never refreshed.
+  it.each(['https://www.caremetricintel.com/county-report?offer=county', 'https://www.caremetricintel.com/articles/report', 'https://www.caremetricintel.com/market-review'])('does not replace unsupported destination %s with a default page', async link => {
     const model = modelReturning({ variants: [] });
     const snapshot = { adsets: [{ id: '40', name: 'Report', active: true, dailyBudget: 2000 }],
       ads: [{ id: '50', adsetId: '40', active: true, copy: { link } }], current: [], previous: [] };
@@ -331,11 +332,11 @@ describe('the daily ad review', () => {
     const model = modelReturning({ variants: [{ angle: 'market', message: 'See referral patterns and agency market information in a report for your team.',
       headline: 'Your agency market report', description: 'Agency market information', callToAction: 'LEARN_MORE' }] });
     const snapshot = { adsets: [{ id: '40', name: 'Report', active: true, dailyBudget: 2000 }],
-      ads: [{ id: '50', adsetId: '40', active: true, copy: { link: 'https://www.caremetricintel.com/market-review/?utm_source=linkedin' } }], current: [], previous: [] };
+      ads: [{ id: '50', adsetId: '40', active: true, copy: { link: 'https://www.caremetricintel.com/county-report/?utm_source=linkedin' } }], current: [], previous: [] };
     const h = harness({ model, meta: metaOf({ adsOverview: vi.fn(async () => snapshot) }) });
     await h.handlers['social.ads'](task('social.ads'), { now });
     expect(h.store.proposeAction).toHaveBeenCalledTimes(1);
-    expect(new URL(h.store.proposeAction.mock.calls[0][0].input.link).pathname).toBe('/market-review');
+    expect(new URL(h.store.proposeAction.mock.calls[0][0].input.link).pathname).toBe('/county-report');
   });
 });
 
@@ -537,7 +538,7 @@ describe('approved creative from the Creative Director', () => {
   });
 
   it('keeps a report refresh on the report and finds matching creative after the first twenty', async () => {
-    const destination = 'https://www.caremetricintel.com/market-review';
+    const destination = 'https://www.caremetricintel.com/county-report';
     const meta = metaOf({ adsOverview: vi.fn(async () => ({
       adsets: [{ id: '40', name: 'Intel report', active: true, dailyBudget: 2000 }],
       ads: [{ id: '1', adsetId: '40', active: true, copy: { link: destination } }], current: [], previous: [],
@@ -550,6 +551,19 @@ describe('approved creative from the Creative Director', () => {
     expect(h.store.proposeAction.mock.calls[0][0].input.link).toBe(report.landingUrl);
     h.store.proposeAction.mockClear();
     h.store.creativeLiveAssets.mockResolvedValue([approvedAsset({ status: 'approved' })]);
+    const outcome = await h.handlers['social.ads'](task('social.ads'), { now });
+    expect(h.store.proposeAction).not.toHaveBeenCalled();
+    expect(outcome.result.skips).toMatchObject({ model_not_configured: 1 });
+  });
+
+  it('never publishes creative approved for the retired market review again, even to refresh an ad that still points to it (2026-11-19)', async () => {
+    const retired = 'https://www.caremetricintel.com/market-review';
+    const meta = metaOf({ adsOverview: vi.fn(async () => ({
+      adsets: [{ id: '40', name: 'Intel report', active: true, dailyBudget: 2000 }],
+      ads: [{ id: '1', adsetId: '40', active: true, copy: { link: retired } }], current: [], previous: [],
+    })) });
+    const h = harness({ meta, creative: { approved: vi.fn(async () => []) } });
+    h.store.creativeLiveAssets = vi.fn(async () => [approvedAsset({ status: 'approved', landingUrl: `${retired}?utm_source=meta&utm_medium=paid&utm_campaign=report` })]);
     const outcome = await h.handlers['social.ads'](task('social.ads'), { now });
     expect(h.store.proposeAction).not.toHaveBeenCalled();
     expect(outcome.result.skips).toMatchObject({ model_not_configured: 1 });

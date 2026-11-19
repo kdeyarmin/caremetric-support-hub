@@ -22,7 +22,7 @@ const plain = {
   2: 'Here\'s what a week of admissions work looks like in CareMetric Intel.\n\nHow does your team decide who to visit each week?',
   3: 'This is my last note. If someone else handles admissions there, forward this to them.',
 };
-// What a draft passes for one kind of organization: an agency's own report or the market report page; a nursing home has neither.
+// What a draft passes for one kind of organization: an agency's own report or Intel's free county report page; a nursing home has neither.
 const links = (touch, setting = 'agency', own = true) => ({ trialUrl: trial(touch), setting,
   ...(hasReport(setting) ? { reportUrl: own ? report : reviewPage(), ownReport: own } : { reportUrl: null, ownReport: false }) });
 const openingFor = (touch, setting, own = true) => (!hasReport(setting) ? plain[touch] : touch === 1 && !own ? openings[1].replace(report, reviewPage()) : openings[touch]);
@@ -49,9 +49,14 @@ describe('the marketing sections of an email about CareMetric Intel (email revie
     expect(third).toMatch(new RegExp(`^Your market report:\\n${report.replace(/[.]/g, '\\.')}\\n\\nWhat CareMetric Intel does\\n\\n- Finds every referral source in your counties, ranked from Medicare data\\.`));
     expect(third).toMatch(new RegExp(`Whenever the time is right, start a ${products.intel.trialDays}-day free trial on one county:\\n`));
     expect(copy.shortPoints).toHaveLength(3);
-    // An agency with no report of its own is sent to the page where it gets one.
-    expect(campaignBlock(2, links(2, 'home_health', false))).toContain(`Your free market report is one step away:\n${reviewPage()}`);
-    expect(campaignBlock(3, links(3, 'home_health', false))).toMatch(/^Your free market report:\n/);
+    // An agency with no report of its own is sent to Intel's free county report (2026-11-19: the market review is retired).
+    expect(reviewPage()).toBe('https://www.caremetricintel.com/county-report');
+    expect(campaignBlock(2, links(2, 'home_health', false))).toContain(`Your free county report is one step away:\n${reviewPage()}`);
+    expect(campaignBlock(3, links(3, 'home_health', false))).toMatch(/^Your free county report:\n/);
+    for (const setting of campaignSettings) for (const touch of campaignTouches) for (const version of [1, 2]) {
+      const block = campaignBlock(touch, { ...links(touch, setting, false), version }) ?? '';
+      expect(block, `${setting} ${touch} v${version}`).not.toMatch(/market-review|certification number|\bCCN\b|agency name/i);
+    }
     // Nothing to add without a trial link, for another touch, or (after an agency's first email) without the report's link.
     expect(campaignBlock(1, {})).toBeNull();
     expect(campaignBlock(4, links(1))).toBeNull();
@@ -174,7 +179,7 @@ describe('the marketing sections of an email about CareMetric Intel (email revie
     expect(first[3]).toMatchObject({ title: 'What CareMetric Intel does for your home health agency, every day', items: campaignCopy('home_health').featurePoints });
     expect(first[5]).toMatchObject({ text: founderQuote, name: founder.signOff[0], role: founder.signOff[1] });
     expect(first[6].button).toMatchObject({ label: 'Start your free trial', url: trial(1), quiet: true });
-    expect(blocksFor(1, 'home_health', false)[2]).toMatchObject({ label: 'Get your free market report', url: reviewPage(), note: 'Enter your agency\'s Medicare certification number and it is emailed to you as a PDF.' });
+    expect(blocksFor(1, 'home_health', false)[2]).toMatchObject({ label: 'Get your free county report', url: reviewPage(), note: 'Choose your state and county and it is emailed to you as a PDF.' });
     const second = blocksFor(2);
     expect(second.map(block => block.type)).toEqual(['message', 'cards', 'offer', 'panel']);
     expect(second[3]).toMatchObject({ button: { label: 'Start your free trial', url: trial(2) }, link: { lead: 'Your market report is still here:', label: 'Open your market report (PDF)', url: report } });

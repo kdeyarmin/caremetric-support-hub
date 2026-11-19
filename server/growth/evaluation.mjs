@@ -62,7 +62,7 @@ export async function evaluateGrowth(now = new Date()) {
     // link and at most one question, then what the software does and the trial, added by code. No prospect email names the card a
     // trial needs.
     const report = { label: 'Free market report for the agency', url: 'https://www.caremetricintel.com/report/synthetic.case' };
-    const reviewPage = 'https://www.caremetricintel.com/market-review';
+    const reviewPage = 'https://www.caremetricintel.com/county-report';
     const inside = 'It shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county\'s residents use most and the highest-ranked physicians for outreach.';
     const close = 'I run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nDoes it match what your team sees in the field?';
     const firstBody = `I put together a free market report for your agency from Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\n${inside}\n\n${close}`;
@@ -77,8 +77,10 @@ export async function evaluateGrowth(now = new Date()) {
       check('first email over its length rejected', await first(`${firstBody}${' The report also lists the county\'s largest agencies and the hospitals its residents use.'.repeat(6)}`) === null);
       check('first email with a second question rejected', await first(`${firstBody} Which county matters most to you?`) === null);
       check('first email without its report link rejected', await first(firstBody.replace(`\n${report.url}`, '')) === null);
-      const review = await first(`A free market report for your agency, built from Medicare data, is one step away. Search by agency name and state to get it by email.\n${reviewPage}`, {});
-      check('first email without a roster report points to the market report page', review?.modelGenerated === true && review.arms?.form === 'short' && seen.at(-1)?.touchPlan === reviewTouchAngle);
+      const review = await first(`A free report on your county, built from Medicare and Census data, is one step away. Choose your state and county and it is emailed to you as a PDF.\n${reviewPage}`, {});
+      check('first email without a roster report points to the free county report page', review?.modelGenerated === true && review.arms?.form === 'short' && seen.at(-1)?.touchPlan === reviewTouchAngle);
+      // Intel retired its market review on 2026-11-19: nobody is asked for an agency's certification number or name to get a report.
+      check('first email asking for the agency\'s certification number rejected', await first(`A free report on your county is one step away. Enter your agency's CMS certification number and it is emailed to you as a PDF.\n${reviewPage}`, {}) === null);
       const second = body => draftMessage({ opportunity: { ...base, touches: 1 }, work, task: {}, model: capture({ ...firstDraft, subject: 'The hospitals your county uses', body }), report });
       const trial = `You can try it free for 30 days on one county:\n${playbookFor(product).nextStep.url}`;
       const followup = await second(`One part of the report shows hospitals your county's residents use. Does your team plan its week around them?`);

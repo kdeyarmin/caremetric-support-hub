@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allowedHost, officialSources, products } from './facts.mjs';
+import { allowedHost, officialSources, productPageIds, productPages, products } from './facts.mjs';
 import { backlogProblems, chooseTopic, countyTopic, queryMatches, quarterTag, rewriteAfterDays, topics } from './topics.mjs';
 import { numbersIn } from './validate.mjs';
 
@@ -100,15 +100,24 @@ describe('choosing the next topic', () => {
 });
 
 describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
-  it('puts Intel\'s free market report first in every Intel article\'s suggested pages', () => {
-    for (const item of topics.filter(entry => entry.product === 'intel')) expect(item.links[0], item.key).toBe('intel-market-review');
-    for (const item of topics.filter(entry => entry.product !== 'intel')) expect(item.links, item.key).not.toContain('intel-market-review');
+  it('puts Intel\'s free county report first in every Intel article\'s suggested pages, once, and never the retired market review', () => {
+    for (const item of topics.filter(entry => entry.product === 'intel')) {
+      expect(item.links[0], item.key).toBe('intel-county-report');
+      expect(item.links.filter(id => id === 'intel-county-report'), item.key).toHaveLength(1);
+    }
+    for (const item of topics.filter(entry => entry.product !== 'intel')) expect(item.links, item.key).not.toContain('intel-county-report');
+    // Intel retired its market review (owner direction 2026-11-19): no topic, and no product page, offers it.
+    for (const item of topics) expect(item.links.some(id => /market-review/.test(id)), item.key).toBe(false);
+    expect(productPageIds).not.toContain('intel-market-review');
+    expect(productPages.some(page => /market-review/.test(page.url))).toBe(false);
   });
 
-  it('makes a county topic from a roster county, with no figure, pointing to the county and market reports', () => {
+  it('makes a county topic from a roster county, with no figure, pointing to the county report', () => {
     const lancaster = countyTopic({ countyFips: '42071', state: 'PA', name: 'Lancaster County' });
     expect(lancaster).toMatchObject({ key: 'county-42071', product: 'intel', slug: 'home-health-hospice-lancaster-county-pa',
-      title: 'Home health and hospice in Lancaster County, PA: what to look at in the market', links: ['intel-county-report', 'intel-market-review', 'intel-home'] });
+      title: 'Home health and hospice in Lancaster County, PA: what to look at in the market', links: ['intel-county-report', 'intel-home'] });
+    expect(lancaster.angle).toContain('Intel\'s free county report');
+    expect(lancaster.angle).not.toMatch(/market report|public/);
     expect(backlogProblems([lancaster])).toEqual([]);
     expect(lancaster.facts.flatMap(numbersIn)).toEqual([]);
     expect(countyTopic({ countyFips: '22071', state: 'LA', name: 'Orleans Parish' })).toMatchObject({ slug: 'home-health-hospice-orleans-parish-la', title: 'Home health and hospice in Orleans Parish, LA: what to look at in the market' });

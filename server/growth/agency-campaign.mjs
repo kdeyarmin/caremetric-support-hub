@@ -59,10 +59,11 @@ function content(touch, { setting, trialUrl, reportUrl, ownReport }) {
   const offer = products.intel.offers.find((item) => item.startsWith('Founders Sale: '));
   const offerTitle = offer?.match(/^Founders Sale: (\d+% off) eligible subscription charges for the first (\d+ months)/);
   const trial = { label: `Start your ${trialDays}-day free trial`, url: trialUrl };
-  const report = { label: ownReport ? 'Open your market report' : 'Find your agency report', url: reportUrl };
+  // Without a report of its own, the agency is offered Intel's free county report (2026-11-19): a state, a county and an email address.
+  const report = { label: ownReport ? 'Open your market report' : 'Get your free county report', url: reportUrl };
   const note = ownReport
     ? (reportUrl.endsWith('/view') ? 'Read online or download a PDF.' : 'Opens as a printable PDF.')
-    : 'Search by agency name and state. We’ll email your report.';
+    : 'Choose your state and county. We’ll email the report as a PDF.';
   if (touch === 1) return {
     heading: words.title,
     points: [['Know your market', words.market], ['Plan your outreach', words.field], ['Review the results', words.results]],
