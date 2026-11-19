@@ -123,8 +123,8 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Social media | Read and answer comments on ads | Comments on running Meta ads are read and handled like a post's: an interested or pricing one is recorded and you are told, and replies follow the replies step (off by default; LinkedIn ad comments are not read; added 2026-11-17, stage 6) |
 | Paid ads | Most to spend on new campaigns a month | New LinkedIn, Meta and Google search campaigns are proposed only while it is set (Intel's send agencies to the free market report for their own agency); after you hand "Ad campaign launch" over, the campaigns that start on their own share it and never pass it together |
 | Paid ads | Run each month's campaign as a short flight | The month's number spent in one campaign over about this many days (3 to 30), never below the platform's least daily budget, ending on its own; empty spreads each campaign a thirtieth a day ([Social media](SOCIAL_MEDIA.md#new-campaigns-launched-on-their-own-2026-11-15)) |
-| Paid ads | Meta retargeting audience; Meta Pixel (dataset) id; LinkedIn conversion rule id | Where new Meta campaigns aim and where leads are reported |
-| Paid ads | Report leads to the ad platforms | Hashed-email lead reports to the platform whose ad was clicked |
+| Paid ads | Meta retargeting audience; Meta Pixel (dataset) id; LinkedIn conversion rule id; Google Ads conversion action id | Where new Meta campaigns aim and where leads are reported (Google: a click-import conversion action, [Social media](SOCIAL_MEDIA.md#new-campaigns-launched-on-their-own-2026-11-15)) |
+| Paid ads | Report leads to the ad platforms | Lead reports to the platform whose ad was clicked: a hashed email and the click ID to Meta and LinkedIn, the click ID alone to Google |
 | Paid ads | Google Ads customer id; Google Ads manager account id; Google Ads OAuth client id; Google Ads API version | The Google Ads API |
 | Paid ads | Bid on competitor names | Competitor names as search keywords only, never in ad text |
 

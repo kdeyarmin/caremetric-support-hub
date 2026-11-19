@@ -135,8 +135,26 @@ roster's. The findings are on the run's result as `google` (`read: false` with a
 when the read fails; nothing Google writes in an error is kept). A campaign with a disapproved ad, no enabled ad, not being served,
 no impression after two days of serving, or places other than the roster's states is told to you once per campaign and problem
 (attention `now`), to fix in Google Ads. `auto_tagging_off` (no `gclid` reaches the lead form; the landing page's `utm_` tags still
-do) and `conversions_not_tracked` are recorded on the result only. The Hub reports leads back to Meta and LinkedIn, not to Google, so
-Google's own conversion count depends on tracking set up in Google Ads.
+do) and `conversions_not_tracked` are recorded on the result only.
+
+**Reporting leads to Google (2026-11-19).** The first read-back found auto-tagging on and conversion tracking off, so Google could not
+count a lead its ad brought. With Settings → Paid ads → "Report leads to the ad platforms" on and **Google Ads conversion action id** set
+(migration `20261119120000_google_conversions.sql` adds the setting), the quarter-hourly `ads.conversions` run uploads each county
+report or trial lead of the last seven days that carries a `gclid` to that conversion action as an offline click conversion. It sends
+the `gclid`, when the lead happened, and the lead's id as the order id, so a resend is never counted twice. It sends no email or name;
+Meta and LinkedIn get a hashed email. Setting it up:
+
+1. In Google Ads, go to Goals → Conversions → New conversion action → Import → Manual import using API or uploads → Track conversions
+   from clicks. Name it (for example "Intel lead"), count **One**, and leave its value empty.
+2. Copy its id, the number after `ctId=` in the address of the conversion action's page, into Settings → Paid ads → Google Ads
+   conversion action id.
+
+Each run checks the conversion action once, before it sends a lead. If the action is missing, not enabled or not a click import, or
+Google refuses the Hub's access, nothing is sent and no lead is marked, and you are told once (attention `now`). Each lead is then sent
+once the problem is fixed, if it is within a week of the lead. A lead without a `gclid` is marked `skipped` (`no_click`), as for Meta and
+LinkedIn. A click Google cannot match yet, or a conversion action less than six hours old, waits for the next run (`waiting` on the
+result). A click Google will not take (an expired one, for example) is marked `failed` with Google's reason as a fixed code, for
+example `google_expired_event`.
 
 ## Approved video posts
 
