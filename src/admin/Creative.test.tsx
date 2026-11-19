@@ -163,8 +163,17 @@ describe("the Creative screen", () => {
     expect(await within(panel).findByRole("alert")).toBeTruthy();
     expect(client.uploadVideo).not.toHaveBeenCalled();
     fireEvent.click(within(panel).getByRole("checkbox", { name: /shows no patient, resident or personal information/ }));
+    client.uploadVideo.mockRejectedValueOnce(new TeamApiError(503, "Upload interrupted.")).mockRejectedValueOnce(new TeamApiError(503, "Upload interrupted."));
     fireEvent.click(within(panel).getByRole("button", { name: "Add to the library" }));
-    await waitFor(() => expect(client.uploadVideo).toHaveBeenCalledWith(expect.objectContaining({ product: "caremetric-intel", placements: ["meta.video_vertical", "linkedin.video_vertical"], attested: true, file })));
+    expect(await screen.findByText("Upload interrupted.")).toBeTruthy();
+    fireEvent.click(within(panel).getByRole("button", { name: "Add to the library" }));
+    await waitFor(() => expect(client.uploadVideo).toHaveBeenCalledTimes(2));
+    expect(client.uploadVideo.mock.calls[0][0].requestKey).toBe(client.uploadVideo.mock.calls[1][0].requestKey);
+    fireEvent.change(within(panel).getByRole("textbox", { name: "Name" }), { target: { value: "Updated commercial 9x16" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Add to the library" }));
+    await waitFor(() => expect(client.uploadVideo).toHaveBeenCalledTimes(3));
+    expect(client.uploadVideo.mock.calls[2][0].requestKey).not.toBe(client.uploadVideo.mock.calls[0][0].requestKey);
+    expect(client.uploadVideo).toHaveBeenLastCalledWith(expect.objectContaining({ product: "caremetric-intel", placements: ["meta.video_vertical", "linkedin.video_vertical"], label: "Updated commercial 9x16", attested: true, file }));
     expect(await screen.findByText(/Added to the library, approved for Instagram Reels and Facebook \(9:16\) and LinkedIn \(9:16\)/)).toBeTruthy();
   });
 

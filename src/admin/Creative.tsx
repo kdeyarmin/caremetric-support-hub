@@ -204,18 +204,18 @@ function VideoUpload({ client, busy, change }: { client: CreativeClient; busy: s
       <p>Your own MP4 (at most 60 MB and two minutes): 1080 x 1920 for Reels and vertical LinkedIn, 1080 x 1080 or 1080 x 1350 for feeds, 1920 x 1080 for Facebook and LinkedIn. Adding it approves it; posting it still waits for you.</p></div></div>
     <form onSubmit={event => { event.preventDefault(); void submit(); }}>
       <div className="creative-form-grid">
-        <label className="team-field">Product<select value={product} onChange={event => setProduct(event.target.value as CreativeProduct)}>
+        <label className="team-field">Product<select value={product} onChange={event => { setProduct(event.target.value as CreativeProduct); setError(null); key.current = null; }}>
           {creativeProducts.map(item => <option key={item} value={item}>{productLabels[item]}</option>)}</select></label>
-        <label className="team-field">Name<input value={label} maxLength={120} onChange={event => setLabel(event.target.value)} placeholder="30-second commercial" /></label>
+        <label className="team-field">Name<input value={label} maxLength={120} onChange={event => { setLabel(event.target.value); setError(null); key.current = null; }} placeholder="30-second commercial" /></label>
         <label className="team-field creative-wide">Video file<input type="file" accept="video/mp4" disabled={Boolean(busy)} onChange={event => void pick(event.target.files?.[0])} /></label>
       </div>
       {info && <p className="muted">{info.width} x {info.height}, {Math.round(info.durationSeconds)} seconds{file ? `, ${sizeLabel(file.size)}` : ""}.</p>}
       {info && (fits.length
         ? <fieldset className="creative-choices"><legend>Use it for</legend>
-          {fits.map(item => <label key={item.key}><input type="checkbox" checked={chosen.includes(item.key)} onChange={() => setChosen(list => list.includes(item.key) ? list.filter(value => value !== item.key) : [...list, item.key])} />{item.label}</label>)}
+          {fits.map(item => <label key={item.key}><input type="checkbox" checked={chosen.includes(item.key)} onChange={() => { setChosen(list => list.includes(item.key) ? list.filter(value => value !== item.key) : [...list, item.key]); setError(null); key.current = null; }} />{item.label}</label>)}
         </fieldset>
         : <p className="form-message form-error" role="alert">This video fits no placement. Use 1080 x 1920, 1080 x 1080, 1080 x 1350 or 1920 x 1080, at most two minutes long (one minute for Instagram Reels).</p>)}
-      <label className="creative-check"><input type="checkbox" checked={attested} onChange={event => setAttested(event.target.checked)} />This video shows no patient, resident or personal information.</label>
+      <label className="creative-check"><input type="checkbox" checked={attested} onChange={event => { setAttested(event.target.checked); setError(null); key.current = null; }} />This video shows no patient, resident or personal information.</label>
       {error && <p className="form-message form-error" role="alert">{error}</p>}
       <div className="button-row"><button type="submit" className="button button-primary button-small" disabled={Boolean(busy) || !file || !fits.length}><Upload size={14} aria-hidden="true" />{busy === "video" ? "Adding…" : "Add to the library"}</button></div>
     </form>
