@@ -3,7 +3,7 @@ import { HttpError, transaction, withSession } from './sms-auth.mjs';
 import { settingsCatalog, settingInput } from './hub-settings.mjs';
 import { socialConfig } from './agents/social/index.mjs';
 import { metaClient } from './agents/social/meta.mjs';
-import { linkedinClient } from './agents/social/linkedin.mjs';
+import { adAccountRoles, linkedinClient } from './agents/social/linkedin.mjs';
 
 export const socialConnectionsFeature = 'platform.social-connections.v1';
 export const connectionFields = {
@@ -79,6 +79,14 @@ export function connectionValue(provider, field, value) {
   }
   return settingInput(catalog.get(connectionFields[provider][field]), text);
 }
+
+// What the ads person's role on a LinkedIn ad account allows: only a Campaign manager, Account manager or Billing admin creates campaigns.
+const roleMessage = account => ({ role, canCreateCampaigns }) => {
+  const where = /^[0-9]{1,30}$/.test(String(account ?? '')) ? ` ${account}` : '';
+  if (!role) return { ok: false, message: `Ad account role: the person who authorized the advertising connection has no role on ad account${where}. In Campaign Manager → Account settings → Manage access, add them as a Campaign manager or Account manager, then reconnect.` };
+  if (!canCreateCampaigns) return { ok: false, message: `Ad account role: ${adAccountRoles[role]} on ad account${where}, which cannot create campaigns. In Campaign Manager → Account settings → Manage access, make them a Campaign manager or Account manager.` };
+  return { ok: true, message: `Ad account role: ${adAccountRoles[role]} on ad account${where}, which can create campaigns.` };
+};
 
 const failureMessage = (code, advertising = false) => {
   if (/token_invalid$/.test(code)) {
@@ -205,17 +213,20 @@ export function socialConnections({ pool, features, settings, env = process.env,
     const pageConfigured = provider === 'meta' ? client.configured.pages : client.configured.page;
     if (!pageConfigured && !client.configured.ads) return { ok: false, message: 'Save a Page or ad account ID and access token before checking the connection.' };
     const signal = AbortSignal.timeout(20000);
+    // LinkedIn: the role on the ad account of the person whose token the ads connection uses (review 2026-11-19), read only.
+    const roleCheck = provider === 'linkedin' && client.configured.ads && typeof client.adAccountRole === 'function';
     const checks = await Promise.all([
       ...(pageConfigured ? [{ label: 'Page', advertising: false, read: () => client.checkConnection({ signal, includeAds: false }) }] : []),
       ...(client.configured.ads ? [{ label: 'Advertising data', advertising: true, read: () => client.adsOverview({ signal }) }] : []),
-    ].map(async ({ label, advertising, read }) => {
-      try { await read(); return { ok: true, message: `${label} read access verified.` }; }
+      ...(roleCheck ? [{ label: 'Ad account role', advertising: true, read: () => client.adAccountRole({ signal }), describe: roleMessage(client.ids?.account) }] : []),
+    ].map(async ({ label, advertising, read, describe }) => {
+      try { const result = await read(); return describe ? describe(result) : { ok: true, message: `${label} read access verified.` }; }
       catch (error) { return { ok: false, message: `${label}: ${failureMessage(String(error?.code ?? ''), advertising)}` }; }
     }));
     return { ok: checks.every(check => check.ok), message: [
       ...checks.map(check => check.message),
       ...(!client.configured.ads ? ['Advertising is not configured.'] : []),
-      'Publishing permission, campaign-write permission, conversion reporting and ad delivery are not verified by this read-only check. No content was published and no campaign was created or changed.',
+      `Publishing permission, ${roleCheck ? 'the token\'s own ' : ''}campaign-write permission${roleCheck ? ' (rw_ads)' : ''}, conversion reporting and ad delivery are not verified by this read-only check. No content was published and no campaign was created or changed.`,
     ].join(' ') };
   }
   async function admin(token, input) {

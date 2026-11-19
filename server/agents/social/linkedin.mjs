@@ -46,6 +46,13 @@ const commentParts = value => {
 };
 
 const failure = (code, transient = false) => Object.assign(new Error('LinkedIn refused the request.'), { code, transient });
+/**
+ * LinkedIn's ad account roles (Ad Account Users API), with the words Campaign Manager uses. Only the last three may create and edit
+ * campaigns; a Creative manager makes ads only and a Viewer only reads, whatever permissions the token carries.
+ */
+export const adAccountRoles = Object.freeze({ VIEWER: 'Viewer', CREATIVE_MANAGER: 'Creative manager', CAMPAIGN_MANAGER: 'Campaign manager',
+  ACCOUNT_MANAGER: 'Account manager', ACCOUNT_BILLING_ADMIN: 'Billing admin' });
+export const campaignRoles = Object.freeze(['CAMPAIGN_MANAGER', 'ACCOUNT_MANAGER', 'ACCOUNT_BILLING_ADMIN']);
 function codeFor(status) {
   if (status === 401) return failure('linkedin_token_invalid');
   if (status === 403) return failure('linkedin_permission');
@@ -354,6 +361,20 @@ export function linkedinClient({
       if (!configured.page) throw failure('linkedin_not_configured');
       await get('posts', `author=${enc(org)}&q=author&count=1&sortBy=LAST_MODIFIED`, { signal });
       if (includeAds && configured.ads) await get(`adAccounts/${account}`, '', { signal, auth: adsAuth });
+    },
+
+    /**
+     * The role on this ad account of the person whose token the ads connection uses (review 2026-11-19: November's campaign creation was
+     * refused for permission, and nothing in the Hub could say which role the token held). Read only: LinkedIn's "find ad accounts by
+     * authenticated user". `{ role, canCreateCampaigns }`, role null when that person has no role on this account. It does not show
+     * whether the token carries rw_ads; LinkedIn reports that only when a write is refused.
+     */
+    async adAccountRole({ signal } = {}) {
+      needAds();
+      const data = await get('adAccountUsers', 'q=authenticatedUser', { signal, auth: adsAuth });
+      const mine = elements(data).find(item => item?.account === accountUrn);
+      const role = typeof mine?.role === 'string' && Object.hasOwn(adAccountRoles, mine.role) ? mine.role : null;
+      return { role, canCreateCampaigns: campaignRoles.includes(role) };
     },
 
     async recentPosts({ signal } = {}) {
