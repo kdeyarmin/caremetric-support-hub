@@ -14,6 +14,8 @@ const readLimit = 1_000_000;
 const idPattern = /^[0-9]{1,40}(?:_[0-9]{1,40})?$/;
 
 const failure = (code, transient = false) => Object.assign(new Error('Meta refused the request.'), { code, transient });
+/** Whether a platform's video is published by its upload (a Facebook Page video), so a later processing timeout is not a failure. */
+export const videoPublishedOnUpload = platform => platform === 'facebook';
 function codeFor(status, error) {
   const code = Number(error?.code);
   if (code === 190 || code === 102) return failure('meta_token_invalid');
@@ -263,13 +265,20 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
       throw failure('meta_invalid_request');
     },
 
-    /** Stage an unpublished Page video or Instagram Reel container. Its id is persisted before any later processing check. */
+    /**
+     * Upload a Page video, or stage an Instagram Reel container. Its id is persisted before any later processing check.
+     *
+     * A Page video is uploaded and published in one request (review 2026-11-19). Meta documents creating and publishing a Page video
+     * together, with the pages_manage_posts access the Page's photo posts already use. An unpublished Page video is documented only as
+     * an ads post, with no way to publish it later: the November 17 video uploaded and processed, then switching it to published was
+     * refused as meta_permission. So `publishVideo` sends nothing for Facebook; Meta shows the post once processing ends.
+     */
     async prepareVideo({ platform, videoUrl, message }, { signal } = {}) {
       let url;
       try { url = new URL(videoUrl); } catch { throw failure('meta_invalid_request'); }
       if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || !/^\/api\/creative\/a\/[0-9a-f]{64}\.mp4$/.test(url.pathname)) throw failure('meta_invalid_request');
       let created;
-      if (platform === 'facebook' && configured.pages) created = await mutateVideo(() => post(`${page}/videos`, { file_url: videoUrl, published: false, description: message }, { as: 'page', signal, videoUpload: true }));
+      if (platform === 'facebook' && configured.pages) created = await mutateVideo(() => post(`${page}/videos`, { file_url: videoUrl, published: true, description: message }, { as: 'page', signal, videoUpload: true }));
       else if (platform === 'instagram' && configured.instagram) created = await mutateVideo(() => post(`${instagram}/media`, { media_type: 'REELS', video_url: videoUrl, caption: message, share_to_feed: true }, { signal }));
       else throw failure('meta_not_configured');
       if (!metaId(created.id)) throw failure('meta_unconfirmed');
@@ -287,8 +296,11 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
       return { ready: state === 'ready', failed: ['error', 'expired', 'upload_failed'].includes(state) };
     },
 
-    /** Called once only after a ready state and a durable publishing intent. */
-    async publishVideo({ platform, videoId, message }, { signal } = {}) {
+    /**
+     * Called once only after a ready state and a durable publishing intent. A Reel is published here; a Page video was published by its
+     * upload (prepareVideo), so for Facebook this only returns its id, with no request to Meta.
+     */
+    async publishVideo({ platform, videoId }, { signal } = {}) {
       if (!metaId(videoId)) throw failure('meta_invalid_request');
       if (platform === 'instagram') {
         const published = await mutateVideo(() => post(`${instagram}/media_publish`, { creation_id: videoId }, { signal }));
@@ -296,8 +308,6 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
         return { id: published.id };
       }
       if (platform !== 'facebook') throw failure('meta_invalid_request');
-      const published = await mutateVideo(() => post(videoId, { published: true, description: message }, { as: 'page', signal }));
-      if (published.success !== true && published.id !== videoId) throw failure('meta_unconfirmed');
       return { id: videoId };
     },
 

@@ -1,4 +1,6 @@
 /** Durable, approved-only organic video publishing. Provider mutations are attempted once; processing reads may retry. */
+import { videoPublishedOnUpload } from './meta.mjs';
+
 const failure = code => Object.assign(new Error('The video could not be published.'), { code });
 const defer = () => failure('action_deferred');
 export const videoFeature = 'platform.agents.social-video.v1';
@@ -25,7 +27,8 @@ export async function publishApprovedVideo(execution, { store, publicOrigin, met
   }
   if (state.phase !== 'processing' || !state.providerId) throw failure('invalid_video');
   const started = Date.parse(state.createdAt);
-  if (!Number.isFinite(started) || now().getTime() - started > 60 * 60_000) throw failure('video_processing_timeout');
+  // A Facebook Page video was published by its upload: past the hour it may still appear on the Page, so that is not known to have failed.
+  if (!Number.isFinite(started) || now().getTime() - started > 60 * 60_000) throw failure(videoPublishedOnUpload(input.platform) ? 'social_unconfirmed' : 'video_processing_timeout');
   let status;
   try { status = await client.readVideo(state.providerId, { platform: input.platform }); }
   catch (error) { if (error?.transient) throw defer(); throw error; }

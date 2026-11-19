@@ -35,6 +35,27 @@ function fixture({ phase = 'new', providerId = null, publishedId = null, created
 }
 
 describe('durable approved video publishing', () => {
+  // Review 2026-11-19: a Facebook Page video is published by its upload, so past the hour it may still appear on the Page.
+  it('calls a Facebook video unconfirmed, not failed, when processing outlasts the hour, and still times out a LinkedIn one', async () => {
+    const late = new Date(moment.getTime() - 61 * 60_000).toISOString();
+    const facebook = fixture({ phase: 'processing', providerId: '900', createdAt: late, statuses: [false] });
+    await expect(facebook.run(action({ input: { ...action().input, platform: 'facebook' } }))).rejects.toMatchObject({ code: 'social_unconfirmed' });
+    expect(facebook.client.publishVideo).not.toHaveBeenCalled();
+    const linkedin = fixture({ phase: 'processing', providerId: 'urn:li:video:prepared', createdAt: late, statuses: [false] });
+    await expect(linkedin.run()).rejects.toMatchObject({ code: 'video_processing_timeout' });
+  });
+
+  it('takes a Facebook video through the same recorded stages, uploading it once', async () => {
+    const h = fixture({ statuses: [false, true] });
+    h.client.prepareVideo.mockResolvedValue({ id: '900' });
+    h.client.publishVideo.mockResolvedValue({ id: '900' });
+    const facebook = execution => action({ ...execution, input: { ...action().input, platform: 'facebook' } });
+    await expect(h.run(facebook())).rejects.toMatchObject({ code: 'action_deferred' });
+    expect(await h.run(facebook({ execution: 2 }))).toEqual({ id: '900' });
+    expect(h.client.prepareVideo).toHaveBeenCalledTimes(1);
+    expect(h.state()).toMatchObject({ phase: 'published', providerId: '900', publishedId: '900' });
+  });
+
   it('persists upload state, defers processing, and resumes without uploading the video again', async () => {
     const h = fixture({ statuses: [false, true] });
     await expect(h.run()).rejects.toMatchObject({ code: 'action_deferred' });
