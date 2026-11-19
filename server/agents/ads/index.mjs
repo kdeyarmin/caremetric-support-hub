@@ -132,6 +132,7 @@ export function adsConfig(env = {}, setting = null) {
     flightDays: Number.isInteger(flight) && flight >= leastFlightDays && flight <= 30 ? flight : 0,
     serverConversions: value('ads.server_conversions') === true,
     metaAudienceId: text('ads.meta_audience_id'), metaPixelId: text('ads.meta_pixel_id'), linkedinConversionId: text('ads.linkedin_conversion_id'),
+    googleConversionAction: text('ads.google_conversion_action'),
     competitorKeywords: value('ads.google_competitor_keywords') === true,
     // Reach (team review 2026-11-17, stage 6): new campaigns are limited to the roster's states.
     rosterStates: Array.isArray(value('growth.roster_states')) ? value('growth.roster_states') : [],
@@ -522,7 +523,59 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
             }
           }
         }
+        // Google (owner request 2026-11-19), once Settings → Paid ads → "Google Ads conversion action id" is set: the gclid alone.
+        const client = google();
+        if (/^[0-9]{1,20}$/.test(settings.googleConversionAction) && client.configured && typeof client.uploadClickConversion === 'function') {
+          await googleConversions(task, settings.googleConversionAction, client, counts, signal);
+        }
         return { result: counts };
+      }
+
+      // A refusal of the request itself, the same for every lead: stop for this run and record no lead, so each is sent once it is fixed.
+      const googleStops = new Set(['google_permission', 'google_token_invalid', 'google_not_configured', 'google_query_refused']);
+      const googleStopWords = {
+        missing: 'The conversion action id in Settings → Paid ads → Google Ads conversion action id is not one of your Google Ads account\'s conversion actions.',
+        not_enabled: 'The conversion action in Settings → Paid ads → Google Ads conversion action id is not enabled in Google Ads.',
+        not_click_import: 'The conversion action in Settings → Paid ads → Google Ads conversion action id does not import conversions from clicks. Create one in Google Ads under Goals → Conversions → New conversion action → Import → Manual import using API or uploads → Track conversions from clicks, and save its id there.',
+        google_permission: 'Google refused the Hub\'s access to the account. Check Settings → Paid ads.',
+        google_token_invalid: 'Google refused the Hub\'s sign-in. Check Settings → Paid ads.',
+      };
+      async function stopGoogle(task, reason, counts) {
+        counts.stopped = reason;
+        await notifier.send({ severity: 'warning', subject: 'Leads from Google ads are not being reported to Google',
+          body: `${googleStopWords[reason] ?? `Google refused the upload (${reason.replaceAll('_', ' ')}).`} Nothing was sent and no lead was marked, so each lead from a Google ad is reported once this is fixed, if it is within a week of the lead.`,
+          dedupeKey: `ads:conversions:google:${reason}`, agentKey: task.agentKey, taskId: task.id, attention: 'now' })
+          .catch(error => { if (error?.transient) throw error; log(JSON.stringify({ event: 'hub_ads_google_conversions_unsent', code: codeOf(error) })); });
+      }
+
+      /**
+       * Leads from Google search ads, reported to Google as offline click conversions (owner request 2026-11-19: the account auto-tags
+       * clicks but tracked no conversions). A county report or trial lead with a gclid goes to the conversion action with the gclid, when
+       * the lead happened and the lead's id as the order id; never an email or a name. A lead without a gclid is marked skipped, as for
+       * Meta and LinkedIn. The conversion action is checked once a run, only when a lead is to be sent. A click Google cannot match yet is
+       * left to the next run (`waiting`), until the lead is a week old.
+       */
+      async function googleConversions(task, actionId, client, counts, signal) {
+        let checked = null;
+        for (const lead of (await store.adsConversionCandidates('google', 25)) ?? []) {
+          signal?.throwIfAborted();
+          const click = lead.clickIds?.gclid;
+          if (!click) { await store.adsConversionRecord(lead.id, 'google', 'skipped', 'no_click'); counts.skipped += 1; continue; }
+          if (checked === null) {
+            try { checked = await client.conversionActionReady(actionId, { signal }); }
+            catch (error) { if (signal?.aborted || error?.transient) throw error; checked = { ready: false, reason: codeOf(error) }; }
+            if (!checked?.ready) { await stopGoogle(task, /^[a-z][a-z_]{0,59}$/.test(checked?.reason ?? '') ? checked.reason : 'google_error', counts); return; }
+          }
+          try {
+            await client.uploadClickConversion({ conversionActionId: actionId, gclid: click, happenedAt: Date.parse(lead.occurredAt), orderId: lead.id }, { signal });
+            await store.adsConversionRecord(lead.id, 'google', 'sent', null); counts.sent += 1;
+          } catch (error) {
+            if (signal?.aborted || error?.transient) throw error;
+            if (error?.retry === true || error?.code === 'google_unconfirmed') { counts.waiting = (counts.waiting ?? 0) + 1; continue; }
+            if (googleStops.has(error?.code)) { await stopGoogle(task, error.code, counts); return; }
+            await store.adsConversionRecord(lead.id, 'google', 'failed', codeOf(error)); counts.failed += 1;
+          }
+        }
       }
 
       return { 'ads.plan': plan, 'ads.conversions': conversions };
