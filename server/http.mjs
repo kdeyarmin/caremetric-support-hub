@@ -12,13 +12,14 @@ import { chatCookie } from './communications.mjs';
 import { bulkEmailActions } from './bulk-email.mjs';
 import { agentAdminActions } from './agents/admin.mjs';
 import { creativeAdminActions, videoUploadLimit } from './agents/creative/admin.mjs';
-import { welcomePagePolicy } from './customer-invitations.mjs';
+import { applicationImageHosts, welcomePagePolicy, welcomePageReferrerPolicy } from './customer-invitations.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
   'Strict-Transport-Security':'max-age=31536000; includeSubDomains','Referrer-Policy':'no-referrer',
   'Permissions-Policy':'camera=(), microphone=(), geolocation=(), payment=()',
-  'Content-Security-Policy':"default-src 'self'; connect-src 'self'; img-src 'self' data:; media-src 'self' blob: https://xgauehtwksmnoqhgqegm.supabase.co; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'",
+  // Images also from the applications' own hosts, for Billing's preview of a customer invitation email (server/email-layout.mjs).
+  'Content-Security-Policy':`default-src 'self'; connect-src 'self'; img-src 'self' data: ${applicationImageHosts}; media-src 'self' blob: https://xgauehtwksmnoqhgqegm.supabase.co; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'`,
 };
 async function jsonBody(req,limit=2000000) {
   if (req.headers['content-type']?.split(';')[0] !== 'application/json') throw new HttpError(415,'Use a JSON request.');
@@ -582,6 +583,7 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
       const welcome=/^\/welcome\/([A-Za-z0-9_-]{43})$/.exec(path);
       if(welcome && invitations) {
         res.setHeader('Content-Security-Policy',welcomePagePolicy);
+        res.setHeader('Referrer-Policy',welcomePageReferrerPolicy);
         res.setHeader('Cache-Control','no-store');
         res.setHeader('X-Robots-Tag','noindex, nofollow');
         const answer=async outcome=>{
