@@ -90,9 +90,9 @@ try {
 
   // The preview is the email the customer will get, and creates nothing.
   const preview = await ownerCommand({ action: 'preview', invitation: paidRecord });
-  assert.equal(preview.subject, 'Your invitation to CareMetric CareBase');
+  assert.equal(preview.subject, `Your CareMetric CareBase account for ${paidRecord.organization_name}`);
   assert.match(preview.html, /data-theme="carebase"/);
-  assert.match(preview.text, /50% off for your first 12 months/);
+  assert.match(preview.text, /Price: \$298\.50 per month for your first 12 months, then \$597\.00 per month/);
   assert.match(preview.text, /\$298\.50 per month for your first 12 months, then \$597\.00 per month/);
   assert.equal((await ownerCommand({ action: 'list' })).invitations.filter(row => row.organization_name === paidRecord.organization_name).length, 0);
 
@@ -177,7 +177,7 @@ try {
   assert.match(back.html, /Your plan is active/);
   assert.match(back.html, new RegExp(`https://cmcarebase\\.com/signup\\?hub_invite=${paidToken}`));
   assert.equal(sent.length, 2);
-  assert.equal(sent[1].subject, 'Your CareMetric CareBase plan is active: create your sign-in');
+  assert.equal(sent[1].subject, 'Create your CareMetric CareBase sign-in');
   assert.equal(inviteOf(sent[1]), paidToken);
   await invitations.page(paidToken);
   assert.equal(sent.length, 2, 'the sign-up email is sent once');

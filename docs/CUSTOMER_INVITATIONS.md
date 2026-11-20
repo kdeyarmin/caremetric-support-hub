@@ -25,11 +25,21 @@ match it.
 
 ## What the customer sees
 
-- **The invitation email**, in the application's theme (server/email-layout.mjs: CareBase's logo over its blue rule,
-  Breathe's navy band and accent rule, Intel's Emberline). It comes from the support sender with the application's name
-  ("CareMetric CareBase"), and replies reach the support inbox. It welcomes them, describes the application, lists their
-  plan, regular price, discount and price, says how paying works, and links to the welcome page. It says when the
+- **The invitation email** ("Your CareMetric CareBase account for <organization>"), in the application's theme
+  (server/email-layout.mjs: CareBase's logo over its blue rule, Breathe's navy band and accent rule, Intel's Emberline). It
+  comes from the support sender with the application's name ("CareMetric CareBase"), and replies reach the support inbox. It
+  welcomes them, describes the application in one paragraph, lists their plan and its price ("No charge", "No charge for
+  your first 3 months, then …", or what they pay), says how paying works, and links to the welcome page. It says when the
   invitation expires (Settings → Billing → Invitations last, 30 days unless you change it).
+  - **It reads as an account notice, not an offer.** Microsoft 365 filed the first production invitation as junk
+    (2026-11-20) with SPF, DKIM and DMARC all passing, so the email leaves out promotional wording ("complimentary",
+    "% off", "$0.00", a feature list) and leaves the full breakdown (regular price, discount) to the welcome page.
+  - **Every image and link in it is on help.caremetric.ai**, the domain it is sent from: the CareBase and Intel logos are
+    the Hub's own copies in `public/email/` (`EMAIL_IMAGE_ORIGIN` in server/email-layout.mjs). Replace a copy when the
+    application changes its own email image. The "plan is active" email's button is the one link elsewhere: it opens the
+    application's sign-up.
+  - Tell the customer to expect it. A first message from a new sender can still land in junk; each one opened or marked
+    *Not junk* helps the next.
 - **The welcome page** (`https://<hub>/welcome/<link>`, in the same look) shows the offer and one button. Opening it
   changes nothing, so a mail scanner that follows the link never accepts it.
   - **100% discount:** *Accept and activate your plan*. The Hub creates the subscription in Stripe itself, with the
@@ -38,7 +48,7 @@ match it.
   - **Below 100%:** *Accept and continue to secure payment* opens Stripe Checkout with the discount already applied.
     Cancelling there changes nothing; they can come back to the page and continue.
 - **"Your plan is active"**: once the plan is active the page shows **Create your sign-in**, and the same button is
-  emailed to them once. It opens the application's sign-up address (Settings → Billing) with `?hub_invite=<code>`; a
+  emailed to them once ("Create your CareMetric CareBase sign-in"). It opens the application's sign-up address (Settings → Billing) with `?hub_invite=<code>`; a
   CareBase invitation to a Train plan (entitlement key `train…`) opens CareBase's training sign-up (`product=train`), and a
   Breathe invitation names its plan (`plan=<entitlement key>`), which Breathe's form chooses for them.
 

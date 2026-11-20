@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { HttpError, transaction, withSession } from './sms-auth.mjs';
-import { CAREBASE_SITE, INTEL_SITE, INTEL_TAGLINE, SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, emailThemes, escapeHtml, renderEmail } from './email-layout.mjs';
+import { CAREBASE_SITE, INTEL_SITE, INTEL_TAGLINE, SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY, emailImagePaths, emailThemes, escapeHtml, renderEmail } from './email-layout.mjs';
 import { CHECKOUT_API_VERSION, StripeError } from './stripe.mjs';
 import { live } from './live.mjs';
 import {
-  discountLabel, invitationCommandSchema, isComplimentary, normalizedRecord, quantityLabel, regularPriceLabel, yourPriceLabel,
+  discountLabel, durationWords, invitationCommandSchema, isComplimentary, normalizedRecord, quantityLabel, regularPriceLabel, yourPriceLabel,
 } from '../src/billing/invitationProtocol.ts';
 
 /**
@@ -106,34 +106,56 @@ function payingWords(invitation, profile) {
     : 'You will pay securely through Stripe, CareMetric\'s payment provider.';
 }
 
-/** The invitation email: welcome, what the application does, the offer, and the button to the welcome page. */
+/**
+ * The emails say what the customer has in plain words, as an account notice does, and leave the offer's breakdown (regular price,
+ * discount, "complimentary") to the welcome page: Microsoft 365 filed the first production invitation as junk with SPF, DKIM and DMARC
+ * all passing, and promotional wording is one of the things such filters weigh.
+ */
+/** The plan's price in those words: "No charge", "No charge for your first 3 months, then $597.00 per month", "$298.50 per month". */
+function emailPriceWords(offer) {
+  if (!isComplimentary(offer)) return yourPriceLabel(offer);
+  return offer.discount_duration === 'forever' ? 'No charge' : `No charge ${durationWords(offer)}, then ${regularPriceLabel(offer)}`;
+}
+/** The plan as the emails show it: its name, the quantity of a per-unit price, and what it costs. */
+export function emailRows(invitation) {
+  const offer = offerOf(invitation);
+  return [['Plan', offer.plan_name], ...(offer.pricing_model === 'per_unit' ? [['Quantity', quantityLabel(offer)]] : []), ['Price', emailPriceWords(offer)]];
+}
+/** What the invitation email says about paying, in one sentence. */
+function emailPayingWords(offer, profile) {
+  if (isComplimentary(offer)) {
+    return offer.discount_duration === 'forever' ? 'No card is needed.'
+      : `No card is needed now. When the no-charge period ends, ${profile.short} invoices at the regular price are emailed to you.`;
+  }
+  return 'You will pay through Stripe, the payment service CareMetric uses.';
+}
+
+/** The invitation email: what CareMetric set up, what the application does, the plan, and the button to the welcome page. */
 export function invitationEmail(invitation, link) {
   const profile = invitationProfiles[invitation.app];
   const offer = offerOf(invitation);
   const free = isComplimentary(offer);
-  const subject = `Your invitation to ${profile.name}`;
+  const organization = invitation.organization_name;
+  const subject = `Your ${profile.name} account for ${organization}`;
   const expires = dateWords(invitation.expires_at);
-  const preheader = free ? `A complimentary ${profile.short} plan for ${invitation.organization_name} is ready to activate.`
-    : offer.discount_percent > 0 ? `${discountLabel(offer)} on ${offer.plan_name}. Accept by ${expires}.`
-      : `${offer.plan_name} for ${invitation.organization_name}. Accept by ${expires}.`;
+  const preheader = free ? `${profile.name} is set up for ${organization}. Accept the invitation to create your sign-in.`
+    : `${offer.plan_name} for ${organization}. Review and accept by ${expires}.`;
   const blocks = [
-    { type: 'paragraph', text: `CareMetric has invited ${invitation.organization_name} to ${profile.name}, and we are glad to welcome you.` },
+    { type: 'paragraph', text: free ? `CareMetric has set up ${profile.name} for ${organization}.` : `CareMetric has invited ${organization} to ${profile.name}.` },
     { type: 'paragraph', text: profile.summary },
-    { type: 'checklist', items: profile.highlights },
-    { type: 'paragraph', text: 'Your invitation includes:' },
-    { type: 'details', rows: offerRows(invitation) },
-    { type: 'callout', tone: free ? 'success' : 'info', text: payingWords(invitation, profile) },
+    { type: 'details', rows: emailRows(invitation) },
+    { type: 'paragraph', text: emailPayingWords(offer, profile) },
     ...(invitation.note ? [{ type: 'paragraph', text: 'A note from CareMetric:' }, { type: 'message', text: invitation.note }] : []),
-    { type: 'button', label: free ? 'Accept and activate your plan' : 'Review and accept your invitation', url: link },
+    { type: 'button', label: free ? 'Accept the invitation' : 'Review the invitation', url: link },
     { type: 'paragraph', text: 'What happens next:' },
     { type: 'steps', items: free
-      ? ['Accept the invitation on the page the button opens.', `Create your ${profile.short} sign-in.`, `Start using ${profile.short}: your plan is already active.`]
-      : ['Review your plan and price, then accept.', `Pay securely through Stripe${offer.discount_percent > 0 ? ', with your discount applied' : ''}.`, `Create your ${profile.short} sign-in and get started.`] },
-    { type: 'paragraph', text: `This invitation is for ${invitation.contact_email} at ${invitation.organization_name} and expires on ${expires}. Questions? Reply to this email or call ${SUPPORT_PHONE_DISPLAY}.` },
+      ? ['Accept the invitation on the page the button opens.', `Create your ${profile.short} sign-in.`]
+      : ['Review the plan and price, then accept.', 'Pay through Stripe.', `Create your ${profile.short} sign-in.`] },
+    { type: 'paragraph', text: `This invitation is for ${invitation.contact_email} at ${organization} and expires on ${expires}. Questions? Reply to this email or call ${SUPPORT_PHONE_DISPLAY}.` },
   ];
-  return { subject, ...renderEmail({ theme: profile.theme, brand: profile.name, title: subject, preheader, eyebrow: 'Your invitation',
+  return { subject, ...renderEmail({ theme: profile.theme, brand: profile.name, title: subject, preheader, eyebrow: 'Account setup',
     heading: `Welcome to ${profile.name}`, recipientName: greetingName(invitation.contact_name), blocks,
-    signature: [`The ${profile.name} team`], footer: [`You received this email because CareMetric invited ${invitation.organization_name} to ${profile.short}. If you were not expecting it, you can ignore it.`] }) };
+    signature: [`The ${profile.name} team`], footer: [`You received this email because CareMetric invited ${organization} to ${profile.short}. If you were not expecting it, you can ignore it.`] }) };
 }
 
 /**
@@ -153,28 +175,26 @@ export function signupLink(base, token, { app = null, entitlement = null } = {})
 export function readyEmail(invitation, signup) {
   const profile = invitationProfiles[invitation.app];
   const offer = offerOf(invitation);
-  const subject = `Your ${profile.name} plan is active: create your sign-in`;
+  const subject = `Create your ${profile.name} sign-in`;
   const blocks = [
-    { type: 'paragraph', text: isComplimentary(offer)
-      ? `${invitation.organization_name}'s ${offer.plan_name} plan is active, with nothing to pay${offer.discount_duration === 'forever' ? '' : ' during your complimentary period'}.`
-      : `Thank you for your payment. ${invitation.organization_name}'s ${offer.plan_name} plan is active.` },
-    { type: 'details', rows: offerRows(invitation) },
+    { type: 'paragraph', text: `${isComplimentary(offer) ? '' : 'Thank you for your payment. '}${invitation.organization_name}'s ${offer.plan_name} plan is active.` },
+    { type: 'details', rows: emailRows(invitation) },
     { type: 'paragraph', text: `One step is left: create your ${profile.short} sign-in. Use the button below so your new account is connected to this plan.` },
     { type: 'button', label: `Create your ${profile.short} sign-in`, url: signup },
-    { type: 'callout', tone: 'info', text: `This link is for ${invitation.contact_email} only. Please do not forward it.` },
+    { type: 'paragraph', text: `This link is for ${invitation.contact_email} only. Please do not forward it.` },
   ];
-  return { subject, ...renderEmail({ theme: profile.theme, brand: profile.name, title: subject, preheader: `One step left: create your ${profile.short} sign-in.`,
-    eyebrow: 'You are all set', heading: `Welcome to ${profile.name}`, recipientName: greetingName(invitation.contact_name), blocks,
+  return { subject, ...renderEmail({ theme: profile.theme, brand: profile.name, title: subject, preheader: `Your ${profile.short} plan is active. Create your sign-in to start.`,
+    eyebrow: 'Account setup', heading: `Welcome to ${profile.name}`, recipientName: greetingName(invitation.contact_name), blocks,
     signature: [`The ${profile.name} team`], footer: [`You received this email because ${invitation.organization_name} accepted CareMetric's invitation to ${profile.short}.`] }) };
 }
 
 // ---- The welcome page ---------------------------------------------------------------------------------------------------------------
 
-/** Where the applications' email and welcome-page images come from (server/email-layout.mjs): CareBase's logo, Intel's logo and fire. */
-export const applicationImageHosts = 'https://cmcarebase.com https://www.caremetricintel.com';
-
-/** The welcome page's own security policy: the shared one, plus the application's logo hosts and Stripe Checkout as a form's destination. */
-export const welcomePagePolicy = `default-src 'self'; connect-src 'self'; img-src 'self' data: ${applicationImageHosts}; style-src 'self' 'unsafe-inline'; script-src 'none'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://checkout.stripe.com`;
+/**
+ * The welcome page's own security policy: the shared one, plus Stripe Checkout as a form's destination. Its logos are the Hub's own copies
+ * (server/email-layout.mjs, emailImagePaths), so images come from the page's own origin only.
+ */
+export const welcomePagePolicy = `default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'none'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://checkout.stripe.com`;
 
 /**
  * The welcome page's referrer policy. The Hub's own is no-referrer, and under it a browser sends `Origin: null` with a form's POST, so
@@ -185,12 +205,12 @@ export const welcomePageReferrerPolicy = 'same-origin';
 
 function pageHeader(profile, p) {
   if (profile.theme === 'carebase') {
-    return `<header style="background:${p.card};border-bottom:3px solid ${p.brand};padding:20px 32px;"><img src="${CAREBASE_SITE}/brand/email-lockup-carebase.png" width="200" height="50" alt="CareMetric CareBase" style="display:block;"></header>`;
+    return `<header style="background:${p.card};border-bottom:3px solid ${p.brand};padding:20px 32px;"><img src="${emailImagePaths.carebaseLockup}" width="200" height="50" alt="CareMetric CareBase" style="display:block;"></header>`;
   }
   if (profile.theme === 'intel') {
-    return `<header style="background:${p.canvas};padding:28px 32px;display:flex;align-items:center;gap:20px;"><img src="${INTEL_SITE}/brand/caremetric-logo-reverse.png" width="76" height="63" alt="CareMetric Intel">
+    return `<header style="background:${p.canvas};padding:28px 32px;display:flex;align-items:center;gap:20px;"><img src="${emailImagePaths.intelLogo}" width="76" height="63" alt="CareMetric Intel">
 <div><p style="margin:0 0 6px;font-size:11px;letter-spacing:1.5px;color:${p.body};">CAREMETRIC INTEL</p><p style="margin:0;font-size:24px;line-height:30px;font-weight:600;color:${p.heading};">${escapeHtml(INTEL_TAGLINE)}</p></div></header>
-<img src="${INTEL_SITE}/brand/emberline-fire.png" alt="" width="600" height="100" style="display:block;width:100%;height:auto;border-bottom:1px solid ${p.brandDark};">`;
+<img src="${emailImagePaths.intelFire}" alt="" width="600" height="100" style="display:block;width:100%;height:auto;border-bottom:1px solid ${p.brandDark};">`;
   }
   return `<header style="background:${p.ink};background:linear-gradient(135deg,${p.ink} 0%,${p.brandDark} 100%);padding:24px 32px;display:flex;align-items:center;justify-content:space-between;">
 <span style="color:${p.onBrand};font-size:20px;font-weight:700;letter-spacing:-0.01em;">CareMetric Breathe</span><span style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,${p.cyan} 0%,${p.brand} 100%);"></span></header>

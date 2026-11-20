@@ -22,7 +22,7 @@ const client = (overrides: Partial<InvitationClient> = {}): InvitationClient => 
   list: vi.fn(async () => [invitation(), invitation({ id: '00000000-0000-4000-8000-0000000000c2', app: 'breathe', organization_name: 'Keystone Sleep', status: 'active',
     pricing_model: 'flat', quantity: 1, unit_label: '', plan_name: 'Launch', unit_amount: 79900, discount_percent: 100, discount_duration: 'forever', discount_months: null,
     pending_account_hint: 'a1b2c3', tenant_id: '00000000-0000-4000-8000-0000000000a2', subscription: 'sub_free' })]),
-  preview: vi.fn(async () => ({ subject: 'Your invitation to CareMetric CareBase', html: '<!DOCTYPE html><p>Preview</p>', text: 'Preview' })),
+  preview: vi.fn(async () => ({ subject: 'Your CareMetric CareBase account for Maple Grove', html: '<!DOCTYPE html><p>Preview</p>', text: 'Preview' })),
   create: vi.fn(async record => ({ invitation: invitation({ contact_email: record.contact_email, organization_name: record.organization_name }), delivery: 'sent' as const })),
   change: vi.fn(async () => ({ invitation: invitation(), delivery: 'sent' as const })),
   ...overrides,
