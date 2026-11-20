@@ -218,7 +218,7 @@ try {
   const freeMail = sent.at(-1), sentBefore = sent.length;
   assert.match(freeMail.html, /data-theme="breathe"/);
   assert.match(freeMail.text, /Hi Dr\. Sam Lee,/);
-  assert.match(freeMail.text, /nothing to pay and no card to enter/);
+  assert.match(freeMail.text, /Price: No charge\n\nNo card is needed\./);
   const freeToken = tokenOf(freeMail);
   const sessionsBefore = stripe.store.checkout_sessions.size;
   const activated = await invitations.accept(freeToken);
