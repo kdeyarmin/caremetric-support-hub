@@ -85,7 +85,7 @@ the start:
 | --- | --- | --- |
 | Billing | CareBase sign-up address for invitations | Where an invited CareBase customer creates their sign-in once their plan is active (default `https://cmcarebase.com/signup`). The Hub adds `?hub_invite=…` |
 | Billing | Breathe sign-up address for invitations | The same for Breathe (default `https://cmbreathe.com/breathe/signup`) |
-| Billing | CareMetric Intel sign-up address for invitations | The same for Intel (default `https://www.caremetricintel.com/signup`; check it is Intel's own sign-up page) |
+| Billing | CareMetric Intel sign-up address for invitations | The same for Intel (default `https://www.caremetricintel.com/login?signup=true`, Intel's sign-up) |
 | Billing | Invitations last | How many days an invitation link can be accepted, 1 to 90 (default 30). Sending it again starts a new period |
 
 The end-of-day summary (owner decision 2026-11-18: one email a day instead of a stream of updates;

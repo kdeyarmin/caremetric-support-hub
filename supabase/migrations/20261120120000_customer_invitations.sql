@@ -415,7 +415,8 @@ end;
 $$;
 
 -- An application's sign-up (POST /api/apps/trials). With the invitation's code, a new account is linked to the invitation's tenant
--- instead of starting a trial ('linked'), and a retry by the same account answers the same. Without it, a new account whose sign-up email
+-- instead of starting a trial ('linked'), and a retry by the same account answers the same; a code that is unknown, revoked or not yet
+-- paid for is refused ('invalid'), never an ordinary trial. Without it, a new account whose sign-up email
 -- matches an invitation activated in the last 60 days is held ('held') rather than given a second, separate trial: the owner links it
 -- from the invitation. Anything else, and an account that is already linked, starts the ordinary trial ('none').
 create or replace function private.customer_invitation_claim(p_product uuid, p_account text, p_email text, p_token_hash text) returns jsonb
@@ -444,8 +445,9 @@ begin
       end if;
       return jsonb_build_object('outcome', 'linked', 'tenant', private.customer_invitation_link(v_row.id, v_hash, v_hint, null, 'code'));
     end if;
-    -- Unknown, revoked or not yet paid for: the sign-up goes on as an ordinary one.
-    return jsonb_build_object('outcome', 'none');
+    -- Unknown, revoked, expired or not yet paid for: refused, never turned into an ordinary trial (an application that sends a code
+    -- has skipped its own trial terms, such as Intel's card).
+    return jsonb_build_object('outcome', 'invalid');
   end if;
   if v_linked is not null or p_email is null or char_length(p_email) > 320 then return jsonb_build_object('outcome', 'none'); end if;
   select * into v_row from private.customer_invitations

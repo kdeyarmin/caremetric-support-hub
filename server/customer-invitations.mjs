@@ -59,7 +59,7 @@ export const invitationProfiles = Object.freeze({
   }),
   'caremetric-intel': Object.freeze({
     name: 'CareMetric Intel', short: 'Intel', theme: 'intel', site: INTEL_SITE, siteLabel: 'caremetricintel.com',
-    signupSetting: 'billing.invite_intel_signup', defaultSignup: 'https://www.caremetricintel.com/signup',
+    signupSetting: 'billing.invite_intel_signup', defaultSignup: 'https://www.caremetricintel.com/login?signup=true',
     summary: 'Intel brings targeted marketing, marketing analysis and territory analysis from Medicare, Census and other healthcare data together with a marketing CRM that keeps outreach, follow-up and the referrals your organization records in one place.',
     highlights: Object.freeze([
       'Find the physicians, hospitals and facilities that matter in your territory, from Medicare data',

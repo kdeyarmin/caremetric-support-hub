@@ -860,6 +860,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         if (features.has(invitationsFeature)) {
           const claim = (await one(db, 'select private.customer_invitation_claim($1,$2,$3,$4) as c',
             [app.product_id, request.account, request.email, request.invite ? sha256(request.invite) : null])).c;
+          if (claim?.outcome === 'invalid') throw new HttpError(409, 'This invitation is not ready: it is unknown, revoked, expired or not paid for yet. No trial was started.');
           if (claim?.outcome === 'held') return { app, held: true, current: (await one(db, 'select private.billing_app_entitlements($1,$2) as e', [app.product_id, request.account])).e };
         }
         const tenant = (await one(db, 'select private.billing_app_tenant($1,$2,$3) as t', [app.product_id, request.account, request.name])).t;

@@ -58,7 +58,9 @@ match it.
 The application's sign-up must pass the code on to the Hub, so the new account joins the plan instead of starting a
 trial: read `hub_invite` from the sign-up address, keep it through sign-up, and add it as `invite` to the existing
 `POST /api/apps/trials` call ([Platform billing](PLATFORM_BILLING.md#post-apiappstrials)). The Hub links the account to the
-invitation's tenant and answers with the plan's entitlement; nothing else changes for the application.
+invitation's tenant and answers with the plan's entitlement; nothing else changes for the application. A code that is
+unknown, revoked, expired or not paid for yet is refused with 409 and starts no trial, so the application carries on with
+its ordinary sign-up (for Intel, card setup).
 
 Until an application passes it, a sign-up whose email matches an invitation that is already paid for or complimentary
 is **held**: the Hub starts no trial (so the customer is never billed twice) and the invitation shows *Signed up without
@@ -83,7 +85,7 @@ invitation cannot be revoked: cancel its subscription in **Subscriptions** inste
 
 Settings → Billing: **CareBase sign-up address for invitations** (`https://cmcarebase.com/signup`), **Breathe sign-up
 address for invitations** (`https://cmbreathe.com/breathe/signup`), **CareMetric Intel sign-up address for invitations**
-(`https://www.caremetricintel.com/signup`; check it is Intel's own sign-up page) and **Invitations last** (30 days). Email
+(`https://www.caremetricintel.com/login?signup=true`) and **Invitations last** (30 days). Email
 goes through the Hub's email service and support sender (Settings → Email); Stripe needs nothing new.
 
 ## Deployment

@@ -398,7 +398,8 @@ hub_invite value of the sign-up address>"` (43 characters). Once the invitation
 is paid for or complimentary, the new account is linked to the invitation's
 tenant and plan instead of starting a trial, and the answer is that plan's
 entitlement; a retry by the same account answers the same, and another account
-gets 400. Without the code, a new account whose sign-up email matches an
+gets 400. A code that is unknown, revoked, expired or not paid for yet gets 409
+and starts nothing: the application keeps its own sign-up path. Without the code, a new account whose sign-up email matches an
 activated invitation of the same application is held (`status: "none"`,
 `entitled: false`, no trial) until the owner links it from the invitation, so the
 customer is never billed twice. See [customer invitations](CUSTOMER_INVITATIONS.md#what-each-application-passes).

@@ -166,6 +166,18 @@ try {
   assert.equal(sent.length, 2, 'the sign-up email is sent once');
   await assert.rejects(ownerCommand({ action: 'revoke', id: listed.id, expected_version: listed.version }), error => error.status === 409, 'a paid invitation cannot be revoked');
 
+  // A code that is not paid for yet is refused and starts nothing.
+  const pendingInvite = await ownerCommand({ action: 'create', invitation: { ...paidRecord, contact_email: `pending.${suffix}@maple.test` }, request_key: key() });
+  const pendingToken = tokenOf(sent.at(-1));
+  const before = stripe.store.subscriptions.size;
+  await assert.rejects(billing.trial('Bearer ' + carebaseKey, { account: 'org-early-' + suffix, name: 'Early', email: null, plan: null, invite: pendingToken }),
+    error => error.status === 409, 'an unpaid invitation is refused');
+  await assert.rejects(billing.trial('Bearer ' + carebaseKey, { account: 'org-early-' + suffix, name: 'Early', email: null, plan: null, invite: 'z'.repeat(43) }),
+    error => error.status === 409, 'an unknown code is refused');
+  assert.equal(stripe.store.subscriptions.size, before, 'no trial is started for an unusable code');
+  assert.equal((await billing.entitlements('Bearer ' + carebaseKey, { account: 'org-early-' + suffix })).linked, false);
+  await ownerCommand({ action: 'revoke', id: pendingInvite.invitation.id, expected_version: pendingInvite.invitation.version });
+
   // CareBase's sign-up passes the code: the new account joins the plan, never a trial.
   const subscriptionsBefore = stripe.store.subscriptions.size;
   const account = 'org-maple-' + suffix;
@@ -186,10 +198,11 @@ try {
   const freeRecord = { app: 'breathe', contact_name: 'Dr. Sam Lee', contact_email: `sam.${suffix}@keystone.test`, organization_name: 'Keystone Sleep ' + suffix,
     price: proMonthly, quantity: 1, discount_percent: 100, discount_duration: 'forever', discount_months: null, note: '' };
   const free = await ownerCommand({ action: 'create', invitation: freeRecord, request_key: key() });
-  assert.match(sent[2].html, /data-theme="breathe"/);
-  assert.match(sent[2].text, /Hi Dr\. Sam Lee,/);
-  assert.match(sent[2].text, /nothing to pay and no card to enter/);
-  const freeToken = tokenOf(sent[2]);
+  const freeMail = sent.at(-1), sentBefore = sent.length;
+  assert.match(freeMail.html, /data-theme="breathe"/);
+  assert.match(freeMail.text, /Hi Dr\. Sam Lee,/);
+  assert.match(freeMail.text, /nothing to pay and no card to enter/);
+  const freeToken = tokenOf(freeMail);
   const sessionsBefore = stripe.store.checkout_sessions.size;
   const activated = await invitations.accept(freeToken);
   assert.equal(activated.redirect, `/welcome/${freeToken}`);
@@ -198,9 +211,9 @@ try {
   assert.equal(comp.collection_method, 'send_invoice');
   assert.equal(comp.status, 'active');
   assert.equal(comp.discounts[0].source.coupon.percent_off, 100);
-  assert.equal(sent.length, 4, 'the sign-up email follows at once');
-  assert.equal(inviteOf(sent[3]), freeToken);
-  assert.match(sent[3].text, /https:\/\/cmbreathe\.com\/breathe\/signup\?hub_invite=/);
+  assert.equal(sent.length, sentBefore + 1, 'the sign-up email follows at once');
+  assert.equal(inviteOf(sent.at(-1)), freeToken);
+  assert.match(sent.at(-1).text, /https:\/\/cmbreathe\.com\/breathe\/signup\?hub_invite=/);
   assert.equal((await invitations.accept(freeToken)).redirect, `/welcome/${freeToken}`, 'accepting again changes nothing');
   assert.equal([...stripe.store.subscriptions.values()].filter(row => row.metadata.hub_invitation === free.invitation.id).length, 1);
 
