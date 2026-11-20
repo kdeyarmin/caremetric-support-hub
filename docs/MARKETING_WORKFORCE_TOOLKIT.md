@@ -99,7 +99,7 @@ off. The team sells through self-serve pages, trials, guides, and written answer
 
 New readiness rows on the AI team page: Medicare roster prospecting (`prospect_roster`), named decision-makers (`decision_makers`),
 prospect research with web search (`prospect_deep_research`), posts for your own LinkedIn profile (`founder_posts`), county snapshot
-images (`county_snapshots`), new paid campaigns (`paid_campaigns`) and leads reported to the ad platforms (`ad_conversions`). Each
+images (`county_snapshots`, removed 2026-11-20 with the snapshots: [Creative Director](CREATIVE_DIRECTOR.md#county-snapshots-2026-11-13)), new paid campaigns (`paid_campaigns`) and leads reported to the ad platforms (`ad_conversions`). Each
 row names the setting or secret still missing. The morning brief's watchdog quotes the first missing step when an agent goes quiet.
 What each does and the order to turn them on: [AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md).
 

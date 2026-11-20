@@ -383,6 +383,17 @@ from the same budget. HeyGen renders are billed by HeyGen and logged in the AI u
 
 ## County snapshots (2026-11-13)
 
+**Retired on 2026-11-20** (owner decision: no marketing names one county unless it is shown only in that county). Every campaign the
+Hub creates targets the roster's whole states, the daily ad review puts approved images into those campaigns, and the Social Media
+Manager posts them on the company pages, so an image such as "41% of Medicare beneficiaries in Bucks County, PA are in Medicare
+Advantage" was shown across Pennsylvania and the other roster states. The daily plan opens no county snapshot, and "County snapshots
+a week" left the Settings page (`retiredSettings`). `20261120224500_county_snapshots_retired.sql` retired every county snapshot image,
+and every revision or refresh made from one, whatever its state (an approved or live image loses its public address, so no ad, campaign
+or post uses it again); withdrew their approvals still waiting and any ad, campaign or post proposed or approved with one and not yet
+carried out; and cancelled their open briefs. An ad already running keeps the copy of the image Meta or LinkedIn made: pause it there.
+The figure builders in `server/agents/creative/data.mjs` stay for an ad that runs only in its county; nothing calls them. What follows
+is how they worked.
+
 With Settings → Creative → County snapshots a week above 0 (default 3), the daily plan opens briefs for counties, none pictured in the last
 eight weeks, each about one Medicare or Census figure from Intel's county figures. Code fixes the figure, its label and its short source
 (`server/agents/creative/data.mjs`) and every variant is drawn with the stat layout; the model writes only the words around it. A draft

@@ -10,6 +10,12 @@
  * sends the reader to Intel's free county report (2026-11-19: the market review that asked for an agency's name or certification number
  * was retired; the county report serves every kind of organization). Counties are every county in the roster's states, the least recently
  * pictured first (creative_data_counties), so a county with no agency located in it is pictured too.
+ *
+ * Not drawn since 2026-11-20 (owner decision): no marketing names one county unless it is shown only in that county, and every campaign,
+ * ad and post reaches the roster's whole states, so a Bucks County figure was shown across Pennsylvania and beyond. The daily plan opens
+ * no county snapshot, "County snapshots a week" is retired, and 20261120224500_county_snapshots_retired.sql retired the images already
+ * drawn. The builders stay for an ad that runs only in its county; `withFacts` and `snapshotAltText` still draw and check any brief stored
+ * with a figure.
  */
 import { placeName } from '../places.mjs';
 

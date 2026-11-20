@@ -127,8 +127,7 @@ export function agentTeam({
       // A growth prospect's account brief, the email answered and whether the report was opened (Settings → Customer growth).
       salesContext, growthContext: pool && hasGrowthPriority(features) ? salesGrowthContextReader(pool) : null }),
     ...socialWork.handlers({ store, notifier, model: runtime, customerTextToAi, publicOrigin, marketed: marketedSource, log, creative: creativeLink, feed: growth?.roster?.feed ?? null }),
-    ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log, feed: growth?.roster?.feed ?? null,
-      states: growth?.roster?.states ?? null }),
+    ...creativeWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, publicOrigin, marketed: marketedSource, log }),
     ...adsWork.handlers({ store, notifier, model: runtime, meta: socialWork.meta, linkedin: socialWork.linkedin, social: socialWork.ads?.settings ?? {}, marketed: marketedSource, creative: creativeLink, publicOrigin, log }),
     ...scorecardHandlers({ store, notifier, publicOrigin, features, growth, ads: socialWork.ads, fetchImpl, searchConsoleSites, visitors: visitorMetrics ? input => visitorMetrics.read(input) : null, log,
       strategist: strategistDeclared(features) ? strategist : false, toolkit: toolkitNow, watchdogIdleDays }),
