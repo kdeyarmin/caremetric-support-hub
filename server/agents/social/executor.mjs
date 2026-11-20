@@ -122,7 +122,23 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       if (execution.autoApproved === true && !(typeof store?.actionTrusted === 'function' && await store.actionTrusted(execution.id, execution.execution ?? null) === true)) {
         throw failure('approval_required');
       }
-      const published = await careful(execution, () => li.publishMemberPost({ message: input.message }));
+      let published;
+      try {
+        published = await careful(execution, () => li.publishMemberPost({ message: input.message }));
+      } catch (error) {
+        // Review 2026-11-20: the founder posts of November 17 and 19 failed with linkedin_token_invalid and nobody was told. The personal
+        // "Share on LinkedIn" token has no renewal (LinkedIn's member tokens last 60 days), so a refused one is the owner's to replace:
+        // the post comes to paste on the profile, as for a refused Page post, and still fails here with LinkedIn's code.
+        if (settings.reach === true && ['linkedin_token_invalid', 'linkedin_permission'].includes(error?.code) && notifier) {
+          try {
+            await notifier.send({ severity: 'warning', subject: 'A post for your LinkedIn profile to paste: LinkedIn refused your personal token',
+              body: `LinkedIn refused your personal LinkedIn token (${error.code.replaceAll('_', ' ')}) when this approved post for your profile was due, so here it is to paste yourself. LinkedIn's personal tokens last 60 days: make a new one and save it on the LinkedIn connection card (Settings → Social media), and the next posts for your profile go out at their time slots again.`,
+              blocks: [{ type: 'paragraph', text: 'Paste this on your LinkedIn profile:' }, { type: 'message', text: input.message }],
+              dedupeKey: `social:linkedin:founder-paste:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId, attention: 'now' });
+          } catch { log(JSON.stringify({ event: 'hub_social_founder_paste_unsent', action_id: execution.id })); }
+        }
+        throw error;
+      }
       return { published: true, id: published.id, founder: true };
     },
 

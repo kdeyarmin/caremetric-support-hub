@@ -333,6 +333,30 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
     expect(sent.body).toContain('Reconnect LinkedIn (Settings → Social media)');
   });
 
+  // Review 2026-11-20: the founder posts of November 17 and 19 failed with linkedin_token_invalid, and nobody was told.
+  it('emails a post for the founder\'s profile LinkedIn refused to paste, says how to renew the personal token, and still fails it', async () => {
+    const founderMessage = 'Most agencies I talk to plan visits from memory. Writing down which referral sources you saw last month changes the week.';
+    const action = { id: 'f1', kind: 'social.founder_post', agentKey: 'social_manager', taskId: 't9', targetId: 'founder:2026-11-19:1',
+      input: { product: 'caremetric-intel', pillar: 'tip', message: founderMessage, scheduledFor: now().toISOString() } };
+    const memberRefusing = code => linkedinOf({ configured: { page: true, ads: true, member: true }, publishMemberPost: vi.fn(async () => { throw Object.assign(new Error('refused'), { code }); }) });
+    for (const code of ['linkedin_token_invalid', 'linkedin_permission']) {
+      const notifier = { send: vi.fn(async () => [{ channel: 'email', delivery: 'sent' }]) };
+      const executors = socialExecutors({ meta: metaOf(), linkedin: memberRefusing(code), settings: { reach: true }, notifier, now, log: () => {} });
+      await expect(executors['social.founder_post'](action)).rejects.toMatchObject({ code });
+      const sent = notifier.send.mock.calls[0][0];
+      expect(sent).toMatchObject({ severity: 'warning', attention: 'now', dedupeKey: 'social:linkedin:founder-paste:f1', taskId: 't9' });
+      expect(sent.blocks).toEqual([{ type: 'paragraph', text: 'Paste this on your LinkedIn profile:' }, { type: 'message', text: founderMessage }]);
+      expect(sent.body).toContain('LinkedIn connection card (Settings → Social media)');
+    }
+    // Any other failure, or without the feature, says nothing new.
+    for (const [code, settings] of [['linkedin_unavailable', { reach: true }], ['linkedin_token_invalid', {}]]) {
+      const notifier = { send: vi.fn(async () => []) };
+      const executors = socialExecutors({ meta: metaOf(), linkedin: memberRefusing(code), settings, notifier, now, log: () => {} });
+      await expect(executors['social.founder_post'](action)).rejects.toMatchObject({ code });
+      expect(notifier.send).not.toHaveBeenCalled();
+    }
+  });
+
   it('says nothing for any other failure, or without the feature', async () => {
     for (const [code, settings] of [['linkedin_unavailable', { reach: true }], ['linkedin_permission', {}]]) {
       const notifier = { send: vi.fn(async () => []) };
