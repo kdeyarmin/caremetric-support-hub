@@ -477,59 +477,79 @@ export function customerInvitations({ pool, stripe, mail, setting = () => null, 
       if (!invitation) return { status: 404, html: unknownInvitationPage() };
       return { status: 503, html: invitationPage(invitation, { token, notice: { tone: 'warning', text: 'We could not reach our payment provider just now. Please try again in a few minutes.' } }) };
     }
-    let outcome;
-    try {
-      outcome = await transaction(pool, async db => {
-        let invitation = await find(db, 'token', hash, true);
-        if (!invitation) return { page: { status: 404, html: unknownInvitationPage() } };
-        if (!['pending', 'checkout'].includes(invitation.status)) return { redirect: `/welcome/${token}` };
+    // Each step locks the invitation, re-reads it and commits on its own, so whatever Stripe made is recorded at once and survives a later
+    // failure. The tenant is committed before the first Stripe request, and every request's parameters follow from what is already
+    // recorded: a retry after any failure sends Stripe the same parameters under the same idempotency key, which Stripe requires.
+    const step = operation => transaction(pool, async db => {
+      const invitation = await find(db, 'token', hash, true);
+      if (!invitation) return { page: { status: 404, html: unknownInvitationPage() } };
+      if (!['pending', 'checkout'].includes(invitation.status)) return { redirect: `/welcome/${token}` };
+      return operation(db, invitation);
+    });
+    const steps = [
+      async (db, invitation) => {
         const price = (await one(db, 'select private.billing_lookup($1,$2) as v', ['price', invitation.price])).v;
         if (!price?.active || !price.product_active) {
           return { page: { status: 409, html: invitationPage(invitation, { token, notice: { tone: 'warning',
             text: 'This plan\'s price has changed since you were invited, so the invitation needs to be updated. Contact us and we will send you a new one.' } }) } };
         }
-        const tenant = (await one(db, 'select private.customer_invitation_tenant($1) as t', [invitation.id])).t;
-        if (!invitation.customer) {
-          const customer = await client.post('/v1/customers', { name: invitation.organization_name, email: invitation.contact_email,
-            metadata: { hub_tenant_id: tenant, app: invitation.app, hub_invitation: invitation.id } }, { idempotencyKey: `hub-invitation-customer-${invitation.id}` });
-          await stripe.mirror(db, client, 'customer', customer);
-          invitation = await progress(db, invitation.id, 'customer', { customer: customer.id });
-        }
+        await one(db, 'select private.customer_invitation_tenant($1) as t', [invitation.id]);
+        return null;
+      },
+      async (db, invitation) => {
+        if (invitation.customer) return null;
+        const customer = await client.post('/v1/customers', { name: invitation.organization_name, email: invitation.contact_email,
+          metadata: { hub_tenant_id: invitation.tenant_id, app: invitation.app, hub_invitation: invitation.id } }, { idempotencyKey: `hub-invitation-customer-${invitation.id}` });
+        await stripe.mirror(db, client, 'customer', customer);
+        await progress(db, invitation.id, 'customer', { customer: customer.id });
+        return null;
+      },
+      async (db, invitation) => {
         const percent = Number(invitation.discount_percent);
-        if (percent > 0 && !invitation.coupon) {
-          const coupon = await client.post('/v1/coupons', { percent_off: percent, duration: invitation.discount_duration,
-            ...(invitation.discount_duration === 'repeating' ? { duration_in_months: invitation.discount_months } : {}),
-            max_redemptions: 1, name: `Invitation ${percent}% off`.slice(0, 40), applies_to: { products: [invitation.product] },
-            metadata: { app: invitation.app, hub_invitation: invitation.id } }, { idempotencyKey: `hub-invitation-coupon-${invitation.id}` });
-          await stripe.refresh(db, client, 'coupon', coupon.id);
-          invitation = await progress(db, invitation.id, 'coupon', { coupon: coupon.id });
-        }
-        const metadata = { app: invitation.app, hub_tenant_id: tenant, hub_invitation: invitation.id };
+        if (percent <= 0 || invitation.coupon) return null;
+        const coupon = await client.post('/v1/coupons', { percent_off: percent, duration: invitation.discount_duration,
+          ...(invitation.discount_duration === 'repeating' ? { duration_in_months: invitation.discount_months } : {}),
+          max_redemptions: 1, name: `Invitation ${percent}% off`.slice(0, 40), applies_to: { products: [invitation.product] },
+          metadata: { app: invitation.app, hub_invitation: invitation.id } }, { idempotencyKey: `hub-invitation-coupon-${invitation.id}` });
+        await stripe.refresh(db, client, 'coupon', coupon.id);
+        await progress(db, invitation.id, 'coupon', { coupon: coupon.id });
+        return null;
+      },
+      async (db, invitation) => {
+        const metadata = { app: invitation.app, hub_tenant_id: invitation.tenant_id, hub_invitation: invitation.id };
         const items = [{ price: invitation.price, quantity: Number(invitation.quantity) }];
-        if (percent >= 100) {
+        if (Number(invitation.discount_percent) >= 100) {
           // Complimentary: the subscription is made here, with no Checkout and no card. Its invoices are emailed (send_invoice), so a
           // complimentary period that ends bills by email instead of failing a card that was never asked for.
           const subscription = await client.post('/v1/subscriptions', { customer: invitation.customer, items, discounts: [{ coupon: invitation.coupon }],
             collection_method: 'send_invoice', days_until_due: 30, metadata, expand: ['discounts'] }, { idempotencyKey: `hub-invitation-subscription-${invitation.id}` });
           await stripe.mirror(db, client, 'subscription', subscription);
-          invitation = await progress(db, invitation.id, 'active', { subscription: subscription.id });
-          return { invitation, ready: true, redirect: `/welcome/${token}` };
+          return { invitation: await progress(db, invitation.id, 'active', { subscription: subscription.id }), ready: true, redirect: `/welcome/${token}` };
         }
         if (invitation.checkout) {
           const session = await client.get(`/v1/checkout/sessions/${invitation.checkout}`, {}, checkoutOptions);
           if (session.status === 'open' && typeof session.url === 'string') return { redirect: session.url };
           if (session.status === 'complete') return { settle: invitation.checkout };
         }
+        // The key names the link too (a resend changes the return addresses), and the session keeps Stripe's own 24-hour expiry, so a
+        // retried request is identical to the first and Stripe returns the session it already made.
         const attempt = Number(invitation.checkout_attempt ?? 0) + 1;
         const back = welcomeUrl(token);
         const session = await client.post('/v1/checkout/sessions', { mode: 'subscription', customer: invitation.customer, line_items: items,
           ...(invitation.coupon ? { discounts: [{ coupon: invitation.coupon }] } : {}), client_reference_id: invitation.id, metadata,
-          subscription_data: { metadata }, success_url: `${back}?checkout=done`, cancel_url: `${back}?checkout=cancelled`,
-          expires_at: Math.floor(now() / 1000) + 24 * 3600 - 300 }, { ...checkoutOptions, idempotencyKey: `hub-invitation-checkout-${invitation.id}-${attempt}` });
-        await progress(db, invitation.id, 'checkout', { checkout: session.id, attempt });
+          subscription_data: { metadata }, success_url: `${back}?checkout=done`, cancel_url: `${back}?checkout=cancelled` },
+        { ...checkoutOptions, idempotencyKey: `hub-invitation-checkout-${invitation.id}-${attempt}-${hash.slice(0, 16)}` });
         if (!/^https:\/\/checkout\.stripe\.com\//.test(session.url ?? '')) throw new HttpError(503, 'Stripe did not return a payment page.');
+        await progress(db, invitation.id, 'checkout', { checkout: session.id, attempt });
         return { redirect: session.url };
-      });
+      },
+    ];
+    let outcome = null;
+    try {
+      for (const operation of steps) {
+        outcome = await step(operation);
+        if (outcome) break;
+      }
     } catch (error) {
       log.warn(`A customer invitation could not be accepted (${error?.status ?? error?.code ?? 'error'}).`);
       const invitation = await transaction(pool, db => find(db, 'token', hash)).catch(() => null);

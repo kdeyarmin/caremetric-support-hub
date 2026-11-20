@@ -47,7 +47,9 @@ match it.
 - Accepting creates the customer's own Hub tenant (named for the organization), its Stripe customer and the invitation's
   own coupon (that percent, that duration, one redemption, only for that plan's product). Every Stripe request carries a
   key derived from the invitation, so a double click or a retry never creates a second customer, coupon, subscription or
-  Checkout session; an open Checkout is reopened.
+  Checkout session; an open Checkout is reopened. The tenant is saved before the first Stripe request and each Stripe
+  object is recorded as soon as Stripe answers, so if Stripe fails part-way the customer is told nothing was charged and
+  accepting again carries on from that step with the same request.
 - A payment is recorded from Stripe's webhook (`checkout.session.*`) even if the customer never returns to the page, and
   again when they do. The subscription then appears in **Subscriptions** and on the customer in **Customers** like any
   other.
@@ -104,7 +106,8 @@ application to pass `invite` (above).
 
 - `node server/invitations-integration.mjs` (local Supabase stack and the fake Stripe API; CI runs it twice to prove
   teardown) covers owner-only commands, the preview, idempotent creation and the themed email, paid acceptance through
-  Checkout with the invitation's coupon, webhook activation, one sign-up email with the code, a sign-up linked without a
+  Checkout with the invitation's coupon, recovery when Stripe fails part-way (the fake Stripe, like Stripe, refuses a key
+  reused with other parameters), webhook activation, one sign-up email with the code, a sign-up linked without a
   trial, complimentary activation without Checkout, a held sign-up linked by the owner, resend, revoke and the audit.
 - `supabase/tests/125_customer_invitations.test.sql` checks the closed table and functions and the database's own rules.
 - `server/customer-invitations.test.mjs` and `src/billing/Invitations.test.tsx` cover the words, the emails in each theme,

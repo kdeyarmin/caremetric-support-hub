@@ -28,7 +28,10 @@ export const invitationRecordSchema = z.object({
   price: z.string().regex(/^[A-Za-z0-9_-]{1,255}$/, 'Choose a plan price.'),
   quantity: z.number().int().min(1, 'Enter a quantity from 1 to 10,000.').max(10_000, 'Enter a quantity from 1 to 10,000.'),
   discount_percent: z.number().min(0, 'Enter a discount from 0 to 100%.').max(100, 'Enter a discount from 0 to 100%.')
-    .refine(value => Math.round(value * 100) === value * 100, 'Use at most two decimal places for the discount.'),
+    // value * 100 is not exact in binary (17.99 * 100 = 1798.9999999999998), so the check allows a rounding error and the value is
+    // stored rounded to cents.
+    .refine(value => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, 'Use at most two decimal places for the discount.')
+    .transform(value => Math.round(value * 100) / 100),
   discount_duration: z.enum(discountDurations),
   discount_months: z.number().int().min(1, 'A discount for some months lasts 1 to 36 months.').max(36, 'A discount for some months lasts 1 to 36 months.').nullable(),
   note: z.string().transform(value => value.replace(/\r\n?/g, '\n').trim())

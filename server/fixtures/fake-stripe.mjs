@@ -35,6 +35,7 @@ export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
     checkout_sessions: new Map() };
   const requests = [];
   const idempotent = new Map();
+  const failures = new Map();
   const events = [];
   const emit = (type, object) => events.push({ id: id('evt'), object: 'event', type, created: now(), livemode: false, data: { object: structuredClone(object) } });
   const notFound = () => ({ status: 404, body: { error: { type: 'invalid_request_error', code: 'resource_missing', message: 'No such object.' } } });
@@ -306,13 +307,29 @@ export function fakeStripe({ accountId = 'acct_1SinLKB06O2UFlNz' } = {}) {
     requests.push({ method: req.method, path: url.pathname, params, idempotencyKey: req.headers['idempotency-key'] ?? null, version: req.headers['stripe-version'] });
     if (!/^Bearer sk_test_/.test(req.headers.authorization ?? '')) { res.statusCode = 401; return res.end(JSON.stringify({ error: { type: 'authentication_error', message: 'Invalid API key.' } })); }
     const key = req.headers['idempotency-key'];
+    const request = `${req.method} ${url.pathname} ${body}`;
     let result;
-    if (key && idempotent.has(key)) result = idempotent.get(key);
-    else { result = handle(req.method, url.pathname, params); if (key) idempotent.set(key, result); }
+    const failure = failures.get(`${req.method} ${url.pathname}`);
+    if (failure && !failure.after) {
+      // A request that never ran: Stripe saves no result for its key.
+      result = { status: failure.status, body: { error: { type: 'api_error', message: 'Injected failure.' } } };
+    } else if (key && idempotent.has(key)) {
+      // Like Stripe: a key replays its first result, and only for the same request with the same parameters.
+      const first = idempotent.get(key);
+      result = first.request === request ? first.result : { status: 400, body: { error: { type: 'idempotency_error',
+        message: 'Keys for idempotent requests can only be used with the same parameters they were first used with.' } } };
+    } else { result = handle(req.method, url.pathname, params); if (key) idempotent.set(key, { request, result }); }
+    // A request Stripe carried out whose answer was lost on the way back: its key keeps the result.
+    if (failure?.after) result = { status: failure.status, body: { error: { type: 'api_error', message: 'Injected failure after the request ran.' } } };
     res.statusCode = result.status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(result.body));
   });
   return {
     store, requests, events,
+    /**
+     * Fails every `method path` request with `status` until the returned function is called: before it runs, or with `after`, once it
+     * has run (the answer is lost, and its idempotency key keeps the result).
+     */
+    fail(method, path, { status = 500, after = false } = {}) { failures.set(`${method} ${path}`, { status, after }); return () => failures.delete(`${method} ${path}`); },
     async listen() { await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); return `http://127.0.0.1:${server.address().port}`; },
     close: () => new Promise(resolve => server.close(resolve)),
     /** Settles a subscription's open invoice as paid and makes it active, as Stripe does after payment. */

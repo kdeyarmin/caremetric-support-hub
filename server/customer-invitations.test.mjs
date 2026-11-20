@@ -47,6 +47,17 @@ describe('the price and discount words', () => {
     }
     expect(invitationRecordSchema.safeParse({ ...record, extra: true }).success).toBe(false);
   });
+
+  it('accepts any discount with up to two decimals, though value × 100 is inexact in binary', () => {
+    const record = { app: 'carebase', contact_name: 'Jane', contact_email: 'jane@maple.test', organization_name: 'Maple', price: 'price_1', quantity: 1,
+      discount_percent: 0, discount_duration: 'forever', discount_months: null, note: '' };
+    for (const percent of [1.1, 17.99, 0.07, 0.29, 33.33, 57.01, 99.99, 100]) {
+      const parsed = invitationRecordSchema.safeParse({ ...record, discount_percent: percent });
+      expect(parsed.success, String(percent)).toBe(true);
+      expect(parsed.data.discount_percent).toBe(percent);
+    }
+    for (const percent of [12.345, 0.001, 99.995]) expect(invitationRecordSchema.safeParse({ ...record, discount_percent: percent }).success, String(percent)).toBe(false);
+  });
 });
 
 describe('the invitation email', () => {

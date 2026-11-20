@@ -120,16 +120,33 @@ try {
   assert.equal((await invitations.page('x'.repeat(43))).status, 404);
   assert.equal(stripe.store.customers.size, 0, 'looking changes nothing');
 
+  // Stripe fails part-way: the customer is made and the coupon is not, then a Checkout is made but its answer is lost. Each time the
+  // customer is told nothing was charged, and the retry carries on with what Stripe already made, sending the same parameters under the
+  // same keys (the fake, like Stripe, refuses a key reused with different parameters).
+  let restore = stripe.fail('POST', '/v1/coupons');
+  let failed = await invitations.accept(paidToken);
+  restore();
+  assert.equal(failed.status, 503);
+  assert.match(failed.html, /nothing was charged/);
+  assert.equal(stripe.store.customers.size, 1, 'the customer Stripe made is kept');
+  restore = stripe.fail('POST', '/v1/checkout/sessions', { after: true });
+  failed = await invitations.accept(paidToken);
+  restore();
+  assert.equal(failed.status, 503);
+  assert.equal([...stripe.store.coupons.values()].filter(row => row.metadata.hub_invitation === created.invitation.id).length, 1, 'the retry went on to the coupon');
+  assert.equal(stripe.store.checkout_sessions.size, 1, 'Stripe made the session, though its answer was lost');
+
   // Accepting: the tenant, its Stripe customer, the invitation's own coupon and a Checkout with the discount applied.
   const checkout = await invitations.accept(paidToken);
   assert.match(checkout.redirect, /^https:\/\/checkout\.stripe\.com\//);
   const customerId = [...stripe.store.customers.values()].find(row => row.metadata.hub_invitation === created.invitation.id)?.id;
   assert.ok(customerId);
   const tenant = stripe.store.customers.get(customerId).metadata.hub_tenant_id;
+  assert.equal(tenant, (await ownerCommand({ action: 'list' })).invitations.find(row => row.id === created.invitation.id).tenant_id, 'the customer names the invitation\'s tenant');
   const coupon = [...stripe.store.coupons.values()].find(row => row.metadata.hub_invitation === created.invitation.id);
   assert.deepEqual([coupon.percent_off, coupon.duration, coupon.duration_in_months, coupon.max_redemptions], [50, 'repeating', 12, 1]);
   assert.deepEqual(coupon.applies_to.products, [core]);
-  const sessionRequest = stripe.requests.find(request => request.path === '/v1/checkout/sessions' && request.method === 'POST');
+  const sessionRequest = stripe.requests.findLast(request => request.path === '/v1/checkout/sessions' && request.method === 'POST');
   assert.deepEqual(sessionRequest.params.discounts, [{ coupon: coupon.id }]);
   assert.deepEqual(sessionRequest.params.line_items, [{ price: coreMonthly, quantity: '3' }]);
   assert.equal(sessionRequest.params.success_url, `https://hub.test/welcome/${paidToken}?checkout=done`);
@@ -267,7 +284,7 @@ try {
   const auditText = JSON.stringify(audit);
   for (const text of ['Jane', 'Maple', 'keystone.test', 'Sam Lee', 'Glad to have you']) assert.equal(auditText.includes(text), false, text);
   await assert.rejects(pool.query('select * from private.customer_invitations'), error => error.code === '42501', 'the table is closed to the server too');
-  console.log('Customer invitations: owner-only commands, preview, idempotent create and themed email, paid acceptance through Checkout with the invitation\'s coupon, webhook activation, one sign-up email with the code, sign-up linked without a trial, complimentary activation without Checkout, held sign-ups linked by the owner, resend, revoke and bounded audit passed.');
+  console.log('Customer invitations: owner-only commands, preview, idempotent create and themed email, paid acceptance through Checkout with the invitation\'s coupon, recovery when Stripe fails part-way, webhook activation, one sign-up email with the code, sign-up linked without a trial, complimentary activation without Checkout, held sign-ups linked by the owner, resend, revoke and bounded audit passed.');
 } finally {
   await stripe.close();
   const tenants = (await admin.query('select tenant_id from private.customer_invitations where created_by=$1 and tenant_id is not null', [owner])).rows.map(row => row.tenant_id);
