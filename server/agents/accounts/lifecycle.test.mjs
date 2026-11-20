@@ -284,15 +284,15 @@ describe('the sent email', () => {
       expect(`Subject: ${email.subject}\n\n${email.text}`).toBe(preview.replace(`${unsubscribeLabel}: a personal link is added when the email is sent`, `${unsubscribeLabel}: ${unsubscribeUrl}`));
       expect(preview.startsWith(lifecycleWording(input))).toBe(true);
       // The branded layout in the theme of the product's app, with its inbox preview: Intel's Emberline header (its logo, tagline
-      // and fire image), or CareBase's logo on white over its blue rule.
+      // and fire image), or CareBase's logo on white over its blue rule; the images are the Hub's copies on the sending domain.
       expect(email.html).toContain(`${LAYOUT_MARKER}="branded"`);
       if (input.product === 'caremetric-intel') {
         expect(email.html).toContain('data-theme="intel"');
-        expect(email.html).toContain('https://www.caremetricintel.com/brand/emberline-fire.png');
+        expect(email.html).toContain('https://help.caremetric.ai/email/intel-emberline-fire.png');
         expect(email.html).toContain('Set your marketing on FIRE!');
       } else {
         expect(email.html).toContain('data-theme="carebase"');
-        expect(email.html).toContain('https://cmcarebase.com/brand/email-lockup-carebase.png');
+        expect(email.html).toContain('https://help.caremetric.ai/email/carebase-lockup.png');
       }
       expect(email.html).toContain(escapeHtml(lifecycleEmail(input).preheader));
       expect(email.html).toContain(`<a href="${unsubscribeUrl}" target="_blank"`);
