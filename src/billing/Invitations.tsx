@@ -107,6 +107,9 @@ export function InvitationsTab({ data, client = invitationClient }: { data: Work
       <fieldset><legend>Application</legend>
         <div className="invite-apps" role="radiogroup" aria-label="Application">{invitationApps.map(option => <label key={option} className="invite-app">
           <input type="radio" name="invite-app" value={option} checked={app === option} onChange={() => setApp(option)} />{invitationAppNames[option]}</label>)}</div>
+        {/* Intel applies a code only to a new sign-up or an organization still setting up its card. An organization that already
+            uses it is linked to its own customer already, so this invitation's Link account can't take it; its price changes there. */}
+        {app === 'caremetric-intel' && <p className="billing-muted">CareMetric Intel applies an invitation only to a new sign-up or an organization still setting up its card. If the organization already uses Intel, don't invite it: change its plan, price or discount on its page under Customers, where its Intel account is already connected.</p>}
       </fieldset>
       <div className="billing-form-grid">
         <label>Contact name<input required maxLength={120} autoComplete="off" value={contactName} onChange={event => setContactName(event.target.value)} /></label>

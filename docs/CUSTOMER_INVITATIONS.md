@@ -71,6 +71,12 @@ its ordinary sign-up. Intel ([#536](https://github.com/kdeyarmin/intel/pull/536)
 Billing, which says why the invitation didn't apply and can apply it again: a newer link opened while signed in, or the
 same code once the Hub answers. A refused or unanswered code there never sends a trial lead.
 
+Intel applies a code only to a new sign-up or an organization still setting up its card. An organization that already
+uses Intel (a plan, a trial, or one that ended) is already connected to its own customer here, so an invitation can't
+take it, and its **Link account** can't either: when someone there opens the link, Intel says the invitation can't be
+applied and asks them to reply to your email. Change that customer's plan, price or discount on its page under
+**Customers** instead. The invitation form says so when CareMetric Intel is chosen.
+
 Until an application passes it, a sign-up whose email matches an invitation that is already paid for or complimentary
 is **held**: the Hub starts no trial (so the customer is never billed twice) and the invitation shows *Signed up without
 the link: account …1234* with **Link account**. Link it once you know the sign-up is theirs; the account is then
