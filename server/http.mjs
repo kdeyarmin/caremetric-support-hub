@@ -12,14 +12,16 @@ import { chatCookie } from './communications.mjs';
 import { bulkEmailActions } from './bulk-email.mjs';
 import { agentAdminActions } from './agents/admin.mjs';
 import { creativeAdminActions, videoUploadLimit } from './agents/creative/admin.mjs';
-import { applicationImageHosts, welcomePagePolicy, welcomePageReferrerPolicy } from './customer-invitations.mjs';
+import { welcomePagePolicy, welcomePageReferrerPolicy } from './customer-invitations.mjs';
+import { EMAIL_IMAGE_ORIGIN } from './email-layout.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
   'Strict-Transport-Security':'max-age=31536000; includeSubDomains','Referrer-Policy':'no-referrer',
   'Permissions-Policy':'camera=(), microphone=(), geolocation=(), payment=()',
-  // Images also from the applications' own hosts, for Billing's preview of a customer invitation email (server/email-layout.mjs).
-  'Content-Security-Policy':`default-src 'self'; connect-src 'self'; img-src 'self' data: ${applicationImageHosts}; media-src 'self' blob: https://xgauehtwksmnoqhgqegm.supabase.co; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'`,
+  // Images also from help.caremetric.ai, where every email image is (server/email-layout.mjs), for Billing's preview of an email when the
+  // Hub is opened at its Railway address.
+  'Content-Security-Policy':`default-src 'self'; connect-src 'self'; img-src 'self' data: ${EMAIL_IMAGE_ORIGIN}; media-src 'self' blob: https://xgauehtwksmnoqhgqegm.supabase.co; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'`,
 };
 async function jsonBody(req,limit=2000000) {
   if (req.headers['content-type']?.split(';')[0] !== 'application/json') throw new HttpError(415,'Use a JSON request.');
@@ -612,7 +614,8 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
         file=resolve(dist,'index.html');
       }
       res.setHeader('Content-Type',mime[extname(file)] || 'application/octet-stream');
-      res.setHeader('Cache-Control',path.startsWith('/assets/')?'public,max-age=604800,immutable':'no-store');
+      // Email images (public/email/) are fetched by mail clients and their image proxies each time a message is opened: let them keep a copy a day.
+      res.setHeader('Cache-Control',path.startsWith('/assets/')?'public,max-age=604800,immutable':path.startsWith('/email/')&&info?.isFile()?'public,max-age=86400':'no-store');
       if(req.method==='HEAD') return res.end();
       await pipeline(createReadStream(file),res);
     } catch(error) {

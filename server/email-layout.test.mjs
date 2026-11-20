@@ -1,5 +1,8 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { LAYOUT_MARKER, PRODUCT_WORDMARK, calloutTones, emailThemes, escapeHtml, intelPalette, palette, renderEmail, themeFor } from './email-layout.mjs';
+import {
+  EMAIL_IMAGE_ORIGIN, LAYOUT_MARKER, PRODUCT_WORDMARK, calloutTones, emailImagePaths, emailThemes, escapeHtml, intelPalette, palette, renderEmail, themeFor,
+} from './email-layout.mjs';
 import { htmlToText, replySubject, supportReplyEmail } from './communications.mjs';
 import { bulkEmailHtml, composeBulkEmail } from './bulk-email.mjs';
 import { lifecycleInput, renderLifecycleEmail } from './agents/accounts/lifecycle.mjs';
@@ -208,8 +211,8 @@ describe('product themes', () => {
       signature: ['The CareMetric Intel team'], footer });
     expect(email.html).toContain('data-theme="intel"');
     expect(email.html).toContain('<meta name="color-scheme" content="dark">');
-    expect(email.html).toContain('https://www.caremetricintel.com/brand/caremetric-logo-reverse.png');
-    expect(email.html).toContain('https://www.caremetricintel.com/brand/emberline-fire.png');
+    expect(email.html).toContain('<img src="https://help.caremetric.ai/email/intel-logo-reverse.png" alt="CareMetric Intel"');
+    expect(email.html).toContain('<img src="https://help.caremetric.ai/email/intel-emberline-fire.png" alt=""');
     expect(email.html).toContain('>Set your marketing on FIRE!</p>');
     expect(email.html).toContain(`background-color:${intelPalette.canvas};`);
     expect(email.html).toContain(`background-color:${intelPalette.card};`);
@@ -248,13 +251,27 @@ describe('product themes', () => {
   });
 });
 
+describe('email images', () => {
+  it('come only from the Hub\'s own address on the sending domain, and each one is a PNG the Hub serves', async () => {
+    expect(EMAIL_IMAGE_ORIGIN).toBe('https://help.caremetric.ai');
+    for (const theme of Object.keys(emailThemes)) {
+      const { html } = renderEmail({ theme, title: 'T', heading: 'H', blocks: [], footer: ['F'] });
+      for (const [, src] of html.matchAll(/<img src="([^"]+)"/g)) expect(src, theme).toMatch(/^https:\/\/help\.caremetric\.ai\/email\/[a-z-]+\.png$/);
+    }
+    for (const path of Object.values(emailImagePaths)) {
+      const file = await readFile(new URL(`../public${path}`, import.meta.url));
+      expect(file.subarray(0, 8).toString('hex'), path).toBe('89504e470d0a1a0a');
+    }
+  });
+});
+
 describe('the CareBase theme', () => {
   it('dresses a CareBase email as the CareBase app sends it: its logo on white over the blue rule, its blue, its footer', () => {
     const email = renderEmail({ theme: 'carebase', title: 'Welcome', heading: 'Welcome to CareMetric CareBase', preheader: 'First steps.',
       blocks: [{ type: 'button', label: 'Open the help center', url: 'https://cmcarebase.com/app/help' }, { type: 'steps', items: ['Add your facility.'] }],
       signature: ['The CareMetric CareBase team'], footer: ['Reason.'] });
     expect(email.html).toContain('data-theme="carebase"');
-    expect(email.html).toContain('<img src="https://cmcarebase.com/brand/email-lockup-carebase.png" width="200" height="50" alt="CareMetric CareBase"');
+    expect(email.html).toContain('<img src="https://help.caremetric.ai/email/carebase-lockup.png" width="200" height="50" alt="CareMetric CareBase"');
     expect(email.html).toContain('border-bottom:3px solid #2563EB;');
     expect(email.html).toContain('border-radius:8px;background-color:#2563EB;');
     expect(email.html).toContain('background-color:#F1F5F9;');

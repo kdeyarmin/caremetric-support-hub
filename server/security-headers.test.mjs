@@ -20,6 +20,8 @@ beforeAll(async () => {
   await mkdir(join(dist, 'assets'));
   await writeFile(join(dist, 'index.html'), '<!doctype html><title>Hub</title>');
   await writeFile(join(dist, 'assets', 'app.js'), 'export {};');
+  await mkdir(join(dist, 'email'));
+  await writeFile(join(dist, 'email', 'logo.png'), 'png');
   server = appServer({ auth: {}, gateway: {}, delegations: {}, origins: [origin], dist, health: async () => {} });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   base = `http://127.0.0.1:${server.address().port}`;
@@ -40,20 +42,25 @@ describe('production web-server contract', () => {
     expect(directives['script-src']).toEqual(["'self'"]);
     expect(directives['connect-src']).toEqual(["'self'"]);
     expect(directives['media-src']).toEqual(["'self'", 'blob:', 'https://xgauehtwksmnoqhgqegm.supabase.co']);
-    // The applications' own image hosts, for Billing's preview of an invitation email (its iframe inherits this policy).
-    expect(directives['img-src']).toEqual(["'self'", 'data:', 'https://cmcarebase.com', 'https://www.caremetricintel.com']);
+    // help.caremetric.ai, where every email image is, for Billing's preview of an email opened at the Railway address (its iframe
+    // inherits this policy). No other host: the applications' images are the Hub's own copies.
+    expect(directives['img-src']).toEqual(["'self'", 'data:', 'https://help.caremetric.ai']);
     for (const name of ['frame-ancestors', 'base-uri', 'form-action', 'font-src']) expect(directives[name], name).toEqual(["'self'"]);
     expect(securityHeaders['Content-Security-Policy']).not.toMatch(/unsafe-eval|\*/);
   });
 
   it('sets every header on the app, its assets, its fallback route, the API and an error', async () => {
-    for (const [path, status] of [['/', 200], ['/assets/app.js', 200], ['/admin/apps', 200], ['/api/health', 200], ['/missing.js', 404]]) {
+    for (const [path, status] of [['/', 200], ['/assets/app.js', 200], ['/email/logo.png', 200], ['/admin/apps', 200], ['/api/health', 200], ['/missing.js', 404]]) {
       const response = await fetch(`${base}${path}`);
       expect(response.status, path).toBe(status);
       for (const [name, value] of Object.entries(securityHeaders)) expect(response.headers.get(name), `${path} ${name}`).toBe(value);
     }
     expect((await fetch(`${base}/assets/app.js`)).headers.get('Cache-Control')).toBe('public,max-age=604800,immutable');
     expect((await fetch(`${base}/admin/apps`)).headers.get('Cache-Control')).toBe('no-store');
+    // Mail clients and their image proxies fetch an email's images each time it is opened.
+    const image = await fetch(`${base}/email/logo.png`);
+    expect([image.headers.get('Cache-Control'), image.headers.get('Content-Type')]).toEqual(['public,max-age=86400', 'image/png']);
+    expect((await fetch(`${base}/email/missing.png`)).status).toBe(404);
   });
 
   it('feeds connected-mode variables into the validated production build and runs this server', () => {

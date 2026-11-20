@@ -84,6 +84,24 @@ function href(url) {
   return escapeHtml(value);
 }
 
+// ---- Images ------------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Every image in a Support Hub email comes from help.caremetric.ai, the Hub's own address on the domain the email is sent from
+ * (support@caremetric.ai), so the images and links point at the sender's own domain. Microsoft 365 filed an invitation as junk with SPF,
+ * DKIM and DMARC all passing, and images from other domains are one of the things such filters weigh. The files in public/email/ are
+ * copies of the applications' own email images: CareBase's cmcarebase.com/brand/email-lockup-carebase.png, and Intel's
+ * www.caremetricintel.com/brand/caremetric-logo-reverse.png and emberline-fire.png. Replace a copy when the application changes its own.
+ */
+export const EMAIL_IMAGE_ORIGIN = 'https://help.caremetric.ai';
+/** The images' paths on the Hub; the welcome page (server/customer-invitations.mjs) shows the same files from its own origin. */
+export const emailImagePaths = Object.freeze({
+  carebaseLockup: '/email/carebase-lockup.png',
+  intelLogo: '/email/intel-logo-reverse.png',
+  intelFire: '/email/intel-emberline-fire.png',
+});
+const emailImage = name => `${EMAIL_IMAGE_ORIGIN}${emailImagePaths[name]}`;
+
 // ---- Themes ------------------------------------------------------------------------------------------------------------------------
 
 /** CareMetric Intel's Emberline colors (kdeyarmin/intel src/lib/branding.ts, CAREMETRIC_COLORS), as its emails use them. */
@@ -102,14 +120,14 @@ export const carebasePalette = Object.freeze({
 });
 // The CareBase app's email header: its official logo lockup on white over the brand-blue rule. With images blocked, the alt text
 // shows the product name in the heading style.
-const carebaseHeader = ({ font, theme: { palette: p } }) => `<tr><td class="cm-header" bgcolor="${p.card}" style="background-color:${p.card};border-radius:11px 11px 0 0;border-bottom:3px solid ${p.brand};padding:20px 32px;"><img src="${CAREBASE_SITE}/brand/email-lockup-carebase.png" width="200" height="50" alt="CareMetric CareBase" style="display:block;width:200px;height:50px;border:0;outline:none;text-decoration:none;${font}font-size:20px;line-height:28px;font-weight:700;color:${p.heading};"></td></tr>
+const carebaseHeader = ({ font, theme: { palette: p } }) => `<tr><td class="cm-header" bgcolor="${p.card}" style="background-color:${p.card};border-radius:11px 11px 0 0;border-bottom:3px solid ${p.brand};padding:20px 32px;"><img src="${emailImage('carebaseLockup')}" width="200" height="50" alt="CareMetric CareBase" style="display:block;width:200px;height:50px;border:0;outline:none;text-decoration:none;${font}font-size:20px;line-height:28px;font-weight:700;color:${p.heading};"></td></tr>
 `;
 const hubHeader = ({ brand, font, theme }) => `<tr><td bgcolor="${theme.palette.brand}" style="padding:20px 32px;background-color:${theme.palette.brand};border-radius:11px 11px 0 0;${font}font-size:20px;line-height:28px;font-weight:700;color:${theme.palette.onBrand};">${escapeHtml(brand || PRODUCT_WORDMARK)}</td></tr>\n`;
 // The Intel app's header: its reverse logo, the product name and tagline, then a still of the Emberline fire.
 const intelHeader = ({ font, theme: { palette: p } }) => `<tr><td class="cm-header" bgcolor="${p.canvas}" style="${font}background-color:${p.canvas};border-radius:21px 21px 0 0;padding:28px 32px;color:${p.heading};">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td width="100" valign="middle"><img src="${INTEL_SITE}/brand/caremetric-logo-reverse.png" alt="CareMetric Intel" width="76" height="63" style="display:block;width:76px;height:auto;border:0;"></td><td valign="middle" style="${font}text-align:left;"><p style="margin:0 0 8px;font-size:11px;line-height:16px;letter-spacing:1.5px;color:${p.body};">CAREMETRIC INTEL</p><p class="cm-email-tagline" style="margin:0;font-size:25px;line-height:32px;font-weight:600;color:${p.heading};">${escapeHtml(INTEL_TAGLINE)}</p></td></tr></table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td width="100" valign="middle"><img src="${emailImage('intelLogo')}" alt="CareMetric Intel" width="76" height="63" style="display:block;width:76px;height:auto;border:0;"></td><td valign="middle" style="${font}text-align:left;"><p style="margin:0 0 8px;font-size:11px;line-height:16px;letter-spacing:1.5px;color:${p.body};">CAREMETRIC INTEL</p><p class="cm-email-tagline" style="margin:0;font-size:25px;line-height:32px;font-weight:600;color:${p.heading};">${escapeHtml(INTEL_TAGLINE)}</p></td></tr></table>
 </td></tr>
-<tr class="cm-fire"><td bgcolor="${p.canvas}" style="padding:0;background-color:${p.canvas};border-bottom:1px solid ${p.brandDark};"><img src="${INTEL_SITE}/brand/emberline-fire.png" alt="" role="presentation" width="600" height="100" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>
+<tr class="cm-fire"><td bgcolor="${p.canvas}" style="padding:0;background-color:${p.canvas};border-bottom:1px solid ${p.brandDark};"><img src="${emailImage('intelFire')}" alt="" role="presentation" width="600" height="100" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>
 `;
 
 /** CareMetric Breathe's email colors (kdeyarmin/PennFit lib/resupply-email/src/layout.ts, BREATHE_COLORS). */

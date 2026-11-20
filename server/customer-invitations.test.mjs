@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { appServer } from './http.mjs';
 import { LAYOUT_MARKER } from './email-layout.mjs';
 import {
-  greetingName, invitationEmail, invitationPage, invitationProfiles, invitationTokenPattern, newInvitationToken, offerRows, readyEmail, signupLink,
+  emailRows, greetingName, invitationEmail, invitationPage, invitationProfiles, invitationTokenPattern, newInvitationToken, offerRows, readyEmail, signupLink,
   unknownInvitationPage, welcomePagePolicy,
 } from './customer-invitations.mjs';
 import { discountLabel, durationWords, invitationRecordSchema, normalizedRecord, offerAmounts, plural, regularPriceLabel, yourPriceLabel } from '../src/billing/invitationProtocol.ts';
@@ -65,26 +65,45 @@ describe('the invitation email', () => {
     for (const [app, theme] of [['carebase', 'carebase'], ['breathe', 'breathe'], ['caremetric-intel', 'intel']]) {
       const email = invitationEmail(invitation({ app }), link);
       const profile = invitationProfiles[app];
-      expect(email.subject).toBe(`Your invitation to ${profile.name}`);
+      expect(email.subject).toBe(`Your ${profile.name} account for Maple Grove`);
       expect(email.html).toContain(`${LAYOUT_MARKER}="branded" data-theme="${theme}"`);
       expect(email.text).toContain(`Welcome to ${profile.name}`);
+      expect(email.text).toContain(`CareMetric has invited Maple Grove to ${profile.name}.`);
       expect(email.text).toContain(profile.summary);
-      for (const highlight of profile.highlights) expect(email.text).toContain(highlight);
-      expect(email.text).toContain('Your discount: 50% off for your first 12 months');
-      expect(email.text).toContain('Your price: $298.50 per month for your first 12 months, then $597.00 per month');
-      expect(email.text).toContain(`Review and accept your invitation:\n${link}`);
+      expect(email.text).toContain('Price: $298.50 per month for your first 12 months, then $597.00 per month');
+      expect(email.text).toContain('You will pay through Stripe, the payment service CareMetric uses.');
+      expect(email.text).toContain(`Review the invitation:\n${link}`);
       expect(email.text).toContain('expires on December 19, 2026');
       expect(email.text).toContain(`The ${profile.name} team`);
     }
   });
 
-  it('tells a complimentary customer there is nothing to pay and no card to enter', () => {
+  it('reads as an account notice, not an offer: the breakdown and the feature list stay on the welcome page', () => {
+    // Microsoft 365 filed the first production invitation as junk with SPF, DKIM and DMARC passing; promotional wording is one signal.
+    for (const overrides of [{}, { discount_percent: 100, discount_duration: 'forever', discount_months: null }, { discount_percent: 100 }, { discount_percent: 0 }]) {
+      for (const app of Object.keys(invitationProfiles)) {
+        const email = invitationEmail(invitation({ app, ...overrides }), link);
+        const ready = readyEmail(invitation({ app, ...overrides }), 'https://example.test/signup');
+        for (const text of [email.subject, email.text, ready.subject, ready.text]) {
+          expect(text, JSON.stringify(overrides)).not.toMatch(/complimentary|discount|% off|\$0\.00|free|securely|activate/i);
+        }
+        for (const highlight of invitationProfiles[app].highlights) expect(email.text).not.toContain(highlight);
+        // Every image and link in the invitation is on help.caremetric.ai, the sending domain.
+        for (const [, url] of email.html.matchAll(/(?:href|src)="([^"]+)"/g)) expect(url).toMatch(/^https:\/\/help\.caremetric\.ai\//);
+      }
+    }
+  });
+
+  it('tells a customer with no charge that no card is needed, and when invoices start', () => {
     const forever = invitationEmail(invitation({ discount_percent: 100, discount_duration: 'forever', discount_months: null }), link);
-    expect(forever.text).toContain('Your plan is complimentary: there is nothing to pay and no card to enter.');
-    expect(forever.text).toContain('Accept and activate your plan:');
+    expect(forever.text).toContain('CareMetric has set up CareMetric CareBase for Maple Grove.');
+    expect(forever.text).toContain('Price: No charge\n');
+    expect(forever.text).toContain('No card is needed.');
+    expect(forever.text).toContain(`Accept the invitation:\n${link}`);
     expect(forever.text).not.toMatch(/Stripe/);
     const limited = invitationEmail(invitation({ discount_percent: 100 }), link);
-    expect(limited.text).toContain('When the complimentary period ends, CareBase invoices at the regular price are emailed to you.');
+    expect(limited.text).toContain('Price: No charge for your first 12 months, then $597.00 per month ($199.00 per facility × 3)');
+    expect(limited.text).toContain('When the no-charge period ends, CareBase invoices at the regular price are emailed to you.');
   });
 
   it('greets by first name, keeps a title, and escapes everything the owner or customer typed', () => {
@@ -110,15 +129,19 @@ describe('the invitation email', () => {
     expect(signupLink('https://www.caremetricintel.com/login?signup=true', token, { app: 'caremetric-intel', entitlement: 'growth' }))
       .toBe(`https://www.caremetricintel.com/login?signup=true&hub_invite=${token}`);
     const email = readyEmail(invitation({ app: 'breathe', discount_percent: 100, discount_duration: 'forever', discount_months: null }), signup);
-    expect(email.subject).toBe('Your CareMetric Breathe plan is active: create your sign-in');
+    expect(email.subject).toBe('Create your CareMetric Breathe sign-in');
     expect(email.html).toContain('data-theme="breathe"');
     expect(email.text).toContain(`Create your Breathe sign-in:\n${signup}`);
-    expect(email.text).toContain('with nothing to pay.');
+    expect(email.text).toContain('Maple Grove\'s CareBase Core plan is active.');
+    expect(email.text).toContain('Price: No charge\n');
+    expect(readyEmail(invitation(), signup).text).toContain('Thank you for your payment. Maple Grove\'s CareBase Core plan is active.');
   });
 
   it('lists the quantity only for a per-unit price', () => {
     expect(offerRows(invitation()).map(([label]) => label)).toEqual(['Plan', 'Quantity', 'Regular price', 'Your discount', 'Your price']);
     expect(offerRows(invitation({ pricing_model: 'flat', quantity: 1, discount_percent: 0 })).map(([label]) => label)).toEqual(['Plan', 'Regular price', 'Your price']);
+    expect(emailRows(invitation()).map(([label]) => label)).toEqual(['Plan', 'Quantity', 'Price']);
+    expect(emailRows(invitation({ pricing_model: 'flat', quantity: 1, discount_percent: 0 }))).toEqual([['Plan', 'CareBase Core'], ['Price', '$199.00 per month']]);
   });
 });
 
@@ -128,7 +151,11 @@ describe('the welcome page', () => {
     const html = invitationPage(invitation({ app: 'caremetric-intel' }), { token });
     expect(html).toContain(`<form method="post" action="/welcome/${token}"`);
     expect(html).toContain('Accept and continue to secure payment');
-    expect(html).toContain('emberline-fire.png');
+    // The application's logos are the Hub's own copies, shown from the page's own origin.
+    expect(html).toContain('<img src="/email/intel-logo-reverse.png"');
+    expect(html).toContain('<img src="/email/intel-emberline-fire.png"');
+    expect(invitationPage(invitation(), { token })).toContain('<img src="/email/carebase-lockup.png"');
+    expect(welcomePagePolicy).toContain("img-src 'self' data:;");
     expect(html).toContain('<meta name="robots" content="noindex, nofollow">');
     expect(invitationPage(invitation({ discount_percent: 100 }), { token })).toContain('Accept and activate your plan');
     expect(invitationPage(invitation({ organization_name: hostile }), { token })).not.toContain('<script>');
