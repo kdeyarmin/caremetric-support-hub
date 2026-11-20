@@ -67,13 +67,16 @@ trial: read `hub_invite` from the sign-up address, keep it through sign-up, and 
 `POST /api/apps/trials` call ([Platform billing](PLATFORM_BILLING.md#post-apiappstrials)). The Hub links the account to the
 invitation's tenant and answers with the plan's entitlement; nothing else changes for the application. A code that is
 unknown, revoked, expired or not paid for yet is refused with 409 and starts no trial, so the application carries on with
-its ordinary sign-up (for Intel, card setup).
+its ordinary sign-up. Intel ([#536](https://github.com/kdeyarmin/intel/pull/536)) still creates the account and opens it on
+Billing, which says why the invitation didn't apply and can apply it again: a newer link opened while signed in, or the
+same code once the Hub answers. A refused or unanswered code there never sends a trial lead.
 
 Until an application passes it, a sign-up whose email matches an invitation that is already paid for or complimentary
 is **held**: the Hub starts no trial (so the customer is never billed twice) and the invitation shows *Signed up without
 the link: account …1234* with **Link account**. Link it once you know the sign-up is theirs; the account is then
 entitled to the plan within the application's five-minute cache. A sign-up whose email matches nothing starts its
-ordinary trial.
+ordinary trial. The same hold applies to an account whose code was refused and that then asks for an ordinary trial with
+the invited email: Intel's card setup then tells the person their plan is waiting, rather than that a trial ended.
 
 ## The invitation list
 
