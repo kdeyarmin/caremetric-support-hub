@@ -38,7 +38,9 @@ match it.
   - **Below 100%:** *Accept and continue to secure payment* opens Stripe Checkout with the discount already applied.
     Cancelling there changes nothing; they can come back to the page and continue.
 - **"Your plan is active"**: once the plan is active the page shows **Create your sign-in**, and the same button is
-  emailed to them once. It opens the application's sign-up address (Settings → Billing) with `?hub_invite=<code>`.
+  emailed to them once. It opens the application's sign-up address (Settings → Billing) with `?hub_invite=<code>`; a
+  CareBase invitation to a Train plan (entitlement key `train…`) opens CareBase's training sign-up (`product=train`), and a
+  Breathe invitation names its plan (`plan=<entitlement key>`), which Breathe's form chooses for them.
 
 ## What happens behind it
 
@@ -54,6 +56,9 @@ match it.
   identifiers, never names, emails or notes.
 
 ## What each application passes
+
+CareBase (`kdeyarmin/PennTrain`), Breathe (`kdeyarmin/PennFit`) and Intel (`kdeyarmin/intel`) each pass the code from their
+own sign-up; deploy the Hub (with its migrations) first, because the Hub's trial call refuses fields it does not know.
 
 The application's sign-up must pass the code on to the Hub, so the new account joins the plan instead of starting a
 trial: read `hub_invite` from the sign-up address, keep it through sign-up, and add it as `invite` to the existing

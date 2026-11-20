@@ -91,6 +91,13 @@ describe('the invitation email', () => {
     const signup = signupLink('https://cmbreathe.com/breathe/signup', token);
     expect(signup).toBe(`https://cmbreathe.com/breathe/signup?hub_invite=${token}`);
     expect(signupLink('https://example.test/join?ref=hub', token)).toBe(`https://example.test/join?ref=hub&hub_invite=${token}`);
+    expect(signupLink('https://cmcarebase.com/signup', token, { app: 'carebase', entitlement: 'train_single_facility' }))
+      .toBe(`https://cmcarebase.com/signup?product=train&hub_invite=${token}`);
+    expect(signupLink('https://cmcarebase.com/signup', token, { app: 'carebase', entitlement: 'core' })).toBe(`https://cmcarebase.com/signup?hub_invite=${token}`);
+    expect(signupLink('https://cmbreathe.com/breathe/signup', token, { app: 'breathe', entitlement: 'launch_founder' }))
+      .toBe(`https://cmbreathe.com/breathe/signup?plan=launch_founder&hub_invite=${token}`);
+    expect(signupLink('https://www.caremetricintel.com/login?signup=true', token, { app: 'caremetric-intel', entitlement: 'growth' }))
+      .toBe(`https://www.caremetricintel.com/login?signup=true&hub_invite=${token}`);
     const email = readyEmail(invitation({ app: 'breathe', discount_percent: 100, discount_duration: 'forever', discount_months: null }), signup);
     expect(email.subject).toBe('Your CareMetric Breathe plan is active: create your sign-in');
     expect(email.html).toContain('data-theme="breathe"');

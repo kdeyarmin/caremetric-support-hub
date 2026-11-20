@@ -114,7 +114,8 @@ language sql stable security definer set search_path = '' as $$
   select private.customer_invitation_view(p) || jsonb_build_object(
     'product_id', p.product_id, 'product', p.stripe_product_id, 'raw_status', p.status,
     'customer', p.stripe_customer_id, 'coupon', p.stripe_coupon_id, 'checkout', p.checkout_session_id, 'checkout_attempt', p.checkout_attempt,
-    'ready_email_at', p.ready_email_at, 'app_name', (select name from hub.products where id = p.product_id));
+    'ready_email_at', p.ready_email_at, 'app_name', (select name from hub.products where id = p.product_id),
+    'entitlement_key', (select entitlement_key from private.billing_products where stripe_product_id = p.stripe_product_id));
 $$;
 
 -- One published plan price of an application, as an invitation would offer it: active, recurring, public (not one customer's own), flat or

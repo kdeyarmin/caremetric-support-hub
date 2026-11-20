@@ -213,7 +213,7 @@ try {
   assert.equal(comp.discounts[0].source.coupon.percent_off, 100);
   assert.equal(sent.length, sentBefore + 1, 'the sign-up email follows at once');
   assert.equal(inviteOf(sent.at(-1)), freeToken);
-  assert.match(sent.at(-1).text, /https:\/\/cmbreathe\.com\/breathe\/signup\?hub_invite=/);
+  assert.match(sent.at(-1).text, /https:\/\/cmbreathe\.com\/breathe\/signup\?plan=pro&hub_invite=/, 'Breathe\'s form is told the invited plan');
   assert.equal((await invitations.accept(freeToken)).redirect, `/welcome/${freeToken}`, 'accepting again changes nothing');
   assert.equal([...stripe.store.subscriptions.values()].filter(row => row.metadata.hub_invitation === free.invitation.id).length, 1);
 

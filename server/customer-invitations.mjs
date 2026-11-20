@@ -136,9 +136,15 @@ export function invitationEmail(invitation, link) {
     signature: [`The ${profile.name} team`], footer: [`You received this email because CareMetric invited ${invitation.organization_name} to ${profile.short}. If you were not expecting it, you can ignore it.`] }) };
 }
 
-/** Where the customer creates their sign-in: the application's sign-up address (Settings → Billing) with the invitation's code. */
-export function signupLink(base, token) {
+/**
+ * Where the customer creates their sign-in: the application's sign-up address (Settings → Billing) with the invitation's code. A CareBase
+ * invitation to a Train plan (entitlement key train…) opens CareBase's training sign-up (`product=train`), which sets the organization up
+ * for training only; a Breathe invitation names its plan (`plan=<entitlement key>`), which Breathe's form chooses for them.
+ */
+export function signupLink(base, token, { app = null, entitlement = null } = {}) {
   const url = new URL(base);
+  if (app === 'carebase' && /^train/.test(entitlement ?? '')) url.searchParams.set('product', 'train');
+  if (app === 'breathe' && /^[a-z0-9_]{1,64}$/.test(entitlement ?? '')) url.searchParams.set('plan', entitlement);
   url.searchParams.set('hub_invite', token);
   return url.href;
 }
@@ -297,6 +303,7 @@ export function customerInvitations({ pool, stripe, mail, setting = () => null, 
     const value = setting(profile.signupSetting);
     return typeof value === 'string' && /^https:\/\//.test(value) ? value : profile.defaultSignup;
   };
+  const signupFor = (invitation, token) => signupLink(signupBase(invitation.app), token, { app: invitation.app, entitlement: invitation.entitlement_key });
   const requireEnabled = () => { if (!enabled) throw new HttpError(503, 'Customer invitations are waiting for their database migration (billing.customer-invitations.v1).'); };
   const asHttp = error => {
     if (error instanceof HttpError) return error;
@@ -313,7 +320,7 @@ export function customerInvitations({ pool, stripe, mail, setting = () => null, 
   };
 
   async function send(invitation, token, kind) {
-    const content = kind === 'ready' ? readyEmail(invitation, signupLink(signupBase(invitation.app), token)) : invitationEmail(invitation, welcomeUrl(token));
+    const content = kind === 'ready' ? readyEmail(invitation, signupFor(invitation, token)) : invitationEmail(invitation, welcomeUrl(token));
     let delivery = 'unknown';
     try {
       const result = await mail.send({ to: invitation.contact_email, subject: content.subject, text: content.text, html: content.html,
@@ -399,7 +406,7 @@ export function customerInvitations({ pool, stripe, mail, setting = () => null, 
       return { invitation: await view(invitation.id), delivery: null };
     } catch (error) { throw asHttp(error); }
   }
-  const ownerFields = ['product_id', 'product', 'raw_status', 'customer', 'coupon', 'checkout', 'checkout_attempt', 'ready_email_at', 'app_name', 'replay'];
+  const ownerFields = ['product_id', 'product', 'raw_status', 'customer', 'coupon', 'checkout', 'checkout_attempt', 'ready_email_at', 'app_name', 'entitlement_key', 'replay'];
   const stripReplay = invitation => Object.fromEntries(Object.entries(invitation).filter(([key]) => !ownerFields.includes(key)));
   const view = async id => stripReplay(await transaction(pool, db => find(db, 'id', id)));
 
@@ -453,7 +460,7 @@ export function customerInvitations({ pool, stripe, mail, setting = () => null, 
       // Stripe's webhook recorded the payment before the customer came back: the sign-up email still goes out, once.
       await readyOnce(invitation, token);
     }
-    const signup = invitation.status === 'active' ? signupLink(signupBase(invitation.app), token) : null;
+    const signup = invitation.status === 'active' ? signupFor(invitation, token) : null;
     return { status: 200, html: invitationPage(invitation, { token, signup, notice }) };
   }
 
