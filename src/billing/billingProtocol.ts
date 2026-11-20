@@ -130,4 +130,6 @@ export const trialRequestSchema = z.object({
   plan: z.string().regex(/^[a-z0-9_.-]{1,64}$/).nullable(),
   interval: z.enum(['month', 'year']).optional(),
   require_payment_method: z.boolean().optional(),
+  // The code of an owner's invitation (the `hub_invite` its sign-up link carries): the account joins the invitation's plan instead of a trial.
+  invite: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
 }).strict();

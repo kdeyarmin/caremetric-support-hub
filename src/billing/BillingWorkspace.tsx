@@ -1,4 +1,5 @@
 import { FoundersSaleNotice } from './FoundersSaleNotice';
+import { InvitationsTab } from './Invitations';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
@@ -13,8 +14,8 @@ import { Notice, Sheet, StatusChip } from './BillingUi';
 import { dayAfter, useBillingAction } from './billingActions';
 import './billing.css';
 
-type Tab = 'subscriptions' | 'customers' | 'catalog' | 'discounts' | 'apps';
-const tabs: Array<[Tab, string]> = [['subscriptions', 'Subscriptions'], ['customers', 'Customers'], ['catalog', 'Catalog'], ['discounts', 'Discounts'], ['apps', 'App connections']];
+type Tab = 'subscriptions' | 'customers' | 'invitations' | 'catalog' | 'discounts' | 'apps';
+const tabs: Array<[Tab, string]> = [['subscriptions', 'Subscriptions'], ['customers', 'Customers'], ['invitations', 'Invite a customer'], ['catalog', 'Catalog'], ['discounts', 'Discounts'], ['apps', 'App connections']];
 
 /** The super administrator's Billing workspace: every application's products, prices, subscriptions and discounts. */
 export function BillingWorkspace({ client = billingClient, demo = config.demoMode }: { client?: BillingClient; demo?: boolean }) {
@@ -45,6 +46,7 @@ export function BillingWorkspace({ client = billingClient, demo = config.demoMod
       {!data && !error && <p role="status">Loading billing…</p>}
       {data && tab === 'subscriptions' && <SubscriptionsTab data={data} />}
       {data && tab === 'customers' && <CustomersTab data={data} client={client} refresh={refresh} />}
+      {data && tab === 'invitations' && <InvitationsTab data={data} />}
       {data && tab === 'catalog' && <CatalogTab data={data} client={client} refresh={refresh} />}
       {data && tab === 'discounts' && <DiscountsTab data={data} client={client} refresh={refresh} />}
       {data && tab === 'apps' && <AppsTab data={data} client={client} refresh={refresh} />}

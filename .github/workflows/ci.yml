@@ -128,6 +128,8 @@ jobs:
           node server/billing-integration.mjs
           # Repeat with fresh fixtures to prove complete teardown.
           node server/billing-integration.mjs
+          node server/invitations-integration.mjs
+          node server/invitations-integration.mjs
           node server/self-service-integration.mjs
           node server/self-service-integration.mjs
           node server/onboarding-integration.mjs

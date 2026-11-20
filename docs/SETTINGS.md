@@ -78,6 +78,16 @@ does nothing. A setting you saved, or cleared back to its default, is never over
 | Course distribution | Allow legacy opt-in distribution | `HUB_LEGACY_DISTRIBUTION_OPT_IN` |
 | Course distribution | Lesson video import hosts (one per line; empty: HeyGen's) | `HUB_MEDIA_IMPORT_HOSTS` (comma separated) |
 
+Customer invitations (Billing → Invite a customer, owner request 2026-11-19; [Customer invitations](CUSTOMER_INVITATIONS.md)), all settings from
+the start:
+
+| Settings group | Setting | What it does |
+| --- | --- | --- |
+| Billing | CareBase sign-up address for invitations | Where an invited CareBase customer creates their sign-in once their plan is active (default `https://cmcarebase.com/signup`). The Hub adds `?hub_invite=…` |
+| Billing | Breathe sign-up address for invitations | The same for Breathe (default `https://cmbreathe.com/breathe/signup`) |
+| Billing | CareMetric Intel sign-up address for invitations | The same for Intel (default `https://www.caremetricintel.com/signup`; check it is Intel's own sign-up page) |
+| Billing | Invitations last | How many days an invitation link can be accepted, 1 to 90 (default 30). Sending it again starts a new period |
+
 The end-of-day summary (owner decision 2026-11-18: one email a day instead of a stream of updates;
 [AI_TEAM.md](AI_TEAM.md#the-end-of-day-summary) says what is held and what still comes at once):
 

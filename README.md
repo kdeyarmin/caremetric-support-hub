@@ -49,6 +49,9 @@ purchases for those apps are disabled.
   their plans and invoices at `/billing` and manage their payment method in the
   Stripe customer portal. Applications check entitlements and report billable
   quantities through the Hub. See [platform billing](docs/PLATFORM_BILLING.md).
+  **Invite a customer** sends one customer a welcome email in the chosen application's own look (CareBase, Breathe or
+  Intel) with a price you authorize and a discount from 0 to 100%; at 100% they never see Stripe. See
+  [customer invitations](docs/CUSTOMER_INVITATIONS.md).
 - **Bulk email** (`/admin/email`): email the users of one or more applications,
   narrowed by role and account status read from each application's own user
   directory. Duplicates across applications and unsubscribed addresses are

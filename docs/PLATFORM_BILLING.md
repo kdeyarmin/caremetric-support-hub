@@ -179,6 +179,13 @@ change needs the command session (signed in within the last eight hours).
   optionally limited to an application or products, a redemption count or a
   date) and promotion codes for them (optionally first-time only, a minimum,
   an expiry or one customer).
+- **Invite a customer** — invite one customer to CareBase, Breathe or Intel at a
+  published plan price, with a discount from 0 to 100% for as long as they
+  subscribe, for some months or once. They get a welcome email in that
+  application's own look and accept on the Hub's welcome page: below 100% they
+  pay in Stripe Checkout with the discount applied; at 100% the Hub creates the
+  subscription itself, with no Checkout and no card. See
+  [customer invitations](CUSTOMER_INVITATIONS.md).
 - **App connections** — issue or revoke each application's key for the APIs
   below. A key is shown once and stored only as a hash.
 
@@ -385,6 +392,16 @@ price of the product whose entitlement key is `plan`, or the product marked
 `hub_trial_default`), then returns the entitlement answer. CareBase trials last
 30 days, others 14. A trial without a payment method cancels at its end. An
 account that already has billing gets its current answer and no second trial.
+
+An invited customer's sign-up passes the invitation's code: `"invite": "<the
+hub_invite value of the sign-up address>"` (43 characters). Once the invitation
+is paid for or complimentary, the new account is linked to the invitation's
+tenant and plan instead of starting a trial, and the answer is that plan's
+entitlement; a retry by the same account answers the same, and another account
+gets 400. Without the code, a new account whose sign-up email matches an
+activated invitation of the same application is held (`status: "none"`,
+`entitled: false`, no trial) until the owner links it from the invitation, so the
+customer is never billed twice. See [customer invitations](CUSTOMER_INVITATIONS.md#what-each-application-passes).
 
 ## Verifying
 

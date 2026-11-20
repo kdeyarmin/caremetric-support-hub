@@ -60,3 +60,24 @@
 
 .founders-sale-banner{border:2px solid #93b8e5;background:#edf5ff;padding:20px;color:#173d6b}
 .founders-sale-banner h2{font-size:clamp(1.35rem,3vw,1.8rem);line-height:1.25}
+
+/* Billing → Invite a customer (Invitations.tsx) */
+.invite-form{border:1px solid #d9e2ed;border-radius:14px;background:#fff;padding:16px}
+.invite-apps{display:flex;gap:8px;flex-wrap:wrap}
+.invite-app{display:inline-flex;flex-direction:row;align-items:center;gap:8px;min-height:38px;padding:0 14px;border:1px solid #cbd5e1;border-radius:999px;font-weight:700;cursor:pointer}
+.invite-app input{width:auto;min-height:0;margin:0;accent-color:#264491}
+.invite-app:has(input:checked){background:#eef3fc;border-color:#264491;color:#1f3261}
+.invite-discount{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.invite-discount input[type="range"]{flex:1 1 220px;accent-color:#264491}
+.invite-percent{display:inline-flex;align-items:flex-end;gap:6px}
+.invite-percent span{padding-bottom:8px;font-weight:700}
+.invite-percent input{width:96px}
+.invite-summary{border:1px solid #bfdbfe;border-left:4px solid #264491;border-radius:10px;background:#f5f8fe;padding:12px 14px}
+.invite-summary-free{border-color:#bbf7d0;border-left-color:#16a34a;background:#f0fdf4}
+.invite-summary dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0}
+.invite-summary dt{color:#526173}
+.invite-summary dd{margin:0;font-weight:700;color:#15223f}
+.invite-summary p{margin:10px 0 0;color:#334155}
+.invite-preview{border:1px solid #d9e2ed;border-radius:14px;background:#fff;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.invite-preview iframe{width:100%;height:720px;border:1px solid #e2e8f0;border-radius:10px;background:#f1f5f9}
+@media (max-width:720px){.invite-summary dl{grid-template-columns:1fr}}

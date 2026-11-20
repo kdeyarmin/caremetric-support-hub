@@ -51,7 +51,7 @@ const emails = {
     footer: [`You're receiving this because ${hostile}.`],
   }),
   // The sections of a marketing email to an agency (growth/campaign.mjs), in each theme.
-  ...Object.fromEntries(['intel', 'hub', 'carebase'].map(theme => [`marketing email layout (${theme})`, () => renderEmail({
+  ...Object.fromEntries(['intel', 'hub', 'carebase', 'breathe'].map(theme => [`marketing email layout (${theme})`, () => renderEmail({
     theme, title: `Report for ${hostile}`, preheader: `A report for ${hostile}.`, eyebrow: `Ready ${hostile}`, heading: `Your report ${hostile}`, greeting: `Hello ${hostile},`,
     blocks: marketingSections(hostile),
     signature: [`Founder ${hostile}`, 'CareMetric'], footer: [`1 Main St ${hostile}`],
@@ -237,6 +237,7 @@ describe('product themes', () => {
     expect(themeFor('caremetric-intel')).toBe('intel');
     expect(themeFor('intel')).toBe('intel');
     expect(themeFor('carebase')).toBe('carebase');
+    expect(themeFor('breathe')).toBe('breathe');
     for (const product of ['advisors', null, undefined]) expect(themeFor(product)).toBe('hub');
     const email = renderEmail({ title: 'T', heading: 'H', blocks: [], footer: ['F'] });
     expect(email.html).toContain('data-theme="hub"');
@@ -259,6 +260,21 @@ describe('the CareBase theme', () => {
     expect(email.html).toContain('background-color:#F1F5F9;');
     expect(email.html).not.toContain(PRODUCT_WORDMARK);
     expect(email.text.endsWith('Reason.\nNeed help? Email support@caremetric.ai.\nCareMetric CareBase · cmcarebase.com')).toBe(true);
+  });
+});
+
+describe('the Breathe theme', () => {
+  it('dresses a Breathe email as the Breathe app sends it: the navy band and wordmark, the accent rule, its blue, its footer', () => {
+    const email = renderEmail({ theme: 'breathe', title: 'Welcome', heading: 'Welcome to CareMetric Breathe', preheader: 'First steps.',
+      blocks: [{ type: 'button', label: 'Create your account', url: 'https://cmbreathe.com/breathe/signup' }],
+      signature: ['The CareMetric Breathe team'], footer: ['Reason.'] });
+    expect(email.html).toContain('data-theme="breathe"');
+    expect(email.html).toContain('linear-gradient(135deg,#0b1426 0%,#11203c 100%)');
+    expect(email.html).toContain('>CareMetric Breathe</td>');
+    expect(email.html).toContain('linear-gradient(90deg,#54c8ff 0%,#2f6fe6 50%,#f6a722 100%)');
+    expect(email.html).toContain('border-radius:8px;background-color:#2f6fe6;');
+    expect(email.html).not.toContain(PRODUCT_WORDMARK);
+    expect(email.text.endsWith('Reason.\nNeed help? Email support@caremetric.ai.\nCareMetric Breathe · cmbreathe.com')).toBe(true);
   });
 });
 

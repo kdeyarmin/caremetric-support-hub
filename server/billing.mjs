@@ -10,6 +10,7 @@ import { useAppCatalogFacts } from './agents/content/facts.mjs';
 import { facilityEntitlementRequest, facilityEntitlementSnapshot } from '../src/billing/facilityEntitlements.ts';
 import { selfServiceApps } from '../src/self-service/protocol.ts';
 import { trialCardOnFile } from './trial-card.mjs';
+import { invitationsFeature } from './customer-invitations.mjs';
 
 /**
  * Platform billing for CareMetric applications that accept payments. Stripe is the source of
@@ -70,7 +71,9 @@ function asHttpError(error) {
 }
 
 export function platformBilling({ pool, secretKey, webhookSecrets = [], accountId = STRIPE_ACCOUNT_ID, portalConfiguration,
-  publicOrigin, fetchImpl = fetch, apiBase, now = () => Date.now(), log = console, authorizeCustomerBilling, customerPurchasingEnabled = false, features = new Set() }) {
+  publicOrigin, fetchImpl = fetch, apiBase, now = () => Date.now(), log = console, authorizeCustomerBilling, customerPurchasingEnabled = false, features = new Set(),
+  // A Checkout session an owner's invitation started (customer-invitations.mjs): its events record the paid plan on the invitation.
+  onInvitationCheckout = null }) {
   // The customer portal configuration (Settings → Billing); `portalConfiguration` may be a function, read on each use.
   const portal = () => { const value = live(portalConfiguration); return typeof value === 'string' && /^bpc_[A-Za-z0-9]+$/.test(value) ? value : undefined; };
   const client = stripeClient({ secretKey, fetchImpl, ...(apiBase ? { apiBase } : {}) });
@@ -184,6 +187,9 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       // fails the event, so Stripe sends it again.
       try {
         if (eventTarget(event)?.kind === 'checkout') await customerSelfService.reconcileCheckout(event.data.object.id);
+        if (eventTarget(event)?.kind === 'checkout' && typeof event.data.object.metadata?.hub_invitation === 'string' && onInvitationCheckout) {
+          await onInvitationCheckout(event.data.object.id);
+        }
         if (live && event.data.object.metadata?.app !== 'caremetric-go' && normalizers.invoice(event.data.object).app !== 'caremetric-go') {
           const target = eventTarget(event);
           if (target?.kind === 'subscription') await customerSelfService.reconcileSubscription(await live.get(`/v1/subscriptions/${target.id}`, { expand: ['latest_invoice', 'discounts'] }));
@@ -848,13 +854,21 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     try {
       const prepared = await transaction(pool, async db => {
         const app = await authenticateApp(db, authorization);
+        // An owner's invitation (customer-invitations.mjs): with its code the new account joins the invitation's plan instead of starting a
+        // trial; without it, a sign-up whose email matches an invitation that is already paid for or complimentary waits for the owner to
+        // link it, so the customer is never billed for a second, separate trial.
+        if (features.has(invitationsFeature)) {
+          const claim = (await one(db, 'select private.customer_invitation_claim($1,$2,$3,$4) as c',
+            [app.product_id, request.account, request.email, request.invite ? sha256(request.invite) : null])).c;
+          if (claim?.outcome === 'held') return { app, held: true, current: (await one(db, 'select private.billing_app_entitlements($1,$2) as e', [app.product_id, request.account])).e };
+        }
         const tenant = (await one(db, 'select private.billing_app_tenant($1,$2,$3) as t', [app.product_id, request.account, request.name])).t;
         const current = (await one(db, 'select private.billing_app_entitlements($1,$2) as e', [app.product_id, request.account])).e;
         const context = (await one(db, 'select private.billing_context($1) as c', [tenant])).c;
         const price = current.status === 'none' ? await lookup(db, request.interval ? 'trial_price_interval' : 'trial_price', `${app.slug}:${request.plan ?? ''}${request.interval ? `:${request.interval}` : ''}`) : null;
         return { app, tenant, current, context, price };
       });
-      if (prepared.current.status !== 'none') return appResponse(prepared.current);
+      if (prepared.held || prepared.current.status !== 'none') return appResponse(prepared.current);
       if (!prepared.price) throw new HttpError(409, 'No trial plan is configured for this application in the Hub.');
       const accountKey = sha256(`${prepared.app.slug}:${request.account}`).slice(0, 32);
       return await transaction(pool, async db => {
@@ -1171,6 +1185,8 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     status: () => ({ configured: !!client, state, mode: client?.mode ?? null, account: state === 'ready' ? accountId : null,
       webhook: webhookSecrets.length > 0, portal_configuration: !!portal() }),
     webhook, command, customerPortal, appPortal, appPlanChanges, entitlements, facilityEntitlements, usage, trial, agentOffer,
+    // Stripe for customer invitations (customer-invitations.mjs): the verified client, and the mirror every billing change writes through.
+    invitationStripe: { client: stripe, mirror: (db, live, kind, object) => mirror(db, kind, object, new Date(now()), { live }), refresh },
     customer: async (session, input) => { try { return await customerSelfService.handle(session, input); } catch (error) { throw asHttpError(error); } },
   };
 }
