@@ -265,7 +265,7 @@ application already federates to the Hub.
 ```json
 {
   "linked": true, "tenant_id": "…", "app": "carebase", "status": "active", "entitled": true,
-  "trial_end": null, "current_period_end": "2026-11-27T00:00:00+00:00", "cancel_at_period_end": false,
+  "trial_end": null, "current_period_end": "2026-11-27T00:00:00+00:00", "cancel_at_period_end": false, "cancel_at": null,
   "products": [{ "key": "core", "kind": "plan", "name": "CareBase Core", "quantity": 3, "unit_label": "facility",
                   "status": "active", "plan": "core", "package_id": "…", "product": "prod_…", "subscription": "sub_…" }],
   "cache_ttl_seconds": 300, "checked_at": "2026-10-27T12:00:00.000Z"
@@ -273,7 +273,11 @@ application already federates to the Hub.
 ```
 
 `entitled` is true while a subscription is active, trialing or past due (Stripe
-is retrying payment). A suspended or closed tenant, an unlinked account, and a
+is retrying payment). `cancel_at` is when access ends once every live
+subscription is set to end, and null while any of them renews. Read it, not
+only `cancel_at_period_end`: Stripe's customer portal records a cancellation at
+the end of the period as `cancel_at` (the period's end) and leaves
+`cancel_at_period_end` false. A suspended or closed tenant, an unlinked account, and a
 canceled or unpaid subscription answer `entitled: false`. Applications cache an
 answer for at most `cache_ttl_seconds` and **fail closed**: if the Hub cannot be
 reached and no fresh answer is cached, paid features stay off.

@@ -380,6 +380,18 @@ try {
   assert.equal((await customer(tenant)).subscriptions[0].cancel_at_period_end, true, 'a late, older event never overwrites newer state');
   await command({ action: 'customer.sync', tenant_id: tenant });
   assert.equal((await customer(tenant)).subscriptions[0].cancel_at_period_end, false, 'a refresh from Stripe restores the truth');
+  // Stripe's customer portal ends a subscription at the end of its period by setting cancel_at to that moment and leaving
+  // cancel_at_period_end false (Stripe sandbox, November 20, 2026). The application still learns when access ends.
+  const periodEnd = Math.max(...snapshot.items.data.map(item => item.current_period_end));
+  const portalCancel = { id: 'evt_' + randomUUID().replaceAll('-', ''), object: 'event', type: 'customer.subscription.updated', created: Math.floor(Date.now() / 1000), livemode: false,
+    data: { object: { ...snapshot, cancel_at_period_end: false, cancel_at: periodEnd, canceled_at: Math.floor(Date.now() / 1000) } } };
+  await admin.query("update private.billing_subscriptions set seen_at=now()-interval '1 hour' where stripe_subscription_id=$1", [subscriptionId]);
+  await sendEvent(portalCancel, webhookSecret, webhookOnly);
+  const ending = await billing.entitlements(bearer, { account });
+  assert.equal(ending.cancel_at_period_end, false);
+  assert.equal(Date.parse(ending.cancel_at), periodEnd * 1000, 'a portal cancellation tells the application when access ends');
+  await command({ action: 'customer.sync', tenant_id: tenant });
+  assert.equal((await billing.entitlements(bearer, { account })).cancel_at, null, 'a subscription that renews has no end');
 
   // Tenant administrators: their own billing and the Stripe customer portal, nothing else.
   const carebase = await product('carebase');
