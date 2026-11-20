@@ -145,24 +145,39 @@ no impression after two days of serving, or places other than the roster's state
 (attention `now`), to fix in Google Ads. `auto_tagging_off` (no `gclid` reaches the lead form; the landing page's `utm_` tags still
 do) and `conversions_not_tracked` are recorded on the result only.
 
-**Reporting leads to Google (2026-11-19).** The first read-back found auto-tagging on and conversion tracking off, so Google could not
-count a lead its ad brought. With Settings → Paid ads → "Report leads to the ad platforms" on and **Google Ads conversion action id** set
-(migration `20261119120000_google_conversions.sql` adds the setting), the quarter-hourly `ads.conversions` run uploads each county
-report or trial lead of the last seven days that carries a `gclid` to that conversion action as an offline click conversion. It sends
-the `gclid`, when the lead happened, and the lead's id as the order id, so a resend is never counted twice. It sends no email or name;
-Meta and LinkedIn get a hashed email. Setting it up:
+**Reporting leads to Google (2026-11-19, through the Data Manager API since 2026-11-20).** The first read-back found auto-tagging on
+and conversion tracking off, so Google could not count a lead its ad brought. With Settings → Paid ads → "Report leads to the ad
+platforms" on and **Google Ads conversion action id** set (migration `20261119120000_google_conversions.sql` adds the setting), the
+quarter-hourly `ads.conversions` run sends each county report or trial lead of the last seven days that carries a `gclid` to that
+conversion action as an offline click conversion. It sends the `gclid`, when the lead happened, and the lead's id as the transaction
+id, which Google keeps one conversion for. It sends no email or name; Meta and LinkedIn get a hashed email.
+
+It goes through Google's [Data Manager API](https://developers.google.com/data-manager/api) (`POST
+https://datamanager.googleapis.com/v1/events:ingest`, scope `https://www.googleapis.com/auth/datamanager`), not the Google Ads API.
+Since June 15, 2026 the Google Ads API refuses offline conversions from a developer that had not imported them before
+([Google's announcement](https://developers.google.com/ads/blog/posts/2026/05/changes-to-offline-click-conversion)), and it refused the
+first lead on November 19 with `google_customer_not_allowlisted_for_this_feature`. Migration
+`20261120210000_google_conversions_resend.sql` clears that refusal so the lead is sent again; apply it after the release that sends
+through the Data Manager API is live, because the release before it would only be refused again. Setting it up:
 
 1. In Google Ads, go to Goals → Conversions → New conversion action → Import → Manual import using API or uploads → Track conversions
    from clicks. Name it (for example "Intel lead"), count **One**, and leave its value empty.
 2. Copy its id, the number after `ctId=` in the address of the conversion action's page, into Settings → Paid ads → Google Ads
    conversion action id.
+3. In Google Cloud, open the project of the service account the Hub signs in to Google with, go to APIs & Services → Library and
+   enable the **Data Manager API**. The service account already needs Standard access to the Google Ads account (or its manager) to
+   create campaigns, which is also what the Data Manager API asks for. A person's sign-in (the OAuth refresh token) must have granted the
+   Data Manager scope as well.
 
-Each run checks the conversion action once, before it sends a lead. If the action is missing, not enabled or not a click import, or
-Google refuses the Hub's access, nothing is sent and no lead is marked, and you are told once (attention `now`). Each lead is then sent
-once the problem is fixed, if it is within a week of the lead. A lead without a `gclid` is marked `skipped` (`no_click`), as for Meta and
-LinkedIn. A click Google cannot match yet, or a conversion action less than six hours old, waits for the next run (`waiting` on the
-result). A click Google will not take (an expired one, for example) is marked `failed` with Google's reason as a fixed code, for
-example `google_expired_event`.
+Each run checks the conversion action once, through the Google Ads API, before it sends a lead. If the action is missing, not enabled
+or not a click import, the Data Manager API is not enabled or the sign-in lacks its scope, Google refuses the Hub's access, or it refuses
+the request as malformed (`google_request_refused`, with Google's reason), nothing is sent and no lead is marked, and you are told once
+(attention `now`). Each lead is then sent once the problem is fixed, if it is within a week of the lead. A lead without a `gclid` is
+marked `skipped` (`no_click`), as for Meta and LinkedIn.
+
+`sent` means Google took the request for processing, not that it matched the click. Google matches it later, up to a day, and reports
+the outcome in Google Ads (Goals → Conversions → the conversion action → Diagnostics): a click too recent, not found or expired shows
+there, not in the Hub. An answer that confirms nothing waits for the next run (`waiting` on the result).
 
 ## Approved video posts
 
@@ -495,5 +510,5 @@ is explicitly limited to read access: it does not prove write authorization, con
 
 Before claiming a campaign works, reconcile the Hub receipt with the provider's campaign ID, approval status, total
 budget, end date, destinations, targeting, impressions and actual spend. Reconcile attributed leads separately.
-Hub server conversion submissions currently cover Meta and LinkedIn, not Google; verify Google conversion actions
-and the site's tag or import integration independently. An empty result is not evidence of zero account spending.
+Hub server conversion submissions cover Meta, LinkedIn and, since November 20, Google through its Data Manager API; a
+Google submission is only accepted for processing, so verify the match in the conversion action's diagnostics in Google Ads. An empty result is not evidence of zero account spending.
