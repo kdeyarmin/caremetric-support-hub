@@ -55,6 +55,17 @@ describe('Billing → Invite a customer', () => {
     await screen.findByText('Maple Grove');
   });
 
+  // Intel can't take a code for an organization that already uses it (that organization is connected to its own customer),
+  // so the form says where its price is changed instead.
+  it('tells the owner how an organization that already uses Intel gets its price', () => {
+    render(<InvitationsTab data={fixtureWorkspace()} client={client({})} />);
+    expect(screen.queryByText(/If the organization already uses Intel/)).toBeNull();
+    fireEvent.click(screen.getByLabelText('CareMetric Intel'));
+    expect(screen.getByText(/If the organization already uses Intel, don't invite it: change its plan, price or discount on its page under Customers/)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('CareMetric Breathe'));
+    expect(screen.queryByText(/If the organization already uses Intel/)).toBeNull();
+  });
+
   it('previews the email, then sends the invitation once with a stable request key', async () => {
     const create = vi.fn().mockRejectedValueOnce(new Error('Network down')).mockImplementation(async record => ({ invitation: invitation({ contact_email: record.contact_email }), delivery: 'sent' as const }));
     const api = client({ create });
