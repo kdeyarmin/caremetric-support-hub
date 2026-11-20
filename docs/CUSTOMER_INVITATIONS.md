@@ -99,8 +99,14 @@ goes through the Hub's email service and support sender (Settings → Email); St
 
 Apply `20261120120000_customer_invitations.sql` and `20261120120100_customer_invitations_contract.sql` (declares
 `billing.customer-invitations.v1`). The server can be deployed first: until the feature is declared, the tab answers that
-invitations are waiting for their migration, `/welcome/…` serves nothing and sign-ups are unchanged. Then update each
+invitations are waiting for their migration, `/welcome/…` serves nothing and sign-ups are unchanged. The server reads the
+declared features when it starts, so a server that started before the contract migration keeps invitations off until it
+restarts: apply the migrations before the deploy goes live, or restart the service afterwards. Its log then says
+`Customer invitations: ready.` (`waiting for the billing.customer-invitations.v1 migration` before). Then update each
 application to pass `invite` (above).
+
+Production: both migrations were applied on 2026-11-20 after the release
+([#294](https://github.com/kdeyarmin/caremetric-support-hub/pull/294)) deployed, and the service was restarted.
 
 ## Verifying
 
