@@ -65,11 +65,11 @@ describe('registration', () => {
   });
 
   it('reads Settings → Creative with safe defaults, and HeyGen only with its key', () => {
-    expect(creativeConfig({})).toEqual({ enabled: false, dailyRenderCap: 40, countySnapshotsPerWeek: 3, visionReview: false, visionMinScore: 3, videoProvider: 'internal', heygenKey: '' });
+    expect(creativeConfig({})).toEqual({ enabled: false, dailyRenderCap: 40, visionReview: false, visionMinScore: 3, videoProvider: 'internal', heygenKey: '' });
     expect(creativeConfig({}, settingsOf({ 'creative.vision_review': true, 'creative.vision_min_score': 4 }))).toMatchObject({ visionReview: true, visionMinScore: 4 });
     expect(creativeConfig({}, settingsOf({ 'creative.vision_review': 'yes', 'creative.vision_min_score': 9 }))).toMatchObject({ visionReview: false, visionMinScore: 3 });
-    expect(creativeConfig({}, settingsOf({ 'creative.county_snapshots_per_week': 0 })).countySnapshotsPerWeek).toBe(0);
-    expect(creativeConfig({}, settingsOf({ 'creative.county_snapshots_per_week': 9 })).countySnapshotsPerWeek).toBe(3);
+    // "County snapshots a week" is retired (2026-11-20): a value left in the database is read by nothing.
+    expect(creativeConfig({}, settingsOf({ 'creative.county_snapshots_per_week': 3 }))).not.toHaveProperty('countySnapshotsPerWeek');
     expect(creativeConfig({}, settingsOf({ 'creative.daily_render_cap': 12, 'creative.video_provider': 'heygen' })).videoProvider).toBe('internal');
     expect(creativeConfig({ HUB_HEYGEN_API_KEY: 'k'.repeat(20) }, settingsOf({ 'creative.daily_render_cap': 12, 'creative.video_provider': 'heygen' }))).toMatchObject({ dailyRenderCap: 12, videoProvider: 'heygen' });
     expect(creativeConfig({}, settingsOf({ 'creative.daily_render_cap': -1 })).dailyRenderCap).toBe(40);
@@ -332,78 +332,35 @@ describe('no side effect without an approved action', () => {
   });
 });
 
-describe('county snapshots', () => {
-  const counties = [{ countyFips: '42003', state: 'PA', agencies: 9 }, { countyFips: '42101', state: 'PA', agencies: 7 }];
+describe('county snapshots (retired 2026-11-20)', () => {
   const answer = { counties: [
-    { county_fips: '42003', county_name: 'Allegheny', state: 'PA', figures: [{ key: 'medicare_beneficiaries', label: 'x', value: 250000, unit: 'count', data_year: '2026', period: '2026-06',
+    { county_fips: '42017', county_name: 'Bucks', state: 'PA', figures: [{ key: 'medicare_advantage_share', label: 'x', value: 0.41, unit: 'fraction', data_year: '2026', period: '2026-06',
       dataset: 'CMS Medicare Monthly Enrollment', source_line: 's', short_source: 'CMS Medicare Monthly Enrollment, 2026' }] },
-    { county_fips: '42101', county_name: 'Philadelphia', state: 'PA', figures: [] },
   ] };
-  const setup = ({ perWeek = 3, configured = true, fail = false } = {}) => {
+  const setup = () => {
     const h = harness({ model: modelOf() });
-    h.store.creativeDataCounties = vi.fn(async () => counties);
-    const feed = { configured, countyFigures: vi.fn(async () => { if (fail) throw Object.assign(new Error('x'), { code: 'feed_unavailable', transient: true }); return answer; }) };
-    const handlers = creativeHandlers({ store: h.store, notifier: h.notifier, model: modelOf(), feed, settings: { dailyRenderCap: 40, videoProvider: 'internal', countySnapshotsPerWeek: perWeek },
-      publicOrigin: 'https://help.caremetric.ai', log: () => {} });
+    h.store.creativeDataCounties = vi.fn(async () => [{ countyFips: '42017', state: 'PA', agencies: 9 }]);
+    h.store.creativeDataCountiesAll = vi.fn(async () => [{ countyFips: '42017', state: 'PA', agencies: 9 }]);
+    const feed = { configured: true, counties: vi.fn(async () => ({ counties: [{ county_fips: '42017', county_name: 'Bucks', state: 'PA' }] })), countyFigures: vi.fn(async () => answer) };
+    // A caller that still passes the old options (an Intel feed, the roster's states, a weekly number) changes nothing.
+    const handlers = creativeHandlers({ store: h.store, notifier: h.notifier, model: modelOf(), feed, states: () => ['PA'],
+      settings: { dailyRenderCap: 40, videoProvider: 'internal', countySnapshotsPerWeek: 3 }, publicOrigin: 'https://help.caremetric.ai', log: () => {} });
     return { ...h, handlers, feed };
   };
 
-  it('opens one brief for each county the data can picture, within the week\'s number, keyed to the county and week', async () => {
+  it('opens no county snapshot: every campaign, ad and post reaches the roster\'s whole states, never one county alone', async () => {
     const { handlers, store, feed, task: make } = setup();
     const done = await handlers['creative.plan'](make('creative.plan'), { now });
-    expect(store.creativeDataCounties).toHaveBeenCalledWith(3, '2026-11-09T05:00:00.000Z');
-    expect(feed.countyFigures).toHaveBeenCalledWith({ countyFips: ['42003', '42101'] });
-    const opened = store.creativeBriefCreate.mock.calls.map(([item]) => item).filter(item => item.source === 'data.county');
-    expect(opened).toHaveLength(1);
-    expect(opened[0]).toMatchObject({ requestKey: 'data:county:42003:2026-11-09', facts: { stat: '250,000', statSource: 'CMS Medicare Monthly Enrollment, 2026' } });
-    expect(done.result.snapshots).toBe(1);
+    expect(feed.counties).not.toHaveBeenCalled();
+    expect(feed.countyFigures).not.toHaveBeenCalled();
+    expect(store.creativeDataCounties).not.toHaveBeenCalled();
+    expect(store.creativeDataCountiesAll).not.toHaveBeenCalled();
+    expect(store.creativeBriefCreate.mock.calls.some(([item]) => item.source === 'data.county' || item.facts)).toBe(false);
+    expect(done.result).not.toHaveProperty('snapshots');
+    expect(done.result).not.toHaveProperty('snapshotsSkipped');
   });
 
-  it('opens none while the number is 0, the feed is not set up or cannot answer', async () => {
-    for (const options of [{ perWeek: 0 }, { configured: false }, { fail: true }]) {
-      const { handlers, store, task: make } = setup(options);
-      const done = await handlers['creative.plan'](make('creative.plan'), { now });
-      expect(store.creativeBriefCreate.mock.calls.some(([item]) => item.source === 'data.county')).toBe(false);
-      expect(done.result.snapshots).toBeUndefined();
-    }
-  });
-
-  it('says why a run opened no snapshot', async () => {
-    const reasons = [];
-    for (const options of [{ perWeek: 0 }, { configured: false }, { fail: true }]) {
-      const { handlers, task: make } = setup(options);
-      reasons.push((await handlers['creative.plan'](make('creative.plan'), { now })).result.snapshotsSkipped);
-    }
-    expect(reasons).toEqual(['off', 'feed_not_configured', 'feed_unavailable']);
-  });
-
-  it('pictures every county of the roster\'s states, each about one care setting, and sends readers to the free county report', async () => {
-    const h = harness({ model: modelOf() });
-    // Forest County has no agency located in it: it comes from Intel's county list. Erie has only hospices on the roster.
-    h.store.creativeDataCountiesAll = vi.fn(async () => [{ countyFips: '42053', state: 'PA', agencies: 0, homeHealth: 0, hospice: 0, lastSetting: 'home_health' },
-      { countyFips: '42049', state: 'PA', agencies: 4, homeHealth: 0, hospice: 4, lastSetting: null }]);
-    const figure = (key, value, setting, unit = 'count') => ({ key, label: key, value, unit, setting, data_year: '2024', period: '2024', dataset: 'CMS', source_line: 's', short_source: `CMS ${key}, 2024` });
-    const feed = { configured: true,
-      counties: vi.fn(async () => ({ counties: [{ county_fips: '42049', county_name: 'Erie', state: 'PA' }, { county_fips: '42053', county_name: 'Forest', state: 'PA' }] })),
-      countyFigures: vi.fn(async () => ({ counties: [
-        { county_fips: '42053', county_name: 'Forest', state: 'PA', figures: [figure('home_health_agencies_billing', 9, 'home_health'), figure('hospices_billing', 6, 'hospice')] },
-        { county_fips: '42049', county_name: 'Erie', state: 'PA', figures: [figure('home_health_top3_share', 0.61, 'home_health', 'fraction'), figure('hospice_top3_share', 0.72, 'hospice', 'fraction')] },
-      ] })) };
-    const handlers = creativeHandlers({ store: h.store, notifier: h.notifier, model: modelOf(), feed, states: () => ['PA'],
-      settings: { dailyRenderCap: 40, videoProvider: 'internal', countySnapshotsPerWeek: 3 }, publicOrigin: 'https://help.caremetric.ai', log: () => {} });
-    const done = await handlers['creative.plan'](h.task('creative.plan'), { now });
-    expect(feed.counties).toHaveBeenCalledWith({ states: ['PA'] });
-    expect(h.store.creativeDataCountiesAll).toHaveBeenCalledWith(3, '2026-11-09T05:00:00.000Z', [{ countyFips: '42049', state: 'PA' }, { countyFips: '42053', state: 'PA' }]);
-    expect(done.result.snapshots).toBe(2);
-    const opened = new Map(h.store.creativeBriefCreate.mock.calls.map(([item]) => item).filter(item => item.source === 'data.county').map(item => [item.facts.countyFips, item]));
-    // Forest was pictured for home health last time, so hospice now; Erie has only hospices, so hospice.
-    expect(opened.get('42053')).toMatchObject({ facts: { setting: 'hospice', stat: '6', statLabel: 'hospices billed Medicare for Forest County, PA residents', landing: 'intel-county-report' },
-      audience: 'Owners, administrators and marketers at hospices serving Forest County, PA' });
-    expect(opened.get('42049')).toMatchObject({ facts: { setting: 'hospice', figure: 'hospice_top3_share', stat: '72%',
-      statLabel: 'of the Medicare patients of Erie County, PA hospices went to the 3 largest' } });
-    for (const item of opened.values()) expect(`${item.goal} ${item.angle}`).not.toMatch(/home health/i);
-  });
-
+  // A brief already stored with a figure is still drawn and checked exactly as before.
   it('sends a snapshot\'s drafts to the free county report, whatever page the concept chose', async () => {
     const snapshotBrief = { ...brief, source: 'data.county', facts: { stat: '9', statLabel: 'home health agencies billed Medicare for Forest County, PA residents', statSource: 'CMS, 2024',
       dataYear: '2024', place: 'Forest County, PA', setting: 'home_health', landing: 'intel-county-report' } };

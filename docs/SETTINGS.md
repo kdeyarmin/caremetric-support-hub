@@ -126,7 +126,6 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Customer growth | Pause cold email at this bounce rate | Cold email waits for you to resume it on Growth when two or more of the last seven days' cold emails bounced for good above this percent (counted against at least 20) or one is marked as spam (empty: off) |
 | Customer growth | Research prospects with web search; Most prospects to research a day; Most to spend researching one prospect | Deeper research within a cost ceiling |
 | Customer growth | Write from what is working | Drafts use the weekly memo you approve on Growth, or each new memo at once after you hand "Learning memo" over on the AI team page |
-| Creative | County snapshots a week | Images of one public number about home health or hospice for a county of your roster's states, each sending readers to Intel's free county report (0 turns them off; [Creative Director](CREATIVE_DIRECTOR.md#county-snapshots-2026-11-13)) |
 | Creative | Have a model look at each image before you see it; Least score from the image review | A model reads each finished ad image as a person in a feed would: cut-off, overlapping, unreadable or garbled text or a wrong figure is never shown to you, and an image below the least score (1 to 5) comes with a warning ([Creative Director](CREATIVE_DIRECTOR.md#the-image-review-2026-11-16)) |
 | Social media | Post about new CMS data and observances | The weekly plan may write one post about a new release or an observance |
 | Social media | Write posts for my LinkedIn profile; Posts for my profile a week | Posts in your voice, each approved by you until you hand "Founder posts" over on the AI team page |
@@ -144,6 +143,9 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 **Retired settings.** "Test a short first email" (Customer growth) left the Settings page on 2026-11-17: every first email built around
 a market report has one form now, a short opening and the email's own sections ([Customer growth](CUSTOMER_GROWTH.md#each-agencys-own-market-report)). Its row stays in the database,
 because the release gate that created it checks for it, and nothing reads it (`retiredSettings` in `server/hub-settings.mjs`).
+"County snapshots a week" (Creative) left it on 2026-11-20: an image that names one county was shown in campaigns and posts that reach
+the roster's whole states, and no marketing names one county unless it is shown only in that county (owner decision). Its row stays for
+the same reason ([Creative Director](CREATIVE_DIRECTOR.md#county-snapshots-2026-11-13)).
 
 **Growth email display name**, when empty: a founder-signed email to a prospect arrives from "Dr. Kevin Deyarmin, CareMetric", and
 every other growth email from "CareMetric". A name set there is used for all of them.

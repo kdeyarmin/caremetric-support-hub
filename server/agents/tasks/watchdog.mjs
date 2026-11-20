@@ -93,7 +93,7 @@ export function lossFindings(losses) {
 const toolsFor = {
   marketing_manager: ['prospect_roster', 'prospect_research', 'growth_email', 'decision_makers', 'prospect_deep_research'],
   social_manager: ['social_images', 'paid_campaigns', 'founder_posts'],
-  creative_director: ['creative_production', 'county_snapshots'],
+  creative_director: ['creative_production'],
 };
 
 function hintFor(agentKey, toolkit) {

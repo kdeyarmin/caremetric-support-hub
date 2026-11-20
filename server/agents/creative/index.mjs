@@ -32,7 +32,6 @@ export function creativeConfig(env = {}, setting = null) {
   return {
     enabled: value('creative.enabled') === true,
     dailyRenderCap: Number.isInteger(cap) && cap >= 0 && cap <= 1000 ? cap : 40,
-    countySnapshotsPerWeek: (snapshots => (Number.isInteger(snapshots) && snapshots >= 0 && snapshots <= 7 ? snapshots : 3))(value('creative.county_snapshots_per_week')),
     // The vision review (vision.mjs): off unless switched on; the least score it lets through without a warning, 1 to 5.
     visionReview: value('creative.vision_review') === true,
     visionMinScore: (score => (Number.isInteger(score) && score >= 1 && score <= 5 ? score : 3))(value('creative.vision_min_score')),
@@ -54,10 +53,9 @@ export function creativeTeam({ creative = null, features = null, fetchImpl = fet
   const enabled = () => config().enabled === true;
   return {
     declared: true, enabled, config, heygen,
-    handlers: ({ store, notifier, model, meta = null, linkedin = null, publicOrigin, marketed = null, log, feed = null, states = null }) => {
-      const handlers = creativeHandlers({ store, notifier, model, meta, linkedin, heygen, publicOrigin, marketed, log, feed, states,
+    handlers: ({ store, notifier, model, meta = null, linkedin = null, publicOrigin, marketed = null, log }) => {
+      const handlers = creativeHandlers({ store, notifier, model, meta, linkedin, heygen, publicOrigin, marketed, log,
         settings: { get dailyRenderCap() { return config().dailyRenderCap; }, get videoProvider() { return config().videoProvider; },
-          get countySnapshotsPerWeek() { return config().countySnapshotsPerWeek; },
           get visionReview() { return config().visionReview === true; }, get visionMinScore() { return config().visionMinScore; } } });
       // Scheduled sweeps are disposable while switched off. A brief's sole drafting task must wait
       // for the switch to come back on, otherwise its open brief is stranded without a task.

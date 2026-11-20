@@ -159,7 +159,8 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [visitors.enabled === true, 'Turn on Settings → Website analytics → Read Intel website sessions.'],
       [visitors.signing === true, 'Set the same HUB_VISITOR_METRICS_KEY (at least 32 characters) on the Hub and Intel services, and release Intel’s measurement endpoint.'],
     ]);
-  // The 2026-11-13 additions: founder posts, county snapshots, new paid campaigns and lead reports.
+  // The 2026-11-13 additions: founder posts, new paid campaigns and lead reports. County snapshot images were retired on 2026-11-20 (no
+  // marketing names one county unless it is shown only in that county).
   const li = socialWork?.linkedin?.configured ?? {};
   const adsSettings = adsWork?.config?.() ?? {};
   add('founder_posts', 'Posts for your own LinkedIn profile', ['social_manager'],
@@ -167,13 +168,6 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [has(features, 'platform.agents.founder-posts.v1'), schemaStep('founder posts')],
       [socialSettings.settings?.founderPosts === true, 'Turn on Settings → Social media → Write posts for my LinkedIn profile.'],
       [li.member === true, 'Save your personal LinkedIn access token on the LinkedIn connection card (Settings → Social media), or copy the posts from the weekly plan email.'],
-    ]);
-  add('county_snapshots', 'County snapshot images', ['creative_director'],
-    'Images that each show one Medicare or Census number for a county where your roster prospects are. Code prints the number and its source; you approve each image.', [
-      [has(features, 'platform.agents.creative-data.v1'), schemaStep('county snapshots')],
-      [creativeWork?.enabled?.() === true, 'Turn on Settings → Creative → Turn on the Creative Director.'],
-      [(creativeWork?.config?.().countySnapshotsPerWeek ?? 0) > 0, 'Set Settings → Creative → County snapshots a week above 0.'],
-      [live(growth?.roster?.feed)?.configured === true || growth?.roster?.feed?.configured === true, 'Set up Intel\'s marketing feed (Settings → Customer growth → Find prospects from the Medicare roster, and HUB_INTEL_FEED_SECRET).'],
     ]);
   add('paid_campaigns', 'New paid campaigns', ['social_manager'],
     'Proposes, once a month, a LinkedIn campaign, a Meta retargeting campaign and a Google search campaign. Each is created paused after you approve it, within your monthly number; once you hand ad campaign launch over they start on their own with your approved creative, together within that number.', [

@@ -164,10 +164,10 @@ honestly offer today.
 | --- | --- | --- |
 | A headline that names an outcome | Short outcome lines, often strings of three fragments | Complete, plain lines that open on the reader's moment or question, never on the brand or a feature. Our checks refuse fragment strings. |
 | Data-scale numbers as proof | Users, claims analyzed, provider counts | Name the publishers (CMS, NPPES, Census Bureau and the rest). Use counts only after they are added to the fact sheet (section 15). |
-| Customer results and logos | Percent lifts, hours saved, named customers | None are approved. Show the product instead: a real screenshot, a county snapshot printed from Medicare or Census data, the free county report, the trial in the reader's own county. |
+| Customer results and logos | Percent lifts, hours saved, named customers | None are approved. Show the product instead: a real screenshot, the free county report, the trial in the reader's own county. |
 | "Request a demo" everywhere | A sales meeting is the next step | The 30-day free trial, the walkthrough at `/#how-it-works`, the free county report at `/county-report`, and written answers by email. Never a call, demo or meeting. |
-| A free personalized market review | A custom report that leads into a sales meeting | The free county report at `/county-report`, for every kind of organization: choose a state and a county, enter an email address, and the report (the county at a glance, the hospitals its residents use most, and the nursing homes, home health agencies, hospices and personal care and assisted living homes located there) is emailed as a PDF. Self-serve and by email, never a meeting, and nobody is asked for a CCN or an agency's name (owner direction 2026-11-19; the market review at `/market-review` is retired). New paid campaigns and county snapshot images send people to it. An agency the roster names also gets its own market report link in the team's email. Follow with the trial in that same county. |
-| A flagship annual report | Gated, interactive, announced by press release | Recurring posts on new CMS data Intel just loaded and on observances, plus county snapshot images. Section 15 suggests a quarterly public-data article. |
+| A free personalized market review | A custom report that leads into a sales meeting | The free county report at `/county-report`, for every kind of organization: choose a state and a county, enter an email address, and the report (the county at a glance, the hospitals its residents use most, and the nursing homes, home health agencies, hospices and personal care and assisted living homes located there) is emailed as a PDF. Self-serve and by email, never a meeting, and nobody is asked for a CCN or an agency's name (owner direction 2026-11-19; the market review at `/market-review` is retired). New paid campaigns send people to it. An agency the roster names also gets its own market report link in the team's email. Follow with the trial in that same county. |
+| A flagship annual report | Gated, interactive, announced by press release | Recurring posts on new CMS data Intel just loaded and on observances. Section 15 suggests a quarterly public-data article. |
 | Tools that ride a new rule | An SSVI lookup after the hospice rule | Explainer articles on SSVI, HHVBP and TEAM that cite cms.gov and show the Intel page where the score appears. |
 | Pages by role and care setting | Separate pitches for each buyer | Use Intel's own pages: targeted marketing, territory analysis, referral measurement and the manager playbook. Match the page to the reader. |
 | "Better together" bundles | Data product plus CRM, sold as one | Our bigger picture: one workspace from research to recorded results, at one published price. |
@@ -310,8 +310,9 @@ product or a feature. The feature is the reason to believe in the primary text. 
 
 - **The founder's story** goes in the primary text, never the headline: "CareMetric Intel was custom built by someone who uses it every
   day."
-- **County snapshots:** one Medicare or Census figure for a county where prospects are, printed by code with its source. The words
-  around it name the decision it helps with.
+- **No single county in broad marketing** (owner decision 2026-11-20): an ad, campaign or post names one county, or shows that county's
+  figure, only when it is shown in that county alone. Every campaign today reaches the roster's whole states, so county snapshot images
+  are retired; an agency's own county stays in the email written to that agency.
 - **Targeting:** home health and hospice owners, administrators, and directors of business development or marketing. Google search should
   start with high-intent terms such as "home health CRM" and "hospice marketing software".
 

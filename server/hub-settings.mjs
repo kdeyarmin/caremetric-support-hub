@@ -291,8 +291,6 @@ export const settingsCatalog = Object.freeze([
     label: 'Turn on the Creative Director', help: 'Lets the Creative Director turn the marketing plans into ad images and videos for your approval. It also needs "Run the AI team" on and the agent resumed on the AI team page. Off: creative you already approved is still handed over.' },
   { key: 'creative.daily_render_cap', group: 'creative', kind: 'number', input: 'number', default: 40, min: 0, max: 1000, unit: 'renders', env: null, valid: wholeNumber(0, 1000),
     label: 'Most renders a day', help: 'Images and videos started per Eastern day, across every server (0 to 1,000). 0 renders nothing.' },
-  { key: 'creative.county_snapshots_per_week', group: 'creative', kind: 'number', input: 'number', default: 3, min: 0, max: 7, unit: 'images', env: null, valid: wholeNumber(0, 7),
-    label: 'County snapshots a week', help: 'Images that each show one Medicare or Census number about home health or hospice in a county of your roster\'s states, sending readers to Intel\'s free county report (0 to 7; 0 turns them off). Code prints the number and its source; you approve each image.' },
   { key: 'creative.vision_review', group: 'creative', kind: 'flag', input: 'toggle', default: false, env: null,
     label: 'Have a model look at each image before you see it', help: 'A model reads each finished ad image as a person in a feed would. Cut-off, overlapping, unreadable or garbled text, or a wrong figure, is never shown to you; a weak image comes with a warning and the model\'s note. About a cent an image, from the Creative Director\'s budget.' },
   { key: 'creative.vision_min_score', group: 'creative', kind: 'number', input: 'number', default: 3, min: 1, max: 5, unit: 'points', env: null, valid: wholeNumber(1, 5),
@@ -319,8 +317,11 @@ export const retiredVariables = Object.freeze(['HUB_BULK_EMAIL_FROM', 'HUB_BOOKI
  * Settings nothing reads any more. Their rows stay in the database, because the release gates that created them still check for them,
  * and no page shows them. growth.short_first_email ("Test a short first email") was a half-and-half test of a first email that holds
  * only the agency's market report: every such first email is that form since 2026-11-17 (growth/draft.mjs), by the owner's decision.
+ * creative.county_snapshots_per_week ("County snapshots a week") drew one county's figure for ads and posts that reach the roster's
+ * whole states: no marketing names one county unless it is shown only in that county (owner decision 2026-11-20), so none is drawn.
  */
-export const retiredSettings = Object.freeze([Object.freeze({ key: 'growth.short_first_email', kind: 'flag' })]);
+export const retiredSettings = Object.freeze([Object.freeze({ key: 'growth.short_first_email', kind: 'flag' }),
+  Object.freeze({ key: 'creative.county_snapshots_per_week', kind: 'number' })]);
 const usable = (entry, value) => {
   if (value === null || value === undefined) return false;
   if (entry.kind === 'flag') return typeof value === 'boolean';

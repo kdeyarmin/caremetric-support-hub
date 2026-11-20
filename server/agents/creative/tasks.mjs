@@ -19,15 +19,14 @@
  *
  * Only products the team markets (marketing.mjs) get creative. Nothing another person wrote reaches the model or a stored record.
  */
-import { weekStart, easternDate, easternMidnight } from '../accounts/week.mjs';
+import { weekStart, easternDate } from '../accounts/week.mjs';
 import { marketedNow, markets } from '../marketing.mjs';
 import { delivered } from '../notify.mjs';
-import { live } from '../../live.mjs';
 import { reviewImage } from './vision.mjs';
 import { dueMoment, permanent, plural, recordRun } from '../tasks/shared.mjs';
 import { catalogBlocks, focusFor } from '../content/features.mjs';
 import { badgeText, checkCopy, checkData, checkPlatform, checkText, checkVideo, checkVisual, verdictOf, withoutFigure } from './compliance.mjs';
-import { countyBrief, countySnapshot, settingFor, withFacts } from './data.mjs';
+import { withFacts } from './data.mjs';
 import {
   audienceFor, namedSegment, segmentFor,
   briefUserMessage, chooseVariants, conceptPromptVersion, conceptSchema, conceptSystem, landingFor, normalizeVariant, planPlacements, variantsPromptVersion,
@@ -82,11 +81,7 @@ export function copyFindings({ product, platform, copy, offerCode = null, kit = 
  * @param {object} [options.meta] @param {object} [options.linkedin] the Social Media Manager's clients, read for ad results
  */
 export function creativeHandlers({ store, notifier, model = null, meta = null, linkedin = null, heygen = null, settings = {}, publicOrigin = null, marketed = null,
-  feed = null, states = null, renderBudgetMs = 150_000, log = line => console.warn(line) }) {
-  // The roster's states (Settings → Customer growth), read on each run: the county snapshots picture every county of them.
-  const rosterStates = () => { const value = live(states); return Array.isArray(value) ? value.filter(state => /^[A-Z]{2}$/.test(state)).slice(0, 60) : []; };
-  // County snapshots a week (Settings → Creative), from Intel's marketing feed (`feed`, growth/intel-feed.mjs); 0 or no feed, none.
-  const snapshotsNow = () => (Number.isInteger(settings.countySnapshotsPerWeek) && settings.countySnapshotsPerWeek >= 0 ? Math.min(settings.countySnapshotsPerWeek, 7) : 0);
+  renderBudgetMs = 150_000, log = line => console.warn(line) }) {
   // Read on each run: the cap and the video provider are Hub settings (Settings → Creative) that change without a restart.
   const capNow = () => (Number.isInteger(settings.dailyRenderCap) && settings.dailyRenderCap >= 0 ? settings.dailyRenderCap : 40);
   // Settings → Creative: the vision review and the least score it lets through without a warning. On without a model, an image is shown
@@ -199,51 +194,11 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
         await store.enqueue(task.agentKey, 'creative.request', `creative:brief:${saved.id}`, { payload: { briefId: saved.id }, priority: 5, sourceKind: 'agent', sourceRef: 'creative.plan' });
       }
     }
-    const snapshots = offered.includes('caremetric-intel') ? await countySnapshots(task, week) : { opened: 0, skipped: 'intel_not_marketed' };
-    await recordRun({ store, log }, task, { promptVersion: 'creative-plan.1', summary: `Read ${plural(inputs.length, 'plan item')} and opened ${plural(created, 'creative brief')}${snapshots.opened ? ` and ${plural(snapshots.opened, 'county snapshot')}` : ''}.` });
-    // Why no county snapshot was opened, in the run's result, so a quiet week can be told from a broken one.
-    return { result: { week, inputs: inputs.length, briefs: created, ...(snapshots.opened ? { snapshots: snapshots.opened } : {}), ...(snapshots.skipped ? { snapshotsSkipped: snapshots.skipped } : {}) } };
+    await recordRun({ store, log }, task, { promptVersion: 'creative-plan.1', summary: `Read ${plural(inputs.length, 'plan item')} and opened ${plural(created, 'creative brief')}.` });
+    return { result: { week, inputs: inputs.length, briefs: created } };
   }
 
-  const codeOf = error => (/^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'feed_error');
-
-  /**
-   * County snapshots (data.mjs): up to the week's number, each one public figure about one care setting for one county of the roster's
-   * states, the least recently pictured first, the figure in turn by week. Returns how many were opened, or why none could be.
-   * A feed that cannot answer leaves the week without them; the next day's plan tries again.
-   */
-  async function countySnapshots(task, week) {
-    const perWeek = snapshotsNow();
-    if (!perWeek) return { opened: 0, skipped: 'off' };
-    if (!feed?.configured || typeof feed.countyFigures !== 'function') return { opened: 0, skipped: 'feed_not_configured' };
-    if (typeof store.creativeDataCountiesAll !== 'function' && typeof store.creativeDataCounties !== 'function') return { opened: 0, skipped: 'database_not_ready' };
-    const weekStart = easternMidnight(week).toISOString();
-    // Every county of the roster's states (Intel's geography), so a county with no agency located in it is pictured too. Without the list
-    // (an older Intel, or the database without the newer county choice), the roster's own counties, as before.
-    let all = null;
-    const states = rosterStates();
-    if (states.length && typeof feed.counties === 'function' && typeof store.creativeDataCountiesAll === 'function') {
-      try { all = ((await feed.counties({ states }))?.counties ?? []).map(county => ({ countyFips: county.county_fips, state: county.state })); }
-      catch (error) { log(JSON.stringify({ event: 'hub_creative_county_list_unread', code: codeOf(error) })); }
-    }
-    const counties = typeof store.creativeDataCountiesAll === 'function' ? await store.creativeDataCountiesAll(perWeek, weekStart, all) : await store.creativeDataCounties(perWeek, weekStart);
-    if (!Array.isArray(counties) || !counties.length) return { opened: 0, skipped: 'no_county_due' };
-    let answer;
-    try { answer = await feed.countyFigures({ countyFips: counties.map(county => county.countyFips) }); }
-    catch (error) { log(JSON.stringify({ event: 'hub_creative_county_unread', code: codeOf(error) })); return { opened: 0, skipped: codeOf(error) }; }
-    const turn = Math.floor(Date.parse(week) / (7 * day));
-    const chosen = new Map(counties.map(county => [county.countyFips, county]));
-    let opened = 0;
-    for (const [index, county] of (answer?.counties ?? []).entries()) {
-      const snapshot = countySnapshot(county, turn + index, settingFor(chosen.get(county.county_fips), turn + index));
-      if (!snapshot) continue;
-      const saved = await store.creativeBriefCreate(countyBrief(snapshot, week));
-      if (!saved?.created) continue;
-      opened += 1;
-      await store.enqueue(task.agentKey, 'creative.request', `creative:brief:${saved.id}`, { payload: { briefId: saved.id }, priority: 5, sourceKind: 'agent', sourceRef: 'creative.plan' });
-    }
-    return opened ? { opened } : { opened: 0, skipped: 'no_figure_fits' };
-  }
+  const codeOf = error => (/^[a-z][a-z_]{0,59}$/.test(error?.code ?? '') ? error.code : 'store_error');
 
   // ---- Request: one brief becomes checked drafts -------------------------------------------------------------------------------------
   async function request(task, { now = () => new Date(), signal } = {}) {

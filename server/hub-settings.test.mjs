@@ -20,7 +20,7 @@ describe('the settings catalog', () => {
     const rows = [...migration.matchAll(/\('([a-z_]+\.[a-z_]+)', '(flag|text|number|list)'\)/g)].map(match => [match[1], match[2]]);
     // A retired setting keeps its row (the release gates still check for it) and leaves the catalog, so no page shows it.
     expect([...settingsCatalog, ...retiredSettings].map(item => [item.key, item.kind]).sort()).toEqual(rows.sort());
-    expect(retiredSettings.map(item => item.key)).toEqual(['growth.short_first_email']);
+    expect(retiredSettings.map(item => item.key)).toEqual(['growth.short_first_email', 'creative.county_snapshots_per_week']);
     for (const retired of retiredSettings) expect(settingsCatalog.some(item => item.key === retired.key), retired.key).toBe(false);
     // The release gate refuses a database without the first release's 32 rows.
     expect(rows.length).toBeGreaterThanOrEqual(32);
