@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { socialExecutors } from './executor.mjs';
+import { renderOwnerEmail } from '../notify.mjs';
 
 const now = () => new Date('2026-11-10T15:31:00Z');
 const message = 'Annual training hours piling up? Keep each staff member\'s training in one place.\n\n#PersonalCareHome';
@@ -329,8 +330,11 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
     await expect(promise).rejects.toMatchObject({ code: 'linkedin_permission' });
     const sent = notifier.send.mock.calls[0][0];
     expect(sent).toMatchObject({ severity: 'warning', subject: 'A LinkedIn post to paste: LinkedIn refused the team', dedupeKey: 'social:linkedin:paste:a1' });
-    expect(sent.blocks[1]).toEqual({ type: 'message', text: `${message}\n\n${post.link}` });
-    expect(sent.body).toContain('Reconnect LinkedIn (Settings → Social media)');
+    expect(sent.blocks[2]).toEqual({ type: 'message', text: `${message}\n\n${post.link}` });
+    // Codex review 2026-11-20: custom blocks replace the body in the email, so the email itself must say how to reconnect.
+    const email = renderOwnerEmail({ ...sent, publicOrigin: 'https://help.caremetric.ai' });
+    expect(email.html).toContain('Reconnect LinkedIn (Settings → Social media)');
+    expect(email.html).toContain('Paste this on the LinkedIn Page:');
   });
 
   // Review 2026-11-20: the founder posts of November 17 and 19 failed with linkedin_token_invalid, and nobody was told.
@@ -345,8 +349,10 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
       await expect(executors['social.founder_post'](action)).rejects.toMatchObject({ code });
       const sent = notifier.send.mock.calls[0][0];
       expect(sent).toMatchObject({ severity: 'warning', attention: 'now', dedupeKey: 'social:linkedin:founder-paste:f1', taskId: 't9' });
-      expect(sent.blocks).toEqual([{ type: 'paragraph', text: 'Paste this on your LinkedIn profile:' }, { type: 'message', text: founderMessage }]);
-      expect(sent.body).toContain('LinkedIn connection card (Settings → Social media)');
+      expect(sent.blocks.slice(1)).toEqual([{ type: 'paragraph', text: 'Paste this on your LinkedIn profile:' }, { type: 'message', text: founderMessage }]);
+      // The email itself, not only the notice's body, says the token lasts 60 days and where to save a new one.
+      const email = renderOwnerEmail({ ...sent, publicOrigin: 'https://help.caremetric.ai' });
+      for (const words of ['last 60 days', 'LinkedIn connection card (Settings → Social media)', 'Paste this on your LinkedIn profile:']) expect(email.html).toContain(words);
     }
     // Any other failure, or without the feature, says nothing new.
     for (const [code, settings] of [['linkedin_unavailable', { reach: true }], ['linkedin_token_invalid', {}]]) {
