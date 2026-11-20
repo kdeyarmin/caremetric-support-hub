@@ -92,10 +92,15 @@ const enumWord = value => (typeof value === 'string' && /^[A-Z][A-Z0-9_]{0,59}$/
 const count = value => { const n = Number(value); return Number.isFinite(n) && n >= 0 ? Math.round(n) : 0; };
 const cents = micros => { const n = Number(micros); return Number.isFinite(n) && n >= 0 ? Math.round(n / 10_000) : null; };
 const dayOf = value => (typeof value === 'string' && calendarDay(value.slice(0, 10)) ? value.slice(0, 10) : null);
-// An uploaded click conversion Google already holds (the lead's id is its order id), and one it cannot take yet: the click is too recent
-// to match, or the conversion action was created less than six hours ago. Both names Google has used are listed for each.
-const clickAlready = new Set(['CLICK_CONVERSION_ALREADY_EXISTS', 'DUPLICATE_ORDER_ID', 'ORDER_ID_ALREADY_IN_USE']);
-const clickNotReady = new Set(['TOO_RECENT_CONVERSION_ACTION', 'TOO_RECENT_EVENT', 'TOO_RECENT_GCLID', 'EVENT_NOT_FOUND', 'GCLID_NOT_FOUND', 'CLICK_NOT_FOUND']);
+// Why the Data Manager API refused a request: the reason of its google.rpc.ErrorInfo (SERVICE_DISABLED, ACCESS_TOKEN_SCOPE_INSUFFICIENT),
+// else the first field violation's reason (INVALID_NUMBER_FORMAT). Only the enum is kept, never the message or a field's value.
+const dataManagerRefusal = data => {
+  const details = Array.isArray(data?.error?.details) ? data.error.details : [];
+  const info = details.find(detail => String(detail?.['@type'] ?? '').endsWith('google.rpc.ErrorInfo'));
+  const violation = details.flatMap(detail => (Array.isArray(detail?.fieldViolations) ? detail.fieldViolations : []))[0];
+  for (const value of [info?.reason, violation?.reason, data?.error?.status]) if (enumWord(value) && value !== 'INVALID_ARGUMENT') return value;
+  return enumWord(data?.error?.status);
+};
 // A refused search keeps only Google's error enum (e.g. queryError.UNRECOGNIZED_FIELD), never its message text.
 const searchRefusal = data => {
   for (const detail of Array.isArray(data?.error?.details) ? data.error.details : []) {
@@ -165,6 +170,9 @@ export function deliveryFromRows({ account = [], campaigns = [], metrics = [], a
 }
 
 export const adwordsScope = 'https://www.googleapis.com/auth/adwords';
+/** Google's Data Manager API, where offline click conversions go since the Google Ads API stopped taking new adopters (June 15, 2026). */
+export const dataManagerScope = 'https://www.googleapis.com/auth/datamanager';
+export const dataManagerIngestUrl = 'https://datamanager.googleapis.com/v1/events:ingest';
 
 /**
  * The Google Ads API: an access token, and one atomic mutate that creates a PAUSED search campaign (its budget, United States targeting,
@@ -186,10 +194,12 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
   const auth = oauth ? 'oauth' : account.state === 'ready' ? 'service_account' : null;
   const configured = Boolean(customer && auth);
   const devToken = developerToken.length >= 10 ? developerToken : '';
-  async function accessToken(signal) {
+  // The service account asks for the scope the call needs (the Google Ads API's, or the Data Manager API's for conversions); a person's
+  // refresh token carries the scopes they granted when they signed in.
+  async function accessToken(signal, scope = adwordsScope) {
     const body = auth === 'oauth'
       ? new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken }).toString()
-      : new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: signAssertion(account, { issuedAt: Math.floor(clock() / 1000), scope: adwordsScope }) }).toString();
+      : new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: signAssertion(account, { issuedAt: Math.floor(clock() / 1000), scope }) }).toString();
     let response;
     try {
       response = await fetchImpl(tokenUrl, { method: 'POST', redirect: 'error', signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(timeoutMs)]),
@@ -273,48 +283,47 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
     },
 
     /**
-     * Reports one lead from a Google ad click to `conversionActionId` as an offline click conversion (owner request 2026-11-19): its
-     * gclid, when the lead happened (`happenedAt`, milliseconds) and the lead's id as the order id, so a resend is never counted twice;
-     * nothing else about the person. `{ uploaded: true }` (with `already: true` when Google has it already). A refusal is a fixed code:
-     * `google_click_not_ready` (`retry: true`) while Google cannot match the click yet or the conversion action is under six hours old;
-     * `google_<enum>` for a click Google will not take (an expired click, for one); google_permission, google_query_refused or
-     * google_unavailable for the request itself; google_unconfirmed when the answer confirms nothing. Nothing Google writes is kept.
+     * Reports one lead from a Google ad click to `conversionActionId` as an offline click conversion, through Google's Data Manager API
+     * (review 2026-11-20: since June 15, 2026 the Google Ads API refuses offline conversions from a new adopter with
+     * CUSTOMER_NOT_ALLOWLISTED_FOR_THIS_FEATURE, and it refused this Hub's first lead). One event: its gclid, when the lead happened
+     * (`happenedAt`, milliseconds) and the lead's id as the transaction id, which Google deduplicates on; nothing else about the person,
+     * so no user data and no encoding. The destination is this account and the conversion action, through the manager account when one
+     * is set, as the Google Ads API calls sign in.
+     *
+     * `{ accepted: true }` once Google takes the request for processing: Google matches the click later, and the outcome shows in
+     * Google Ads. A refusal is a fixed code: google_datamanager_disabled (the Data Manager API is not enabled in the Google Cloud
+     * project of the Hub's credentials), google_datamanager_scope (a person's sign-in without the Data Manager scope), google_permission,
+     * google_request_refused (with the enum `reason` only), google_unavailable (transient), or google_unconfirmed when the answer
+     * confirms nothing. Nothing Google writes is kept.
      */
-    async uploadClickConversion({ conversionActionId, gclid, happenedAt, orderId }, { signal } = {}) {
+    async sendClickConversion({ conversionActionId, gclid, happenedAt, transactionId }, { signal } = {}) {
       if (!configured) throw failure('google_not_configured');
       if (!/^[0-9]{1,20}$/.test(String(conversionActionId ?? '')) || !/^[A-Za-z0-9_.-]{1,500}$/.test(String(gclid ?? ''))
-        || !Number.isFinite(happenedAt) || !/^[0-9A-Za-z-]{1,64}$/.test(String(orderId ?? ''))) throw failure('google_invalid_request');
-      const at = new Date(happenedAt).toISOString();
-      const conversion = { gclid, conversionAction: `customers/${customer}/conversionActions/${conversionActionId}`,
-        conversionDateTime: `${at.slice(0, 10)} ${at.slice(11, 19)}+00:00`, orderId };
-      const token = await accessToken(signal);
+        || !Number.isFinite(happenedAt) || !/^[0-9A-Za-z-]{1,64}$/.test(String(transactionId ?? ''))) throw failure('google_invalid_request');
+      const googleAds = id => ({ accountType: 'GOOGLE_ADS', accountId: id });
+      const request = {
+        destinations: [{ operatingAccount: googleAds(customer), ...(login ? { loginAccount: googleAds(login) } : {}), productDestinationId: String(conversionActionId) }],
+        events: [{ adIdentifiers: { gclid }, eventTimestamp: new Date(happenedAt).toISOString(), transactionId, eventSource: 'WEB' }],
+      };
+      const token = await accessToken(signal, dataManagerScope);
       let response;
       try {
-        response = await fetchImpl(`https://googleads.googleapis.com/${apiVersion}/customers/${customer}:uploadClickConversions`, { method: 'POST', redirect: 'error',
+        response = await fetchImpl(dataManagerIngestUrl, { method: 'POST', redirect: 'error',
           signal: AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(timeoutMs)]),
-          headers: { Authorization: `Bearer ${token}`, ...(devToken ? { 'developer-token': devToken } : {}), 'Content-Type': 'application/json', ...(login ? { 'login-customer-id': login } : {}) },
-          body: JSON.stringify({ conversions: [conversion], partialFailure: true }) });
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
       } catch (error) { if (signal?.aborted) throw error; throw failure('google_unavailable', true); }
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const refused = failure(response.status === 401 || response.status === 403 ? 'google_permission' : response.status === 429 || response.status >= 500 ? 'google_unavailable' : 'google_query_refused',
-          response.status === 429 || response.status >= 500);
-        const reason = searchRefusal(data);
-        throw reason ? Object.assign(refused, { reason }) : refused;
+        const reason = dataManagerRefusal(data);
+        const transient = response.status === 429 || response.status >= 500;
+        const code = transient ? 'google_unavailable'
+          : reason === 'SERVICE_DISABLED' ? 'google_datamanager_disabled'
+            : reason === 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' ? 'google_datamanager_scope'
+              : response.status === 401 || response.status === 403 ? 'google_permission' : 'google_request_refused';
+        throw Object.assign(failure(code, transient), reason ? { reason } : {});
       }
-      // With partialFailure, a conversion Google will not take comes back as a 200 carrying the reason, and an empty result in its place.
-      const partial = data?.partialFailureError;
-      if (partial && (Number(partial.code) || 0) !== 0) {
-        const reason = searchRefusal({ error: partial });
-        const word = reason?.split('.')[1] ?? null;
-        if (word && clickAlready.has(word)) return { uploaded: true, already: true };
-        if (word && clickNotReady.has(word)) throw Object.assign(failure('google_click_not_ready'), { retry: true, reason });
-        const code = word ? `google_${word.toLowerCase()}`.slice(0, 60) : 'google_conversion_refused';
-        throw Object.assign(failure(/^[a-z][a-z_]{0,59}$/.test(code) ? code : 'google_conversion_refused'), reason ? { reason } : {});
-      }
-      const result = Array.isArray(data?.results) ? data.results[0] : null;
-      if (!result || (result.gclid !== gclid && result.conversionAction !== conversion.conversionAction)) throw failure('google_unconfirmed');
-      return { uploaded: true };
+      if (typeof data?.requestId !== 'string' || !data.requestId) throw failure('google_unconfirmed');
+      return { accepted: true };
     },
 
     /**
