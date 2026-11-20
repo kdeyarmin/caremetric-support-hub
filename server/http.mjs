@@ -12,6 +12,7 @@ import { chatCookie } from './communications.mjs';
 import { bulkEmailActions } from './bulk-email.mjs';
 import { agentAdminActions } from './agents/admin.mjs';
 import { creativeAdminActions, videoUploadLimit } from './agents/creative/admin.mjs';
+import { welcomePagePolicy } from './customer-invitations.mjs';
 
 export const securityHeaders = {
   'X-Content-Type-Options':'nosniff','X-Frame-Options':'SAMEORIGIN',
@@ -76,7 +77,7 @@ export const privateHubMessage='This Hub is private. Only its owner can sign in.
  * treated as signed out, a sign-in that fails it is revoked at once, and the routes that create
  * sign-ins for anyone else (invitation claims and application self-service) are closed.
  */
-export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,settings=null,socialConnections=null,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,publicArticles=null,creative=null,dist=resolve('dist')}) {
+export function appServer({auth,password,gateway,delegations,publications,aiCases,readiness,integrationSetup,settings=null,socialConnections=null,communications,bulkEmail,billing,selfService,agents,growth,leads,leadAdmin,mediaImport=null,health,owner,origins,helpCenter=null,publicArticles=null,creative=null,invitations=null,dist=resolve('dist')}) {
   return createServer(async(req,res) => {
     for (const [name,value] of Object.entries(securityHeaders)) res.setHeader(name,value);
     const json=(body,status=200,cookies=[]) => {
@@ -481,6 +482,12 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           if(!billing) throw new HttpError(503,'Billing is not configured.');
           return json(await billing.command(session,await jsonBody(req,65536)));
         }
+        // Customer invitations (Billing → Invite a customer, server/customer-invitations.mjs): the owner's command session only.
+        if(path==='/api/admin/invitations' && req.method==='POST') {
+          if(url.search) throw new HttpError(400,'Invitation query parameters are not supported.');
+          if(!invitations) throw new HttpError(503,'Customer invitations are not configured.');
+          return json(await invitations.admin(session,await jsonBody(req,16384)));
+        }
         if(path==='/api/billing/portal' && req.method==='POST') {
           if(selfService) await selfService.refreshAuthority(session);
           if(url.search) throw new HttpError(400,'Billing query parameters are not supported.');
@@ -568,6 +575,28 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           await pipeline(Readable.fromWeb(response.body),res); return;
         }
         throw new HttpError(404,'This resource is unavailable.');
+      }
+      // An owner's invitation to a customer (server/customer-invitations.mjs): the unguessable token in the path is the only authority. GET
+      // shows the offer and changes nothing but confirming a payment the customer just returned from; accepting it is a POST from this
+      // same page, so a mail scanner that follows the link never accepts it. The page may send its form on to Stripe Checkout.
+      const welcome=/^\/welcome\/([A-Za-z0-9_-]{43})$/.exec(path);
+      if(welcome && invitations) {
+        res.setHeader('Content-Security-Policy',welcomePagePolicy);
+        res.setHeader('Cache-Control','no-store');
+        res.setHeader('X-Robots-Tag','noindex, nofollow');
+        const answer=async outcome=>{
+          if(outcome.redirect) { res.statusCode=303; res.setHeader('Location',outcome.redirect); return res.end(); }
+          res.statusCode=outcome.status; res.setHeader('Content-Type','text/html; charset=utf-8');
+          return res.end(req.method==='HEAD'?undefined:outcome.html);
+        };
+        if(req.method==='POST') {
+          if(!sameOrigin(req,origins)) throw new HttpError(403,'Open this invitation from its email.');
+          await rawBody(req,4096);
+          return answer(await invitations.accept(welcome[1]));
+        }
+        if(!['GET','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
+        const checkout=url.searchParams.get('checkout');
+        return answer(await invitations.page(welcome[1],{checkout:['done','cancelled'].includes(checkout)?checkout:null}));
       }
       if(!['GET','HEAD'].includes(req.method)) throw new HttpError(405,'Method not allowed.');
       // Public help articles, the sitemap and robots.txt as real HTML and text for crawlers (server/help-center.mjs); everything else is the app.

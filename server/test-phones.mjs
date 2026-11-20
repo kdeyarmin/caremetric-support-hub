@@ -53,6 +53,7 @@ export const testPhoneRegistry = Object.freeze({
   'generated-course-integration': { owner: '+12025550619' },
   'generation-integration': { owner: '+12025550871' },
   'growth-integration': { owner: '+12025550971' },
+  'invitations-integration': { owner: '+12025550983', member: '+12025550984' },
   'leads-integration': { owner: '+12025550614' },
   'learning-integration': { owner: '+12025550301' },
   'media-import-integration': { editor: '+12025550617', learner: '+12025550618' },

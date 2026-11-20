@@ -16,6 +16,10 @@
      accent, the Geist type, a header with the Intel logo and its "Set your marketing on
      FIRE!" tagline over the fire image, pill buttons and dark callouts. An email about
      Intel looks like every other email its customers get from Intel.
+   - "breathe": CareMetric Breathe's design system, exactly as the Breathe app sends it (kdeyarmin/PennFit
+     lib/resupply-email/src/layout.ts): a deep-navy header band with the "CareMetric Breathe" wordmark and its cyan-to-blue
+     mark, the cyan/blue/gold accent rule under it, the app's action blue (#2f6fe6) for buttons and links, and the shared
+     CareMetric neutrals.
 
    Three layouts:
    - "branded": a product notification or customer email. Header (the wordmark, or the
@@ -108,6 +112,23 @@ const intelHeader = ({ font, theme: { palette: p } }) => `<tr><td class="cm-head
 <tr class="cm-fire"><td bgcolor="${p.canvas}" style="padding:0;background-color:${p.canvas};border-bottom:1px solid ${p.brandDark};"><img src="${INTEL_SITE}/brand/emberline-fire.png" alt="" role="presentation" width="600" height="100" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>
 `;
 
+/** CareMetric Breathe's email colors (kdeyarmin/PennFit lib/resupply-email/src/layout.ts, BREATHE_COLORS). */
+export const BREATHE_SITE = 'https://cmbreathe.com';
+export const breathePalette = Object.freeze({
+  brand: '#2f6fe6', brandDark: '#11203c', onBrand: '#ffffff', heading: '#0f172a', body: '#334155', muted: '#64748b',
+  hairline: '#e2e8f0', panel: '#f8fafc', canvas: '#f1f5f9', card: '#ffffff',
+  // The header band's navy, its mark's cyan and the accent rule's gold, as the app draws them.
+  ink: '#0b1426', cyan: '#54c8ff', gold: '#f6a722',
+});
+// The Breathe app's header: the wordmark in white on the navy band with its round cyan-to-blue mark, then the 4px accent rule. A client
+// without gradients shows the solid navy band and a solid blue rule.
+const breatheHeader = ({ font, theme: { palette: p } }) => `<tr><td class="cm-header" bgcolor="${p.ink}" style="background-color:${p.ink};background:linear-gradient(135deg,${p.ink} 0%,${p.brandDark} 100%);border-radius:11px 11px 0 0;padding:24px 32px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="left" style="${font}font-size:20px;line-height:28px;font-weight:700;letter-spacing:-0.01em;color:${p.onBrand};">CareMetric Breathe</td>
+<td align="right" style="vertical-align:middle;"><span style="display:inline-block;width:32px;height:32px;border-radius:50%;background-color:${p.brand};background:linear-gradient(135deg,${p.cyan} 0%,${p.brand} 100%);"></span></td></tr></table>
+</td></tr>
+<tr><td bgcolor="${p.brand}" style="height:4px;background-color:${p.brand};background:linear-gradient(90deg,${p.cyan} 0%,${p.brand} 50%,${p.gold} 100%);font-size:0;line-height:0;">&nbsp;</td></tr>
+`;
+
 export const emailThemes = Object.freeze({
   hub: Object.freeze({
     key: 'hub', palette, callouts: calloutTones, fontStack, colorScheme: 'light', cardRadius: 12,
@@ -145,9 +166,24 @@ export const emailThemes = Object.freeze({
     footerAfter: Object.freeze([`Questions? Email ${SUPPORT_EMAIL}.`, INTEL_TAGLINE, 'CareMetric Intel · caremetricintel.com']),
     letter: Object.freeze({ background: intelPalette.card, text: intelPalette.body, fontSize: 16, lineHeight: 24 }),
   }),
+  breathe: Object.freeze({
+    key: 'breathe', palette: breathePalette, colorScheme: 'light', cardRadius: 12,
+    callouts: Object.freeze({
+      info: Object.freeze({ fill: '#eff6ff', border: '#bfdbfe', accent: breathePalette.brand, text: '#1e3a8a' }),
+      success: Object.freeze({ fill: '#f0fdf4', border: '#bbf7d0', accent: '#16a34a', text: '#14532d' }),
+      warning: Object.freeze({ fill: '#fffbeb', border: '#fde68a', accent: '#d97706', text: '#78350f' }),
+      danger: Object.freeze({ fill: '#fef2f2', border: '#fecaca', accent: '#dc2626', text: '#7f1d1d' }),
+    }),
+    fontStack,
+    button: Object.freeze({ fill: breathePalette.brand, text: breathePalette.onBrand, weight: 700, radius: 8 }),
+    linkAttributes: '', header: breatheHeader, signerStrong: false,
+    footerAfter: Object.freeze([`Need help? Email ${SUPPORT_EMAIL}.`, 'CareMetric Breathe · cmbreathe.com']),
+    letter: Object.freeze({ background: '#ffffff', text: breathePalette.heading, fontSize: 15, lineHeight: 23 }),
+  }),
 });
-/** The theme of the app a product's customers use: Intel's Emberline, CareBase's look, or the Hub's own for anything else. */
-export const themeFor = product => (product === 'caremetric-intel' || product === 'intel' ? 'intel' : product === 'carebase' ? 'carebase' : 'hub');
+/** The theme of the app a product's customers use: Intel's Emberline, CareBase's or Breathe's look, or the Hub's own for anything else. */
+export const themeFor = product => (product === 'caremetric-intel' || product === 'intel' ? 'intel' : product === 'carebase' ? 'carebase'
+  : product === 'breathe' ? 'breathe' : 'hub');
 
 /** The styles one email is built with, from its theme. */
 function stylesFor(themeKey) {
@@ -408,7 +444,7 @@ ${details.map(line => `<p style="margin:0;${s.font}font-size:14px;line-height:21
  * Builds one email. Returns { html, text }.
  * @param {object} email
  * @param {'branded'|'personal'|'letter'} [email.layout] branded notification (default), person-to-person message, or a letter to a prospect
- * @param {'hub'|'intel'} [email.theme] the look: the Hub's own (default) or a product app's (see themeFor)
+ * @param {'hub'|'intel'|'carebase'|'breathe'} [email.theme] the look: the Hub's own (default) or a product app's (see themeFor)
  * @param {string} email.title the subject, used as the document title
  * @param {string} [email.brand] the wordmark in the Hub theme's branded header: the product's name for an email about one product
  * @param {string} [email.preheader] one-sentence inbox preview (every layout)

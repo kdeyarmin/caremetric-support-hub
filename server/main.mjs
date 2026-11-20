@@ -49,6 +49,7 @@ import { creativeJpegFiles } from './agents/creative/jpeg.mjs';
 import { learningMediaImport, mediaImportFeature } from './learning-media-import.mjs';
 import { hubSettings } from './hub-settings.mjs';
 import { socialConnections } from './social-connections.mjs';
+import { customerInvitations, invitationsFeature } from './customer-invitations.mjs';
 
 const storageUrl='https://xgauehtwksmnoqhgqegm.supabase.co';
 // A dropped connection is logged and replaced, never an uncaught error (guardPool).
@@ -186,10 +187,18 @@ const announcements=bulkEmail({pool,delegations:capabilities,publicOrigin:proces
   mail:bulkSender({from:supportFrom,replyTo:supportReplyTo})});
 // Platform billing: the Hub is the only Stripe client for every application's subscriptions.
 const customerSelfService=selfService({pool,provider});
-const billing=platformBilling({pool,features,secretKey:process.env.STRIPE_SECRET_KEY,authorizeCustomerBilling:customerSelfService.authorizeBilling,customerPurchasingEnabled:setting('billing.customer_purchasing'),
+// Customer invitations (Billing → Invite a customer, docs/CUSTOMER_INVITATIONS.md), created below with billing's Stripe access; a Checkout
+// an invitation started is recorded from billing's webhook.
+let invitations=null;
+const billing=platformBilling({onInvitationCheckout:sessionId=>invitations?.reconcileCheckout(sessionId),pool,features,secretKey:process.env.STRIPE_SECRET_KEY,authorizeCustomerBilling:customerSelfService.authorizeBilling,customerPurchasingEnabled:setting('billing.customer_purchasing'),
   webhookSecrets:(process.env.STRIPE_WEBHOOK_SECRET||'').split(',').map(value=>value.trim()).filter(Boolean),
   portalConfiguration:setting('billing.portal_configuration'),
   publicOrigin:process.env.HUB_PUBLIC_ORIGIN||defaultPublicOrigin});
+// Invitation emails come from the support sender with the application's own name ("CareMetric CareBase"), replies to the support inbox,
+// and carry no unsubscribe link: each is a one-to-one message the owner sent. Sign-up addresses and how long a link lasts: Settings → Billing.
+invitations=customerInvitations({pool,stripe:billing.invitationStripe,setting:key=>settings.get(key),publicOrigin,enabled:features.has(invitationsFeature),
+  mail:bulkSender({from:supportFrom,replyTo:supportReplyTo,fromName:'CareMetric',category:'hub-invitation'})});
+console.info(`Customer invitations: ${invitations.enabled()?'ready':'waiting for the billing.customer-invitations.v1 migration'}.`);
 // Intel sets its own plan prices (src/lib/planCatalog.ts in kdeyarmin/intel). After the start and every 15 minutes the Hub reads
 // them and keeps Stripe in step, grandfathering current subscribers (server/app-catalog-sync.mjs). Switching off "Keep Stripe in step
 // with Intel's prices" (Settings → Billing) stops it; "Intel price catalog address" (Settings → Billing) reads another Intel (staging)
@@ -244,7 +253,7 @@ const help=helpCenter({load:()=>api.rpc('list_published_content',{}),...(publicA
 const creativePublicFile=token=>team.store.creativePublicFile(token);
 // Instagram publishes JPEG only: the same approved image, re-encoded on request (server/agents/creative/jpeg.mjs).
 const creativeWeb=features.has('platform.agents.creative.v1')?{admin:creativeAdmin({pool,kick:()=>team.tick()}),publicFile:creativePublicFile,publicJpeg:creativeJpegFiles({publicFile:creativePublicFile})}:null;
-const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,settings,socialConnections:connections,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,publicArticles,creative:creativeWeb});
+const server=appServer({auth:smsAuth({pool,provider}),password:passwordAuth({pool}),owner:ownerAccess(pool),gateway:api,delegations:capabilities,publications:publicationService,aiCases,readiness,integrationSetup:setup,settings,socialConnections:connections,communications:messaging,bulkEmail:announcements,billing,selfService:customerSelfService,agents:team.admin,growth,leads,leadAdmin:leadDesk,mediaImport,health:async()=>{await pool.query({text:'select 1',query_timeout:2000});},origins:['https://support-hub-web-production.up.railway.app','https://help.caremetric.ai'],helpCenter:help,publicArticles,creative:creativeWeb,invitations});
 let cleanupRunning=false;
 const cleanup=async()=>{
   if(cleanupRunning) return;
