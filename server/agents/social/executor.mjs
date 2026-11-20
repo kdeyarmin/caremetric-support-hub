@@ -94,10 +94,12 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
         // it to paste, its link included. It still fails here, with LinkedIn's code, so nothing claims it was published.
         if (settings.reach === true && onLinkedIn(input) && ['linkedin_token_invalid', 'linkedin_permission'].includes(error?.code) && notifier) {
           const text = input.link && !input.message.includes(input.link) ? `${input.message}\n\n${input.link}` : input.message;
+          // Custom blocks replace the body in the email (renderOwnerEmail), so the explanation is a block of its own (Codex review
+          // 2026-11-20): without it the email had the post but not why, nor how to reconnect.
+          const why = `LinkedIn refused the team's connection (${error.code.replaceAll('_', ' ')}) when this approved post was due, so here it is to paste on the LinkedIn Page yourself. Reconnect LinkedIn (Settings → Social media) and the next posts go out on their own.`;
           try {
-            await notifier.send({ severity: 'warning', subject: 'A LinkedIn post to paste: LinkedIn refused the team',
-              body: `LinkedIn refused the team's connection (${error.code.replaceAll('_', ' ')}) when this approved post was due, so here it is to paste on the LinkedIn Page yourself. Reconnect LinkedIn (Settings → Social media) and the next posts go out on their own.`,
-              blocks: [{ type: 'paragraph', text: 'Paste this on the LinkedIn Page:' }, { type: 'message', text }],
+            await notifier.send({ severity: 'warning', subject: 'A LinkedIn post to paste: LinkedIn refused the team', body: why,
+              blocks: [{ type: 'paragraph', text: why }, { type: 'paragraph', text: 'Paste this on the LinkedIn Page:' }, { type: 'message', text }],
               dedupeKey: `social:linkedin:paste:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId, attention: 'now' });
           } catch { log(JSON.stringify({ event: 'hub_social_linkedin_paste_unsent', action_id: execution.id })); }
         }
@@ -122,7 +124,23 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       if (execution.autoApproved === true && !(typeof store?.actionTrusted === 'function' && await store.actionTrusted(execution.id, execution.execution ?? null) === true)) {
         throw failure('approval_required');
       }
-      const published = await careful(execution, () => li.publishMemberPost({ message: input.message }));
+      let published;
+      try {
+        published = await careful(execution, () => li.publishMemberPost({ message: input.message }));
+      } catch (error) {
+        // Review 2026-11-20: the founder posts of November 17 and 19 failed with linkedin_token_invalid and nobody was told. The personal
+        // "Share on LinkedIn" token has no renewal (LinkedIn's member tokens last 60 days), so a refused one is the owner's to replace:
+        // the post comes to paste on the profile, as for a refused Page post, and still fails here with LinkedIn's code.
+        if (settings.reach === true && ['linkedin_token_invalid', 'linkedin_permission'].includes(error?.code) && notifier) {
+          const why = `LinkedIn refused your personal LinkedIn token (${error.code.replaceAll('_', ' ')}) when this approved post for your profile was due, so here it is to paste yourself. LinkedIn's personal tokens last 60 days: make a new one and save it on the LinkedIn connection card (Settings → Social media), and the next posts for your profile go out at their time slots again.`;
+          try {
+            await notifier.send({ severity: 'warning', subject: 'A post for your LinkedIn profile to paste: LinkedIn refused your personal token', body: why,
+              blocks: [{ type: 'paragraph', text: why }, { type: 'paragraph', text: 'Paste this on your LinkedIn profile:' }, { type: 'message', text: input.message }],
+              dedupeKey: `social:linkedin:founder-paste:${execution.id}`, agentKey: execution.agentKey, taskId: execution.taskId, attention: 'now' });
+          } catch { log(JSON.stringify({ event: 'hub_social_founder_paste_unsent', action_id: execution.id })); }
+        }
+        throw error;
+      }
       return { published: true, id: published.id, founder: true };
     },
 

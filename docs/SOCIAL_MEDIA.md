@@ -51,6 +51,9 @@ published.)
   a `social.founder_post` you approve one by one, until you hand them over (below). With your personal token on the LinkedIn
   card (scopes `openid`, `profile`, `w_member_social`) an approved post publishes as you, at its time slot like a Page post (an
   approved post waits for its slot, and one started early is handed back to wait); without it the drafts are emailed to copy.
+  LinkedIn's personal tokens last 60 days and the Hub cannot renew them. When LinkedIn refuses the token (`linkedin_token_invalid`
+  or `linkedin_permission`) as a post is due, the post fails with that code and comes to you by email to paste on your profile, with
+  where to save a new token (since November 20: the posts of November 17 and 19 failed this way and nobody was told).
   Nothing sends messages, connection requests or comments.
 - **New campaigns and lead reports**: see Settings → Paid ads and [AI_WORKFORCE_REVIEW_2026-11-13.md](AI_WORKFORCE_REVIEW_2026-11-13.md).
 
