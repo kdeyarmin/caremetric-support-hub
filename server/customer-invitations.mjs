@@ -170,8 +170,18 @@ export function readyEmail(invitation, signup) {
 
 // ---- The welcome page ---------------------------------------------------------------------------------------------------------------
 
+/** Where the applications' email and welcome-page images come from (server/email-layout.mjs): CareBase's logo, Intel's logo and fire. */
+export const applicationImageHosts = 'https://cmcarebase.com https://www.caremetricintel.com';
+
 /** The welcome page's own security policy: the shared one, plus the application's logo hosts and Stripe Checkout as a form's destination. */
-export const welcomePagePolicy = "default-src 'self'; connect-src 'self'; img-src 'self' data: https://cmcarebase.com https://www.caremetricintel.com; style-src 'self' 'unsafe-inline'; script-src 'none'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://checkout.stripe.com";
+export const welcomePagePolicy = `default-src 'self'; connect-src 'self'; img-src 'self' data: ${applicationImageHosts}; style-src 'self' 'unsafe-inline'; script-src 'none'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://checkout.stripe.com`;
+
+/**
+ * The welcome page's referrer policy. The Hub's own is no-referrer, and under it a browser sends `Origin: null` with a form's POST, so
+ * the same-origin check refused every acceptance. same-origin gives the Hub's own POST its Origin (and Referer, to the Hub only) while a
+ * page the customer goes on to (Stripe Checkout, the application's sign-up, a logo) still gets no referrer, so the link stays private.
+ */
+export const welcomePageReferrerPolicy = 'same-origin';
 
 function pageHeader(profile, p) {
   if (profile.theme === 'carebase') {

@@ -170,6 +170,9 @@ describe('the welcome page route', () => {
     expect(welcomePagePolicy).toContain("script-src 'none'");
     expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow');
     expect(response.headers.get('cache-control')).toBe('no-store');
+    // Under the Hub's own no-referrer a browser posts the Accept form with `Origin: null`, which the same-origin check refuses: every
+    // acceptance failed in a real browser. same-origin sends the Hub its own Origin and still no referrer to Stripe or the application.
+    expect(response.headers.get('referrer-policy')).toBe('same-origin');
     expect(invitations.page).toHaveBeenLastCalledWith(token, { checkout: 'done' });
     await fetch(`${base}/welcome/${token}?checkout=elsewhere`);
     expect(invitations.page).toHaveBeenLastCalledWith(token, { checkout: null });
@@ -178,6 +181,8 @@ describe('the welcome page route', () => {
   it('accepts only a POST from the Hub\'s own page, and sends the browser on to Stripe', async () => {
     const refused = await fetch(`${base}/welcome/${token}`, { method: 'POST', headers: { Origin: 'https://evil.test' }, redirect: 'manual' });
     expect(refused.status).toBe(403);
+    const opaque = await fetch(`${base}/welcome/${token}`, { method: 'POST', headers: { Origin: 'null', 'Sec-Fetch-Site': 'same-origin' }, redirect: 'manual' });
+    expect(opaque.status, 'an opaque origin is never taken for the Hub (the page sends its own, above)').toBe(403);
     expect(invitations.accept).not.toHaveBeenCalled();
     const accepted = await fetch(`${base}/welcome/${token}`, { method: 'POST', headers: { Origin: origin, 'Sec-Fetch-Site': 'same-origin', 'Content-Type': 'application/x-www-form-urlencoded' }, body: '', redirect: 'manual' });
     expect(accepted.status).toBe(303);

@@ -40,6 +40,8 @@ describe('production web-server contract', () => {
     expect(directives['script-src']).toEqual(["'self'"]);
     expect(directives['connect-src']).toEqual(["'self'"]);
     expect(directives['media-src']).toEqual(["'self'", 'blob:', 'https://xgauehtwksmnoqhgqegm.supabase.co']);
+    // The applications' own image hosts, for Billing's preview of an invitation email (its iframe inherits this policy).
+    expect(directives['img-src']).toEqual(["'self'", 'data:', 'https://cmcarebase.com', 'https://www.caremetricintel.com']);
     for (const name of ['frame-ancestors', 'base-uri', 'form-action', 'font-src']) expect(directives[name], name).toEqual(["'self'"]);
     expect(securityHeaders['Content-Security-Policy']).not.toMatch(/unsafe-eval|\*/);
   });
