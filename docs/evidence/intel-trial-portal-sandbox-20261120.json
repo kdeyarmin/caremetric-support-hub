@@ -1,0 +1,62 @@
+{
+  "verified_on": "2026-11-20",
+  "purpose": "Intel release: a new organization enters a card in Stripe's hosted page, its trial opens, and it cancels in the Stripe customer portal.",
+  "environment": {
+    "stripe": "Sandbox acct_1UVIE766OwFQY1wC, test mode, reached through the Stripe connector; no Stripe key in the session (the owner declined to add one)",
+    "stripe_account_api_version": "2026-09-30.endive",
+    "hub": "server/billing.mjs platformBilling, built as server/main.mjs builds it, on a local Supabase stack with every migration through 20261120120100 applied",
+    "hub_differences_from_production": [
+      "accountId pinned to the sandbox account instead of the live account",
+      "apiBase is a local relay that answers reads with objects fetched from the sandbox and writes only with the sandbox's answer to the identical request, executed by the operator with exactly the parameters the Hub sent",
+      "the catalog sync was served the sandbox's Intel product and price only, not the archived synthetic products of earlier runs",
+      "the Stripe customer was created with a test clock added to the Hub's parameters",
+      "Stripe events were fetched from the sandbox and re-signed with a local webhook secret before delivery to billing.webhook"
+    ],
+    "intel": "Intel main at 9b67748 (after kdeyarmin/intel#535), run locally with PUBLIC_APP_URL https://intel.sandbox.test answered by the local server; the browser was Chromium driven by Playwright",
+    "portal_configuration": "bpc_1UdhPp66OwFQY1wCvdSXto7s, a sandbox copy of live bpc_1UV1vAB06O2UFlNzp3k4h7X9 (customer update, invoice history, payment method update, cancellation at period end without proration)"
+  },
+  "steps": [
+    { "name": "sign-up lands on Billing, card required", "passed": true },
+    { "name": "Continue to secure card setup: Hub trial() creates the customer and a 30-day trialing subscription with the Hub's parameters", "passed": true,
+      "subscription": "sub_1UdhWx66OwFQY1wCcSeUPRrM", "status": "trialing", "trial_end": "2026-12-20T02:20:00Z",
+      "parameters": { "trial_period_days": 30, "trial_settings.end_behavior.missing_payment_method": "cancel", "payment_settings": { "save_default_payment_method": "on_subscription", "payment_method_types": ["card"] }, "collection_method": "charge_automatically" },
+      "first_invoice": { "id": "in_1UdhWy66OwFQY1wC93bLcDdC", "total": 0, "line": "Free trial for 1 × Growth" } },
+    { "name": "Hub appPortal opens the payment_method_update flow returning to Intel's Billing page", "passed": true },
+    { "name": "test card 4242 entered on Stripe's hosted page", "passed": true,
+      "payment_method": "pm_1UdhZh66OwFQY1wCRycQihN2", "brand": "visa", "last4": "4242", "cvc_check": "pass", "postal_code_check": "pass",
+      "stored_as": "customer.invoice_settings.default_payment_method (subscription.default_payment_method stays null)",
+      "note": "Stripe Link's 'Save my information for faster checkout' is ticked by default and keeps Add disabled until a mobile number is typed or the box is unticked" },
+    { "name": "Hub trialCardOnFile before the card", "answer": { "payment_method_on_file": false }, "passed": true },
+    { "name": "Hub trialCardOnFile after the card", "answer": { "payment_method_on_file": true }, "passed": true },
+    { "name": "Intel opens the trial and goes to guided setup", "passed": true },
+    { "name": "Payment method & invoices opens the portal; Cancel subscription", "passed": true,
+      "portal_before": "Free trial ends Dec 20 · Growth $899.00 per month · will continue automatically · Visa •••• 4242",
+      "portal_after": "Cancels Dec 20 · After your free trial ends on December 20, 2026, this service will no longer be available · Don't cancel subscription" },
+    { "name": "Stripe records the cancellation", "passed": true,
+      "event": "evt_1UdhcE66OwFQY1wCi1I4uEd0 customer.subscription.updated",
+      "subscription": { "status": "trialing", "cancel_at": "2026-12-20T02:20:00Z", "cancel_at_period_end": false, "cancellation_details.reason": "cancellation_requested" } },
+    { "name": "no charge follows", "passed": true, "invoice_preview": "No upcoming invoices for customer: cus_Vf1Zev1noUgk1x", "invoices": "only the $0 trial invoice" },
+    { "name": "Hub webhook mirrors the cancellation", "passed": true, "mirror": { "status": "trialing", "cancel_at": "2026-12-20T02:20:00Z", "cancel_at_period_end": false } },
+    { "name": "Intel learns of the cancellation (before 20261120200000)", "passed": false,
+      "hub_answer": { "cancel_at_period_end": false, "cancel_at": null },
+      "intel_billing": "Trial ends 12/19/2026, no word of the cancellation" },
+    { "name": "Intel learns of the cancellation (with 20261120200000_entitlements_cancel_at.sql)", "passed": true,
+      "hub_answer": { "cancel_at_period_end": false, "cancel_at": "2026-12-20T02:20:00+00:00" },
+      "intel_billing": "Plan ends 12/19/2026 · Your plan ends on December 19, 2026. To keep it, renew it from Payment method & invoices before then." }
+  ],
+  "not_exercised": [
+    "the trial end itself: the Stripe connector cannot advance a test clock, so the cancellation at trial end was shown by Stripe's invoice preview, not observed",
+    "3-D Secure (test card 4242 does not ask for it)",
+    "Stripe delivering events to the deployed Hub's webhook endpoint (events were fetched and re-signed locally)",
+    "the Hub's own owner screens and owner cancel/undo commands, which read cancel_at_period_end only"
+  ],
+  "production_objects_changed": false,
+  "sandbox_objects": {
+    "portal_configuration": "bpc_1UdhPp66OwFQY1wCvdSXto7s",
+    "product": "prod_Vf1ShngnKnSrNi",
+    "price": "price_1UdhPx66OwFQY1wC9X3lE4bQ",
+    "test_clock": "clock_1UdhQ066OwFQY1wCCqqyfNJ3",
+    "customer": "cus_Vf1Zev1noUgk1x",
+    "subscription": "sub_1UdhWx66OwFQY1wCcSeUPRrM"
+  }
+}
