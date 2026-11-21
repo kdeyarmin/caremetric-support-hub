@@ -163,6 +163,7 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
   // marketing names one county unless it is shown only in that county).
   const li = socialWork?.linkedin?.configured ?? {};
   const adsSettings = adsWork?.config?.() ?? {};
+  const google = adsWork?.google?.();
   add('founder_posts', 'Posts for your own LinkedIn profile', ['social_manager'],
     'Writes a few posts a week in your voice for your personal LinkedIn profile. You approve each one until you hand founder posts over; then they publish at their time slots on their own. Without your personal token they are emailed for you to copy.', [
       [has(features, 'platform.agents.founder-posts.v1'), schemaStep('founder posts')],
@@ -173,14 +174,17 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
     'Proposes, once a month, a LinkedIn campaign, a Meta retargeting campaign and a Google search campaign. Each is created paused after you approve it, within your monthly number; once you hand ad campaign launch over they start on their own with your approved creative, together within that number.', [
       [has(features, 'platform.agents.ads.v1'), schemaStep('paid ads')],
       [(adsSettings.monthlyBudgetCents ?? 0) > 0, 'Set Settings → Paid ads → Most to spend on new campaigns a month.'],
-      [li.ads === true || meta.ads === true, 'Connect a LinkedIn or Meta ad account (Settings → Social media).'],
-      [adsWork?.google?.().configured === true, 'For Google: set Settings → Paid ads → Google Ads customer id, and add the Hub\'s Google service account (the Search Console key\'s email) as a Standard user in Google Ads, with the Google Ads API enabled in its Google Cloud project. Until then approved search campaigns are emailed as an import file.'],
+      [li.ads === true || meta.ads === true || google?.configured === true,
+        'Connect a LinkedIn or Meta ad account (Settings → Social media), or configure Google Ads in Settings → Paid ads. Account configuration does not confirm provider permissions or delivery.'],
     ]);
   add('ad_conversions', 'Leads reported to the ad platforms', ['social_manager'],
-    'Tells Meta and LinkedIn, by a hashed work email and the ad click ID, when a county report or trial request came from their ad, so their reports and bidding see it.', [
+    'Reports leads to their originating ad platform: Meta and LinkedIn receive a hashed work email and click ID; Google receives its click ID through the Data Manager API. Configuration does not confirm upload permissions or successful attribution; check the latest conversion task results.', [
       [has(features, 'platform.agents.ads.v1'), schemaStep('paid ads')],
       [adsSettings.serverConversions === true, 'Turn on Settings → Paid ads → Report leads to the ad platforms.'],
-      [/^[0-9]{5,30}$/.test(adsSettings.metaPixelId ?? '') || /^[0-9]{3,30}$/.test(adsSettings.linkedinConversionId ?? ''), 'Set Settings → Paid ads → Meta Pixel (dataset) id or LinkedIn conversion rule id.'],
+      [(meta.ads === true && typeof socialWork?.meta?.sendConversion === 'function' && /^[0-9]{5,30}$/.test(adsSettings.metaPixelId ?? ''))
+        || (li.ads === true && typeof socialWork?.linkedin?.sendConversion === 'function' && /^[0-9]{3,30}$/.test(adsSettings.linkedinConversionId ?? ''))
+        || (google?.configured === true && typeof google.sendClickConversion === 'function' && /^[0-9]{1,20}$/.test(adsSettings.googleConversionAction ?? '')),
+      'Connect an ad account and set its matching Meta Pixel (dataset) id, LinkedIn conversion rule id, or Google Ads conversion action id in Settings → Paid ads. Google also requires Data Manager API access.'],
     ]);
   return tools;
 }

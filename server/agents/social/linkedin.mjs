@@ -430,7 +430,8 @@ export function linkedinClient({
         lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false,
         ...(content ? { content } : {}),
       } });
-      return { id: String(result.id ?? ''), image: Boolean(image) };
+      if (!linkedinPost(result.id)) throw failure('linkedin_unconfirmed');
+      return { id: result.id, image: Boolean(image) };
     },
 
     /** The founder's member URN, from the OpenID userinfo the token's own profile answers (read once). */
@@ -444,7 +445,8 @@ export function linkedinClient({
         distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
         lifecycleState: 'PUBLISHED', isReshareDisabledByAuthor: false,
       } });
-      return { id: String(result.id ?? '') };
+      if (!linkedinPost(result.id)) throw failure('linkedin_unconfirmed');
+      return { id: result.id };
     },
 
     /** A reply nested under the comment: posted on the comment, naming what the comment is on and the comment as its parent. */
@@ -453,7 +455,8 @@ export function linkedinClient({
       const parts = commentParts(id);
       if (!linkedinPost(parentId) || !parts) throw failure('linkedin_invalid_request');
       const result = await call('POST', `socialActions/${enc(id)}/comments`, { signal, body: { actor: org, object: parts.object, parentComment: id, message: { text: message } } });
-      return { id: String(result.id ?? '') };
+      if (!linkedinComment(result.id) && !numeric(result.id)) throw failure('linkedin_unconfirmed');
+      return { id: result.id };
     },
 
     /** Deletes another member's comment on the Page's post (LinkedIn has no "hide"). */

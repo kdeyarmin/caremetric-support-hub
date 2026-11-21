@@ -63,3 +63,25 @@ it('records a SendGrid block as a bounce without opting the contact out, once th
  await post(growthService({store:{delivery:legacy},features:new Set(['platform.agents.customer-growth.v1']),webhookPublicKey:pem}),rows);
  expect(legacy.mock.calls[0]).toEqual(['blocked-1',message,'bounced',at]);
 });
+
+it('keeps valid delivery and opt-out events when unusable events appear in the same signed batch', async () => {
+ const {privateKey,publicKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});
+ const delivery=vi.fn(async()=>true);
+ const service=growthService({store:{delivery},features:new Set(['platform.agents.customer-growth.v1']),webhookPublicKey:publicKey.export({type:'spki',format:'pem'})});
+ const message='33333333-3333-4333-8333-333333333333';
+ const event={event:'delivered',sg_event_id:'delivered-1',growth_message_id:message,timestamp:now/1000};
+ const rows=[event,null,[],false,'invalid',{},
+  {...event,event:{toString:null}},{...event,event:['delivered']},
+  {...event,event:'toString',sg_event_id:'not-an-event'},
+  {...event,sg_event_id:''},{...event,sg_event_id:'  '},
+  {...event,sg_event_id:'invalid-time',timestamp:1e100},
+  {...event,sg_event_id:'negative-invalid-time',timestamp:-1e100},
+  {...event,event:'unsubscribe',sg_event_id:'unsubscribe-1'}];
+ const stamp=String(now/1000),raw=Buffer.from(JSON.stringify(rows));
+ const signature=sign('sha256',Buffer.concat([Buffer.from(stamp),raw]),privateKey).toString('base64');
+ await expect(service.delivery(raw,{'x-twilio-email-event-webhook-timestamp':stamp,'x-twilio-email-event-webhook-signature':signature},now)).resolves.toEqual({accepted:2});
+ expect(delivery.mock.calls).toEqual([
+  ['delivered-1',message,'delivered',new Date(now).toISOString()],
+  ['unsubscribe-1',message,'unsubscribe',new Date(now).toISOString()],
+ ]);
+});

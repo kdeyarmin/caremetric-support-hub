@@ -26,6 +26,16 @@ function codeFor(status, error) {
   return failure('meta_error');
 }
 export const metaId = value => (typeof value === 'string' && idPattern.test(value) ? value : null);
+// A 2xx response alone does not confirm a publish or update. Keep uncertain writes out of the
+// completed-action ledger, and never continue a multi-step publish without the first object's id.
+const confirmedId = value => {
+  if (!metaId(value)) throw failure('meta_unconfirmed');
+  return value;
+};
+const confirmedUpdate = data => {
+  if (data?.success !== true) throw failure('meta_unconfirmed');
+  return data;
+};
 /**
  * The image address Instagram is given (review 2026-11-19). Instagram publishes JPEG only, and a Creative Director image is a PNG: its
  * address on the Hub (/api/creative/a/<token>.png) becomes the same image's JPEG copy (.jpg). Any other address is sent as it is.
@@ -264,12 +274,13 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
       if (platform === 'facebook' && imageUrl) {
         if (!/^https:\/\//.test(imageUrl)) throw failure('meta_invalid_request');
         const photo = await post(`${page}/photos`, { url: imageUrl, message, published: true }, { as: 'page', signal });
-        return { id: String(photo.post_id ?? photo.id ?? '') };
+        return { id: confirmedId(photo.post_id ?? photo.id) };
       }
-      if (platform === 'facebook') return { id: String((await post(`${page}/feed`, { message, ...(link ? { link } : {}) }, { as: 'page', signal })).id ?? '') };
+      if (platform === 'facebook') return { id: confirmedId((await post(`${page}/feed`, { message, ...(link ? { link } : {}) }, { as: 'page', signal })).id) };
       if (platform === 'instagram') {
         const created = await post(`${instagram}/media`, { image_url: instagramImageUrl(imageUrl), caption: message }, { signal });
-        return { id: String((await post(`${instagram}/media_publish`, { creation_id: created.id }, { signal })).id ?? '') };
+        const creationId = confirmedId(created.id);
+        return { id: confirmedId((await post(`${instagram}/media_publish`, { creation_id: creationId }, { signal })).id) };
       }
       throw failure('meta_invalid_request');
     },
@@ -281,12 +292,15 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
     async publishStory({ platform, imageUrl }, { signal } = {}) {
       if (platform === 'instagram') {
         const created = await post(`${instagram}/media`, { image_url: instagramImageUrl(imageUrl), media_type: 'STORIES' }, { signal });
-        return { id: String((await post(`${instagram}/media_publish`, { creation_id: created.id }, { signal })).id ?? '') };
+        const creationId = confirmedId(created.id);
+        return { id: confirmedId((await post(`${instagram}/media_publish`, { creation_id: creationId }, { signal })).id) };
       }
       if (platform === 'facebook') {
         const photo = await post(`${page}/photos`, { url: imageUrl, published: false }, { as: 'page', signal });
-        const story = await post(`${page}/photo_stories`, { photo_id: photo.id }, { as: 'page', signal });
-        return { id: String(story.post_id ?? photo.id ?? '') };
+        const photoId = confirmedId(photo.id);
+        const story = await post(`${page}/photo_stories`, { photo_id: photoId }, { as: 'page', signal });
+        // The unpublished photo is not evidence that the story was published.
+        return { id: confirmedId(story.post_id) };
       }
       throw failure('meta_invalid_request');
     },
@@ -338,17 +352,20 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
     },
 
     async reply({ platform, kind, id, recipient = null, message }, { signal } = {}) {
-      if (kind === 'comment' && platform === 'facebook') return { id: String((await post(`${id}/comments`, { message }, { as: 'page', signal })).id ?? '') };
-      if (kind === 'comment' && platform === 'instagram') return { id: String((await post(`${id}/replies`, { message }, { signal })).id ?? '') };
+      if (kind === 'comment' && platform === 'facebook') return { id: confirmedId((await post(`${id}/comments`, { message }, { as: 'page', signal })).id) };
+      if (kind === 'comment' && platform === 'instagram') return { id: confirmedId((await post(`${id}/replies`, { message }, { signal })).id) };
       if (kind === 'message' && metaId(recipient)) {
-        return { id: String((await post(`${page}/messages`, { recipient: { id: recipient }, messaging_type: 'RESPONSE', message: { text: message } }, { as: 'page', signal })).message_id ?? '') };
+        const sent = await post(`${page}/messages`, { recipient: { id: recipient }, messaging_type: 'RESPONSE', message: { text: message } }, { as: 'page', signal });
+        // Messenger ids are opaque (unlike numeric Graph object ids).
+        if (typeof sent.message_id !== 'string' || !sent.message_id.trim() || sent.message_id.length > 1000) throw failure('meta_unconfirmed');
+        return { id: sent.message_id };
       }
       throw failure('meta_invalid_request');
     },
 
     async hide({ platform, id }, { signal } = {}) {
-      if (platform === 'facebook') return post(id, { is_hidden: true }, { as: 'page', signal });
-      if (platform === 'instagram') return post(id, { hide: true }, { signal });
+      if (platform === 'facebook') return confirmedUpdate(await post(id, { is_hidden: true }, { as: 'page', signal }));
+      if (platform === 'instagram') return confirmedUpdate(await post(id, { hide: true }, { signal }));
       throw failure('meta_invalid_request');
     },
 
@@ -375,8 +392,8 @@ export function metaClient({ token = '', pageId = '', instagramId = '', adAccoun
       };
     },
 
-    pauseAd: (adId, { signal } = {}) => post(adId, { status: 'PAUSED' }, { signal }),
-    setDailyBudget: (adsetId, cents, { signal } = {}) => post(adsetId, { daily_budget: cents }, { signal }),
+    pauseAd: async (adId, { signal } = {}) => confirmedUpdate(await post(adId, { status: 'PAUSED' }, { signal })),
+    setDailyBudget: async (adsetId, cents, { signal } = {}) => confirmedUpdate(await post(adsetId, { daily_budget: cents }, { signal })),
     async readAdset(adsetId, { signal } = {}) {
       const data = await get(adsetId, { fields: 'id,daily_budget,effective_status' }, { signal });
       return { id: String(data.id ?? ''), dailyBudget: data.daily_budget ? Number(data.daily_budget) : null, active: data.effective_status === 'ACTIVE' };

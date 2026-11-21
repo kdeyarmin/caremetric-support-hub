@@ -16,7 +16,7 @@ import "./admin.css";
 import "./creative.css";
 
 type Notice = { ok: boolean; text: string } | null;
-type Change = (id: string, work: () => Promise<unknown>, success: string) => Promise<boolean>;
+type Change = (id: string, work: () => Promise<unknown>, success: string | (() => string)) => Promise<boolean>;
 const failureText = (error: unknown) => error instanceof TeamApiError ? error.message
   : "The result could not be confirmed, so the change may have gone through. Refresh and check before you try again.";
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -342,17 +342,22 @@ export function Creative({ client = creativeClient }: { client?: CreativeClient 
     if (changing.current) return false;
     changing.current = true;
     setBusy(id); setNotice(null);
-    try { await work(); setNotice({ ok: true, text: success }); return true; }
+    try { await work(); setNotice({ ok: true, text: typeof success === "function" ? success() : success }); return true; }
     catch (error) { setNotice({ ok: false, text: failureText(error) }); return false; }
     finally { changing.current = false; setBusy(""); reload(); }
   };
   const decide = (asset: CreativeAsset, decision: "approve" | "reject" | "revise", note: string) => {
     if (!asset.actionId) return;
     const trimmed = note.trim();
+    let message = decision === "approve" ? "Approved and handed to the Social Media Manager." : decision === "revise" || trimmed ? "Sent back with your note. A revision is on its way." : "Rejected.";
     void change(`decide:${asset.id}`, async () => {
       const result = await client.decide({ actionId: asset.actionId!, decision: decision === "approve" ? "approve" : "reject", ...(trimmed ? { note: trimmed } : {}) });
+      if (!result.decided) throw new TeamApiError(409, "This asset was no longer waiting (expired or decided elsewhere). Your decision was not applied. The gallery has been refreshed.");
       if (result.status === "failed") throw new TeamApiError(409, "The approval was recorded but the hand-over did not complete. Check the AI team's activity.");
-    }, decision === "approve" ? "Approved and handed to the Social Media Manager." : decision === "revise" || trimmed ? "Sent back with your note. A revision is on its way." : "Rejected.");
+      if (decision === "approve" && result.status !== "executed") {
+        message = "Approved. The hand-over to the Social Media Manager is still pending. Check the AI team's activity.";
+      }
+    }, () => message);
   };
   /**
    * Approves every asset waiting for a decision, on every page, one at a time through the same decide route as each card's Approve (so each

@@ -15,6 +15,35 @@ const mail = { configured: true, send: vi.fn() };
 const row = (rows, key) => rows.find(item => item.key === key);
 
 describe('marketing toolkit configuration', () => {
+  it('recognizes a Google-only campaign and conversion setup without requiring unrelated social accounts', () => {
+    const sendClickConversion = vi.fn();
+    let configured = true;
+    const adsWork = { config: () => ({ monthlyBudgetCents: 5000, serverConversions: true, googleConversionAction: '123456789' }),
+      google: () => ({ configured, sendClickConversion }) };
+    const options = { features: new Set(['platform.agents.ads.v1']), adsWork };
+    expect(row(marketingToolkit(options), 'paid_campaigns').configured).toBe(true);
+    expect(row(marketingToolkit(options), 'ad_conversions').configured).toBe(true);
+    expect(row(marketingToolkit(options), 'ad_conversions').detail).toContain('does not confirm upload permissions');
+    configured = false;
+    expect(row(marketingToolkit(options), 'paid_campaigns').configured).toBe(false);
+    expect(row(marketingToolkit(options), 'ad_conversions').configured).toBe(false);
+    expect(sendClickConversion).not.toHaveBeenCalled();
+  });
+
+  it.each(['meta', 'linkedin'])('requires the matching %s account for conversion setup and keeps Google optional', platform => {
+    const sendConversion = vi.fn();
+    const adsWork = { config: () => ({ monthlyBudgetCents: 5000, serverConversions: true,
+      metaPixelId: platform === 'meta' ? '1234567' : '', linkedinConversionId: platform === 'linkedin' ? '123456' : '' }) };
+    const options = { features: new Set(['platform.agents.ads.v1']), adsWork };
+    expect(row(marketingToolkit(options), 'ad_conversions').configured).toBe(false);
+    const socialWork = { [platform]: { configured: { ads: true }, sendConversion } };
+    expect(row(marketingToolkit({ ...options, socialWork }), 'paid_campaigns').configured).toBe(true);
+    expect(row(marketingToolkit({ ...options, socialWork }), 'ad_conversions').configured).toBe(true);
+    const otherPlatform = platform === 'meta' ? 'linkedin' : 'meta';
+    expect(row(marketingToolkit({ ...options, socialWork: { [otherPlatform]: socialWork[platform] } }), 'ad_conversions').configured).toBe(false);
+    expect(sendConversion).not.toHaveBeenCalled();
+  });
+
   it('shows concrete configuration gaps without making any network request', () => {
     const result = marketingToolkit();
     expect(result.every(tool => tool.configured === false)).toBe(true);

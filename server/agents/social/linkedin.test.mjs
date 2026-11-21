@@ -17,6 +17,28 @@ const route = handlers => vi.fn(async (url, init = {}) => {
 const client = (fetchImpl, over = {}) => linkedinClient({ token, organizationId: '5550001', adAccountId: '5080001', fetchImpl, ...over });
 const bodyOf = call => JSON.parse(call[1].body);
 
+describe('confirmed LinkedIn social writes', () => {
+  it.each([
+    ['Page post', li => li.publishPost({ message: 'Approved post.' })],
+    ['founder post', li => li.publishMemberPost({ message: 'Approved post.' })],
+    ['comment reply', li => li.reply({ id: comment, parentId: post, message: 'Thanks for asking.' })],
+  ])('does not report a %s as published without a valid provider id', async (_, work) => {
+    for (const id of [null, '', 'invalid']) {
+      const fetchImpl = route([
+        [/^GET \/v2\/userinfo$/, { sub: 'founder' }],
+        [/^POST/, json({}, 201, id === null ? {} : { 'x-restli-id': id })],
+      ]);
+      await expect(work(client(fetchImpl, { memberToken: token }))).rejects.toMatchObject({ code: 'linkedin_unconfirmed', transient: false });
+      expect(fetchImpl.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(1);
+    }
+  });
+
+  it('accepts a numeric LinkedIn comment receipt as well as a comment URN', async () => {
+    const fetchImpl = route([[/^POST/, json({}, 201, { 'x-restli-id': '7200000000000000007' })]]);
+    expect(await client(fetchImpl).reply({ id: comment, parentId: post, message: 'Thanks for asking.' })).toEqual({ id: '7200000000000000007' });
+  });
+});
+
 describe('LinkedIn approved videos', () => {
   const video = 'urn:li:video:C4E10AQFvideo';
   const videoUrl = `https://help.caremetric.ai/api/creative/a/${'a'.repeat(64)}.mp4`;

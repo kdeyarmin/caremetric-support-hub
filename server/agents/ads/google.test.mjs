@@ -149,6 +149,7 @@ describe('the Google search plan', () => {
     // No request can accidentally turn a missing/invalid total or time window into an unrestricted live campaign.
     fetchImpl.mockClear();
     for (const changed of [{ totalBudgetCents: 0 }, { totalBudgetCents: -1 }, { totalBudgetCents: 50.5 }, { totalBudgetCents: '5000' },
+      { dailyBudgetCents: 0 }, { dailyBudgetCents: -1 }, { dailyBudgetCents: 50.5 }, { dailyBudgetCents: '500' },
       { startDate: null }, { endDate: null }, { startDate: '2026-11-26' }, { startDate: '2026-02-30' }, { endDate: '2026-11-31' },
       { endDate: '2026-11-17' }, { endDate: '2027-02-14' }]) {
       await expect(client.createSearchCampaign({ ...campaign, ...changed })).rejects.toMatchObject({ code: 'google_invalid_request' });
@@ -203,5 +204,16 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
       .rejects.toMatchObject({ code: 'google_geo_unresolved' });
     expect(fetchImpl.mock.calls.some(([url]) => String(url).endsWith('googleAds:mutate'))).toBe(false);
     await expect(make(googleFetch()).stateTargets([{ code: 'pa', name: 'Pennsylvania' }])).rejects.toMatchObject({ code: 'google_geo_unresolved' });
+  });
+
+  it('retries throttled location lookups and campaign requests without treating them as invalid campaigns', async () => {
+    for (const target of ['geoTargetConstants:suggest', 'googleAds:mutate']) {
+      const regular = googleFetch();
+      const fetchImpl = vi.fn(async (url, init) => String(url).endsWith(target) ? new Response('{}', { status: 429 }) : regular(url, init));
+      await expect(make(fetchImpl).createSearchCampaign({ name: 'Intel search', dailyBudgetCents: 500,
+        finalUrl: 'https://www.caremetricintel.com/county-report', plan: checkGooglePlan(plan(), { factsKey: 'intel' }).plan, states }))
+        .rejects.toMatchObject({ code: 'google_unavailable', transient: true });
+      if (target === 'geoTargetConstants:suggest') expect(fetchImpl.mock.calls.some(([url]) => String(url).endsWith('googleAds:mutate'))).toBe(false);
+    }
   });
 });

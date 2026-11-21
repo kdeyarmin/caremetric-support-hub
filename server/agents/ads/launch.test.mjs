@@ -246,6 +246,20 @@ describe('launching a campaign approved under the hand-over', () => {
     expect(h.notifier.send.mock.calls[0][0].body).toContain('may already be running');
   });
 
+  it('releases a throttled Google request for retry without creating a paused duplicate', async () => {
+    const h = setup({ googleConfigured: true });
+    h.googleClient.createSearchCampaign.mockRejectedValueOnce(Object.assign(new Error('throttled'), { code: 'google_unavailable', transient: true }));
+    const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/county-report', plan: googlePlan };
+    const execution = { id: 'g1', kind: 'social.google_campaign', input, autoApproved: true, execution: 1 };
+    await expect(h.executors['social.google_campaign'](execution)).rejects.toMatchObject({ code: 'google_unavailable', transient: true });
+    expect(h.googleClient.createSearchCampaign).toHaveBeenCalledTimes(1);
+    expect(h.store.adsLaunchRelease).toHaveBeenCalledWith('g1', 1);
+    expect(h.notifier.send).not.toHaveBeenCalled();
+    expect(await h.executors['social.google_campaign']({ ...execution, execution: 2 })).toMatchObject({ launched: true });
+    expect(h.store.adsLaunchReserve).toHaveBeenCalledTimes(2);
+    expect(h.googleClient.createSearchCampaign.mock.calls.every(([campaign]) => campaign.live === true)).toBe(true);
+  });
+
   it('launches a Google search campaign running to its month\'s end through the API, and otherwise as before', async () => {
     const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 1000, finalUrl: 'https://www.caremetricintel.com/county-report', plan: googlePlan };
     const google = (over = {}) => ({ id: 'g1', kind: 'social.google_campaign', agentKey: 'social_manager', input, autoApproved: true, execution: 1, ...over });

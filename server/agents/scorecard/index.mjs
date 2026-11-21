@@ -11,7 +11,7 @@ import { watchdogFindings } from '../tasks/watchdog.mjs';
  * - the Account Manager's billing snapshot: MRR with the Billing screen's maths and the accounts that need attention;
  * - verified trial starts and positive paid billing events, when the app-growth capability and prospective coverage are available;
  * - the Sales Executive's pipeline (the growth snapshot): deals that need the owner;
- * - the Social Media Manager's ad accounts, when one is connected: ad spend and ads losing money;
+ * - connected Meta, LinkedIn and Google Ads accounts: ad spend, plus social ads losing money;
  * - the SEO Analyst's crawl of the websites (urgent problems) and Search Console, when it is connected (organic clicks);
  * - the weekly strategist's note for the week (platform.agents.strategist.v1), when it was written: the scorecard opens with it.
  * A source that cannot be read is named in the email; only the scorecard's own counts are required.
@@ -25,7 +25,7 @@ import { watchdogFindings } from '../tasks/watchdog.mjs';
  * email's blocks, which the notifier never stores.
  */
 import { delivered } from '../notify.mjs';
-import { easternMidnight, weekStart } from '../accounts/week.mjs';
+import { easternDate, easternMidnight, weekStart } from '../accounts/week.mjs';
 import { composeAccountsReport } from '../accounts/report.mjs';
 import { composeReview, readPipeline } from '../sales/review.mjs';
 import { evaluateAds } from '../social/rules.mjs';
@@ -55,12 +55,13 @@ const shift = (date, days) => { const [year, month, day] = date.split('-').map(N
  * Registered only when the database declares platform.agents.scorecard.v1 (and the store has its read), so a Hub whose database lacks the
  * migration still starts and the schedule stays due. `growth` is the customer growth service (its pipeline snapshot), `ads` the Social
  * Media Manager's ad accounts (`{ sources: () => [{ name, client }], settings }`, or null), `searchConsole` replaces the reader in tests,
- * and `visitors` is an analytics reader (`async ({ before, since, until, signal }) => { state, products }`). It receives the same
+ * `googleAds` returns the current Google Ads client for account-wide spend, and `visitors` is an analytics reader
+ * (`async ({ before, since, until, signal }) => { state, products }`). It receives the same
  * Eastern boundaries as the Hub's own figures, including the prior week's boundary across daylight-saving changes. Missing
  * configuration and failed reads remain distinct; an unread source never becomes a zero visitor count.
  */
 export function scorecardHandlers({
-  store, notifier, publicOrigin = null, features = null, growth = null, ads = null, searchConsole = undefined, searchConsoleSites = undefined, env = process.env, fetchImpl = fetch,
+  store, notifier, publicOrigin = null, features = null, growth = null, ads = null, googleAds = null, searchConsole = undefined, searchConsoleSites = undefined, env = process.env, fetchImpl = fetch,
   sites = defaultSites, audit = auditSite, visitors = null, log = line => console.warn(line), strategist = false, toolkit = null, watchdogIdleDays = 3,
 }) {
   // Team review 2026-11-17, stage 5 (platform.agents.support-truth.v1): the watchdog read with the brief's options, cost per trial from
@@ -91,9 +92,11 @@ export function scorecardHandlers({
    * read as of the week's end (Monday's midnight). The ads losing money are judged on the last seven days, so a run later in the week
    * (a catch-up, or Run now) reads the accounts a second time as of now.
    */
-  async function readAds({ moment, until }, signal) {
+  const adsConfigured = () => Boolean(ads?.sources?.().length || googleAds?.()?.configured);
+  async function readAds({ moment, before, since, until }, signal) {
     const sources = ads?.sources?.() ?? [];
-    if (!sources.length) return null;
+    const google = googleAds?.();
+    if (!sources.length && !google?.configured) return null;
     const sameDay = moment.getTime() - until.getTime() < 86_400_000;
     let spendCents = 0;
     let previousSpendCents = 0;
@@ -104,6 +107,19 @@ export function scorecardHandlers({
       previousSpendCents += (week.previous ?? []).reduce((sum, row) => sum + (Number(row.spendCents) || 0), 0);
       const recent = sameDay ? week : await source.client.adsOverview({ signal, now: moment });
       failing += evaluateAds({ ...recent, now: moment, settings: ads.settings ?? {} }).recommendations.filter(item => item.kind === 'pause').length;
+    }
+    // Google search spend includes campaigns paused or ended since the reported week. Delivery diagnostics are handled by ads.plan;
+    // they cannot supply account spend because they only inspect currently enabled campaigns. Use the same calendar-week dates.
+    if (google?.configured) {
+      const [current, previous] = await Promise.all([
+        google.spendReport({ since: easternDate(since), until: shift(easternDate(until), -1) }, { signal }),
+        google.spendReport({ since: easternDate(before), until: shift(easternDate(since), -1) }, { signal }),
+      ]);
+      if (![current?.spendCents, previous?.spendCents].every(value => Number.isSafeInteger(value) && value >= 0)) {
+        throw Object.assign(new Error('Google ad spend could not be read.'), { code: 'google_response_invalid' });
+      }
+      spendCents += current.spendCents;
+      previousSpendCents += previous.spendCents;
     }
     return { spendCents, previousSpendCents, failing };
   }
@@ -163,7 +179,7 @@ export function scorecardHandlers({
       optional('brief', () => store.briefFacts(), signal),
       optional('billing', () => readAccountsSnapshot(store), signal),
       growth?.store?.snapshot ? optional('pipeline', () => readPipeline(growth, signal), signal) : null,
-      ads?.sources?.().length ? optional('ads', () => readAds({ moment, until }, signal), signal).then(value => value ?? { unavailable: true }) : null,
+      adsConfigured() ? optional('ads', () => readAds({ moment, before, since, until }, signal), signal).then(value => value ?? { unavailable: true }) : null,
       optional('search_console', () => readSearch(moment, signal), signal),
       optional('websites', () => siteProblems(signal), signal),
       visitors ? optional('visitors', () => visitors({ before, since, until, signal }), signal).then(value => value ?? { state: 'unavailable' }) : null,

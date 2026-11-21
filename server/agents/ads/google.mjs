@@ -206,7 +206,7 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
     } catch (error) { if (signal?.aborted) throw error; throw failure('google_unavailable', true); }
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || typeof data?.access_token !== 'string') throw failure(response.status === 400 || response.status === 401 ? 'google_token_invalid' : 'google_unavailable', response.status >= 500);
+    if (!response.ok || typeof data?.access_token !== 'string' || !data.access_token) throw failure(response.status === 400 || response.status === 401 ? 'google_token_invalid' : 'google_unavailable', response.status === 429 || response.status >= 500 || response.ok);
     return data.access_token;
   }
   // Google's location for each US state, from its location suggestions (geoTargetConstants:suggest), never written by hand; kept for the
@@ -225,7 +225,8 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
           body: JSON.stringify({ locale: 'en', countryCode: 'US', locationNames: { names: missing.map(state => state.name) } }) });
       } catch (error) { if (signal?.aborted) throw error; throw failure('google_unavailable', true); }
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw failure(response.status === 401 || response.status === 403 ? 'google_permission' : 'google_geo_unresolved');
+      if (!response.ok) throw failure(response.status === 401 || response.status === 403 ? 'google_permission'
+        : response.status === 429 || response.status >= 500 ? 'google_unavailable' : 'google_geo_unresolved', response.status === 429 || response.status >= 500);
       for (const state of missing) {
         const match = (data?.geoTargetConstantSuggestions ?? []).map(item => item?.geoTargetConstant ?? {})
           .find(item => item.targetType === 'State' && item.countryCode === 'US' && item.status === 'ENABLED' && String(item.name ?? '').toLowerCase() === state.name.toLowerCase()
@@ -248,22 +249,48 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
           headers: { Authorization: `Bearer ${token}`, ...(devToken ? { 'developer-token': devToken } : {}), 'Content-Type': 'application/json', ...(login ? { 'login-customer-id': login } : {}) },
           body: JSON.stringify({ query, ...(pageToken ? { pageToken } : {}) }) });
       } catch (error) { if (signal?.aborted) throw error; throw failure('google_unavailable', true); }
-      const data = await response.json().catch(() => ({}));
+      const data = await response.json().catch(() => null);
       if (!response.ok) {
         const refused = failure(response.status === 401 || response.status === 403 ? 'google_permission' : response.status === 429 || response.status >= 500 ? 'google_unavailable' : 'google_query_refused',
           response.status === 429 || response.status >= 500);
         const reason = searchRefusal(data);
         throw reason ? Object.assign(refused, { reason }) : refused;
       }
-      rows.push(...(Array.isArray(data?.results) ? data.results : []));
+      // Google omits an empty results array in its protobuf JSON, so {} is valid. An unreadable body or malformed field is not
+      // evidence of zero campaigns or zero spend, and a capped paginated read must never be reported as a complete account.
+      if (!data || typeof data !== 'object' || Array.isArray(data) || (data.results !== undefined && !Array.isArray(data.results))
+        || (data.nextPageToken !== undefined && typeof data.nextPageToken !== 'string')) throw failure('google_response_invalid', true);
+      if (data.results?.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw failure('google_response_invalid', true);
+      rows.push(...(data.results ?? []));
       pageToken = typeof data?.nextPageToken === 'string' && data.nextPageToken ? data.nextPageToken : null;
       if (!pageToken) break;
     }
+    if (pageToken) throw failure('google_query_incomplete');
     return rows;
   }
 
   return {
     configured, auth,
+
+    /** All account spend for the requested account-calendar days, including campaigns paused or removed after they spent. */
+    async spendReport({ since, until }, { signal } = {}) {
+      if (!configured) throw failure('google_not_configured');
+      if (!calendarDay(since) || !calendarDay(until) || since > until) throw failure('google_invalid_request');
+      const token = await accessToken(signal);
+      const rows = await search(`SELECT metrics.cost_micros FROM customer WHERE segments.date BETWEEN '${since}' AND '${until}'`, token, signal);
+      let micros = 0n;
+      for (const row of rows) {
+        // Omitted protobuf scalar fields mean zero; invalid values mean an unreadable report.
+        if (row.metrics !== undefined && (!row.metrics || typeof row.metrics !== 'object' || Array.isArray(row.metrics))) throw failure('google_response_invalid', true);
+        const amount = row.metrics?.costMicros === undefined ? '0' : row.metrics.costMicros;
+        if (!(typeof amount === 'string' && /^[0-9]+$/.test(amount))
+          && !(typeof amount === 'number' && Number.isSafeInteger(amount) && amount >= 0)) throw failure('google_response_invalid', true);
+        micros += BigInt(amount);
+      }
+      const spend = (micros + 5000n) / 10000n;
+      if (spend > BigInt(Number.MAX_SAFE_INTEGER)) throw failure('google_response_invalid', true);
+      return { spendCents: Number(spend) };
+    },
 
     /**
      * Whether `conversionActionId` is a conversion action leads can be uploaded to (owner request 2026-11-19): it exists in this account,
@@ -362,6 +389,7 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
 
     async createSearchCampaign({ name, dailyBudgetCents, totalBudgetCents = null, finalUrl, plan, live = false, startDate = null, endDate = null, states = [] }, { signal } = {}) {
       if (!configured) throw failure('google_not_configured');
+      if (!Number.isSafeInteger(dailyBudgetCents) || dailyBudgetCents <= 0) throw failure('google_invalid_request');
       if ((live || endDate !== null || totalBudgetCents !== null) && !calendarDay(endDate)) throw failure('google_invalid_request');
       if (startDate !== null && (!calendarDay(startDate) || (endDate !== null && startDate > endDate))) throw failure('google_invalid_request');
       if (totalBudgetCents !== null && (!Number.isSafeInteger(totalBudgetCents) || totalBudgetCents <= 0 || !calendarDay(startDate))) throw failure('google_invalid_request');
@@ -403,7 +431,8 @@ export function googleAdsClient({ developerToken = '', clientId = '', clientSecr
           body: JSON.stringify({ mutateOperations }) });
       } catch (error) { if (signal?.aborted) throw error; throw failure('google_unconfirmed'); }
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw failure(response.status === 401 || response.status === 403 ? 'google_permission' : response.status >= 500 ? 'google_unconfirmed' : 'google_invalid_request');
+      if (!response.ok) throw failure(response.status === 401 || response.status === 403 ? 'google_permission'
+        : response.status >= 500 ? 'google_unconfirmed' : response.status === 429 ? 'google_unavailable' : 'google_invalid_request', response.status === 429);
       const responses = Array.isArray(data?.mutateOperationResponses) ? data.mutateOperationResponses : [];
       const created = responses.map(item => item?.campaignResult?.resourceName).find(Boolean);
       // A 2xx response without a campaign receipt is not confirmation that it was launched. It may already be running, so preserve
