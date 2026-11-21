@@ -36,7 +36,7 @@ const fakeReader = (properties = [
 
 function fixture({
   features = new Set([scorecardFeature]), deliveries = [{ channel: 'email', delivery: 'sent' }], status = null, brief = { approvals: { count: 2, oldestAt: at(-1) }, incidents: [] },
-  snapshot = book(), pipeline = null, ads = null, searchConsole = null, audit = async site => ({ key: site.key, findings: [] }), store: extra = {}, strategist = false,
+  snapshot = book(), pipeline = null, ads = null, googleAds = null, searchConsole = null, audit = async site => ({ key: site.key, findings: [] }), store: extra = {}, strategist = false,
 } = {}) {
   const logs = [];
   const store = {
@@ -50,7 +50,7 @@ function fixture({
   };
   const notifier = { send: vi.fn(async () => deliveries) };
   const growth = pipeline ? { store: { snapshot: vi.fn(async offset => ({ total: pipeline.length, items: offset ? [] : pipeline })) } } : null;
-  const handlers = scorecardHandlers({ store, notifier, publicOrigin: origin, features, growth, ads, searchConsole, env: {}, sites: [{ key: 'intel', label: 'Intel', origin: 'https://caremetricintel.com', variants: ['https://www.caremetricintel.com'] }], audit, log: line => logs.push(line), strategist });
+  const handlers = scorecardHandlers({ store, notifier, publicOrigin: origin, features, growth, ads, googleAds, searchConsole, env: {}, sites: [{ key: 'intel', label: 'Intel', origin: 'https://caremetricintel.com', variants: ['https://www.caremetricintel.com'] }], audit, log: line => logs.push(line), strategist });
   return { store, notifier, logs, handlers, run: (over, now = monday, signal) => handlers['scorecard.weekly'](task(over), { now: () => now, signal }) };
 }
 
@@ -170,6 +170,41 @@ describe('the Monday scorecard task', () => {
     expect(adsOverview.mock.calls.map(([input]) => input.now)).toEqual([new Date('2026-11-02T05:00:00Z'), thursday]);
   });
 
+  it.each([false, true])('includes Google spend with exact calendar weeks, with social accounts %s', async social => {
+    const spendReport = vi.fn(async ({ since }) => ({ spendCents: since === '2026-10-26' ? 3000 : 1000 }));
+    const adsOverview = vi.fn(async () => ({ adsets: [], ads: [], current: [{ spendCents: 500 }], previous: [] }));
+    const { run, notifier } = fixture({ googleAds: () => ({ configured: true, spendReport }),
+      ...(social ? { ads: { sources: () => [{ name: 'Meta', client: { adsOverview } }] } } : {}) });
+    const outcome = await run({}, new Date('2026-11-05T15:00:00Z'));
+    expect(spendReport.mock.calls).toEqual([
+      [{ since: '2026-10-26', until: '2026-11-01' }, { signal: undefined }],
+      [{ since: '2026-10-19', until: '2026-10-25' }, { signal: undefined }],
+    ]);
+    expect(outcome.result.sources.ads).toBe('read');
+    const words = JSON.stringify(notifier.send.mock.calls[0][0].blocks);
+    expect(words).toContain(social ? '$19.67 ($59.00 over 3 trials)' : '$18.00 ($54.00 over 3 trials)');
+    expect(words).toContain('last week $22.00 ($22.00 over 1 trial)');
+    expect(JSON.stringify(outcome)).not.toContain('spendCents');
+  });
+
+  it('does not report incomplete ad spend as a complete cost per trial when Google cannot be read', async () => {
+    const spendReport = vi.fn(async () => { throw Object.assign(new Error('private provider error'), { code: 'google_permission' }); });
+    const { run, notifier, logs } = fixture({ googleAds: () => ({ configured: true, spendReport }) });
+    expect((await run()).result.sources.ads).toBe('unavailable');
+    const rows = notifier.send.mock.calls[0][0].blocks.flatMap(block => block.rows ?? []);
+    expect(rows.find(([name]) => name === 'Cost per trial sign-up')[1]).toBe('Not available; last week Not available');
+    expect(rows.find(([name]) => name === 'Spend counted')[1]).toContain('AI $24.00; ad spend unavailable');
+    expect(JSON.stringify(logs)).not.toContain('private provider error');
+    expect(JSON.stringify(notifier.send.mock.calls[0][0].blocks)).toContain('cost per trial is unavailable');
+  });
+
+  it('does not call Google when its account is unconfigured', async () => {
+    const spendReport = vi.fn();
+    const { run } = fixture({ googleAds: () => ({ configured: false, spendReport }) });
+    expect((await run()).result.sources.ads).toBe('not_connected');
+    expect(spendReport).not.toHaveBeenCalled();
+  });
+
   it('adds organic search clicks per product when Search Console is connected, and says so when it is not', async () => {
     const reader = fakeReader();
     const connected = fixture({ searchConsole: reader });
@@ -236,6 +271,8 @@ describe('the Monday scorecard task', () => {
     const withoutTotals = fixture({ searchConsole: reader });
     expect((await withoutTotals.run()).result.products['caremetric-intel'].clicks).toBeUndefined();
     expect(JSON.stringify(withoutTotals.notifier.send.mock.calls[0][0].blocks)).toContain('agency territories');
+    expect(JSON.stringify(withoutTotals.notifier.send.mock.calls[0][0].blocks)).toContain('Search Console could not be read this week. Organic search clicks are unavailable, not zero.');
+    expect(JSON.stringify(withoutTotals.notifier.send.mock.calls[0][0].blocks)).not.toContain('Search Console is not connected');
   });
 
   it('does not describe unread search properties as having no opportunities', () => {

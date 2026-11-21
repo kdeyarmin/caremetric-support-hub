@@ -11,6 +11,61 @@ const route = handlers => vi.fn(async (url, init = {}) => {
 });
 const client = (fetchImpl, over = {}) => metaClient({ token, pageId: '1111', instagramId: '2222', adAccountId: 'act_3333', fetchImpl, ...over });
 
+describe('confirmed Meta social writes', () => {
+  const imageUrl = 'https://help.caremetric.ai/api/creative/a/x.jpg';
+  const operations = [
+    ['Facebook feed', meta => meta.publishPost({ platform: 'facebook', message: 'Hello' })],
+    ['Facebook photo', meta => meta.publishPost({ platform: 'facebook', message: 'Hello', imageUrl })],
+    ['Instagram post', meta => meta.publishPost({ platform: 'instagram', message: 'Hello', imageUrl })],
+    ['Instagram story', meta => meta.publishStory({ platform: 'instagram', imageUrl })],
+    ['Facebook story', meta => meta.publishStory({ platform: 'facebook', imageUrl })],
+    ['Facebook comment', meta => meta.reply({ platform: 'facebook', kind: 'comment', id: '1111_99', message: 'Hello' })],
+    ['Instagram comment', meta => meta.reply({ platform: 'instagram', kind: 'comment', id: '999', message: 'Hello' })],
+    ['Messenger reply', meta => meta.reply({ platform: 'messenger', kind: 'message', recipient: '999', message: 'Hello' })],
+  ];
+  it.each(operations)('does not record a %s as published when its first write has no receipt', async (_, work) => {
+    const fetchImpl = route([[/^GET/, { access_token: token }], [/^POST/, {}]]);
+    await expect(work(client(fetchImpl))).rejects.toMatchObject({ code: 'meta_unconfirmed', transient: false });
+    // No retry, and no second publish request using an absent container/photo id.
+    expect(fetchImpl.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(1);
+  });
+
+  it.each(['instagram', 'facebook'])('does not mistake an uploaded %s story image for a published story', async platform => {
+    let writes = 0;
+    const fetchImpl = route([[/^GET/, { access_token: token }], [/^POST/, () => json(++writes === 1 ? { id: '900' } : { success: true })]]);
+    await expect(client(fetchImpl).publishStory({ platform, imageUrl })).rejects.toMatchObject({ code: 'meta_unconfirmed', transient: false });
+    expect(writes).toBe(2);
+  });
+
+  it('requires the final Instagram post receipt and accepts a confirmed one', async () => {
+    const fetchImpl = route([[/\/media$/, { id: '900' }], [/\/media_publish$/, {}]]);
+    await expect(client(fetchImpl).publishPost({ platform: 'instagram', message: 'Hello', imageUrl })).rejects.toMatchObject({ code: 'meta_unconfirmed' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const success = route([[/\/media$/, { id: '900' }], [/\/media_publish$/, { id: '901' }]]);
+    expect(await client(success).publishPost({ platform: 'instagram', message: 'Hello', imageUrl })).toEqual({ id: '901' });
+  });
+
+  it.each([
+    ['Facebook moderation', meta => meta.hide({ platform: 'facebook', id: '1111_99' })],
+    ['Instagram moderation', meta => meta.hide({ platform: 'instagram', id: '999' })],
+    ['ad pause', meta => meta.pauseAd('999')],
+    ['budget change', meta => meta.setDailyBudget('999', 1000)],
+  ])('requires explicit success for %s', async (_, work) => {
+    for (const receipt of [{}, { success: false }]) {
+      const fetchImpl = route([[/^GET/, { access_token: token }], [/^POST/, receipt]]);
+      await expect(work(client(fetchImpl))).rejects.toMatchObject({ code: 'meta_unconfirmed', transient: false });
+      expect(fetchImpl.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(1);
+    }
+    expect(await work(client(route([[/^GET/, { access_token: token }], [/^POST/, { success: true }]])))).toEqual({ success: true });
+  });
+
+  it('accepts the opaque Messenger message id as a confirmed reply', async () => {
+    const fetchImpl = route([[/^GET/, { access_token: token }], [/^POST/, { message_id: 'mid.$opaque-message-id' }]]);
+    expect(await client(fetchImpl).reply({ platform: 'messenger', kind: 'message', recipient: '999', message: 'Hello' }))
+      .toEqual({ id: 'mid.$opaque-message-id' });
+  });
+});
+
 describe('the Meta client', () => {
   // Review 2026-11-19: Meta refused switching an uploaded, unpublished Page video to published (meta_permission). A Page video is now
   // uploaded and published in one request; an Instagram Reel is still staged and published on a separate call.
@@ -58,10 +113,10 @@ describe('the Meta client', () => {
   it('publishes a story: an Instagram STORIES container, or a Page photo uploaded unpublished and posted as a photo story', async () => {
     const fetchImpl = route([
       [/^GET \/v23\.0\/1111$/, { access_token: 'EAAG-page-token-abcdefghijklmnop' }],
-      [/^POST \/v23\.0\/2222\/media$/, (url, params) => json({ id: params.get('media_type') === 'STORIES' && params.get('image_url') ? 'c1' : 'wrong' })],
-      [/^POST \/v23\.0\/2222\/media_publish$/, (url, params) => json({ id: params.get('creation_id') === 'c1' ? '1790000' : 'wrong' })],
-      [/^POST \/v23\.0\/1111\/photos$/, (url, params) => json({ id: params.get('published') === 'false' && params.get('url') ? 'p1' : 'wrong' })],
-      [/^POST \/v23\.0\/1111\/photo_stories$/, (url, params) => json({ success: true, post_id: params.get('photo_id') === 'p1' ? '1111_55' : 'wrong' })],
+      [/^POST \/v23\.0\/2222\/media$/, (url, params) => json({ id: params.get('media_type') === 'STORIES' && params.get('image_url') ? '7001' : 'wrong' })],
+      [/^POST \/v23\.0\/2222\/media_publish$/, (url, params) => json({ id: params.get('creation_id') === '7001' ? '1790000' : 'wrong' })],
+      [/^POST \/v23\.0\/1111\/photos$/, (url, params) => json({ id: params.get('published') === 'false' && params.get('url') ? '7002' : 'wrong' })],
+      [/^POST \/v23\.0\/1111\/photo_stories$/, (url, params) => json({ success: true, post_id: params.get('photo_id') === '7002' ? '1111_55' : 'wrong' })],
     ]);
     const meta = client(fetchImpl);
     expect(await meta.publishStory({ platform: 'instagram', imageUrl: 'https://help.caremetric.ai/api/creative/a/x.png' })).toEqual({ id: '1790000' });

@@ -127,6 +127,25 @@ describe("the Creative screen", () => {
     await waitFor(() => expect(client.studio).toHaveBeenLastCalledWith(expect.objectContaining({ platform: "linkedin", offset: 0 }), expect.anything()));
   });
 
+  it.each(["Approve", "Reject"])('does not claim a stale individual %s decision succeeded', async button => {
+    const client = clientOf();
+    client.decide.mockResolvedValueOnce({ id: "33333333-3333-4333-8333-333333333333", kind: "creative.asset_review", status: "expired", decided: false });
+    render(<Creative client={client} />);
+    fireEvent.click(within((await screen.findAllByRole("article"))[0]).getByRole("button", { name: button }));
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "This asset was no longer waiting (expired or decided elsewhere). Your decision was not applied. The gallery has been refreshed.");
+    expect(screen.queryByText("Approved and handed to the Social Media Manager.")).toBeNull();
+    await waitFor(() => expect(client.studio).toHaveBeenCalledTimes(2));
+  });
+
+  it('reports an individual approval whose hand-over is still pending', async () => {
+    const client = clientOf();
+    client.decide.mockResolvedValueOnce({ id: "33333333-3333-4333-8333-333333333333", kind: "creative.asset_review", status: "approved", decided: true });
+    render(<Creative client={client} />);
+    fireEvent.click(within((await screen.findAllByRole("article"))[0]).getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText("Approved. The hand-over to the Social Media Manager is still pending. Check the AI team's activity.")).toBeTruthy();
+    expect(screen.queryByText("Approved and handed to the Social Media Manager.")).toBeNull();
+  });
+
   it("starts a brief, refusing an audience described by a health condition", async () => {
     const client = clientOf(studio({ briefs: [{ id: "11111111-1111-4111-8111-111111111111", product: "caremetric-intel", goal: "g", audience: "a", offerCode: null, platforms: ["meta"], formats: ["static"], videoLengths: [], angle: "", source: "owner", status: "open", planRef: null, parentAssetId: null, revisionNote: "", result: {}, createdAt: at, updatedAt: at }] }));
     render(<Creative client={client} />);

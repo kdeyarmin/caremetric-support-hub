@@ -239,7 +239,7 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
   const marketing = marketingCost && verifiedLifecycle && Number.isFinite(Number(facts?.current?.marketingSpendCents));
   const aiSpend = index => count(index === 0 ? (marketing ? facts?.current?.marketingSpendCents : facts?.current?.aiSpendCents)
     : (marketing ? facts?.previous?.marketingSpendCents : facts?.previous?.aiSpendCents));
-  const spend = index => aiSpend(index) + (adsRead ? count(index === 0 ? ads.spendCents : ads.previousSpendCents) : 0);
+  const spend = index => ads?.unavailable === true ? null : aiSpend(index) + (adsRead ? count(index === 0 ? ads.spendCents : ads.previousSpendCents) : 0);
 
   const ranked = rankNeeds(needs);
   const headline = ranked.kept.length === 0 ? 'Nothing needs you this week.'
@@ -275,7 +275,7 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
   });
 
   const spendWords = index => `${marketing ? 'Marketing Manager AI' : 'AI'} ${dollars(aiSpend(index))}`
-    + (adsRead ? ` and ads ${dollars(count(index === 0 ? ads.spendCents : ads.previousSpendCents))}` : '');
+    + (adsRead ? ` and ads ${dollars(count(index === 0 ? ads.spendCents : ads.previousSpendCents))}` : ads?.unavailable === true ? '; ad spend unavailable' : '');
   const sourceNotes = [
     verifiedLifecycle ? 'Verified trial starts and new paying customers use processed billing events, one first event per organization and product. A paid event requires a confirmed positive invoice payment; subscription status alone is not a purchase. Measurement is prospective; periods before lifecycle coverage begins are unavailable, and renewals are not counted as new customers.'
       : 'Trial sign-ups count website forms, not verified product trials. Verified new paying customers are unavailable until billing lifecycle measurement is enabled; subscription status is not used as evidence of a purchase.',
@@ -285,8 +285,10 @@ export function composeScorecard({ week, facts, billing = null, search = null, a
     seen.state === 'unavailable' ? 'Website visitor analytics could not be read this week. Unavailable figures are not counted as zero.' : null,
     seen.state === 'partial' ? 'Website visitor analytics are incomplete. Each product shows the periods that could be read; unavailable figures are not counted as zero.' : null,
     ads === null ? 'No ad account is connected, so cost per trial is the AI spend alone.' : null,
-    ads?.unavailable === true ? 'The ad accounts could not be read this week, so cost per trial is the AI spend alone.' : null,
-    search && !searchOn ? 'Search Console is not connected, so there are no organic search clicks. The SEO Analyst\'s report says how to connect it.' : null,
+    ads?.unavailable === true ? 'Ad spend could not be read for every connected account, so cost per trial is unavailable. Known AI spend is shown separately.' : null,
+    search && !searchOn ? search.state === 'unavailable'
+      ? 'Search Console could not be read this week. Organic search clicks are unavailable, not zero.'
+      : 'Search Console is not connected, so organic search clicks are unavailable. The SEO Analyst\'s report says how to connect it.' : null,
     billing?.mode && billing.mode !== 'live' ? `Billing figures are from Stripe ${billing.mode} mode.` : null,
     billing ? 'MRR is the Billing screen\'s figure. A week earlier is the same calculation over the subscriptions that were paying then, at today\'s prices and discounts.' : null,
     ...notes,

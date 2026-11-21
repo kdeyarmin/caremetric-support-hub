@@ -43,8 +43,10 @@ before the week the scorecard is due in, against the week before that.
 5. **Outbound email**: delivered, replies, bounces and complaints for the team's growth emails, by product, from the provider's
    delivery events and the reply events. Internal organizations are left out.
 6. **Cost per trial**, across both products: the AI spend recorded on agent runs in the week, plus the ad spend when an ad account
-   is connected (the same Meta and LinkedIn figures the social report reads, for the same Monday-to-Sunday week, also on a run later in
-   the week), divided by verified trial starts. It is unavailable when either product's trial count is unknown. Before lifecycle
+   is connected (Meta and LinkedIn figures from the social report, plus Google Ads account spend including paused or ended campaigns,
+   for the same Monday-to-Sunday calendar dates, also on a run later in the week), divided by verified trial starts. Google interprets
+   these dates in the advertising account's time zone. It is unavailable when either product's trial count is unknown or any connected
+   ad account cannot be read; known AI spend is still shown separately. Before lifecycle
    measurement, this is explicitly **Cost per trial sign-up**, using website form submissions.
 
 With Search Console connected (`HUB_SEARCH_CONSOLE_CREDENTIALS` in Railway and the properties in Settings → Search, see the SEO Analyst), **organic

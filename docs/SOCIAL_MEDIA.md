@@ -148,6 +148,12 @@ no impression after two days of serving, or places other than the roster's state
 (attention `now`), to fix in Google Ads. `auto_tagging_off` (no `gclid` reaches the lead form; the landing page's `utm_` tags still
 do) and `conversions_not_tracked` are recorded on the result only.
 
+Google reads reject malformed responses and incomplete pagination instead of reporting a partial account as complete. Temporary
+throttling during sign-in, location lookup or campaign creation stays retryable. Before a campaign is created or exported, its budget
+must still meet the platform minimum and current limits; a Google campaign must still point to its product's current landing page,
+with tracking tags allowed. The weekly scorecard reads Google spend across all campaign statuses, including campaigns paused after
+spending, separately from the enabled-campaign delivery review.
+
 **Reporting leads to Google (2026-11-19, through the Data Manager API since 2026-11-20).** The first read-back found auto-tagging on
 and conversion tracking off, so Google could not count a lead its ad brought. With Settings → Paid ads → "Report leads to the ad
 platforms" on and **Google Ads conversion action id** set (migration `20261119120000_google_conversions.sql` adds the setting), the

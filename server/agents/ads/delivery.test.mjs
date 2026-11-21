@@ -77,6 +77,54 @@ describe('the Google read-back', () => {
     expect(report.account.autoTagging).toBeNull();
     expect(report.campaigns[0]).toMatchObject({ ads: { approved: 1, limited: 1, disapproved: 1, underReview: 1, other: 1 }, impressions: 5, clicks: 1, conversions: 1.5 });
   });
+
+  it('rejects malformed successful reads and incomplete pagination instead of reporting an empty or partial account', async () => {
+    for (const body of ['not JSON', 'null', '[]', '{"results":{}}', '{"results":[null]}', '{"nextPageToken":42}']) {
+      const client = googleAdsClient({ ...credentials, fetchImpl: searchFetch({ account: new Response(body) }) });
+      await expect(client.deliveryReport({ since: '2026-11-01', until: '2026-11-19' }))
+        .rejects.toMatchObject({ code: 'google_response_invalid', transient: true });
+    }
+    const fetchImpl = vi.fn(async url => new Response(JSON.stringify(String(url).includes('oauth2')
+      ? { access_token: 'ya29.token' } : { results: [campaignRow()], nextPageToken: 'more' })));
+    await expect(googleAdsClient({ ...credentials, fetchImpl }).deliveryReport({ since: '2026-11-01', until: '2026-11-19' }))
+      .rejects.toMatchObject({ code: 'google_query_incomplete' });
+    expect(fetchImpl.mock.calls.filter(([url]) => String(url).endsWith('googleAds:search'))).toHaveLength(5);
+  });
+});
+
+describe('Google account spend', () => {
+  it('reads all campaign spend for the requested days and rounds the total once, following pages', async () => {
+    const fetchImpl = vi.fn(async (url, init) => {
+      if (String(url).includes('oauth2')) return new Response(JSON.stringify({ access_token: 'ya29.token' }));
+      const request = JSON.parse(init.body);
+      expect(request.query).toBe("SELECT metrics.cost_micros FROM customer WHERE segments.date BETWEEN '2026-11-09' AND '2026-11-15'");
+      return new Response(JSON.stringify(request.pageToken
+        ? { results: [{ metrics: { costMicros: '6000' } }] }
+        : { results: [{ metrics: { costMicros: '6000' } }], nextPageToken: 'next' }));
+    });
+    expect(await googleAdsClient({ ...credentials, fetchImpl }).spendReport({ since: '2026-11-09', until: '2026-11-15' })).toEqual({ spendCents: 1 });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('accepts omitted protobuf zero fields, rejects malformed amounts and dates, and retries throttled sign-in', async () => {
+    const fetchFor = body => vi.fn(async url => new Response(JSON.stringify(String(url).includes('oauth2') ? { access_token: 'ya29.token' } : body)));
+    for (const body of [{}, { results: [] }, { results: [{}] }, { results: [{ metrics: {} }] }]) {
+      expect(await googleAdsClient({ ...credentials, fetchImpl: fetchFor(body) }).spendReport({ since: '2026-11-09', until: '2026-11-15' })).toEqual({ spendCents: 0 });
+    }
+    for (const costMicros of ['invalid', -10, 1.5, [6000], {}, null, true, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(googleAdsClient({ ...credentials, fetchImpl: fetchFor({ results: [{ metrics: { costMicros } }] }) })
+        .spendReport({ since: '2026-11-09', until: '2026-11-15' })).rejects.toMatchObject({ code: 'google_response_invalid', transient: true });
+    }
+    for (const metrics of ['bad', [], null, 0, true]) {
+      await expect(googleAdsClient({ ...credentials, fetchImpl: fetchFor({ results: [{ metrics }] }) })
+        .spendReport({ since: '2026-11-09', until: '2026-11-15' })).rejects.toMatchObject({ code: 'google_response_invalid', transient: true });
+    }
+    const fetchImpl = fetchFor({});
+    await expect(googleAdsClient({ ...credentials, fetchImpl }).spendReport({ since: '2026-11-15', until: '2026-11-09' })).rejects.toMatchObject({ code: 'google_invalid_request' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    await expect(googleAdsClient({ ...credentials, fetchImpl: vi.fn(async () => new Response('{}', { status: 429 })) })
+      .spendReport({ since: '2026-11-09', until: '2026-11-15' })).rejects.toMatchObject({ code: 'google_unavailable', transient: true });
+  });
 });
 
 describe('what the read-back finds', () => {

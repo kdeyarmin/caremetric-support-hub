@@ -89,6 +89,34 @@ describe('approving a new campaign', () => {
     retried.notifier.send.mockResolvedValueOnce([{ channel: 'email', delivery: 'duplicate', original: 'sent' }]);
     expect(await retried.executors['social.google_campaign']({ id: 'a3', input })).toEqual({ exported: true });
   });
+
+  it('refuses stale or unrelated Google destinations before exporting or creating the campaign', async () => {
+    const input = { product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents: 3000, plan: googlePlan };
+    for (const googleConfigured of [false, true]) {
+      const h = setup({ googleConfigured });
+      for (const finalUrl of ['https://www.caremetricintel.com/market-review', 'https://example.com/county-report',
+        'https://www.caremetricintel.com/county-report?redirect=elsewhere', 'https://user:password@www.caremetricintel.com/county-report']) {
+        await expect(h.executors['social.google_campaign']({ id: 'a4', input: { ...input, finalUrl } })).rejects.toMatchObject({ code: 'ad_destination_changed' });
+      }
+      expect(h.googleClient.createSearchCampaign).not.toHaveBeenCalled();
+      expect(h.notifier.send.mock.calls.some(([message]) => message.blocks)).toBe(false);
+      await h.executors['social.google_campaign']({ id: 'a5', input: { ...input,
+        finalUrl: 'https://www.caremetricintel.com/county-report?utm_source=google&utm_medium=cpc&utm_campaign=search-intel' } });
+      if (googleConfigured) expect(h.googleClient.createSearchCampaign).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('refuses campaign budgets below the platform minimum before contacting any provider', async () => {
+    const h = setup({ googleConfigured: true });
+    for (const dailyBudgetCents of [0, -100, 1, 499, 500.5, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(h.executors['social.google_campaign']({ id: 'g1', input: {
+        product: 'caremetric-intel', name: 'Intel search', dailyBudgetCents, finalUrl: 'https://www.caremetricintel.com/county-report', plan: googlePlan,
+      } })).rejects.toMatchObject({ code: 'budget_changed' });
+      await expect(h.executors['social.campaign_create']({ id: 'm1', input: { ...linkedinCampaign, dailyBudgetCents } })).rejects.toMatchObject({ code: 'budget_changed' });
+    }
+    expect(h.googleClient.createSearchCampaign).not.toHaveBeenCalled();
+    expect(h.linkedin.createCampaign).not.toHaveBeenCalled();
+  });
 });
 
 describe('reporting leads to the ad platforms', () => {

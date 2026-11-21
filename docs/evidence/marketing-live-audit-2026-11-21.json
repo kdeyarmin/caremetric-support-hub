@@ -1,0 +1,360 @@
+{
+  "settings": {
+    "ads.flight_days": 10,
+    "ads.google_api_version": null,
+    "ads.google_customer_id": "3021386768",
+    "ads.server_conversions": true,
+    "ads.monthly_budget_cents": 5000,
+    "ads.google_conversion_action": "7909754311"
+  },
+  "campaigns": [
+    {
+      "id": "dbbb6cd4-4b01-4db5-bd8e-d6c648b9671b",
+      "kind": "social.campaign_create",
+      "result": {
+        "error": "linkedin_permission"
+      },
+      "status": "failed",
+      "target_id": "linkedin:caremetric-intel:2026-11",
+      "created_at": "2026-11-16T14:20:59.270327+00:00",
+      "executed_at": "2026-11-16T14:21:01.219345+00:00",
+      "flight_days": 5,
+      "landing_page": null,
+      "daily_budget_cents": 1000
+    },
+    {
+      "id": "d196c19f-94b6-4c65-ac18-37a4beec4a94",
+      "kind": "social.campaign_create",
+      "result": {
+        "error": "linkedin_invalid_request"
+      },
+      "status": "failed",
+      "target_id": "linkedin:caremetric-intel:2026-11",
+      "created_at": "2026-11-17T14:20:59.302911+00:00",
+      "executed_at": "2026-11-17T14:21:01.156573+00:00",
+      "flight_days": 5,
+      "landing_page": null,
+      "daily_budget_cents": 1000
+    },
+    {
+      "id": "966e6738-1fce-4bda-9d61-d2ed1ad8886f",
+      "kind": "social.google_campaign",
+      "result": {
+        "endsOn": "2026-11-27",
+        "created": true,
+        "campaign": "customers/3021386768/campaigns/24493303819",
+        "launched": true,
+        "dailyBudgetCents": 500
+      },
+      "status": "executed",
+      "target_id": "google:caremetric-intel:2026-11",
+      "created_at": "2026-11-18T14:21:07.456644+00:00",
+      "executed_at": "2026-11-18T14:21:10.410867+00:00",
+      "flight_days": 10,
+      "landing_page": null,
+      "daily_budget_cents": 500
+    }
+  ],
+  "leadCounts": [
+    {
+      "kind": "trial_signup",
+      "count": 2,
+      "latest": "2026-11-14T06:13:34.538+00:00",
+      "source": "intel",
+      "with_gclid": 0,
+      "with_source": 0
+    },
+    {
+      "kind": "county_report",
+      "count": 6,
+      "latest": "2026-11-19T23:27:43.095+00:00",
+      "source": "intel",
+      "with_gclid": 1,
+      "with_source": 2
+    }
+  ],
+  "observedAt": "2026-11-21T21:37:01.436209+00:00",
+  "reservation": [
+    {
+      "days": 10,
+      "month": "2026-11",
+      "platform": "google",
+      "daily_cents": 500,
+      "committed_cents": 5000
+    }
+  ],
+  "creativeStatus": [
+    {
+      "count": 70,
+      "status": "approved"
+    },
+    {
+      "count": 1,
+      "status": "blocked"
+    },
+    {
+      "count": 6,
+      "status": "live"
+    },
+    {
+      "count": 2,
+      "status": "rejected"
+    },
+    {
+      "count": 30,
+      "status": "retired"
+    }
+  ],
+  "googleStopHistory": [
+    {
+      "code": "google_datamanager_disabled",
+      "count": 108,
+      "last_seen": "2026-11-21T21:26:40.488902+00:00",
+      "first_seen": "2026-11-20T18:42:24.181606+00:00"
+    }
+  ],
+  "socialActionStatus": [
+    {
+      "kind": "social.campaign_create",
+      "count": 1,
+      "error": "linkedin_invalid_request",
+      "status": "failed",
+      "platform": "linkedin",
+      "latest_updated": "2026-11-17T14:21:01.156573+00:00"
+    },
+    {
+      "kind": "social.campaign_create",
+      "count": 1,
+      "error": "linkedin_permission",
+      "status": "failed",
+      "platform": "linkedin",
+      "latest_updated": "2026-11-16T14:21:01.219345+00:00"
+    },
+    {
+      "kind": "social.founder_post",
+      "count": 2,
+      "error": "linkedin_token_invalid",
+      "status": "failed",
+      "platform": "founder",
+      "latest_updated": "2026-11-19T12:50:14.858655+00:00"
+    },
+    {
+      "kind": "social.google_campaign",
+      "count": 1,
+      "error": null,
+      "status": "executed",
+      "platform": "google",
+      "latest_updated": "2026-11-18T14:21:10.410867+00:00"
+    },
+    {
+      "kind": "social.post",
+      "count": 2,
+      "error": null,
+      "status": "executed",
+      "platform": "facebook",
+      "latest_updated": "2026-11-21T15:32:46.100444+00:00"
+    },
+    {
+      "kind": "social.post",
+      "count": 1,
+      "error": "meta_permission",
+      "status": "failed",
+      "platform": "facebook",
+      "latest_updated": "2026-11-17T15:32:36.662669+00:00"
+    },
+    {
+      "kind": "social.post",
+      "count": 1,
+      "error": null,
+      "status": "auto_approved",
+      "platform": "instagram",
+      "latest_updated": "2026-11-16T13:16:57.165048+00:00"
+    },
+    {
+      "kind": "social.post",
+      "count": 2,
+      "error": null,
+      "status": "executed",
+      "platform": "instagram",
+      "latest_updated": "2026-11-20T17:16:06.763778+00:00"
+    },
+    {
+      "kind": "social.post",
+      "count": 1,
+      "error": "meta_invalid_request",
+      "status": "failed",
+      "platform": "instagram",
+      "latest_updated": "2026-11-18T17:15:44.672984+00:00"
+    },
+    {
+      "kind": "social.post",
+      "count": 2,
+      "error": null,
+      "status": "executed",
+      "platform": "linkedin",
+      "latest_updated": "2026-11-20T13:46:01.197438+00:00"
+    },
+    {
+      "kind": "social.post",
+      "count": 1,
+      "error": "post_check_public_data",
+      "status": "failed",
+      "platform": "linkedin",
+      "latest_updated": "2026-11-19T13:45:14.473112+00:00"
+    }
+  ],
+  "pendingGoogleConversions": {
+    "count": 1,
+    "latest": "2026-11-19T23:27:43.095+00:00",
+    "oldest": "2026-11-19T23:27:43.095+00:00",
+    "earliestRetryDeadline": "2026-11-26T23:27:43.095+00:00"
+  },
+  "googleNotice": [
+    {
+      "status": "sent",
+      "channel": "email",
+      "sent_at": "2026-11-20T18:42:25.550966+00:00",
+      "created_at": "2026-11-20T18:42:25.257518+00:00",
+      "provider_reason": "SERVICE_DISABLED"
+    }
+  ],
+  "googleDelivery": {
+    "status": "done",
+    "readback": {
+      "read": true,
+      "since": "2026-10-23",
+      "until": "2026-11-21",
+      "account": {
+        "issues": [],
+        "autoTagging": true,
+        "conversionTracking": "CONVERSION_TRACKING_MANAGED_BY_SELF"
+      },
+      "campaigns": [
+        {
+          "id": "24493303819",
+          "ads": {
+            "other": 0,
+            "limited": 0,
+            "approved": 1,
+            "disapproved": 0,
+            "underReview": 0
+          },
+          "name": "CareMetric CareMetric Intel search 2026-11",
+          "budget": {
+            "period": "CUSTOM_PERIOD",
+            "dailyCents": null,
+            "totalCents": 5000
+          },
+          "clicks": 2,
+          "endDay": "2026-11-27",
+          "issues": [],
+          "places": [
+            "Pennsylvania"
+          ],
+          "status": "ENABLED",
+          "primary": "LEARNING",
+          "reasons": [
+            "BIDDING_STRATEGY_LEARNING"
+          ],
+          "serving": "SERVING",
+          "startDay": "2026-11-18",
+          "costCents": 1696,
+          "conversions": 0,
+          "impressions": 1
+        }
+      ]
+    },
+    "createdAt": "2026-11-21T14:20:36.18796+00:00"
+  },
+  "socialAdsReview": {
+    "skips": {
+      "no_ad_link": 15,
+      "leads_elsewhere": 3
+    },
+    "adsets": 19,
+    "status": "done",
+    "createdAt": "2026-11-21T14:10:35.876222+00:00",
+    "platforms": {
+      "meta": {
+        "ads": 18,
+        "skips": {
+          "no_ad_link": 15,
+          "leads_elsewhere": 3
+        },
+        "adsets": 19,
+        "noLink": 15,
+        "elsewhere": {
+          "facebook.com": 2,
+          "www.facebook.com": 1
+        },
+        "noLinkKinds": {
+          "other": 8,
+          "existing_post": 7
+        },
+        "recommendations": 18
+      },
+      "linkedin": {
+        "ads": 0,
+        "skips": {},
+        "adsets": 0,
+        "noLink": 0,
+        "elsewhere": {},
+        "noLinkKinds": {},
+        "recommendations": 0
+      }
+    }
+  },
+  "conversionLedger": [
+    {
+      "code": "no_click",
+      "count": 3,
+      "latest": "2026-11-19T20:12:18.525778+00:00",
+      "status": "skipped",
+      "platform": "google"
+    },
+    {
+      "code": "no_click",
+      "count": 8,
+      "latest": "2026-11-19T23:42:14.749133+00:00",
+      "status": "skipped",
+      "platform": "linkedin"
+    },
+    {
+      "code": "no_click",
+      "count": 8,
+      "latest": "2026-11-19T23:42:14.562637+00:00",
+      "status": "skipped",
+      "platform": "meta"
+    }
+  ],
+  "marketingTaskFailures72h": 0,
+  "overdueMarketingSchedules": 0,
+  "scope": "Read-only production database operational aggregates and existing provider readbacks; no secrets, customer identities, provider writes, campaigns, budgets, settings or deployments changed.",
+  "deployment": {
+    "id": "e496a1b0-957a-4d3e-b354-ad553df04ec2",
+    "status": "SUCCESS",
+    "commit": "c93f35d27d2bd51bb86c511d4714adf92852bb18",
+    "createdAt": "2026-11-20T18:19:33.728Z",
+    "service": "support-hub-web",
+    "online": true,
+    "runningReplicas": 1,
+    "recentFailures8h": 0
+  },
+  "publicChecks": {
+    "source": "Parent agent public checks",
+    "hubHealth": {
+      "url": "https://help.caremetric.ai/api/health",
+      "httpStatus": 200,
+      "ok": true
+    },
+    "landingPages": "Intel and CareBase direct requests blocked by environment proxy at CONNECT; this does not establish a site failure. End-to-end landing forms unverified."
+  },
+  "limitations": [
+    "Google metrics are the latest stored daily provider readback, not a direct real-time provider read in this audit.",
+    "Google readback reports 1 impression and 2 clicks; figures preserved as recorded and awaiting code/provider reconciliation.",
+    "No successful offline conversion upload exists; Google Data Manager API is disabled in the credential's Cloud project.",
+    "Later Facebook, Instagram and company LinkedIn successes do not verify their complete advertising or personal-profile permissions.",
+    "No Google Cloud management tool was available for enabling Data Manager or renewing the personal LinkedIn token.",
+    "Live landing forms and conversion completion remain unverified."
+  ]
+}

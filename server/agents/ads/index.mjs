@@ -763,7 +763,7 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           const automatic = execution.autoApproved === true;
           if (automatic && !(await trusted(execution))) throw failure('approval_required');
           const allowed = allowedFor(input.platform, input);
-          if (!allowed || !Number.isInteger(input.dailyBudgetCents) || input.dailyBudgetCents > allowed) throw failure('budget_changed');
+          if (!allowed || !Number.isSafeInteger(input.dailyBudgetCents) || input.dailyBudgetCents < (leastDailyCents[input.platform] ?? 500) || input.dailyBudgetCents > allowed) throw failure('budget_changed');
           // A flight is created with its last day, so it ends on its own even when it is started later (it then runs fewer days, never more).
           const flightEnd = () => (input.flightDays === undefined ? {} : { endAt: campaignWindow(now(), input.flightDays).endsAt.toISOString() });
           if (input.platform === 'meta') {
@@ -786,9 +786,11 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           const automatic = execution.autoApproved === true;
           if (automatic && !(await trusted(execution))) throw failure('approval_required');
           const allowed = allowedFor('google', input);
-          if (!allowed || !Number.isInteger(input.dailyBudgetCents) || input.dailyBudgetCents > allowed) throw failure('budget_changed');
+          if (!allowed || !Number.isSafeInteger(input.dailyBudgetCents) || input.dailyBudgetCents < leastDailyCents.google || input.dailyBudgetCents > allowed) throw failure('budget_changed');
           const checked = checkGooglePlan(input.plan, { factsKey: playbookFor(input.product)?.factsKey ?? null, competitors: config().competitorKeywords });
-          if (!checked.ok || !/^https:\/\//.test(input.finalUrl ?? '')) throw failure('invalid_campaign');
+          if (!checked.ok) throw failure('invalid_campaign');
+          const page = productPage(landing[input.product]);
+          if (!page || !sameAdDestination(input.finalUrl, page.url)) throw failure('ad_destination_changed');
           const client = google();
           if (client.configured) {
             const createPaused = () => client.createSearchCampaign({ name: input.name, dailyBudgetCents: input.dailyBudgetCents, finalUrl: input.finalUrl, plan: checked.plan, ...located(),
