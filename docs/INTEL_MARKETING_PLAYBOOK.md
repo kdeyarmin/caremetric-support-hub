@@ -65,7 +65,7 @@ Never add the agency's name, its results, any number or years, or a superlative.
 | Pro | $1,999 per month | $1,665 per month ($19,980 per year) | Up to 3 states, 25 seats, 10 branches, forecasting, book balance, white-label reports |
 | Enterprise | Custom | Annual, from about $3,500 per month | Larger footprints and other care settings by agreement |
 
-- 30-day free trial, one county, 3 marketer seats and 1 manager seat. A credit card is required to start it, and the plan chosen at sign-up bills automatically when it ends unless canceled first.
+- 30-day free trial, one county, 3 marketer seats and 1 manager seat. No credit card is needed to start it (owner decision 2026-11-23). A card added in Billing before it ends keeps the plan chosen at sign-up, which then bills automatically unless canceled; without a card the trial simply ends.
 - Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service, applied automatically. Extra seats,
   branches, states, taxes and custom contracts are excluded.
 - Free onboarding on every plan. Annual billing saves about 17%.
@@ -149,7 +149,7 @@ each theme and how prominently:
 | 7 | Hospital partnership and TEAM | Trella, Salesforce, Definitive | Outcomes packet PDF, TEAM hospital flags and target list, Hospice Care Index and home health value-based purchasing scores | **Lead for hospital-facing agencies.** |
 | 8 | Goals, coaching and contests | Outfield, Isoratec, Trella | Monthly goals and leaderboard, team review of a marketer's week, ride-along coaching, Monday digest | **Support** for managers. Reward activity, never referral counts. |
 | 9 | Mileage, expenses and spend compliance | Trella, Isoratec | Stark annual limit per physician, per-person meal values, policy flags, approvals, reimbursement records, mileage log | **Mention only, inside field work.** Never leads (owner direction 2026-11-14). Never "keeps you compliant". |
-| 10 | Easy to evaluate and buy | Few: most say "request a demo" and quote privately | Prices on the website, a 30-day trial (card required, cancel any time before it ends), free onboarding, the Founders Sale | **Support** in every message as the next step. |
+| 10 | Easy to evaluate and buy | Few: most say "request a demo" and quote privately | Prices on the website, a 30-day trial (no credit card needed to start), free onboarding, the Founders Sale | **Support** in every message as the next step. |
 
 **Two things Intel cannot match and must not imply:** licensed claims data that infers which physician sent which patient to which
 agency, and dozens of live EHR connections. Intel's honest counter is clearly sourced CMS and Census data, the agency's own recorded referrals,
@@ -360,8 +360,9 @@ Most items are already enforced in code; the rest depend on judgment.
 - Say something concrete: who it is for, and what they can do, see or stop doing.
 - Show Intel as one marketing workspace, even when leading with one feature.
 - Quote prices, the trial and the Founders Sale exactly as the fact sheet words them.
-- Offer the trial in plain words. Do not bring up the credit card unless the reader asks what the trial needs or what happens when
-  it ends (owner direction 2026-11-17); never say that no card is needed.
+- Offer the trial in plain words. "No credit card needed to start" may be said, asked or not (owner decision 2026-11-23). Do not
+  bring up how billing works unless the reader asks what the trial needs or what happens when it ends; never say that a card is
+  required to start the trial.
 - Everywhere (email, replies, posts, ads, articles), name the data by its source ("Medicare data", "CMS and Census data", "CMS
   ratings") without the word "public" (owner direction 2026-11-17); code refuses it (`public_data`). Never call it proprietary,
   exclusive or licensed, and answer plainly when a reader asks where it comes from.

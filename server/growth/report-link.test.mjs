@@ -170,7 +170,8 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     // The trial is the email's to offer, not the writer's: in the opening it is refused, with or without its link.
     expect(await draftMessage({ opportunity, work, task: {}, model: reply(`${body}\n\nYou can try it free for 30 days:\nhttps://www.caremetricintel.com/`), report: link })).toBeNull();
     expect(await draftMessage({ opportunity, work, task: {}, model: reply(body.replace('Does it match what your team sees in the field?', 'Would a free trial on your county help?')), report: link })).toBeNull();
-    // The second email offers it, in plain words: "risk-free", "no credit card" and the card terms themselves are refused there.
+    // The second email offers it in its own sections, in plain words: an opening that offers it again is refused, risk-free or not, with
+    // "no credit card needed" (true since 2026-11-23, but the trial is the email's to offer) or with a card called required.
     const second = async opening => {
       const written = reply(opening);
       const sent = await draftMessage({ opportunity: { ...opportunity, touches: 1 }, work, task: {}, model: written, report: link });

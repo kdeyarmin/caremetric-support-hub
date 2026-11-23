@@ -148,7 +148,7 @@ describe('sales playbook', () => {
     }
   });
 
-  it('never tells a writer to volunteer the card a CareMetric Intel trial needs, and answers plainly when a reader asks (owner direction 2026-11-17)', () => {
+  it('never tells a writer to volunteer how a CareMetric Intel trial bills, and answers plainly when a reader asks (owner decision 2026-11-23)', () => {
     const book = salesPlaybook['caremetric-intel'];
     // What a writer may say about the trial, and the answers that mention it, no longer carry the card.
     expect(book.valuePoints).toContain(`A ${products.intel.trialDays}-day free trial on one county, started online.`);
@@ -156,11 +156,12 @@ describe('sales playbook', () => {
     for (const key of ['timing', 'demo', 'price', 'results']) expect(book.objections.find(objection => objection.key === key).answer, key).not.toMatch(/credit card|canceling before/i);
     expect(book.objections.find(objection => objection.key === 'timing').answer).toMatch(/30-day free trial can start whenever suits them/);
     expect(book.objections.find(objection => objection.key === 'demo').answer).toMatch(/the 30-day free trial on one county, and answers to any question by email\.$/);
-    // One answer holds the terms, as the fact sheet words them, for a reader who asks; it never denies the card.
+    // One answer holds the terms, as the fact sheet states them, for a reader who asks: no card to start, a card in Billing keeps the plan.
     const asked = book.objections.find(objection => objection.key === 'trial_terms');
     expect(asked.when).toBe('They ask what the trial needs, whether it needs a card, or what happens when it ends.');
-    expect(asked.answer.toLowerCase()).toContain(trialCardTerms.toLowerCase().replace(/\.$/, ''));
-    expect(asked.answer).toMatch(/Say this only when they ask\. Never bring it up unasked, and never say a card is not needed\.$/);
+    expect(asked.answer).toContain('no credit card is needed to start the trial');
+    expect(asked.answer).toContain('Adding a card in Billing before the trial ends keeps the plan, which then bills automatically after the trial unless it is canceled, and without a card the trial simply ends.');
+    expect(asked.answer).toMatch(/Never say that a card is required to start it\.$/);
     expect(book.objections.filter(objection => /credit card/i.test(objection.answer)).map(objection => objection.key)).toEqual(['trial_terms']);
     expect(playbookText()).toContain('- trial_terms (They ask what the trial needs, whether it needs a card, or what happens when it ends.)');
     // No outreach plan of any kind asks for the terms: the first three emails, a website lead's, a re-ask and the quiet follow-ups.
@@ -168,7 +169,8 @@ describe('sales playbook', () => {
       ...inboundSequence.map(step => step.angle), reaskAngle, ...Object.values(quietPlays)];
     for (const plan of plans) expect(plan, plan.slice(0, 40)).not.toMatch(/credit card is required|canceling before it ends|card terms|say (?:in one plain clause )?that a credit card/i);
     // The fact sheet carries the rule for every writer, beside the terms it still states.
-    expect(trialMention).toBe('Offer the free trial in plain words: its length and what it covers. Do not bring up the credit card or how billing starts. State those terms, exactly as written above, only when the reader asks what the trial needs or what happens when it ends. Never say that no card is needed, and never call the trial risk-free.');
+    expect(trialMention).toBe('Offer the free trial in plain words: its length and what it covers. You may add, asked or not, that no credit card is needed to start ("No credit card needed to start."). Do not bring up how billing works unasked: state the terms above, exactly as written, when the reader asks what the trial needs or what happens when it ends. Never say that a card is required to start the trial, and never call the trial risk-free.');
+    expect(trialCardTerms).toBe('No credit card is needed to start your trial. Add a card in Billing before the trial ends to keep your plan; it then bills automatically after the trial unless you cancel. Without a card, the trial simply ends.');
     expect(products.intel.trialMention).toBe(trialMention);
     expect(products.carebase.trialMention).toBeUndefined();
     // CareBase's trial needs no card, and its playbook never spoke of one.

@@ -109,7 +109,10 @@ check, the send ledger's template and period checks and `private.agent_lifecycle
 is executable by `hub_app_server` alone and requires its connection, `private.sales_handoff` includes the `trial` stage and
 `private.growth_app_event` accepts Intel's milestones. Each test fails closed. The Hub server plans the trial path's emails, reads a
 trial's card and activity, and lets a refused customer email wait only when the feature is declared
-([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 4).
+([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 4). Since `20261123120000_intel_trial_without_card.sql`
+(owner decision 2026-11-23: an Intel trial needs no card to start) the trigger `growth_intel_trial_started` on
+`private.billing_subscriptions` counts an Intel trial from its start, beside the mirror; it declares no feature, as the Hub server reads
+nothing new from it.
 
 `20261117233100_growth_address_service_contract.sql` declares `platform.agents.growth-address-service.v1` once the address check,
 people finder and work recovery features are declared, `private.growth_address_service_reserve` is executable by `hub_app_server` alone,

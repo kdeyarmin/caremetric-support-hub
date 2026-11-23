@@ -664,9 +664,9 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
   /**
    * Whether a trialing Intel subscription has a card Stripe confirms (trial-card.mjs). Intel locks an organization to its Billing page
    * whenever the Hub cannot answer its entitlement, so a Stripe failure here must not fail the whole answer: before, one Stripe hiccup
-   * locked out every trialing Intel customer. A failure never unlocks a trial: the answer falls back to Stripe's last answer for this
-   * tenant's subscription, true only if Stripe confirmed its card, else false. Every new trial needs a card, but Stripe starts the
-   * trial before the card is entered (an abandoned card setup is a trialing subscription with none), so "trialing" alone proves nothing.
+   * locked out every trialing Intel customer. A failure never reports a card Stripe did not confirm: the answer falls back to Stripe's
+   * last answer for this tenant's subscription, true only if Stripe confirmed its card, else false. An Intel trial starts with no card
+   * (since 2026-11-23; Intel gives it smaller allowances until one is added), so "trialing" alone proves nothing.
    * A confirmation stands until a check finds no card: a card removed later does not matter, as Stripe cancels a trial that ends
    * without one. Stripe's last answer is kept in memory and, once the database declares billing.trial-cards.v1, in
    * private.billing_trial_cards, so a restart during an outage keeps it too (before that, a restart starts with none). The database is

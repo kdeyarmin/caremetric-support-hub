@@ -60,6 +60,13 @@ describe('reading Intel\'s published features', () => {
     expect(() => check({ ...committed, scale: [] })).toThrow(/figures 0/);
   });
 
+  it('reads an answer without a trial\'s card and billing terms, which the fact sheet states (Intel\'s changed on 2026-11-23)', () => {
+    const page = homePage.replace('{"text":"Yes."}', '{"text":"Yes. No credit card is needed to start your 30-day trial. Add a card in Billing before the trial ends to keep your plan; it then bills automatically after the trial unless you cancel. Without a card, the trial simply ends."}');
+    expect(extractIntel(page, featuresPage()).faq).toEqual([{ question: 'Is CareMetric Intel a CRM?', answer: 'Yes.' }]);
+    const old = homePage.replace('{"text":"Yes."}', '{"text":"A credit card is required before trial access opens. Yes, it is."}');
+    expect(extractIntel(old, featuresPage()).faq).toEqual([{ question: 'Is CareMetric Intel a CRM?', answer: 'Yes, it is.' }]);
+  });
+
   it('stops rather than let another product\'s name through', () => {
     expect(() => extractIntel(homePage, featuresPage(' Works alongside Trella.'))).toThrow(/Another product is named/);
   });

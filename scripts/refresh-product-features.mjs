@@ -58,6 +58,9 @@ const generic = [
   [/accounts to HubSpot as companies/g, 'accounts to a supported CRM as companies', productEdit],
   [/ ?You can also explore demo options with fictional facility data before setting up your own organization\./g, '', () => 'A sentence offering demo options is left out: CareMetric offers no demos.'],
   [/without a sales call/g, 'on your own', () => '"Without a sales call" is written "on your own": the team never mentions sales calls.'],
+  // A trial's card and billing terms are the fact sheet's (facts.mjs `trialCardTerms`), as purchasing and the end of the trial are: a
+  // catalog answer that states them is read without them, so a page that lags a change of terms (Intel's on 2026-11-23) never contradicts it.
+  [/ ?[^.]*\b(?:credit card|bills automatically|without a card)\b[^.]*\./gi, '', () => 'A trial\'s card and billing terms are left out of the answers: the fact sheet states them.'],
 ];
 // The products the team never names (content/validate.mjs keeps the same list).
 const vendors = /\b(HCHB|Homecare Homebase|WellSky|Axxess|MatrixCare|Trella|Definitive Healthcare|Marketware|Aline|WelcomeHome|PointClickCare|Yardi|Eldermark|ALIS|Relias|Caremerge|August Systems|Experience Care|eMARLink|Netsmart)\b/;
@@ -67,7 +70,7 @@ function sanitize(value) {
     let out = value;
     for (const [pattern, replacement, why] of generic) {
       pattern.lastIndex = 0;
-      if (pattern.test(out)) { edits.add(why(replacement)); out = out.replace(pattern, replacement); }
+      if (pattern.test(out)) { edits.add(why(replacement)); out = out.replace(pattern, replacement).replace(/\s{2,}/g, ' ').trim(); }
     }
     if (vendors.test(out)) throw new Error(`Another product is named and has no generic wording yet: "${out.slice(0, 160)}". Add a rule to \`generic\`.`);
     return out;

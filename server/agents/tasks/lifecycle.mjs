@@ -65,8 +65,8 @@ export function lifecycleHandlers({ store, features = null, lifecycle = {}, log 
   async function emails(task, { now = () => new Date(), signal } = {}) {
     const moment = now();
     const save = has(features, lifecycleSaveFeature) && live(lifecycle.saveEmails) === true;
-    // The trial path (team review 2026-11-17, stage 4): a trial that needs a card counts from it, use is read from activity events, and
-    // the card reminder and the two mid-trial emails exist.
+    // The trial path (team review 2026-11-17, stage 4): use is read from activity events, an Intel trial with no card is reminded in its
+    // last week to add one (since 2026-11-23; it needs none to start), and the two mid-trial emails exist.
     const trialPath = has(features, trialPathFeature);
     const facts = await readFacts(signal);
     const { candidates, skipped } = planEmails(facts.accounts, moment, { save, trialPath });

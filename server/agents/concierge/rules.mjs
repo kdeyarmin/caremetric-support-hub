@@ -104,9 +104,10 @@ export function ownWords(text) {
 const trialPhrase = 'credit card';
 /**
  * `text` with the company's own words about its free trial made neutral: "a 30-day free trial with no credit card" (what outreach said
- * until 2026-11-14) and "a 30-day free trial (credit card required ...)" (what it says since Intel trials began to need a card). The fact
- * sheet and the sales playbook say one or the other in outreach emails, and a mail program that quotes the original with no mark puts it
- * under the prospect's answer. "credit card" is set aside only in recognized trial disclosures, so card-management requests stay billing
+ * until 2026-11-14), "a 30-day free trial (credit card required ...)" (what it said while Intel trials needed a card, until 2026-11-23)
+ * and "No credit card is needed to start your trial" / "No credit card needed to start." (Intel's words since). The fact sheet and the
+ * sales playbook say one or another in outreach emails, and a mail program that quotes the original with no mark puts it under the
+ * prospect's answer. "credit card" is set aside only in recognized trial disclosures, so card-management requests stay billing
  * even when they mention the trial or sit beside marketing wording. Found with indexOf and judged on bounded disclosure context, so
  * a long message costs no more than its length.
  */
@@ -132,7 +133,9 @@ export function withoutTrialPhrase(text) {
     // The documented trial summary uses "it" in the next sentence; require that specific trial-summary context.
     const startIt = /\bfree trial, [^.!?\n]{0,70}\. a $/.test(before) && /^ is required to start it(?:,|$)/.test(suffix);
     const siteTerms = /^\s*>?\s*$/.test(prefix) && /^ required · cancel before trial end to avoid charges(?:$|[;,])/.test(suffix);
-    const ours = noCard || cardRequired || startTrial || startIt || siteTerms;
+    // Intel's words since 2026-11-23 open a sentence (or follow a colon or a "yes"): "No credit card is needed to start your trial."
+    const noCardToStart = /(?:^\s*>?\s*|:\s*|\byes[,:]?\s+)no $/.test(prefix) && /^ (?:is )?needed to start\b/.test(suffix);
+    const ours = noCard || cardRequired || startTrial || startIt || siteTerms || noCardToStart;
     // "no credit card" reads "no card", as it always has; "credit card required" reads "card required".
     const no = ours && at - 3 >= from && lower.slice(at - 3, at) === 'no ';
     out += source.slice(from, no ? at - 3 : at) + (ours ? (no ? 'no card' : 'card') : source.slice(at, at + trialPhrase.length));

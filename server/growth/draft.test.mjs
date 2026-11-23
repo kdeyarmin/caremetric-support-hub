@@ -2,6 +2,7 @@ import {it,expect,vi} from 'vitest';
 import {callsDataPublic,citesDataFile,criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,namesCard,outdatedWords,problemHints,shortFormProblem,weaknessMeanings} from './draft.mjs';
 import {nursingHomeAngles,playbookFor,prospectKind,quietPlays,reportCloseAngle,reportTouchAngle,reviewFollowupAngle,reviewTouchAngle,shortFormLimits,touchAngle,unviewedTouchAngle,viewedTouchAngle} from './playbook.mjs';
 import {readCampaign,founderQuote} from './campaign.mjs';
+import {trialCardTerms} from '../agents/content/facts.mjs';
 import {assessProspect} from './assessment.mjs';
 const now=new Date().toISOString();
 const opportunity={id:'o',product:'carebase',version:1,contact_id:'c',goal:'Staff training',policy:{approved_claim:'CareBase supports facility training.',booking_url:'https://example.org/book'},evidence:[{id:'source-1',source_url:'https://example.org',observed_at:now,claim:'A personal-care facility',confidence:'high'}],events:[]};
@@ -34,7 +35,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.19');
+ expect(request.promptVersion).toBe('growth.20');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -205,7 +206,7 @@ it('repairs a draft once, telling the writer what to fix, and reports why one wa
  const draft=await draftMessage({opportunity,work,task:{},model,onReject:code=>reasons.push(code)});
  expect(draft).toMatchObject({modelGenerated:true,body:'How do you track training hours today?'});
  const repair=model.run.mock.calls[1][1];
- expect(repair.promptVersion).toBe('growth.19-r');
+ expect(repair.promptVersion).toBe('growth.20-r');
  expect(repair.system[0].text).toBe(growthSystem);
  expect(JSON.parse(repair.user)).toMatchObject({previousDraft:{body:'A seamless way to train staff.'},fix:expect.stringMatching(/plain words/)});
  expect(reasons).toEqual([]);
@@ -241,7 +242,7 @@ it('writes outreach with the owner-approved memo as a last cached block, after t
  expect(request.system[1].text).toMatch(/^CareMetric CareBase capabilities/);
  expect(request.system[2].text).toContain('memo 3');
  expect(request.system[2].text).toContain('Too long');
- expect(request.promptVersion).toBe('growth.19-m3');
+ expect(request.promptVersion).toBe('growth.20-m3');
  expect(draft.memoVersion).toBe(3);
  // A customer's message and an unusable memo are written without it.
  model.run.mockClear();
@@ -251,7 +252,7 @@ it('writes outreach with the owner-approved memo as a last cached block, after t
  expect(customer?.memoVersion).toBeUndefined();
  model.run.mockClear();
  await draftMessage({opportunity,work,task:{},model,memo:{version:'3',memo:'x'}});
- expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.19');
+ expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.20');
 });
 
 it('records the applied report length without changing angle, subject or ordinary length treatments', async () => {
@@ -290,8 +291,8 @@ const firstEmail=async(o,{offered=report,output=firstDraft,critic=false,views=fa
 };
 const wordsIn=text=>text.replace(/https?:\/\/\S+/g,' ').split(/\s+/).filter(word=>/[A-Za-z0-9]/.test(word)).length;
 
-it('bumps the writer to growth.19 and the reader to critic.5, with a weakness code from a fixed list and a scale a good email can reach',()=>{
- expect(growthPromptVersion).toBe('growth.19');
+it('bumps the writer to growth.20 and the reader to critic.5, with a weakness code from a fixed list and a scale a good email can reach',()=>{
+ expect(growthPromptVersion).toBe('growth.20');
  expect(criticPromptVersion).toBe('critic.5');
  expect(criticWeaknesses).toEqual(['none','generic_opening','about_sender','too_long','too_many_asks','unclear_ask','wrong_problem','no_reason_now','reads_as_template']);
  expect(criticSchema.required).toEqual(['specific','relevant','clearAsk','wouldReply','weakness','weakestSentence']);
@@ -670,42 +671,56 @@ it('keeps a prospect email easy to read: no data file or its year cited, and the
  expect(reportTouchAngle).toContain('without the file or year that follows it in brackets');
 });
 
-it('never brings up the card an Intel trial needs in a prospect email, and never tells a writer to (owner direction 2026-11-17)',()=>{
+it('never brings up how an Intel trial bills in a prospect email, may say no card is needed to start it, and never that one is required (owner decision 2026-11-23)',()=>{
  const answer=body=>({subject:'Referral sources in your county',body,citations:['s'],needsHuman:false});
  const about=(product,body,outreach=true)=>draftProblem(answer(body),{product,sources:[{id:'s'}],outreach});
  const offer='You can try it free for 30 days on one county.';
  expect(about('caremetric-intel',`${offer} Which county comes first for your team?`)).toBeNull();
- for(const terms of ['A credit card is required to start the trial.','A card is required to start.','Your card will be charged when the trial ends.','The plan you choose bills automatically when the trial ends.',
-   'A payment card starts it.','The card terms are on the sign-up page.','Your card is not charged during the trial.','You will need a card to start.',
-   'Add a card to begin.','The plan is billed automatically when it ends.'])
+ // No card is needed to start an Intel trial, and a prospect email may say so (owner decision 2026-11-23).
+ for(const words of ['No credit card needed to start.','No credit card is needed to start your trial.','You can try it with no credit card needed.'])
+  expect(about('caremetric-intel',`${offer} ${words} Which county comes first for your team?`),words).toBeNull();
+ for(const terms of ['Your card will be charged when the trial ends.','The plan you choose bills automatically when the trial ends.',
+   'A payment card starts it.','The card terms are on the sign-up page.','Your card is not charged during the trial.',
+   'Add a card in Billing before the trial ends to keep your plan.','The plan is billed automatically when it ends.'])
   expect(about('caremetric-intel',`${offer} ${terms} Which county comes first for your team?`),terms).toBe('card_terms');
- // Saying no card is needed stays refused, as it was.
- expect(about('caremetric-intel',`${offer} No credit card is needed. Which county comes first for your team?`)).not.toBeNull();
+ // Saying a card is required to start it is refused in any message about Intel, a prospect's or a customer's.
+ for(const terms of ['A credit card is required to start the trial.','A card is required to start.','You will need a card to start.','Add a card to begin.'])
+  expect(about('caremetric-intel',`${offer} ${terms} Which county comes first for your team?`),terms).not.toBeNull();
+ expect(about('caremetric-intel','A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.',false)).toBe('claim');
  // A message to a customer may still say what happens when its trial ends, and CareBase's trial needs no card to speak of.
- expect(about('caremetric-intel','A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.',false)).toBeNull();
+ expect(about('caremetric-intel',trialCardTerms,false)).toBeNull();
  expect(about('carebase','You can start a 30-day free trial online, and no credit card is needed. How do you track training hours today?')).toBeNull();
  expect(namesCard('caremetric-intel','Scan a business card after each visit.')).toBe(false);
  expect(namesCard('caremetric-intel','The pre-visit card lists what to bring up.')).toBe(false);
  expect(namesCard('caremetric-intel','Open the card before each visit, and add your notes after.')).toBe(false);
+ expect(namesCard('caremetric-intel','No credit card needed to start.')).toBe(false);
+ expect(namesCard('caremetric-intel','No credit card needed to start. Your card is charged when the trial ends.')).toBe(true);
  expect(namesCard('carebase','A credit card is required.')).toBe(false);
- // An email written under the old instructions is withdrawn when its turn to send comes: prospect email only.
+ // An email written under the old instructions is withdrawn when its turn to send comes: prospect email only, and any email that says a
+ // card is required to start the trial.
  const waiting={product:'caremetric-intel',subject:'Which referral sources are slipping?',body:'You can try Intel free for 30 days (a credit card is required, and canceling before it ends avoids any charge).'};
- expect(outdatedWords({...waiting,purpose:'marketing'})).toBe('card_terms');
- expect(outdatedWords({...waiting,purpose:'success'})).toBeNull();
- expect(outdatedWords(waiting)).toBeNull();
+ expect(outdatedWords({...waiting,purpose:'marketing'})).toBe('trial_terms');
+ expect(outdatedWords({...waiting,purpose:'success'})).toBe('trial_terms');
+ const billing={...waiting,body:'You can try Intel free for 30 days, and the plan you chose bills automatically when it ends.'};
+ expect(outdatedWords({...billing,purpose:'marketing'})).toBe('card_terms');
+ expect(outdatedWords({...billing,purpose:'success'})).toBeNull();
+ expect(outdatedWords(billing)).toBeNull();
  expect(outdatedWords({...waiting,product:'carebase',purpose:'marketing'})).toBeNull();
  expect(outdatedWords({...waiting,body:offer,purpose:'marketing'})).toBeNull();
- // The instructions: the trial in plain words, never its card; no touch plan asks for the terms.
- expect(growthSystem).toContain('Never bring up the credit card or how billing starts in a message to a prospect');
- expect(growthSystem).toContain('Never say that no card is needed, and never call the trial risk-free.');
+ expect(outdatedWords({...waiting,body:`${offer} No credit card needed to start.`,purpose:'marketing'})).toBeNull();
+ // The instructions: the trial in plain words, no card needed to start, never how it bills; no touch plan asks for the terms.
+ expect(growthSystem).toContain('For CareMetric Intel you may add that no credit card is needed to start ("No credit card needed to start.").');
+ expect(growthSystem).toContain('Never bring up how billing works or what happens when the trial ends in a message to a prospect');
+ expect(growthSystem).toContain('Never say that a card is required to start the trial, and never call the trial risk-free.');
  for(const plan of [reportTouchAngle,reviewTouchAngle,viewedTouchAngle,unviewedTouchAngle,reviewFollowupAngle,reportCloseAngle,touchAngle(1),touchAngle(2),touchAngle(3)])
   expect(plan).not.toMatch(/credit card is required|canceling before it ends|card terms|say (?:in one plain clause )?that a credit card/i);
- // The fact sheet and the playbook that follow the instructions still hold the terms, as facts for a reader who asks.
+ // The fact sheet and the playbook that follow the instructions hold the terms, as facts for a reader who asks.
  const instructions=growthSystem.slice(0,growthSystem.indexOf('CareMetric fact sheet'));
  expect(instructions.length).toBeGreaterThan(2000);
  expect(instructions).not.toMatch(/credit card is required|canceling before it ends|three questions and carry two links/);
- expect(growthSystem).toContain('A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.');
- expect(growthSystem).toContain('How to offer the trial: Offer the free trial in plain words: its length and what it covers. Do not bring up the credit card or how billing starts.');
+ expect(growthSystem).toContain(trialCardTerms);
+ expect(growthSystem).not.toMatch(/a credit card is required|never say that no card is needed/i);
+ expect(growthSystem).toContain('How to offer the trial: Offer the free trial in plain words: its length and what it covers. You may add, asked or not, that no credit card is needed to start ("No credit card needed to start.").');
 });
 
 it('refuses a draft that implies we saw the reader open what we sent, or that uses Intel\'s own word "the book" (email review 2026-11-17)',()=>{
@@ -721,9 +736,9 @@ it('refuses a draft that implies we saw the reader open what we sent, or that us
 });
 it('reads an email written earlier against the rules added since, when it is about to be sent',()=>{
  const email=body=>outdatedWords({product:'caremetric-intel',subject:'Which referral sources are slipping?',body});
- // The Intel trial needs a card since 2026-11-14: 23 cold emails said otherwise before the rule existed.
- expect(email('Try it free for 30 days, no credit card:\nhttps://www.caremetricintel.com/')).toBe('trial_terms');
- expect(email('You can try Intel free for 30 days (a credit card is required, and canceling before it ends avoids any charge).')).toBeNull();
+ // Since 2026-11-23 an Intel trial needs no card to start: an email queued while it needed one, saying so, is not sent.
+ expect(email('You can try Intel free for 30 days (a credit card is required, and canceling before it ends avoids any charge).')).toBe('trial_terms');
+ expect(email('Try it free for 30 days, no credit card:\nhttps://www.caremetricintel.com/')).toBeNull();
  expect(email('Intel flags a top source when its recent referrals fall and shows what the book says about why.')).toBe('jargon');
  expect(email('Thanks for opening the report I sent.')).toBe('mentions_open');
  expect(email('Which counties does your team cover today?')).toBeNull();

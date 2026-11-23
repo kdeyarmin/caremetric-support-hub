@@ -244,20 +244,21 @@ Founders Sale below for new offers. Do not advertise lifetime pricing as part of
   from Intel's own /features page and home page with no numbers): see "CareMetric Intel: the bigger picture" below.
 - **Trial:** a **30-day** free trial covering 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your
   choice, 1 county (`TRIAL_DAYS = 30`, the `trial` plan; owner decision 2026-11-12, it was 14 days; the coverage as Intel's billing
-  catalog states it since 2026-11-16, where it was 1 branch, home health and hospice). **A credit card is required to start the
-  trial**, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then (Hub billing
-  since 2026-11-14, [Platform billing](PLATFORM_BILLING.md); Intel's site: "Credit card required · Cancel before trial end to avoid
-  charges"). Never write "no credit card" for Intel (`trialCardTerms` in `facts.mjs`).
-- **How to offer the trial** (owner direction 2026-11-17; `trialMention` in `facts.mjs`): a card at sign-up is ordinary for a trial,
-  so nothing the team writes brings it up unasked.
-  - An email, a post, an ad or an article offers the trial in plain words: its length and what it covers.
-  - The card and billing terms above are stated, exactly as written, only when a reader asks what the trial needs or what happens
-    when it ends.
-  - They stay where the card is entered or is the subject: Intel's sign-up, Billing and pricing pages, and the email that asks a
-    sign-up to finish adding its card.
-  - Nothing may say that no card is needed (refused in code, `trial_terms`), and nothing calls the trial risk-free.
-  - A prospect email that names the card is refused when it is written and withdrawn when it would be sent (`card_terms` in
-    `server/growth/draft.mjs`).
+  catalog states it since 2026-11-16, where it was 1 branch, home health and hospice). **No credit card is needed to start the
+  trial** (owner decision 2026-11-23; from 2026-11-14 until then a card was required). In Intel's own words (`trialCardTerms` in
+  `facts.mjs`): "No credit card is needed to start your trial. Add a card in Billing before the trial ends to keep your plan; it then
+  bills automatically after the trial unless you cancel. Without a card, the trial simply ends." The short form is "No credit card
+  needed to start." The trial starts at sign-up ([Platform billing](PLATFORM_BILLING.md)).
+- **How to offer the trial** (owner decisions 2026-11-17 and 2026-11-23; `trialMention` in `facts.mjs`):
+  - An email, a post, an ad or an article offers the trial in plain words: its length and what it covers. It may add, asked or not,
+    "No credit card needed to start."
+  - What happens when the trial ends (add a card in Billing to keep the plan, which then bills automatically unless canceled; without a
+    card the trial simply ends) is stated, exactly as written above, when a reader asks what the trial needs or what happens when it ends.
+    It also stays on Intel's Billing and pricing pages, and in the email that reminds a trial without a card, in its last week, to add one
+    to keep its plan.
+  - Nothing may say that a card is required to start the trial (refused in code, `trial_terms`), and nothing calls the trial risk-free.
+  - A prospect email that brings up how the trial bills is refused when it is written and withdrawn when it would be sent (`card_terms`
+    in `server/growth/draft.mjs`); "No credit card needed to start" is not refused.
 - **How everything names Intel's data** (owner direction 2026-11-17, first for email, then for everything the same day; `dataMention`
   in `facts.mjs`): by its source, without the word "public".
   - Everything about Intel says "Medicare data", "CMS and Census data" or "CMS ratings", never "public Medicare data", "publicly
@@ -557,7 +558,8 @@ The [claim rules](#claims) still govern security, privacy and certification stat
 | Explore a consulting engagement. | Use the [Advisors consultation request form](https://caremetricadvisors.com/contact); there is no obligation to move forward. |
 | Find product help. | Use the [CareMetric help center](https://help.caremetric.ai), Intel's in-app help and user guides, or the public support contacts listed under [The company](#the-company). |
 
-Start in the product's own signup and billing flow. Intel's free trial does not become a paid subscription by itself.
+Start in the product's own signup and billing flow. Intel's free trial becomes a paid subscription only when a card is added in Billing
+before it ends; without one, the trial simply ends.
 Automatic application of the Founders Sale means the eligible discount is applied when paid service begins; it does not enroll a trial user automatically.
 Do not extend Intel's no-credit-card or trial-expiry terms to CareBase without a product-specific source.
 
@@ -674,6 +676,10 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
   ZIP areas and 3,200+ counties, and daily checks for new CMS releases (the home page's "by the numbers" band, which the features catalog
   carries). Intel still has no approved customer results. Approved by the owner on 2026-11-16. Also confirmed that day: the pre-visit card and spoken
   debrief pillar never leads a brief.
+- [x] 2026-11-23: Intel's trial needs no credit card to start (owner decision). Intel's words: "No credit card is needed to start your
+  trial. Add a card in Billing before the trial ends to keep your plan; it then bills automatically after the trial unless you cancel.
+  Without a card, the trial simply ends." and "No credit card needed to start." The team may say the short form unasked; saying a card is
+  required to start is refused; the end-of-trial terms are stated when asked.
 - [ ] 2026-11-16: CareBase's home-page figures (12–16 hrs of annual training tracked per direct care worker, by facility type;
   Ch. 2600 + 2800 linked to supporting records; 60+ survey-ready form templates; 1 record with access by role), read into the CareBase
   catalog the AI team writes from and listed under "CareBase by the numbers". Tick this box when you approve the pull request that adds them.

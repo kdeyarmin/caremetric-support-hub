@@ -351,11 +351,12 @@ said nothing the week every county snapshot was blocked and the month's flight f
 - **An agent that only skips is named.** An agent whose every task in 14 days skipped is named with the reason, such as the Content
   Marketer having no topic left (`lastTaskAt`, `tasks14d`, `worked14d` and `skipped14d` in `private.agent_watchdog_facts`).
 - **The Monday scorecard reads the watchdog as the brief does**, with the toolkit's likely causes and your idle setting.
-- **Cost per verified trial** divides the Marketing Manager's AI spend and the ads by card-confirmed trials, not every agent's spend
-  (`marketingSpendCents`).
+- **Cost per verified trial** divides the Marketing Manager's AI spend and the ads by verified trials (an Intel trial counts from its
+  start since 2026-11-23; from its card before), not every agent's spend (`marketingSpendCents`).
 - **CareBase is one pilot line**, since it is not marketed.
-- **The strategist never suggests a call.** Its activation move is the Account Manager's emails. It now names sign-ups that never
-  added a card (`conversion`, `noCard`) and trials that end unpaid (a new constraint, `paying`, judged by new paying customers).
+- **The strategist never suggests a call.** Its activation move is the Account Manager's emails. It names trials that end unpaid (a
+  new constraint, `paying`, judged by new paying customers). It named sign-ups that never added a card (`conversion`, `noCard`) until
+  2026-11-23, when an Intel trial stopped needing a card to start; the facts still carry `noCard`, and nothing judges it.
 
 ### The end-of-day summary
 
@@ -651,7 +652,8 @@ many times each side has written). It then:
    hacked while I was out of the office" is a security report), and so does a cancellation or a billing matter
    when only an opening sentence suggests an automatic reply.
    Billing and cancellation are read from the sender's own words, because the company's own emails mention a credit card in their
-   trial sentence ("no credit card" until 2026-11-14, "credit card required" since Intel trials need a card) and a prospect who
+   trial sentence ("no credit card" until 2026-11-14, "credit card required" while Intel trials needed a card, and "No credit card
+   needed to start" since 2026-11-23) and a prospect who
    answers one has not raised a billing matter. Two things are set aside, and nothing else: the lines a mail program marked as
    quoted (each starts with ">") with the "On ... wrote:" line that introduces them (`ownWords`), and the words "credit card" in a
    sentence about trying the product free (`withoutTrialPhrase`). What a person wrote above,
@@ -945,7 +947,7 @@ it cannot use falls back to the default.
 ### Customer emails
 
 A trial that hears nothing leaks: CareBase and Intel trials (30 days each) start through the Hub's billing, and
-a CareBase trial without a card cancels silently. The Account Manager proposes short, fixed emails to the
+a trial without a card cancels silently when it ends. The Account Manager proposes short, fixed emails to the
 billing contact of a trial or a new paying account (task `accounts.lifecycle`, every morning at 08:20 Eastern).
 They are written once, in `server/agents/accounts/lifecycle.mjs`, use no model, and go out only after the owner
 approves the exact text on the Team screen, or, for an agent on **Act**, when the owner listed the template.
@@ -962,23 +964,25 @@ approves the exact text on the Team screen, or, for an agent on **Act**, when th
 **The trial path** ([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 4; `platform.agents.trial-path.v1`,
 `20261117230000_trial_path.sql`) changes the trial emails once the database declares it:
 
-- **An Intel trial starts with its card.** Intel opens a trial when someone opens card setup, before any card exists, so the Hub
-  counts the trial (and the scorecard its start) from the first time Stripe confirms the card (`private.growth_trial_cards`). Until
-  then the sign-up gets only the **card reminder** (from about a day in to day 14): its last step was not finished, what the trial
-  opens once it starts, Intel's card terms word for word ("A credit card is required to start the trial…"), and a button to Intel's
-  Billing page. It is the one email that names the card: no other customer or prospect email brings it up (owner direction
-  2026-11-17). It is never welcomed, sent
-  setup help or thanked for trying. The welcome counts its two days from the card.
+- **An Intel trial starts at sign-up, card or not** (owner decision 2026-11-23; `20261123120000_intel_trial_without_card.sql`). The
+  Hub counts the trial (and the scorecard its start) from its start, and every trial email counts its days from there, as for
+  CareBase. A trial with no card confirmed (`private.growth_trial_cards`) gets the **card reminder** once in its last week (7 to 1 days
+  before it ends): the trial ends within a week, Intel's terms word for word ("Add a card in Billing before the trial ends to keep your
+  plan; it then bills automatically after the trial unless you cancel. Without a card, the trial simply ends."), what stays in place
+  when the plan continues, and a button to Intel's Billing page. A trial with a card confirmed gets none, and a card added after it was
+  proposed stops it. It is the one customer email that names the card. A trial that ends without a card is thanked for trying like any
+  other. (From 2026-11-14 until then an Intel trial counted from its card's first confirmation, and the reminder asked a sign-up that
+  had not added one to finish starting its trial.)
 - **Setup help reads Intel's own activity** (`active` and `first_value` events). Intel sends no usage reports, so before this every
   Intel trial was offered setup help. CareBase keeps its usage reports.
 - **The middle of the trial** (days 10 to 16, more than 5 days left): the **mid-trial next step** when the trial has not reached first
   value (for Intel: open Setup, pick the county, build a first list), or **what to do next** once it has (Intel only: three next steps,
-  and that the plan starts on its own when the trial ends and everything built stays).
+  and that everything built stays when the plan is kept after the trial).
 - **A refused email waits.** Before, an email refused for the day's cap of 20 or because the address got a growth email in the last
   72 hours ended there, and its template was never proposed again, so a prospect who signed up within three days of a cold email never
   got a welcome. Now it waits (`private.agent_lifecycle_defer`: 9 AM Eastern the next day, or a day) and is checked again when it is tried.
-- **A trial that ends unpaid is lost**, once (`churned`), so the Sales review stops listing it; an extension moves the end date the
-  review reads.
+- **A trial that ends unpaid is lost**, once (`churned`), card or not, so the Sales review stops listing it; an extension moves the end
+  date the review reads.
 
 The three new emails are on the Account emails step's list (owner decision of November 17,
 `20261117245000_trial_emails_auto_send.sql`), so with that step automatic they go out on their own like the welcome; the executor still

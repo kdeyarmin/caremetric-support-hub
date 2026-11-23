@@ -7,6 +7,7 @@
   },
   "contentSha256": "2baa06be2317a0d1",
   "edits": [
+    "A trial's card and billing terms are left out of the answers: the fact sheet states them.",
     "EMR vendors named on the page are written generically: \"(or have a supported EMR deliver it on a schedule)\"",
     "EMR vendors named on the page are written generically: \"Saved layouts cover common home health and hospice EMR reports.\"",
     "EMR vendors named on the page are written generically: \"Scheduled EMR report delivery\"",
@@ -1032,7 +1033,7 @@
     },
     {
       "question": "What can we explore during the free trial?",
-      "answer": "The 30-day trial covers one county and includes three marketer seats and one manager seat. Create your organization account, select the county in Billing, and explore the available research, planning, and reporting tools. A labeled sample book gives you examples to work through. A credit card is required before trial access opens. Your selected plan bills automatically after the trial unless you cancel first."
+      "answer": "The 30-day trial covers one county and includes three marketer seats and one manager seat. Create your organization account, select the county in Billing, and explore the available research, planning, and reporting tools. A labeled sample book gives you examples to work through."
     },
     {
       "question": "Can we keep an eye on competitors?",

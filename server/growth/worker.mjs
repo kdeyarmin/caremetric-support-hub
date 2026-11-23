@@ -640,7 +640,7 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress,features
       return {delivery:claimed.status};
     }
     // An email can wait days for its turn under the caps and send hours. Words a rule added since it was written no longer allows (an
-    // Intel trial with "no credit card", as if we saw a report opened, Intel's "the book") never go out: the email is withdrawn, and the
+    // Intel trial that needs a card to start, as if we saw a report opened, Intel's "the book") never go out: the email is withdrawn, and the
     // next sweep writes that work again under today's rules (20261117220000_email_review.sql). A database without the withdrawal marks it
     // failed instead, for the owner to see.
     const outdated=outdatedWords({product:claimed.product,subject:claimed.subject,body:claimed.body,purpose:claimed.purpose});

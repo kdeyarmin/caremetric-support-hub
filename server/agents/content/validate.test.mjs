@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { legalDisclaimer, officialSources } from './facts.mjs';
+import { legalDisclaimer, noCardToStart, officialSources, trialCardTerms } from './facts.mjs';
 import { catalogNumbers, featuresText } from './features.mjs';
 import { fireDrillDraft, referralDraft } from './fixtures.mjs';
 import { topics } from './topics.mjs';
@@ -371,13 +371,22 @@ describe('plain language (owner direction 2026-11-12)', () => {
 });
 
 describe('Intel trial terms', () => {
-  it('refuses copy about Intel that says its trial needs no card, and keeps the true terms', () => {
-    for (const text of ['Try it free for 30 days, no credit card.', 'Start a free trial with no card required.', 'The trial needs no payment details.', 'A credit card is not required for the trial.'])
+  // Owner decision 2026-11-23: an Intel trial needs no card to start (it did from 2026-11-14 until then).
+  it('refuses copy about Intel that says a card is required to start its trial, and keeps the true terms', () => {
+    for (const text of ['Credit card required · Cancel before trial end to avoid charges', 'A 30-day free trial (credit card required; canceling before it ends avoids any charge).',
+      'A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.',
+      'Yes, a credit card is required to start the trial.', 'The trial requires a credit card.', 'You need a card to start the trial.', 'Enter a card at sign-up.',
+      'Start your trial. Card required.', 'The trial needs a credit card up front.'])
       expect(textProblems(text, { product: 'intel' }), text).toContain('trial_terms');
-    expect(textProblems('CareMetric Intel is free for 30 days without a credit card.')).toContain('trial_terms');
-    expect(textProblems('A 30-day free trial. A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.', { product: 'intel' })).not.toContain('trial_terms');
+    expect(textProblems('CareMetric Intel is free for 30 days, but a credit card is required.')).toContain('trial_terms');
+    for (const text of [trialCardTerms, noCardToStart, 'Try it free for 30 days, no credit card.', 'Start a free trial with no card required.', 'The trial needs no payment details.',
+      'A credit card is not required for the trial.', 'A card is needed before the trial ends to keep your plan.', 'Without a credit card, the trial simply ends.',
+      // Intel's own cards are not payment cards.
+      'The pre-visit card is required reading before each visit.', 'Scan a business card after each visit.'])
+      expect(textProblems(text, { product: 'intel' }), text).not.toContain('trial_terms');
+    expect(textProblems(`A 30-day free trial. ${trialCardTerms}`, { product: 'intel' })).toEqual([]);
     // CareBase trials are unchanged.
-    expect(textProblems('Try it free with no credit card.', { product: 'carebase' })).not.toContain('trial_terms');
+    expect(textProblems('A credit card is required to start the trial.', { product: 'carebase' })).not.toContain('trial_terms');
   });
 });
 

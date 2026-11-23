@@ -210,10 +210,10 @@ describe('the trial path (team review 2026-11-17, stage 4)', () => {
     }
   });
 
-  it('holds an Intel trial\'s welcome until its card is confirmed, and refuses the card reminder once it is', async () => {
+  it('sends an Intel trial\'s welcome with or without a card (none is needed to start since 2026-11-23), and refuses the card reminder once one is confirmed', async () => {
     const intel = over => fact({ product: 'caremetric-intel', productName: 'CareMetric Intel', cardConfirmedAt: null, ...over });
     const welcome = execution({ input: lifecycleInput(intel(), 'welcome') });
-    await expect(fixture({ facts: [intel()], trialPath: true }).send(welcome)).rejects.toSatisfy(refusal('no_longer_applies'));
+    expect(await fixture({ facts: [intel()], trialPath: true }).send(welcome)).toEqual({ outcome: 'sent', template: 'welcome' });
     expect(await fixture({ facts: [intel({ cardConfirmedAt: '2026-11-02T13:00:00Z' })], trialPath: true }).send(welcome)).toEqual({ outcome: 'sent', template: 'welcome' });
     const reminder = execution({ input: lifecycleInput(intel(), 'card_reminder') });
     expect(await fixture({ facts: [intel()], trialPath: true }).send(reminder)).toEqual({ outcome: 'sent', template: 'card_reminder' });

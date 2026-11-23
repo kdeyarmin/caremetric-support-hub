@@ -455,15 +455,33 @@ customer is never billed twice. See [customer invitations](CUSTOMER_INVITATIONS.
 
 Eligible new paid CareBase, Train and Intel subscriptions automatically receive **50% off the first 12 paid months**, then regular renewal pricing. No code entry or assisted activation is needed. Checkout verifies the discount in its preview, session and receipt. Hub subscription creation applies it automatically; trial conversions apply it on the first paid invoice so the free trial does not consume the year. Eligibility, no stacking, one introductory year and exact public prices are checked server-side. See [pricing, exclusions and operational details](PRICING_RESEARCH_AND_FOUNDERS_SALE.md). Existing founding agreements retain their terms.
 
-## Intel card-required trial signup
+## Intel trial signup
 
-Intel now reserves a billing-only account until a card is confirmed. Its trial
-request includes `interval: "month" | "year"` and `require_payment_method: true`.
-Apply `20261114180000_trial_billing_interval.sql` before deploying the adapter;
-explicit choices require exactly one active, public USD price for that interval.
-The Hub creates the same idempotent 30-day trial, with automatic card collection
-and cancellation if the trial ends without a payment method. Retries do not restart
-or extend a trial. Existing trial callers retain their original monthly lookup.
+Since 2026-11-23 (owner decision) an Intel trial needs no card to start. Intel asks
+for the trial at sign-up and the person is in the app at once; from 2026-11-14 until
+then Intel kept a new account on its Billing page until a card was confirmed. The
+trial request is unchanged: it includes `interval: "month" | "year"` and
+`require_payment_method: true`, which only limits the subscription's payment method
+types to card. Apply `20261114180000_trial_billing_interval.sql` before deploying the
+adapter; explicit choices require exactly one active, public USD price for that
+interval. The Hub creates the same idempotent 30-day trial, with automatic card
+collection (`charge_automatically`) and Stripe's `missing_payment_method: 'cancel'`,
+so a trial that ends without a card is canceled and Intel shows only Billing. Stripe
+starts a trial with no payment method, and the answer reads `status: "trialing"`,
+`entitled: true`. Retries do not restart or extend a trial. Existing trial callers
+retain their original monthly lookup.
+
+Until Stripe confirms a card (`payment_method_on_file: false`), Intel gives the trial
+smaller daily allowances (25 AI requests, 25 emails, 15 exports); adding a card in
+Intel's Billing (the payment-method portal below) restores the trial's full ones, and
+the plan chosen at sign-up then bills automatically when the trial ends unless
+canceled. The trial request's own answer carries no `payment_method_on_file` (only the
+entitlement check below adds it), and Intel reads a missing value as no card. Intel's
+words for it: "No credit card is needed to start your 30-day trial. Add a card in
+Billing before the trial ends to keep your plan; it then bills automatically after the
+trial unless you cancel. Without a card, the trial simply ends." The AI team says the
+same ([GTM facts](GTM_FACTS.md)), and the Account Manager reminds a trial with no card,
+once in its last week, to add one (`card_reminder`).
 
 `POST /api/apps/portal` accepts optional `payment_method_only: true` to open
 Stripe's payment-method-update flow and redirect to the app when complete. The
@@ -474,30 +492,27 @@ For Intel trial entitlements the Hub adds `payment_method_on_file`, after readin
 Stripe's current subscription, customer default and attached payment method. The
 subscription must collect automatically; the effective default must be a card
 belonging to that customer and the entitlement's tenant. A Stripe failure never
-unlocks a trial, and it never fails the entitlement itself: Intel limits an
+reports a card Stripe did not confirm, and it never fails the entitlement itself: Intel limits an
 organization to Billing whenever the Hub cannot answer, so one Stripe outage used
 to lock out every trialing Intel customer. While Stripe cannot be reached, the
 rest of the answer comes from the Hub's database as usual, and
 `payment_method_on_file` is Stripe's last answer for that subscription: `true` only
-if Stripe confirmed its card, otherwise `false`. Every new trial needs a card, but
-Stripe starts the trial before the card is entered, so an abandoned card setup is a
-trialing subscription with no card, and `trialing` alone never stands in for one. A
-confirmation stands until a check finds no card (Stripe cancels a trial that ends
-without a card). Stripe's last answer is kept in the server's memory and, once
+if Stripe confirmed its card, otherwise `false`. A trial starts with no card, so
+`trialing` alone never stands in for one. A confirmation stands until a check finds
+no card (Stripe cancels a trial that ends without a card). Stripe's last answer is kept in the server's memory and, once
 `20261116020000_billing_trial_cards.sql` and its contract
 (`billing.trial-cards.v1`) are applied, in `private.billing_trial_cards`, so a
 restart during an outage keeps it too; before that, a restart reads `false` until
 Stripe answers. The server writes Stripe's answer on every check (another Hub
 instance may have written since), a confirmation is removed once its subscription is
 no longer trialing, and a database that cannot be reached never fails the entitlement
-either. Intel only grants a new trial after this server-side check, never from
-a success query parameter. The browser can force a fresh check on returning from
+either. Intel restores a trial's full allowances only after this server-side check,
+never from a success query parameter. The browser can force a fresh check on returning from
 Stripe; ordinary entitlement checks retain Intel's five-minute cache limit.
 
-The card is charged at trial end for the selected interval unless canceled.
-The existing Founders Sale first-paid-invoice handling continues to apply. Legacy
-Intel trials keep their accepted terms; the new Intel migration marks only new
-self-service signups as requiring card verification. Validate monthly and annual
+A card added during the trial is charged at trial end for the selected interval
+unless canceled. The existing Founders Sale first-paid-invoice handling continues to
+apply. Legacy Intel trials keep their accepted terms. Validate monthly and annual
 trial-end invoices and cancellation with an isolated Stripe test clock before
 releasing both applications. This source change does not apply migrations or
 alter live Stripe settings.

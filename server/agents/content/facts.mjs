@@ -27,9 +27,12 @@
  * its free agency market review (`/market-review`, which asked for an agency's name or CCN). The free report anyone can
  * request on Intel's site is now the county report (`intel-county-report`): any state and county, emailed as a PDF, about every kind
  * of provider located there. An agency's own signed market report link (growth/report-link.mjs) is unchanged.
+ * On 2026-11-23 (owner decision) Intel's trial no longer needs a credit card to start (`trialCardTerms`, `trialMention`): it starts at
+ * sign-up, a card added in Billing before it ends keeps the plan, and without one the trial simply ends. "No credit card needed to start"
+ * may now be said, and saying a card is required to start is refused instead (validate.mjs `trial_terms`).
  */
 
-export const factsVersion = '2026-11-19.1';
+export const factsVersion = '2026-11-23.1';
 
 /**
  * Where public help articles live. An article's help-center address is `${helpCenterOrigin}/help/articles/<slug>`; that is its
@@ -45,17 +48,21 @@ const deepFreeze = value => {
 
 // Redeemed through assisted billing activation, not an automatic checkout promotion. Keep the complete terms together.
 /**
- * What an Intel trial asks for and what happens when it ends (Hub billing since 2026-11-14, docs/PLATFORM_BILLING.md "Intel card-required
- * trial signup"; Intel's own site says "Credit card required · Cancel before trial end to avoid charges"). Never "no credit card".
+ * What an Intel trial asks for and what happens when it ends, in Intel's own words (owner decision 2026-11-23; docs/PLATFORM_BILLING.md
+ * "Intel trial signup"): the trial starts at sign-up with no card, a card added in Billing before it ends keeps the plan chosen at
+ * sign-up, which then bills automatically, and without a card the trial simply ends. From 2026-11-14 until then it needed a card to start.
  */
-export const trialCardTerms = 'A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.';
+export const trialCardTerms = 'No credit card is needed to start your trial. Add a card in Billing before the trial ends to keep your plan; it then bills automatically after the trial unless you cancel. Without a card, the trial simply ends.';
+/** The short form Intel uses for it, which anything about Intel may say, asked or not. */
+export const noCardToStart = 'No credit card needed to start.';
 /**
- * How the Intel trial is offered (owner direction 2026-11-17): a card at sign-up is ordinary for a trial, so nothing CareMetric writes
- * brings it up unasked. The terms above stay on the sheet for a reader who asks, and for the email that asks a sign-up to finish adding
- * its card (accounts/lifecycle.mjs `cardTermsWords`); Intel's own sign-up and Billing pages state them where the card is entered.
- * Saying that no card is needed is still refused in code (validate.mjs `trial_terms`).
+ * How the Intel trial is offered (owner decision 2026-11-23): that no card is needed to start is a plain fact every competitor states,
+ * so it may be said unasked. What happens when the trial ends (add a card to keep the plan, which then bills automatically; without one
+ * the trial ends) is stated, exactly as written above, when the reader asks; the email that reminds a trial without a card to add one
+ * states it too (accounts/lifecycle.mjs `cardTermsWords`). Saying a card is required to start the trial is refused in code
+ * (validate.mjs `trial_terms`), and so is calling it risk-free (`guarantee`).
  */
-export const trialMention = 'Offer the free trial in plain words: its length and what it covers. Do not bring up the credit card or how billing starts. State those terms, exactly as written above, only when the reader asks what the trial needs or what happens when it ends. Never say that no card is needed, and never call the trial risk-free.';
+export const trialMention = `Offer the free trial in plain words: its length and what it covers. You may add, asked or not, that no credit card is needed to start ("${noCardToStart}"). Do not bring up how billing works unasked: state the terms above, exactly as written, when the reader asks what the trial needs or what happens when it ends. Never say that a card is required to start the trial, and never call the trial risk-free.`;
 /**
  * How Intel's data is named (owner direction 2026-11-17, first for email, then "fix everywhere" the same day): by its source, never
  * as public, publicly available or free data, so it reads as CareMetric's own analysis. Every surface refuses the word in code

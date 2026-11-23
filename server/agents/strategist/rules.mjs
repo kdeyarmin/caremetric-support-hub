@@ -70,8 +70,9 @@ export function weekFigures(facts) {
     capDays: n(e.capDays), cap: n(facts?.settings?.coldEmailCap), waiting: n(e.approvedWaiting ?? e.waiting),
     limitDays: n(e.limitDays), productLimit: n(facts?.settings?.productDailyLimit),
     trialStarts: n(c.trialStarts), activated: n(c.activated), paid: n(c.paid),
-    // Intel sign-ups that never added their card, and counted trials that ended with nothing paid (platform.agents.support-truth.v1).
-    noCard: n(c.noCard), trialsLost: n(c.trialsLost),
+    // Counted trials that ended with nothing paid (platform.agents.support-truth.v1). The facts' `noCard` (Intel trials with no card yet)
+    // is no longer judged: since 2026-11-23 an Intel trial starts without a card, and one is added only to keep the plan after it.
+    trialsLost: n(c.trialsLost),
     spendDollars: Math.round(n(s.marketingCents) / 100), budgetDollars: Math.round(n(s.budgetCents) / 100), budgetDays: n(s.budgetDays),
     approvals: n(facts?.approvals),
     // The bounce guard's own window (since the owner last saved it or resumed): cold emails sent and hard bounces.
@@ -164,13 +165,6 @@ export function candidates(facts, previous = null) {
         : `${twoWeeksSent} cold emails in two weeks drew no reply; report opens are not being recorded, so whether they were read is unknown.`,
       opensKnown ? 'Read the reader\'s weakest sentences on Growth and change the first email\'s offer, not its wording.'
         : 'Turn on recording report opens (Settings → Customer growth), and read the reader\'s weakest sentences on Growth.', opensKnown ? 'openRate' : 'replies');
-  }
-  // Sign-ups that stop at the card: interest that never becomes a trial, the most specific case of it.
-  const noCardTwoWeeks = f.noCard + (before?.noCard ?? 0);
-  if (noCardTwoWeeks >= 2) {
-    add('conversion', 60 + Math.min(noCardTwoWeeks * 5, 30), { noCardTwoWeeks },
-      `${noCardTwoWeeks} people began an Intel trial in two weeks and never added their card, so their trials never started.`,
-      'Let the Account Manager\'s card reminder go out on its own (AI team → Account emails), and look at Intel\'s Billing page for what stops people at the card.', 'trialStarts');
   }
   // Interest without trials.
   if (!list.some(item => item.key === 'conversion') && (f.replies >= 2 || (opensKnown && f.reportViews >= 5)) && f.trialStarts === 0) {

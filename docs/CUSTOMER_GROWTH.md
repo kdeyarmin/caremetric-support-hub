@@ -288,7 +288,7 @@ and Census data, with nothing about any patient:
 - the hospitals the county's residents use, and the highest-ranked physicians for outreach;
 - the agency's CMS ratings;
 - up to three moves the figures point to, and the 30-day free trial. Since 2026-11-17 the report's trial box does not bring up the
-  card (owner direction; Intel's sign-up page states the terms where the card is entered).
+  card (owner direction); since 2026-11-23 no card is needed to start an Intel trial (owner decision).
 
 The link is `https://www.caremetricintel.com/report/<token>`. The Hub signs it (`server/growth/report-link.mjs`) for each CareMetric
 Intel prospect whose evidence carries its Medicare roster record, which holds the agency's CCN. The key comes from the marketing feed's
@@ -359,8 +359,10 @@ industry").
 - **Changing what the sections say** is a code change in `campaign.mjs`, checked against the fact sheet by its test. They hold no
   setting: the trial's length and the Founders Sale's words come from the fact sheet.
 - **Without a model** the email keeps its shape: a fixed opening, then the same sections.
-- **No prospect email brings up the credit card** (owner direction 2026-11-17). One that does is refused when written and withdrawn
-  when it would be sent (`card_terms`). "Risk-free" is refused (`guarantee`), as is "no credit card" (`trial_terms`).
+- **No prospect email brings up how an Intel trial bills** (owner direction 2026-11-17). One that does is refused when written and
+  withdrawn when it would be sent (`card_terms`). Since 2026-11-23 an Intel trial needs no card to start (owner decision), and an
+  email may say so: "No credit card needed to start." is not refused. "Risk-free" is refused (`guarantee`), as is saying a card is
+  required to start the trial (`trial_terms`), in any email about Intel.
 - **Nothing about Intel calls its data public** (owner direction 2026-11-17, first for email, then for everything the same day).
   It names the source instead: "Medicare data", "CMS and Census data", "CMS ratings". One rule in code, `public_data`
   (`publicDataWords` and `callsDataPublic` in `server/agents/content/validate.mjs`), refuses it in prospect and customer email,
@@ -373,8 +375,8 @@ industry").
   cites a data file or its year ("(CMS, 2024)", "the Provider of Services file", "2026Q3"); one that does is rewritten
   (`data_citation`, `citesDataFile` in `draft.mjs`). A county figure is stated without the file and year that follow it in its
   source. The fixed sections keep every sentence to 25 words or fewer and hold no year (`campaign.test.mjs`), and the Founders
-  Sale is said there in everyday words. The trial and customer emails use the same voice; only the card terms and the Founders
-  Sale in the trial check-in keep their exact terms.
+  Sale is said there in everyday words. The trial and customer emails use the same voice; only the card terms in the card reminder
+  and the Founders Sale in the trial check-in keep their exact terms.
 - **The rank check no longer refuses the writer's own words.** Until 2026-11-17 the instructions said "the physicians Intel ranks
   highest as referral sources" and the check for an agency's own rank (`emailStatesStanding`) refused "ranks highest", so a draft
   that followed its instructions failed. A rank that is plainly about physicians or referral sources now passes, and the
@@ -704,8 +706,9 @@ behaves as before).
 - **What a draft may not say, now also checked when it is sent.** Between November 8 and 15, 23 cold emails promised an Intel trial
   with "no credit card", after Intel's trial began to need one; the draft check added on November 15 (`trial_terms`) stopped new ones
   but not an email already approved and waiting for its turn under the caps and send hours. Each growth email is now read again when it
-  is claimed for sending (`outdatedWords` in `server/growth/draft.mjs`): an Intel trial with no credit card, a sentence that implies we
-  saw the reader open something we sent, or Intel's internal word "the book". One that fails is never sent: it is withdrawn
+  is claimed for sending (`outdatedWords` in `server/growth/draft.mjs`): an Intel trial that contradicts its terms (since 2026-11-23,
+  one that says a card is required to start it), a sentence that implies we saw the reader open something we sent, or Intel's internal
+  word "the book". One that fails is never sent: it is withdrawn
   (`private.growth_withdraw_message`: cancelled, its claim undone so it counts toward no cap, with `withdrawn_at`, so the next sweep
   writes that work again under today's rules) and recorded as `growth.message_withdrawn` in the audit log. Before the migration is
   applied it is marked failed instead.
@@ -866,15 +869,16 @@ subscription with unknown prior payment history remains uncounted unless it is a
 webhook ordering is reconciled. Unverified checkout holds remain held; the existing growth maintenance worker drains eligible events,
 backs off individual failures and expires entries after 89 days. No subscription-status inference substitutes for a paid invoice.
 
-**An Intel trial counts from its card** (`platform.agents.trial-path.v1`, `20261117230000_trial_path.sql`, team review 2026-11-17,
-stage 4). Intel asks the Hub to open its trial when someone opens card setup, and Stripe starts the trial before any card is entered,
-so a trialing Intel subscription proves nothing. The mirror no longer queues `trial_started` for one: the first time Stripe confirms its
-card (`private.billing_trial_cards`, written on every entitlement check) queues it, once, under the same key, and
-`private.growth_trial_cards` keeps when that was after the trial ends (for the trials live when this was released, their start:
-`20261117260000_review_repairs.sql` corrects the time the release copied from the last entitlement check). A CareBase trial, which needs no card, still counts when it
-starts. A counted trial that ends (canceled, expired or paused) with nothing ever paid on it is queued as `churned`
-(`billing:trial_lost:<subscription>`); a sign-up that never added its card was never a trial and is not lost either. An extended
-trial's new end date reaches its opportunity. Intel may also send three milestones as `active` events (`facts.metric`:
+**An Intel trial counts from its start** (`20261123120000_intel_trial_without_card.sql`, owner decision 2026-11-23: no card is needed
+to start one). Intel asks the Hub for the trial at sign-up and the person is in the product at once, so a trialing Intel subscription is
+a trial, as a CareBase one always was: `private.growth_intel_trial_started`, a trigger beside the mirror, queues `trial_started` when it
+starts (and the migration queued, once, the Intel trials then running that had waited for a card). From 2026-11-14 until then
+(`platform.agents.trial-path.v1`, `20261117230000_trial_path.sql`, team review 2026-11-17, stage 4) an Intel trial counted only from the
+first time Stripe confirmed its card, because Intel opened the trial when someone opened card setup. The card is still recorded: the
+first confirmation (`private.billing_trial_cards`, written on every entitlement check) is kept in `private.growth_trial_cards` after the
+trial ends, and queues nothing new under the trial's key. A counted trial that ends (canceled, expired or paused) with nothing ever paid
+on it is queued as `churned` (`billing:trial_lost:<subscription>`), card or not. An extended trial's new end date reaches its
+opportunity. Intel may also send three milestones as `active` events (`facts.metric`:
 `county_chosen`, `agency_saved`, `activated`); the Account Manager's facts read whether the county was chosen.
 
 The scorecard's `verifiedPaid`, `verifiedTrialStarts` and `lifecycleStartedAt` distinguish these prospective receipts from form submissions

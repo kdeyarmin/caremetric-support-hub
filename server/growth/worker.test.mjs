@@ -447,14 +447,14 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  const on=await sweep(true);
  expect(on.store.learningActive).toHaveBeenCalledTimes(1);
  expect(on.store.learningActive).toHaveBeenCalledWith('caremetric-intel');
- expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.19-m5');
+ expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.20-m5');
  expect(on.store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({memoVersion:5}));
  // The report-only form needs no switch: the sweep hands the writer none, and the email records its form.
  expect(on.store.draft.mock.calls[0][2].arms).toMatchObject({form:'short',length:'report'});
  expect(JSON.parse(on.model.run.mock.calls[0][1].user).style).toBe('Write two or three sentences, never more than 120 words.');
  const off=await sweep(false);
  expect(off.store.learningActive).not.toHaveBeenCalled();
- expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.19');
+ expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.20');
  expect(off.store.draft.mock.calls[0][2].memoVersion).toBeUndefined();
 });
 
@@ -519,7 +519,8 @@ describe('each cold touch to the organization\'s other decision-makers (20261115
 });
 
 it('never sends an email whose words a newer rule refuses: it is withdrawn, so the work is written again (email review 2026-11-17)',async()=>{
- const claimed={send:true,to:'info@operator.example',id:'m',workId:'w',product:'caremetric-intel',purpose:'marketing',subject:'Which referral sources are slipping?',body:'Try it free for 30 days, no credit card:\nhttps://www.caremetricintel.com/'};
+ // Queued while an Intel trial needed a card (2026-11-14 to 2026-11-23); it needs none now.
+ const claimed={send:true,to:'info@operator.example',id:'m',workId:'w',product:'caremetric-intel',purpose:'marketing',subject:'Which referral sources are slipping?',body:'Try it free for 30 days. Credit card required.\nhttps://www.caremetricintel.com/'};
  const mail={configured:true,send:vi.fn(async()=>({delivery:'sent',id:'provider'}))};
  const store={claim:vi.fn(async()=>claimed),finish:vi.fn(async()=>true),withdraw:vi.fn(async()=>true)};
  const run=growth=>growthExecutors({growth:{configured:()=>true,unsubscribeToken:()=>'a'.repeat(64),...growth},mail,publicOrigin:'https://hub.example.org',postalAddress:'CareMetric, 1 Main St, Altoona, PA'})['growth.message']({id:'a',input:{messageId:'m'}});
@@ -537,9 +538,9 @@ it('never sends an email whose words a newer rule refuses: it is withdrawn, so t
  expect(fine.withdraw).not.toHaveBeenCalled();
  expect(mail.send).toHaveBeenCalledTimes(1);
 });
-it('withdraws a queued prospect email that names the card an Intel trial needs, and sends a customer message that does (owner direction 2026-11-17)',async()=>{
- // Every trial offer was told to state the card terms until 2026-11-17; one approved before then is written again, not sent.
- const body='You can try Intel free for 30 days. A credit card is required to start the trial, and canceling before it ends means no charge:\nhttps://www.caremetricintel.com/';
+it('withdraws a queued prospect email that brings up how an Intel trial bills, and sends one that says no card is needed and a customer message about its end (owner decision 2026-11-23)',async()=>{
+ // A prospect email names no card terms (owner direction 2026-11-17); one that does is written again, not sent.
+ const body='You can try Intel free for 30 days. Add a card in Billing before the trial ends to keep your plan; it then bills automatically after the trial unless you cancel:\nhttps://www.caremetricintel.com/';
  const claimed={send:true,to:'info@operator.example',id:'m',workId:'w',product:'caremetric-intel',purpose:'marketing',subject:'Which referral sources are slipping?',body};
  const mail={configured:true,send:vi.fn(async()=>({delivery:'sent',id:'provider'}))};
  const run=store=>growthExecutors({growth:{configured:()=>true,unsubscribeToken:()=>'a'.repeat(64),store},mail,publicOrigin:'https://hub.example.org',postalAddress:'CareMetric, 1 Main St, Altoona, PA'})['growth.message']({id:'a',input:{messageId:'m'}});
@@ -547,13 +548,14 @@ it('withdraws a queued prospect email that names the card an Intel trial needs, 
  await expect(run(store)).resolves.toEqual({delivery:'withdrawn',reason:'card_terms'});
  expect(store.withdraw).toHaveBeenCalledWith('m','card_terms');
  expect(mail.send).not.toHaveBeenCalled();
- // The same offer without the card goes out, and so does a customer's message that says what happens when its trial ends.
- for(const over of [{body:'You can try Intel free for 30 days on one county:\nhttps://www.caremetricintel.com/'},{purpose:'success'},{product:'carebase'}]) {
+   // The same offer without the terms goes out, with or without "No credit card needed to start", and so does a customer's message that
+ // says what happens when its trial ends.
+ for(const over of [{body:'You can try Intel free for 30 days on one county:\nhttps://www.caremetricintel.com/'},{body:'You can try Intel free for 30 days on one county. No credit card needed to start.\nhttps://www.caremetricintel.com/'},{purpose:'success'},{product:'carebase'}]) {
   const fine={claim:vi.fn(async()=>({...claimed,...over})),finish:vi.fn(async()=>true),withdraw:vi.fn()};
   await expect(run(fine),JSON.stringify(Object.keys(over))).resolves.toEqual({delivery:'accepted'});
   expect(fine.withdraw).not.toHaveBeenCalled();
  }
- expect(mail.send).toHaveBeenCalledTimes(3);
+ expect(mail.send).toHaveBeenCalledTimes(4);
 });
 it('withdraws a queued Intel email that offers the retired market review or asks for an agency\'s certification number, so it is written again (owner direction 2026-11-19)',async()=>{
  // Every first email to an agency without its own report pointed to the market review until 2026-11-19; one approved before then is

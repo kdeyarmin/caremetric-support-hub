@@ -159,6 +159,9 @@ describe('a reply with the original email quoted under it', () => {
       'The free trial needs no credit card.',
       'A 30-day free trial (credit card required; canceling before it ends avoids any charge).',
       'A credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then.',
+      // Intel's words since 2026-11-23, when its trial stopped needing a card to start.
+      'No credit card needed to start.',
+      'Try CareMetric Intel free for 30 days. No credit card is needed to start your trial.',
     ]) {
       for (const original of [disclosure, `> ${disclosure}`, `-----Original Message-----\n${disclosure}`]) {
         expect(category(`Tell me more about the free trial.\n\n${original}`)).toBe('sales');
@@ -250,6 +253,8 @@ describe('a reply with the original email quoted under it', () => {
     expect(withoutTrialPhrase('A free trial, credit card required.')).toBe('A free trial, card required.');
     expect(withoutTrialPhrase('Try it free for 30 days, No Credit Card needed. Our credit card was charged twice.')).toBe('Try it free for 30 days, no card needed. Our credit card was charged twice.');
     expect(withoutTrialPhrase('I have no credit card on file. Is the trial free?')).toBe('I have no credit card on file. Is the trial free?');
+    expect(withoutTrialPhrase('Try it free for 30 days. No credit card needed to start.')).toBe('Try it free for 30 days. no card needed to start.');
+    expect(withoutTrialPhrase('I have no credit card needed to start the trial.')).toBe('I have no credit card needed to start the trial.');
     expect(withoutTrialPhrase('Nothing here.')).toBe('Nothing here.');
     // A very long line with no sentence breaks is scanned once.
     const long = `${'word '.repeat(4000)}no credit card`;
