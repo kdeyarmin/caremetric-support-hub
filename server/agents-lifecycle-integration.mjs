@@ -70,7 +70,7 @@ async function makeAccount(key, { email = canary(key), livemode = true, subscrip
       select $1::text, $2::uuid, $3::text, p.id, $4::text, 'charge_automatically', $5::boolean, now() - $6::float * interval '1 day', now() + $7::float * interval '1 day', $8::boolean,
         now() - $6::float * interval '1 day', now() from hub.products p where p.slug = $9::text`,
     [id, tenant, customer, subscription.status ?? 'trialing', subscription.cancelling ?? false, subscription.started ?? 1, subscription.ends ?? 29, livemode, subscription.product ?? 'carebase']);
-    // An Intel trial starts once Stripe confirms its card (20261117230000_trial_path.sql): recorded as billing.mjs records it.
+    // Stripe's confirmation of an Intel trial's card, recorded as billing.mjs records it (the card reminder reads it; since 2026-11-23 the trial counts from its start).
     if (subscription.card) await admin.query('insert into private.billing_trial_cards(stripe_subscription_id, tenant_id) values ($1, $2)', [id, tenant]);
     if (subscription.paid !== undefined) {
       await admin.query(`insert into private.billing_invoices(stripe_invoice_id, tenant_id, stripe_customer_id, stripe_subscription_id, status, currency, total, subtotal, amount_due,

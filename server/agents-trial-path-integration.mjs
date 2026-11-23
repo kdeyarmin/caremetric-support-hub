@@ -1,8 +1,9 @@
-// Stage 4 of the 2026-11-17 team review through the real roles (20261117230000_trial_path.sql): an Intel subscription that is only
-// trialing is not a trial until Stripe confirms its card, and then counts once; the trial lands on its opportunity with its end date, an
-// extension moves that date, and a counted trial that ends unpaid is recorded as lost (a sign-up that never added its card is not);
-// Intel's three milestones are accepted as activity, and nothing else is; the Account Manager's facts carry the card, the activity and
-// the county, so a sign-up without a card is due only the card reminder; a customer email refused for the day's cap or the growth
+// Stage 4 of the 2026-11-17 team review through the real roles (20261117230000_trial_path.sql), with an Intel trial counted from its
+// start since 2026-11-23 (20261123120000_intel_trial_without_card.sql: no card is needed to start one): a trialing Intel subscription is
+// a trial, card or not, and a card confirmed later counts nothing again; the trial lands on its opportunity with its end date, an
+// extension moves that date, and a trial that ends unpaid is recorded as lost, card or not; Intel's three milestones are accepted as
+// activity, and nothing else is; the Account Manager's facts carry the card, the activity and the county, so a trial is welcomed whether
+// or not it has a card and one without a card is reminded in its last week; a customer email refused for the day's cap or the growth
 // contact gap waits (only with the feature, and only for those two reasons); only the Hub server may ask; and the gate refuses drift.
 // Disposable loopback database only; no model is called, no email is sent and Stripe is never asked.
 import assert from 'node:assert/strict';
@@ -54,22 +55,23 @@ const factsOf = async slug => (await server('private.agent_lifecycle_snapshot', 
 try {
   // The facts read live billing only; another test may have left billing in test mode.
   await admin.query('update private.billing_settings set livemode = true');
-  // ---- 1. A trial starts with its card ---------------------------------------------------------------------------------------------
+  // ---- 1. A trial starts at sign-up, card or not -----------------------------------------------------------------------------------
   const carded = await customer('carded');
   const abandoned = await customer('abandoned');
-  assert.equal(await queued('carded', 'trial_started'), 0, 'only trialing is not yet a trial');
+  assert.equal(await queued('carded', 'trial_started'), 1, 'a trialing Intel subscription is a trial from its start');
+  assert.equal(await queued('abandoned', 'trial_started'), 1, 'with no card');
   // As billing.mjs records Stripe's answer, through the server's own function.
   await server('private.billing_trial_card_record', [carded.id, [subOf('carded')], true]);
-  assert.equal(await queued('carded', 'trial_started'), 1, 'the card\'s confirmation starts the trial');
+  assert.equal(await queued('carded', 'trial_started'), 1, 'the card\'s confirmation counts nothing again');
   await server('private.billing_trial_card_record', [carded.id, [subOf('carded')], true]);
-  assert.equal(await queued('carded', 'trial_started'), 1, 'a later check counts nothing again');
+  assert.equal(await queued('carded', 'trial_started'), 1, 'nor does a later check');
   await server('private.billing_trial_card_record', [abandoned.id, [subOf('abandoned')], false]);
-  assert.equal(await queued('abandoned', 'trial_started'), 0, 'a check that finds no card starts nothing');
+  assert.equal(await queued('abandoned', 'trial_started'), 1, 'and a check that finds no card takes nothing away');
   await server('private.growth_drain_billing');
   const opened = await opportunityOf(carded.id);
   assert.deepEqual([opened.stage, opened.owner_agent], ['trial', 'account_manager'], 'the trial lands on its opportunity');
   assert.ok(opened.trial_end, 'with its end date');
-  assert.equal(await opportunityOf(abandoned.id), undefined, 'a sign-up without a card opens nothing');
+  assert.equal((await opportunityOf(abandoned.id))?.stage, 'trial', 'a trial without a card lands on its opportunity too');
 
   // An extension moves the end date the Sales review reads.
   await admin.query("update private.billing_subscriptions set trial_end = trial_end + interval '14 days' where stripe_subscription_id = $1", [subOf('carded')]);
@@ -100,10 +102,16 @@ try {
   const abandonedFacts = await factsOf(abandoned.slug);
   assert.equal(abandonedFacts.cardConfirmedAt, null);
   const tomorrow = new Date(Date.now() + 86_400_000);
-  assert.deepEqual(planEmails([abandonedFacts], tomorrow, { trialPath: true }).candidates.map(entry => entry.template), ['card_reminder'],
-    'a sign-up without a card is due only the card reminder');
+  assert.deepEqual(planEmails([abandonedFacts], tomorrow, { trialPath: true }).candidates.map(entry => entry.template), ['welcome'],
+    'a trial without a card is welcomed');
   assert.deepEqual(planEmails([cardedFacts], tomorrow, { trialPath: true }).candidates.map(entry => entry.template), ['welcome'],
-    'a trial with its card is welcomed');
+    'and so is one with its card');
+  // In its last week, a trial without a card is reminded to add one to keep its plan; one with a card is not.
+  const lastWeek = new Date(Date.parse(abandonedFacts.trialEnd) - 6 * 86_400_000);
+  assert.deepEqual(planEmails([abandonedFacts], lastWeek, { trialPath: true }).candidates.map(entry => entry.template), ['card_reminder'],
+    'a trial without a card is reminded in its last week');
+  assert.deepEqual(planEmails([cardedFacts], lastWeek, { trialPath: true }).candidates.map(entry => entry.template), [],
+    'and one with its card is not');
 
   // ---- 4. A refused customer email waits ------------------------------------------------------------------------------------------
   await admin.query("update private.agents set status='active', autonomy='act' where key='account_manager'");
@@ -137,8 +145,8 @@ try {
 
   // ---- 5. The end of a trial -------------------------------------------------------------------------------------------------------
   await admin.query("update private.billing_subscriptions set status='canceled' where stripe_subscription_id = any($1::text[])", [[subOf('carded'), subOf('abandoned')]]);
-  assert.equal(await queued('carded', 'churned'), 1, 'a counted trial that ended unpaid is lost');
-  assert.equal(await queued('abandoned', 'churned'), 0, 'a sign-up that never added its card is not');
+  assert.equal(await queued('carded', 'churned'), 1, 'a trial that ended unpaid is lost');
+  assert.equal(await queued('abandoned', 'churned'), 1, 'card or not');
   await server('private.growth_drain_billing');
   assert.equal((await opportunityOf(carded.id)).stage, 'churned', 'and the Sales review stops listing it as a trial');
   assert.ok((await row('select first_confirmed_at from private.growth_trial_cards where stripe_subscription_id=$1', [subOf('carded')])).first_confirmed_at, 'the card outlives the trial');
@@ -178,7 +186,7 @@ try {
         await assert.rejects(gated.query(gate), error => error.code === '55000', `the gate refuses: ${drift.slice(0, 90)}`);
       } finally { await gated.query('rollback'); }
     }
-    console.log(`Trial path integration passed: an Intel trial counted from its card's first confirmation and once, the trial on its opportunity, an extension's end date, a lost trial and none for a sign-up without a card; three milestones accepted and four misuses refused; the facts carry the card, activity and county, so a sign-up without a card is due only the card reminder; a capped email waits until 9 AM Eastern, one inside the contact gap a day, any other refusal ends it and never without the feature; server-only access and ${drifts.length} kinds of gate drift. Stripe was not asked and no email was sent.`);
+    console.log(`Trial path integration passed: an Intel trial counted from its start, card or not, and once, the trial on its opportunity, an extension's end date, a lost trial card or not; three milestones accepted and four misuses refused; the facts carry the card, activity and county, so every trial is welcomed and one without a card is reminded in its last week; a capped email waits until 9 AM Eastern, one inside the contact gap a day, any other refusal ends it and never without the feature; server-only access and ${drifts.length} kinds of gate drift. Stripe was not asked and no email was sent.`);
   } finally { gated.release(); }
 } finally {
   await admin.query("update private.agents set status=$1, autonomy=$2 where key='account_manager'", [seedAgent.status, seedAgent.autonomy]);

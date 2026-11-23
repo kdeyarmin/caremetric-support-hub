@@ -1,7 +1,8 @@
 begin;
-select plan(16);
+select plan(17);
 
--- The trial path (20261117230000_trial_path.sql, team review 2026-11-17, stage 4).
+-- The trial path (20261117230000_trial_path.sql, team review 2026-11-17, stage 4), with Intel trials counted from their start since
+-- 2026-11-23 (20261123120000_intel_trial_without_card.sql: an Intel trial no longer needs a card to start).
 select ok((select relrowsecurity from pg_class where oid = 'private.growth_trial_cards'::regclass)
   and not has_table_privilege('hub_app_server', 'private.growth_trial_cards', 'select')
   and not has_table_privilege('authenticated', 'private.growth_trial_cards', 'select'),
@@ -16,8 +17,12 @@ select ok(position('''card_reminder''' in (select pg_get_constraintdef(oid) from
     where conrelid = 'private.agent_actions'::regclass and conname = 'agent_actions_email_send_check')) > 0,
   'The send ledger and the action check accept the trial path''s emails');
 select ok(hub.get_backend_contract() -> 'features' ? 'platform.agents.trial-path.v1', 'The trial path is declared');
+select ok(exists (select 1 from pg_trigger where tgrelid = 'private.billing_subscriptions'::regclass and tgname = 'growth_intel_trial_started' and not tgisinternal)
+  and not has_function_privilege('hub_app_server', 'private.growth_intel_trial_started()', 'execute')
+  and not has_function_privilege('authenticated', 'private.growth_intel_trial_started()', 'execute'),
+  'An Intel trial''s start is captured by a trigger no role may run');
 
--- Two customers: an Intel trial and a CareBase trial.
+-- Three customers: two Intel trials (one adds a card, one never does) and a CareBase trial.
 insert into hub.tenants (id, slug, name) values
   ('11111111-1111-4111-8111-111111111116', 'trial-path-intel', 'Trial Path Intel'),
   ('22222222-2222-4222-8222-222222222216', 'trial-path-carebase', 'Trial Path CareBase'),
@@ -33,16 +38,17 @@ select v.sub, v.tenant::uuid, v.cus, p.id, 'trialing', 'charge_automatically', t
                ('sub_trialpath116c', '33333333-3333-4333-8333-333333333316', 'cus_trialpath116c', 'caremetric-intel')) v(sub, tenant, cus, product)
   join hub.products p on p.slug = v.product;
 
-select is((select count(*)::integer from private.growth_billing_outbox where event_key in ('billing:trial:sub_trialpath116a', 'billing:trial:sub_trialpath116c')), 0,
-  'An Intel subscription that is only trialing is not counted as a trial');
+select is((select count(*)::integer from private.growth_billing_outbox where event_key in ('billing:trial:sub_trialpath116a', 'billing:trial:sub_trialpath116c')
+    and kind = 'trial_started' and occurred_at = now()), 2,
+  'An Intel trial counts from its start, with no card');
 select is((select count(*)::integer from private.growth_billing_outbox where event_key = 'billing:trial:sub_trialpath116b' and kind = 'trial_started'), 1,
   'A CareBase trial, which needs no card, still counts when it starts');
 
--- Stripe confirms the Intel trial's card (as billing.mjs records it), then confirms it again on a later check.
+-- Stripe confirms one Intel trial's card (as billing.mjs records it), then confirms it again on a later check.
 insert into private.billing_trial_cards (stripe_subscription_id, tenant_id, confirmed_at)
 values ('sub_trialpath116a', '11111111-1111-4111-8111-111111111116', now());
 select is((select count(*)::integer from private.growth_billing_outbox where event_key = 'billing:trial:sub_trialpath116a' and kind = 'trial_started'), 1,
-  'The card''s first confirmation starts the Intel trial');
+  'The card''s first confirmation counts the trial no second time');
 update private.growth_trial_cards set first_confirmed_at = now() - interval '1 hour' where stripe_subscription_id = 'sub_trialpath116a';
 update private.billing_trial_cards set confirmed_at = now() where stripe_subscription_id = 'sub_trialpath116a';
 select is((select count(*)::integer from private.growth_billing_outbox where event_key = 'billing:trial:sub_trialpath116a'), 1,
@@ -58,12 +64,12 @@ select is(private.agent_lifecycle_json(10, 'trial-path-abandoned', 'caremetric-i
 select ok((private.agent_lifecycle_json(10, 'trial-path-intel', 'caremetric-intel', 0) #> '{accounts,0,emails}') ? 'card_reminder',
   'and what became of the trial path''s emails');
 
--- Both Intel trials end unpaid: the counted one is lost, the sign-up that never started is not.
+-- Both Intel trials end unpaid: each was a trial, so each is lost, card or not.
 update private.billing_subscriptions set status = 'canceled' where stripe_subscription_id in ('sub_trialpath116a', 'sub_trialpath116c');
 select is((select count(*)::integer from private.growth_billing_outbox where event_key = 'billing:trial_lost:sub_trialpath116a' and kind = 'churned'), 1,
   'A counted trial that ended with nothing paid is recorded as lost');
-select is((select count(*)::integer from private.growth_billing_outbox where event_key = 'billing:trial_lost:sub_trialpath116c'), 0,
-  'A sign-up that never added its card was never a trial, so it is not lost either');
+select is((select count(*)::integer from private.growth_billing_outbox where event_key = 'billing:trial_lost:sub_trialpath116c' and kind = 'churned'), 1,
+  'and so is one that ended without a card');
 select is((select first_confirmed_at from private.growth_trial_cards where stripe_subscription_id = 'sub_trialpath116a') is not null, true,
   'The card''s confirmation outlives the trial');
 

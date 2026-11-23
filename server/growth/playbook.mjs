@@ -208,8 +208,8 @@ export const salesPlaybook = deepFreeze({
       { key: 'results', when: 'They ask for proof of results or case studies.', answer: 'There are no approved customer results to share. Suggest the free trial on one county so they can judge it on their own market.' },
       { key: 'integration', when: 'They ask whether Intel connects to their EHR or another system.', answer: 'Be exact: Intel imports referral and admission reports from the EHR as files (an upload, an SFTP folder or email), with saved layouts for common EHR reports. It is not a live connection. Never name an EHR vendor and never imply a live link.' },
       { key: 'security', when: 'They ask about HIPAA, a BAA, security or a contract.', answer: 'Say only that the research uses no patient-level data, that imports drop patient-identifying columns and that notes should never name a patient. Tell them the owner answers security, BAA and contract questions in writing, and hand the conversation to the owner.' },
-      // Owner direction 2026-11-17: the card is not volunteered. It is stated when the reader asks, and never denied.
-      { key: 'trial_terms', when: 'They ask what the trial needs, whether it needs a card, or what happens when it ends.', answer: 'Answer plainly, from the fact sheet\'s offer: a credit card is required to start the trial, and the plan chosen at sign-up bills automatically when the trial ends unless it is canceled before then. Say this only when they ask. Never bring it up unasked, and never say a card is not needed.' },
+      // Owner decision 2026-11-23: no card is needed to start the trial. What happens when it ends is stated when the reader asks.
+      { key: 'trial_terms', when: 'They ask what the trial needs, whether it needs a card, or what happens when it ends.', answer: 'Answer plainly, from the fact sheet\'s offer: no credit card is needed to start the trial. Adding a card in Billing before the trial ends keeps the plan, which then bills automatically after the trial unless it is canceled, and without a card the trial simply ends. Never say that a card is required to start it.' },
     ],
   },
 });

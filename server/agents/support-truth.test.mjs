@@ -137,9 +137,9 @@ describe('the scorecard\'s cost per trial and pilot line', () => {
 describe('the strategist\'s new candidates', () => {
   const week = conversion => ({ conversion, email: {}, prospects: {}, spend: {}, settings: {} });
 
-  it('names sign-ups that never add a card, trials lost unpaid, and never suggests a call', () => {
+  it('names trials lost unpaid, never an Intel trial without a card (none is needed to start it since 2026-11-23), and never suggests a call', () => {
     const list = candidates(week({ noCard: 2, trialsLost: 1 }), week({ noCard: 1 }));
-    expect(list.find(item => item.key === 'conversion')).toMatchObject({ evidence: { noCardTwoWeeks: 3 }, watch: 'trialStarts' });
+    expect(list.find(item => item.key === 'conversion')).toBeUndefined();
     expect(list.find(item => item.key === 'paying')).toMatchObject({ evidence: { trialsLostTwoWeeks: 1 }, watch: 'paid' });
     expect(constraintLabels.paying).toBe('Trials are ending unpaid');
     expect(watchLabels.paid).toBe('new paying customers');

@@ -272,9 +272,22 @@ const companyEmail = /^(?:hello|support)@caremetric\.ai$/i;
  * Problems in text that would be published or sent. `product` is the product key it is about (carebase, intel, advisors);
  * `numbers` is the set of numbers-with-units it may state (null skips that check).
  */
-// Intel trials need a card and bill automatically unless canceled (facts.mjs `trialCardTerms`, since 2026-11-14). Copy about Intel may
-// never say otherwise; CareBase trials are unchanged, so this reads only copy that is about Intel.
-const noCardTrial = /\b(?:no|without(?: a| any)?)\s+(?:credit\s+)?card\b|\bcard\s+(?:is\s+)?not\s+(?:required|needed)\b|\bno\s+payment\s+(?:details|information|method)\b/i;
+// An Intel trial needs no card to start (facts.mjs `trialCardTerms`, owner decision 2026-11-23; from 2026-11-14 until then it needed
+// one). Copy about Intel may never say a card is required to start it: "Credit card required", "a credit card is required to start the
+// trial", "requires a card", "enter a card at sign-up". "No credit card needed" is true and passes, and so does what happens when the
+// trial ends ("a card is needed before the trial ends to keep your plan"). A card Intel shows (a pre-visit card, a business card) is not
+// read: a bare "card" counts only after "a", "your", "any" or at the start of a sentence. CareBase trials are unchanged, so this reads
+// only copy that is about Intel.
+const paymentCard = String.raw`(?:(?:credit|debit|payment)\s+card|(?<=(?:^|[.!?(;:,·\n]\s*|\b(?:a|your|any)\s+))card)`;
+const notNegated = String.raw`(?<!\b(?:no|without(?:\s+(?:a|any))?)\s+(?:credit\s+)?)`;
+const toKeepPlan = String.raw`(?!\s+(?:to\s+keep|before|when|after|once|by\s+the\s+end|at\s+the\s+end))`;
+const cardRequiredToStart = new RegExp([
+  String.raw`${notNegated}\b${paymentCard}\s+(?:is\s+|was\s+|will\s+be\s+)?(?:required|needed|necessary)\b${toKeepPlan}`,
+  String.raw`\b(?:requires?|requiring)\s+(?:a\s+|your\s+)?(?:credit\s+)?card\b${toKeepPlan}`,
+  String.raw`\b(?:need|needs|enter|add|provide|give)\s+(?:a\s+|your\s+)?(?:credit\s+)?card\s+(?:to\s+(?:start|begin|sign\s+up|try|get\s+started)|at\s+sign[- ]?up|up\s*front)\b`,
+  String.raw`${notNegated}\b${paymentCard}\s+(?:at|on|for|during)\s+sign[- ]?up\b`,
+  String.raw`${notNegated}\b${paymentCard}\s+up\s*front\b`,
+].join('|'), 'i');
 const aboutIntel = /\b(?:caremetric\s+)?intel\b/i;
 
 /**
@@ -299,7 +312,7 @@ export function textProblems(value, { product = null, numbers = null, percents =
   if (competitorPattern.test(text)) reasons.add('competitor_named');
   if ((product === 'carebase' || /\bcarebase\b/i.test(text)) && proveWords.test(text)) reasons.add('prove_word');
   if (forbiddenTerms.test(text)) reasons.add('vocabulary');
-  if ((product === 'intel' || (product !== 'carebase' && aboutIntel.test(text))) && noCardTrial.test(text)) reasons.add('trial_terms');
+  if ((product === 'intel' || (product !== 'carebase' && aboutIntel.test(text))) && cardRequiredToStart.test(text)) reasons.add('trial_terms');
   if ((product === 'intel' || (product !== 'carebase' && aboutIntel.test(text))) && publicDataWords.test(text)) reasons.add('public_data');
   if (screenIdentifiers(text).flagged || namedPerson.test(text)) reasons.add('personal_information');
   if ([...text.matchAll(honorificName)].some(match => match[0].split(/[\s.]+/).slice(1).filter(Boolean).some(word => !sheet().words.has(word)))) reasons.add('personal_information');

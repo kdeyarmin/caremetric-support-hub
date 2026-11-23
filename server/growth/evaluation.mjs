@@ -59,8 +59,8 @@ export async function evaluateGrowth(now = new Date()) {
     check('tagged link to another host rejected', await invoke({ ...draft, body: 'Would a free trial help?\n\nhttps://unsupported.example.org/?utm_source=x&utm_medium=y&utm_campaign=z' }) === null);
     check('tag carrying another address rejected', await invoke({ ...draft, body: `Would a free trial help?\n\n${page}?utm_source=x&utm_medium=y&utm_campaign=z&next=https://unsupported.example.org` }) === null);
     // The first email to a CareMetric Intel agency (owner direction 2026-11-17): the writer's opening, held by code to the report's one
-    // link and at most one question, then what the software does and the trial, added by code. No prospect email names the card a
-    // trial needs.
+    // link and at most one question, then what the software does and the trial, added by code. No prospect email brings up how the
+    // trial bills, or says a card is required to start it (none is, since 2026-11-23).
     const report = { label: 'Free market report for the agency', url: 'https://www.caremetricintel.com/report/synthetic.case' };
     const reviewPage = 'https://www.caremetricintel.com/county-report';
     const inside = 'It shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county\'s residents use most and the highest-ranked physicians for outreach.';

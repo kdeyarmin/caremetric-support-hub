@@ -37,7 +37,8 @@ const invoice = async (buyer, suffix, sub, {paid=true,old=false,live=true,unreso
  values($1,$2,$3,$4,$5,$6,'usd',100,100,100,$7,$8,$9,case when $10 then now()-interval '40 days' else clock_timestamp() end,clock_timestamp())`,
  [invoiceId(suffix),buyer.id,buyer.stripe,subId(sub),unresolved?null:product,paid?'paid':'open',paid?100:0,paid?0:100,live,old]);
 };
-// An Intel trial starts once Stripe confirms its card (20261117230000_trial_path.sql), recorded as billing.mjs records it.
+// Stripe's confirmation of an Intel trial's card, recorded as billing.mjs records it. Since 2026-11-23 the trial counts from its start, card
+// or not (20261123120000_intel_trial_without_card.sql); a card confirmed later counts nothing again.
 const card = (buyer, suffix) => admin.query('insert into private.billing_trial_cards(stripe_subscription_id,tenant_id) values($1,$2)',[subId(suffix),buyer.id]);
 const queued = async (buyer, kind) => Number((await row('select count(*) as n from private.growth_billing_outbox where tenant_id=$1 and kind=$2',[buyer.id,kind])).n);
 try {
@@ -62,9 +63,9 @@ try {
  await admin.query('update private.billing_app_keys set revoked_at=null where key_hash=$1',[keyHash]);
 
  const fresh=await customer('fresh');await subscription(fresh,'fresh',{trial:true});
- assert.equal(await queued(fresh,'trial_started'),0,'an Intel trial with no card confirmed is not a trial yet');
+ assert.equal(await queued(fresh,'trial_started'),1,'an Intel trial is captured when it starts, with no card');
  await card(fresh,'fresh');
- assert.equal(await queued(fresh,'trial_started'),1,'authoritative trial is captured once its card is confirmed');
+ assert.equal(await queued(fresh,'trial_started'),1,'and its card, confirmed later, captures nothing again');
  await invoice(fresh,'fresh','fresh',{paid:false});assert.equal(await queued(fresh,'paid'),0,'open invoice is not a purchase');
  await admin.query("update private.billing_invoices set status='paid',amount_paid=100,amount_remaining=0,seen_at=clock_timestamp() where stripe_invoice_id=$1",[invoiceId('fresh')]);
  assert.equal(await queued(fresh,'paid'),1,'failed/open payment recovery creates a verified purchase');

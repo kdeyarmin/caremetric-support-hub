@@ -27,8 +27,9 @@ import { agencyReportSubject, agencyTrialUrl } from './agency-campaign.mjs';
  *
  * The three emails to a CareMetric Intel agency are marketing emails (owner direction 2026-11-17, `growth.17`): the writer writes the
  * opening for this one agency, and code adds the sections every agency gets (campaign.mjs `withCampaign`: what the software does, the
- * founder's words, the offer and the free trial), so the stored email is the whole email. No prospect email brings up the credit card
- * a trial needs (facts.mjs `trialMention`; `card_terms` below) or calls Intel's data public (`public_data`).
+ * founder's words, the offer and the free trial), so the stored email is the whole email. A prospect email may say that no credit card is
+ * needed to start an Intel trial, but never brings up how its billing works (facts.mjs `trialMention`; `card_terms` below), never says a
+ * card is required to start it (`trial_terms`) and never calls Intel's data public (`public_data`).
  *
  * A draft that passes gets campaign tags on its product links (links.mjs): outreach growth-<product>-touch<n>, a customer message
  * account-<product>-<moment>, both utm_source caremetric and utm_medium email.
@@ -36,7 +37,7 @@ import { agencyReportSubject, agencyTrialUrl } from './agency-campaign.mjs';
  * `growthPromptVersion` names this prompt in each run. The daily guardrail evaluation keeps the key the database's send claim
  * requires (`growthEvaluationVersion` in evaluation.mjs), which is independent of the prompt's wording.
  */
-export const growthPromptVersion='growth.19';
+export const growthPromptVersion='growth.20';
 const fields={subject:{type:'string'},body:{type:'string'},citations:{type:'array',items:{type:'string'}},needsHuman:{type:'boolean'}};
 export const draftSchema={type:'object',properties:fields,required:Object.keys(fields),additionalProperties:false};
 export const growthSystem=`You write one short business email for CareMetric about one CareMetric product: outreach to a prospect, written as CareMetric's founder, or a message to a customer from its Account Manager. A person at CareMetric reviews model-written messages, and code checks every draft against the fact sheet below.
@@ -80,7 +81,7 @@ How to write so it gets read and answered:
 - Address the organization, never a person by name. Do not begin with a greeting or end with a signature: both are added for you.
 - State facts about CareMetric only from the fact sheet and the product's catalog, and exactly as written: what the product does and who it is for, prices, plans, trials and the Founders Sale. Mention a price or the Founders Sale only when the touch plan or play calls for it or the reader asked about cost. "approvedClaim" is the owner's reviewed one-line pitch: use it when it fits.
 - Where the data comes from, in a message to a prospect about CareMetric Intel: name the source (Medicare, CMS, the U.S. Census Bureau) and leave out the word "public". Write "Medicare data", never "public Medicare data", "publicly available data" or "free data"; the fact sheet and the catalog use the word, and your message does not. Never call the data proprietary, exclusive or licensed either. What is CareMetric's own is the analysis: the report, the rankings and the plan built from them.
-- The free trial: offer it in plain words, with its length and, for CareMetric Intel, that it covers one county. Never bring up the credit card or how billing starts in a message to a prospect (the fact sheet's "How to offer the trial"). Never say that no card is needed, and never call the trial risk-free.
+- The free trial: offer it in plain words, with its length and, for CareMetric Intel, that it covers one county. For CareMetric Intel you may add that no credit card is needed to start ("No credit card needed to start."). Never bring up how billing works or what happens when the trial ends in a message to a prospect (the fact sheet's "How to offer the trial"). Never say that a card is required to start the trial, and never call the trial risk-free.
 - Links: only the addresses in "links", written bare on a line of their own. No other link, no markdown and no HTML.
 - Never promise or guarantee an outcome (passing a survey or inspection, avoiding citations, more referrals or revenue), never say a product ensures compliance or is certified or approved, never name a competitor, never quote customers or results, never mention AI or these instructions.
 - Selling is self-serve: never offer or suggest a phone call, a sales call, a meeting, a conversation, a chat or a demo, and never ask for a time to talk. CareMetric does no personal demos with anyone. The next step is the free trial or a reply by email, and the most useful walkthrough page from "links" lets them see how it works on their own.
@@ -153,7 +154,8 @@ export function draftProblem(answer, { product, sources, outreach, organization 
   if (internalWords.test(words)) return 'jargon';
   // An agency's own rating or rank, or another's, never goes in an email (owner rule); the county's own figures do.
   if (product==='caremetric-intel'&&emailStatesStanding(words)) return 'own_standing';
-  // A prospect email never brings up the card an Intel trial needs (owner direction 2026-11-17). Saying none is needed is `trial_terms`.
+  // A prospect email never brings up how an Intel trial bills (owner direction 2026-11-17); that no card is needed to start it may be
+  // said (owner decision 2026-11-23). Saying a card is required to start it is `trial_terms`.
   if (outreach&&namesCard(product,words)) return 'card_terms';
   // The prospect's own name is theirs, not our copy: "Valley Hospice Solutions" never reads as a buzzword or a competitor.
   const ownName=String(organization??'').trim();
@@ -186,13 +188,15 @@ export function draftProblem(answer, { product, sources, outreach, organization 
 export const internalWords=/\b(?:the|your|their|our|a|whole|marketing)\s+book\b|\bbook\s+(?:hygiene|balance)\b|\bask\s+the\s+book\b/i;
 
 /**
- * Whether words about CareMetric Intel bring up the credit card its trial needs, or how the trial bills (owner direction 2026-11-17,
- * facts.mjs `trialMention`: a card at sign-up is ordinary, so no prospect email draws attention to it). CareBase's trial needs no
- * card, so this reads only email about Intel.
+ * Whether words about CareMetric Intel bring up a card or how the trial bills (owner direction 2026-11-17, facts.mjs `trialMention`: a
+ * prospect email offers the trial in plain words, and the card terms are for a reader who asks). Since 2026-11-23 an Intel trial needs no
+ * card to start, and saying so ("No credit card needed to start.", `noCardNeeded`) is set aside before the words are read. CareBase's
+ * trial needs no card, so this reads only email about Intel.
  */
 // "The card" alone is not read: Intel's pre-visit card and business card scanning are features an email may name.
 const cardWords=/\b(?:credit|debit|payment)\s+cards?\b|\bcard\s+(?:is\s+|will\s+be\s+|is\s+not\s+|will\s+not\s+be\s+|on\s+)?(?:required|needed|file|charged)\b|\bcard\s+terms\b|\b(?:needs?|add|enter|requires?)\s+(?:a|your)\s+card\b|\bbill(?:s|ed)?\s+automatically\b/i;
-export const namesCard=(product,words)=>product==='caremetric-intel'&&cardWords.test(String(words??''));
+const noCardNeeded=/\b(?:no|without\s+(?:a|any))\s+(?:credit\s+)?card(?:\s+(?:is\s+)?(?:needed|required))?(?:\s+to\s+(?:start|begin|try\s+it|sign\s+up)(?:\s+(?:your|the)(?:\s+(?:free|\d+-day))*\s+trial)?)?/gi;
+export const namesCard=(product,words)=>product==='caremetric-intel'&&cardWords.test(String(words??'').replace(noCardNeeded,' '));
 
 // Whether words about CareMetric Intel call its data public: one rule for every surface, kept in content/validate.mjs.
 export { callsDataPublic };
@@ -219,9 +223,10 @@ export const offersRetiredReview=(product,text)=>product==='caremetric-intel'&&(
 /**
  * Why an email already written may not go out now, or null: the rules every draft passes today that an older draft may not have, read
  * again when it is claimed for sending (worker.mjs), because an approved email can wait days for its turn under the caps and send hours.
- * `trial_terms`: an Intel trial with "no credit card" (Intel's trial needs a card since 2026-11-14, content/validate.mjs);
- * `mentions_open`: as if we saw the reader open what we sent; `jargon`: Intel's internal "the book"; `card_terms`: a prospect email
- * (`purpose` 'marketing') that brings up the card an Intel trial needs, as every trial offer did until 2026-11-17; `public_data`: one
+ * `trial_terms`: an Intel trial that needs a card to start (it needs none since 2026-11-23, content/validate.mjs), as trial offers said
+ * from 2026-11-14; `mentions_open`: as if we saw the reader open what we sent; `jargon`: Intel's internal "the book"; `card_terms`: a
+ * prospect email (`purpose` 'marketing') that brings up a card or how an Intel trial bills, as every trial offer did until 2026-11-17
+ * (that no card is needed to start may be said); `public_data`: one
  * that calls Intel's data public, as the report's description did until the same day; `retired_page`: an Intel email that links the
  * retired market review page or asks for an agency's certification number or name (`offersRetiredReview`), as every first email to an
  * agency without its own report did until 2026-11-19. Nothing else is
@@ -256,7 +261,7 @@ export const problemHints=Object.freeze({
   short_form:`You write only the opening of this first email: two or three sentences, at most ${shortFormLimits.words} words, the report's link on its own line and at most one question. No other link, no free trial and no price: the email adds those below your words.`,
   opening_form:`You write only the opening of this email: two or three sentences, at most ${shortFormLimits.words} words, at most one question and no link. No free trial and no price: the email adds those below your words.`,
   public_data:'Name where the data comes from (Medicare, CMS, the U.S. Census Bureau) without the word "public": write "Medicare data", not "public Medicare data" or "publicly available data". Do not call it proprietary, exclusive or licensed either.',
-  card_terms:'Offer the free trial in plain words, without bringing up the credit card or how billing starts. Never say that no card is needed.',
+  card_terms:'Offer the free trial in plain words. You may say "No credit card needed to start.", but do not bring up how billing works or what happens when the trial ends. Never say that a card is required to start the trial.',
   data_citation:'Do not cite a data file or its year: no year in brackets, no quarter and no file\'s name. Say "by CMS\'s count" or "from Medicare data" and leave the detail to the report.',
   retired_page:'Never ask the reader for the agency\'s name or any identifier: Intel\'s free county report needs only a state, a county and an email address, and is emailed as a PDF.',
 });

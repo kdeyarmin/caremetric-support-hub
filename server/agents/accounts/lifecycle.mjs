@@ -3,7 +3,7 @@
  * once, here, and reviewed like any other copy. Pure: facts go in, words come out, and the same facts always give the same words.
  *
  * Each email opens with what the customer gets (email review 2026-11-17): the per-product words below say what the first steps lead
- * to (`firstWin`), what the trial opens once its card is in (`opens`) and what stays when the plan starts (`kept`).
+ * to (`firstWin`) and what stays when the plan starts (`kept`).
  *
  * - welcome          days 0 to 2 of a trial: the first three steps and the result they lead to, with a link to the product's help.
  * - setup_nudge      days 3 to 6 of a trial, only while the product has reported no positive usage for the account: an offer of
@@ -19,13 +19,15 @@
  *                    in the way, told by reply.
  *
  * The trial path (`trialPathFeature`, team review 2026-11-17, stage 4) changes three things once the database declares it:
- * - A product that needs a card to start its trial (Intel) counts its trial from the card's first confirmation (`cardConfirmedAt`).
- *   Until then the account gets only `card_reminder` (from about a day after it began, to day 14): one step left, and the card terms.
- *   The welcome counts its days from the confirmation, and a trial that ends with no card confirmed is not thanked for trying.
+ * - A product whose trial ends without a card (Intel, `cardToKeep`) reminds a trial with no card confirmed (`cardConfirmedAt`) once, in
+ *   its last week (7 to 1 days left): `card_reminder`, to add a card in Billing to keep the plan, in Intel's own terms. A trial with a
+ *   card confirmed gets none. Every trial counts from its start: since 2026-11-23 (owner decision) Intel needs no card to start one, so
+ *   the welcome and the rest no longer wait for a card, and a trial that ended without one is an ended trial like any other. (From
+ *   2026-11-14 until then Intel's trial counted from its card, and the reminder asked a sign-up to finish adding it.)
  * - Whether a trial has used the product is read from the product's own activity events (`activeAt`, `firstValueAt`) where it sends
  *   them (Intel), not from billing usage reports, which Intel never sends; CareBase keeps the usage reports.
  * - Days 10 to 16 of a trial with more than 5 days left: `midtrial_nudge` when the trial has not reached first value (the one step
- *   that shows what the product does), else `value_followup` (what teams do next, and that the plan starts on its own) for a product
+ *   that shows what the product does), else `value_followup` (what teams do next, and that what they built stays when they keep the plan) for a product
  *   that has those words (Intel).
  * A refused email (the day's cap, or the growth contact gap) then waits and is tried again rather than ending (executor.mjs).
  *
@@ -99,11 +101,9 @@ export const lifecycleProducts = Object.freeze({
     setup: 'Most teams start in Setup: they name the agency, pick the counties it covers and build a first list of physicians to reach. The Help page walks through each step.',
     firstWin: 'a list of the highest-ranked physicians for outreach in the county your trial covers',
     kept: 'your lists, your accounts and every visit you\'ve logged',
-    // What the trial opens once its card is confirmed (the card reminder).
-    opens: 'Once it starts, you pick the county your trial covers and build a list of its highest-ranked physicians for outreach.',
-    // Trial path: the trial needs a card (Intel keeps a sign-up on its Billing page until Stripe confirms one), and use is read from
-    // Intel's activity events.
-    cardRequired: true,
+    // Trial path: the trial starts without a card and ends without one, unless a card is added in Billing to keep the plan (owner
+    // decision 2026-11-23), so a trial with no card confirmed is reminded in its last week; use is read from Intel's activity events.
+    cardToKeep: true,
     billingUrl: 'https://www.caremetricintel.com/Billing',
     value: 'events',
     midtrial: 'Most teams see what Intel can do once they open Setup, pick the county their trial covers and build a first list: the highest-ranked physicians for outreach in that county.',
@@ -161,14 +161,11 @@ export function dueTemplates(fact, now = new Date(), { trialPath = false } = {})
   return [];
 }
 
-// Trial path: whether a trial with a card requirement has its card confirmed, when its trial counts from, and whether it has used the
-// product (activity events where the product sends them, else billing usage reports) or reached first value.
-const cardMissing = fact => lifecycleProducts[fact.product]?.cardRequired === true && at(fact.cardConfirmedAt) === null;
-const trialFrom = fact => {
-  const start = at(fact.trialStart) ?? at(fact.created);
-  const card = lifecycleProducts[fact.product]?.cardRequired === true ? at(fact.cardConfirmedAt) : null;
-  return start === null ? card : card === null ? start : Math.max(start, card);
-};
+// Trial path: whether a trial that ends without a card has none confirmed yet, and whether it has used the product (activity events
+// where the product sends them, else billing usage reports) or reached first value.
+const cardMissing = fact => lifecycleProducts[fact.product]?.cardToKeep === true && at(fact.cardConfirmedAt) === null;
+/** How many days before a trial's end the card reminder is due (a trial with no card confirmed, from 7 days left to 1). */
+export const cardReminderDays = Object.freeze({ from: 7, until: 1 });
 const usedIt = fact => lifecycleProducts[fact.product]?.value === 'events' ? at(fact.activeAt) !== null : fact.hasUsage === true;
 const reachedValue = fact => lifecycleProducts[fact.product]?.value === 'events' ? at(fact.firstValueAt) !== null : fact.hasUsage === true;
 
@@ -177,21 +174,16 @@ function trialPathDue(fact, now) {
   if (fact.cancelling === true && ['trialing', 'active'].includes(fact.status)) return ['cancel_save'];
   const moment = now.getTime();
   if (endedStatuses.includes(fact.status)) {
-    // A sign-up whose card was never confirmed never started its trial, so it is not thanked for trying.
-    if (cardMissing(fact)) return [];
     const end = at(fact.trialEnd);
     return end !== null && at(fact.firstPaidAt) === null && end <= moment && moment - end < 14 * day ? ['trial_ended'] : [];
   }
   if (fact.status === 'trialing') {
-    if (cardMissing(fact)) {
-      const began = at(fact.trialStart) ?? at(fact.created);
-      return began !== null && moment - began >= 20 * 3_600_000 && moment - began <= 14 * day ? ['card_reminder'] : [];
-    }
-    const start = trialFrom(fact);
+    const start = at(fact.trialStart) ?? at(fact.created);
     const end = at(fact.trialEnd);
     const trialDay = start === null ? null : Math.floor((moment - start) / day);
     const left = end === null ? null : (end - moment) / day;
     const due = [];
+    if (cardMissing(fact) && left !== null && left > cardReminderDays.until && left <= cardReminderDays.from) due.push('card_reminder');
     if (trialDay !== null && trialDay >= 0 && trialDay <= 2) due.push('welcome');
     if (left !== null && left > 2 && left <= 5) due.push('trial_checkin');
     if (trialDay !== null && trialDay >= 3 && trialDay <= 6 && !usedIt(fact)) due.push('setup_nudge');
@@ -212,9 +204,8 @@ function trialPathDue(fact, now) {
 export function stillApplies(template, fact, { trialPath = false } = {}) {
   if (!fact) return false;
   if (trialPath) {
+    // Until the trial ends, and only while no card is confirmed: a card added since the reminder was proposed ends its moment.
     if (template === 'card_reminder') return fact.status === 'trialing' && fact.cancelling !== true && cardMissing(fact);
-    // Every other trial email waits for the card where the product needs one.
-    if (['welcome', 'setup_nudge', 'trial_checkin', 'midtrial_nudge', 'value_followup', 'trial_ended'].includes(template) && cardMissing(fact)) return false;
     if (template === 'setup_nudge') return fact.status === 'trialing' && fact.cancelling !== true && !usedIt(fact);
     if (template === 'midtrial_nudge') return fact.status === 'trialing' && fact.cancelling !== true && !reachedValue(fact);
     if (template === 'value_followup') return fact.status === 'trialing' && fact.cancelling !== true && reachedValue(fact);
@@ -255,8 +246,11 @@ export function planEmails(accounts, now = new Date(), { save = false, trialPath
   return { candidates, skipped };
 }
 
-/** The card reminder's terms, as Intel states them (docs/GTM_FACTS.md, `trialCardTerms`): the one place a customer email names a card. */
-export const cardTermsWords = 'A credit card is required to start the trial. It is not charged during the trial: the plan you chose bills when the trial ends, unless you cancel before then.';
+/**
+ * The card reminder's terms, as Intel states them (docs/GTM_FACTS.md, `trialCardTerms`, which opens with "No credit card is needed to start
+ * your trial." and goes on in these words): the one place a customer email names a card.
+ */
+export const cardTermsWords = 'Add a card in Billing before the trial ends to keep your plan; it then bills automatically after the trial unless you cancel. Without a card, the trial simply ends.';
 
 /** The Founders Sale as the trial check-in states it: the offer's exact terms (billing applies it automatically at conversion), no price. */
 export const foundersWords = productName => `If you decide to keep ${productName}, the Founders Sale applies on its own: eligible subscription charges are 50% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.`;
@@ -271,17 +265,17 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
   const help = { type: 'button', label: words.helpLabel, url: helpUrl };
   const signature = signatureFor(productName, words.site);
   if (template === 'card_reminder') {
-    // Intel's card terms as Intel states them (docs/GTM_FACTS.md, `trialCardTerms`); never "no credit card".
+    // A trial with no card confirmed, in its last week (owner decision 2026-11-23): Intel's own terms, word for word (`cardTermsWords`).
     return {
-      subject: `One step left to start your ${productName} trial`,
-      preheader: 'Your trial hasn\'t started yet. One step is left.',
-      heading: 'One step left',
+      subject: `Keep your ${productName} plan after your trial`,
+      preheader: 'Your trial ends within a week. Here\'s how to keep your plan.',
+      heading: 'Keep your plan after the trial',
       blocks: [
-        { type: 'paragraph', text: `You started a ${productName} trial for ${tenantName}, but the last step isn't done, so the trial hasn't begun.` },
-        ...(words.opens ? [{ type: 'paragraph', text: words.opens }] : []),
+        { type: 'paragraph', text: `Your ${productName} trial for ${tenantName} ends within a week.` },
         { type: 'paragraph', text: cardTermsWords },
-        { type: 'button', label: 'Finish starting your trial', url: helpUrl },
-        { type: 'paragraph', text: 'If something stopped you, just reply and tell us what it was. We\'ll help you through it.' },
+        { type: 'paragraph', text: `Everything you've built stays in place when your plan continues: ${words.kept}.` },
+        { type: 'button', label: 'Open Billing', url: helpUrl },
+        { type: 'paragraph', text: 'If you have a question, just reply. We\'ll answer here.' },
       ],
       signature,
     };
@@ -304,12 +298,13 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
     if (!words.next) throw new TypeError('Unknown customer email.');
     return {
       subject: `Your first list is built. What to do next in ${productName}`,
-      preheader: 'What teams do next, and what stays in place when your trial ends.',
+      preheader: 'What teams do next, and what stays in place when you keep your plan.',
       heading: 'What to do next',
       blocks: [
         { type: 'paragraph', text: `You've built your first list in ${productName} for ${tenantName}. Teams that keep using it after the trial usually do these next:` },
         { type: 'steps', items: words.next },
-        { type: 'paragraph', text: 'When your trial ends, the plan you chose starts on its own, and everything you\'ve built stays in place.' },
+        // Since 2026-11-23 the plan continues after an Intel trial only with a card added in Billing, so this says nothing about it starting.
+        { type: 'paragraph', text: 'When you keep your plan after the trial, everything you\'ve built stays in place.' },
         help,
         { type: 'paragraph', text: 'If you have a question, just reply. We\'ll answer here.' },
       ],

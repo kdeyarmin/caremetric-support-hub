@@ -313,7 +313,7 @@ describe('why a post or reply was refused just before it went out', () => {
     expect(reasons.size).toBeGreaterThan(25);
     for (const reason of reasons) expect(writingCheckReasons[reason], reason).toBeTruthy();
     expect(writingCheckReasons.long_sentence).toContain(`over ${longestSentence} words`);
-    expect(errorLabel('post_check_trial_terms')).toMatch(/^The post no longer passes the writing check .* so it was not published: it says the Intel trial needs no credit card/);
+    expect(errorLabel('post_check_trial_terms')).toMatch(/^The post no longer passes the writing check .* so it was not published: it says the Intel trial needs a credit card to start/);
     expect(errorLabel('reply_check_link')).toMatch(/^The reply no longer passes the writing check, so it was not sent: it links somewhere other/);
     expect(errorLabel('post_check_some_new_rule')).toContain('some new rule');
     expect(errorLabel('invalid_post')).not.toBe('invalid_post');

@@ -96,16 +96,20 @@ describe('checking a sales reply', () => {
 
 describe('the Sales Executive prompt', () => {
   it('is a constant that carries the fact sheet and the playbook and nothing per request', () => {
-    expect(salesPromptVersion).toBe('sales.8');
+    expect(salesPromptVersion).toBe('sales.9');
     // How to use the product catalog that follows as its own block (content/features.mjs).
     expect(systemPrompt).toContain('when a product\'s own published catalog follows these instructions');
     expect(systemPrompt).toContain('never offer or suggest a demo, a call or a meeting');
-    // The card an Intel trial needs is stated when the prospect asks, never volunteered and never denied (owner direction 2026-11-17).
-    expect(systemPrompt).toContain('Do not bring up the credit card or how billing starts');
+    // An Intel trial needs no card to start, which may be said; what happens when it ends is stated when the prospect asks, and a card
+    // is never called required to start it (owner decision 2026-11-23).
+    expect(systemPrompt).toContain('For CareMetric Intel you may add that no credit card is needed to start ("No credit card needed to start.")');
+    expect(systemPrompt).toContain('Do not bring up how billing works or what happens when the trial ends unasked');
     expect(systemPrompt).toContain('When the prospect asks what the trial needs, whether it needs a card, or what happens when it ends, answer plainly');
+    expect(systemPrompt).toContain('Never say that a card is required to start the trial.');
     expect(systemPrompt).toContain('trial_terms (They ask what the trial needs, whether it needs a card, or what happens when it ends.)');
     expect(systemPrompt).toContain('How to offer the trial: Offer the free trial in plain words');
-    expect(systemPrompt).not.toMatch(/free trial \(credit card required|free trial \(a credit card is required/);
+    expect(systemPrompt).toContain('No credit card is needed to start your trial. Add a card in Billing before the trial ends to keep your plan');
+    expect(systemPrompt).not.toMatch(/credit card required|a credit card is required|never say that no card is needed/i);
     // A reply names where Intel's data comes from without calling it public, and answers plainly when asked (owner direction 2026-11-17).
     expect(systemPrompt).toContain('leave out the word "public"');
     expect(systemPrompt).toContain('When the prospect asks whether the data is public, or where it comes from, answer plainly and truthfully');
