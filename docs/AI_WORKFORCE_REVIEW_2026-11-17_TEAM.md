@@ -76,6 +76,70 @@ The November 24 check reads the same rows. Stages 1–3 are working if, by then:
 - the website search confirmed some of the 66 unresolved agencies;
 - the live evaluation scored at least one Monday.
 
+## November 24 measurement
+
+Read only, between 13:30 and 15:00 UTC on November 24, against the baseline above (counts only: no message text, name or address).
+Stages 1–6 had been live for a week, with every switch on.
+
+| Measure | November 17 | November 24 | Reading |
+| --- | --- | --- | --- |
+| Cold email sent | 32 | +55, plus 4 answers to people who asked | Ten a weekday |
+| Inside weekdays 8–16 Eastern | 18 of 32 | **55 of 55** | Met. All ten of each day left at 8:00–8:01; the 4 outside the hours were answers to inbound leads, never held |
+| By band | none | band 1: 1, band 2: 19, band 3: 30, band 4: 9 | Met. Bands 1–2 are used up; the 75 waiting are bands 3–4 |
+| Bounced | 4 of 32 (12.5%) | 5 of 59 (8.5%) | **The bounce guard tripped at 8:01 Eastern on November 24** |
+| Report opens / replies | 0 / 0 | 2 / 0 | Met, barely: both opens are one agency (band 2, short form, sent November 18) |
+| Quiet follow-ups | none | 0 | Nobody replied, so none could start |
+| Short / standard first email | none | 49 / 10 | Too lopsided to compare |
+| Reader's score | 4 scored, 2–3 | 49 of 51 scored 3; 30 rewritten; weaknesses: too many asks 23, no reason to answer now 17 | |
+| Live writing evaluation | never ran | Monday November 23: 12 cases, average 3.09, failed (average, one case unread); no reason to answer now 7 of 12 | Met (it scored a Monday) |
+| Account briefs | 22 | 109 | |
+| Strong fits with an address | 42 | 106 (182 without) | |
+| Roster | 59 graduated, 66 unresolved, 487 not looked up | 187 graduated, 276 unresolved, 184 not looked up | |
+| Website search | first run | 88 searched, about 10 confirmed, 77 left with a suggested site | Met, weakly |
+| Outside leads | none | 3 county reports (1 from a Google ad), 2 Intel trial sign-ups | The trials came from no cold email |
+| Trials | 3, all internal | 2 outside Intel trials (Nov 23 and 24), both at first value within hours, both welcomed | **Not counted**: production lacked `20261123120000_intel_trial_without_card.sql` |
+| Ads | none launched | Google search live ($5 a day, to November 27), 1 lead; LinkedIn refused twice | |
+| Creative | 0 live, 43 approved | 8 live, 79 approved, 22 waiting for the owner, 4 blocked | |
+| Social | 6 published ever | +8 published; 4 failed (3 Meta, 1 our own check); 3 founder posts failed (LinkedIn token) | No interested comment |
+| Support | 17 with no product, no draft | 6 more, all with no product: 5 alerts, 1 acknowledgment, no draft | |
+
+What it showed:
+- **Every cold bounce went to a shared address nobody confirmed:** 4 of the 26 such addresses written to (unknown or catch-all), none of
+  the 21 confirmed ones. 56 of the 75 emails waiting were of that kind.
+- **The verification service stopped answering after November 17.** It confirmed 3 addresses that day and none since, while the Hub
+  reserved 22 to 38 checks a day: ZeroBounce answers a refusal when the account has no credits left or the key is wrong, and the Hub
+  dropped the refusal.
+- **The emails ask too much and give no reason to answer now:** the reader and the live evaluation agree.
+- **The Concierge still drafted nothing.** Support email carries a product only when sent to a `support+<app>@` address, which nobody
+  uses, and none of the 23 senders of the last 60 days was a known customer, lead or prospect.
+
+Owner decisions (November 24): all six proposals.
+
+### What changed (November 24 follow-up)
+
+Feature `platform.agents.first-replies.v1` (`20261124150000_first_replies.sql`, `20261124151000_first_replies_concierge.sql`, gate
+`20261124159000_first_replies_contract.sql`; pgTAP 126; `server/agents-first-replies-integration.mjs`):
+- **The two outside trials get counted** once `20261123120000_intel_trial_without_card.sql` (already on `main`, from #305) is applied
+  in production; that is done by hand, outside this pull request.
+- **Strict holds a shared address until it is confirmed.**
+  - With Settings → Customer growth → "Check an address before the first email" on Strict, a shared address is written to only once
+    its mail server or the verification service confirmed it.
+  - One that can never be confirmed (a catch-all domain, or three tries without an answer) goes to the owner's review, and its
+    business goes back to the people finder for a named person.
+  - Shared addresses whose tries ended while the service refused get one more try.
+- **A refusing verification service is reported.** It is not asked again that Eastern day, the owner is told once a day, and
+  `growth.verify` counts what it said.
+- **The day's cold emails can be spread over the send hours.** Settings → Customer growth → "Spread the day's cold emails over the
+  send hours" (off): one every 48 minutes at 8 to 16 and ten a day.
+- **The Concierge answers a message that names no product.**
+  - A new conversation takes its sender's one product: their account's subscriptions, then their website request, then the agency
+    we wrote to.
+  - Without one, the Concierge uses the one product the message names, or drafts from every product's guides and names the product
+    its answer is about (prompt `concierge.4`).
+- **Not yet built** (work stopped at the account's weekly usage limit; they follow in their own pull request):
+  - the first email with one ask and a dated reason to answer now;
+  - the website search confirming more of its finds, and the owner's one-click "Use this site".
+
 ## What the review found
 
 ### 1. The path from trial to paid (Hub and Intel)

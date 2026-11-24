@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { growthAddressCheckFeature, growthExecutors, growthHandlers } from './worker.mjs';
-import { growthDiagnosticsFeature, guardAlert, verifyHandlers, verifyPerRun } from './verify.mjs';
+import { growthDiagnosticsFeature, guardAlert, serviceRefusedAlert, verifyHandlers, verifyPerRun } from './verify.mjs';
 
 const features = new Set([growthAddressCheckFeature]);
 const task = { id: 'task', agentKey: 'marketing_manager', agent: { autonomy: 'act' }, kind: 'growth.verify' };
@@ -102,6 +102,21 @@ describe('checking an address before the first email (20261116100000_growth_addr
     expect(guardAlert({ ...guard, complaints: 1 }).body).toMatch(/^Someone marked a cold email as spam\./);
     const off = handler({ guard: { on: false, tripped: false }, notifier: { send: vi.fn() }, mailbox: checker({}) });
     expect((await off.run(task)).result).toEqual({ checked: 0 });
+  });
+
+  it('counts what the verification service said when it settled nothing, and tells the owner once a day while it refuses', async () => {
+    const notifier = { send: vi.fn() };
+    const mailbox = { ...checker({ 'info@a.example.org': { result: 'unknown', reason: 'blocked', service: 'service_refused' },
+      'info@b.example.org': { result: 'unknown', reason: 'blocked', service: 'refused_today' } }), serviceRefusedOn: () => '2026-11-24' };
+    const { run } = handler({ mailbox, notifier, candidates: [{ id: 'a', email: 'info@a.example.org' }, { id: 'b', email: 'info@b.example.org' }] });
+    const outcome = await run(task, { now: () => new Date('2026-11-24T15:00:00Z') });
+    expect(outcome.result).toMatchObject({ checked: 2, unknown: 2, service: { service_refused: 1, refused_today: 1 }, serviceAlerted: true });
+    expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ severity: 'warning', subject: serviceRefusedAlert().subject,
+      dedupeKey: 'growth:address-service-refused:2026-11-24' }));
+    expect(serviceRefusedAlert().body).toMatch(/no credits left or the API key is wrong/);
+    // Another day, or a service that never refused: no alert.
+    const quiet = handler({ mailbox: { ...checker({}), serviceRefusedOn: () => '2026-11-23' }, notifier: { send: vi.fn() } });
+    expect((await quiet.run(task, { now: () => new Date('2026-11-24T15:00:00Z') })).result).toEqual({ guard: 'clear', checked: 0 });
   });
 
   it('does nothing in Observe', async () => {

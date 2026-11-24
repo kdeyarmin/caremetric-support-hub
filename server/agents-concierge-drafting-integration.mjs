@@ -224,7 +224,7 @@ try {
   assert.equal(draftedRuns.length, 2, 'two runs: the triage and the model');
   assert.deepEqual(draftedRuns.map(entry => `${entry.model}/${entry.prompt_version}/${entry.outcome}`).sort(), [`${aiModels.draft}/${promptVersion}/completed`, 'none/rules.1/completed'].sort());
   const modelRun = draftedRuns.find(entry => entry.model === aiModels.draft);
-  assert.equal(promptVersion, 'concierge.3');
+  assert.equal(promptVersion, 'concierge.4');
   assert.match(modelRun.summary, /^Read CM-\d+ \(email\): general question, routine; 1 guide cited\.$/);
   assert.ok(Number(modelRun.cost_cents) > 0 && Number(modelRun.input_tokens) === 1800 && Number(modelRun.output_tokens) === 350);
   assert.match(draftedRuns.find(entry => entry.model === 'none').summary, /drafted reply proposed\.$/);
