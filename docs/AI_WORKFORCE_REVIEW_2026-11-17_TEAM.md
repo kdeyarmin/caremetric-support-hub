@@ -119,7 +119,8 @@ Owner decisions (November 24): all six proposals.
 
 Feature `platform.agents.first-replies.v1` (`20261124150000_first_replies.sql`, `20261124151000_first_replies_concierge.sql`, gate
 `20261124159000_first_replies_contract.sql`; pgTAP 126; `server/agents-first-replies-integration.mjs`):
-- **The two outside trials are counted.** `20261123120000_intel_trial_without_card.sql` (#305) is applied in production.
+- **The two outside trials get counted** once `20261123120000_intel_trial_without_card.sql` (already on `main`, from #305) is applied
+  in production; that is done by hand, outside this pull request.
 - **Strict holds a shared address until it is confirmed.**
   - With Settings → Customer growth → "Check an address before the first email" on Strict, a shared address is written to only once
     its mail server or the verification service confirmed it.
