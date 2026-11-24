@@ -144,6 +144,19 @@ states, lists images with a warning before they lapse, and nudges and rewrites t
 declared; it reads comments on ads and writes county topics only while their switches are on as well
 ([team review, November 17](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md), stage 6).
 
+`20261124159000_first_replies_contract.sql` declares `platform.agents.first-replies.v1` once the address check, growth priority,
+support answers and settings features are declared; Strict's hold (`private.growth_hold_for`, which names `address_unconfirmed` for a
+`role_address`), `private.growth_contact_to_review` (which frees the business for the people finder), `private.growth_hold_settle`,
+`private.growth_cold_pace_at` and `private.communication_sender_product` are executable by no role; the send and draft holds, the
+mailbox record and the deferral are the Hub server's alone and require its connection; the holds settle through
+`private.growth_hold_settle` and still latch the bounce guard; the mailbox record still makes a missing mailbox undeliverable and sends
+an unconfirmable address to review; the send claim refuses a cold email with `paced` while `private.growth_cold_pace_at()` is later,
+and the deferral waits for it in the agency's zone; the spread switch (`growth.send_spread`) has a row; a new support conversation takes
+its sender's one product (`communication_sender_product(v_email)` in `private.ingest_inbound_communication`); and the Concierge's
+snapshot reports `senderProduct` and stays the server's. Each test fails closed. The Hub server reads `senderProduct` only when the
+feature is declared; it handles the claim's `paced` whatever the contract
+([team review, November 24 measurement](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md#november-24-measurement)).
+
 `20261118120100_owner_summary_contract.sql` declares `platform.agents.owner-summary.v1` once the settings and AI team hardening
 features are declared, the three summary settings (`agents.daily_summary`, `agents.summary_hour`, `agents.approvals_right_away`) have
 rows of their kinds, `private.owner_notifications` admits the `held` status and only a held row carries an `attention`,

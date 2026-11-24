@@ -39,14 +39,17 @@ select is(private.communication_sender_product('both@lead-126.example'), null::u
 select is(private.communication_sender_product('qa@test-126.example'), null::uuid, 'A test lead says nothing');
 select is(private.communication_sender_product('stranger@unknown-126.example'), null::uuid, 'A stranger has no product');
 
--- A new conversation takes the sender's product when its address named none, and the address's product when it did.
-select is((select c.product_id from private.communications c
-            where c.id = (private.ingest_inbound_communication('email', '<fr126-1@mail.example>', '<fr126-1@mail.example>', null, null, 'A question',
-                          'How do I export a report?', 'Pat Example', 'pat@lead-126.example', null) ->> 'id')::uuid),
+-- A new conversation takes the sender's product when its address named none, and the address's product when it did. (Each is created
+-- first: a conversation inserted while a statement scans the table is not visible to that scan.)
+create temp table fr126 on commit drop as
+select private.ingest_inbound_communication('email', '<fr126-1@mail.example>', '<fr126-1@mail.example>', null, null, 'A question',
+         'How do I export a report?', 'Pat Example', 'pat@lead-126.example', null) as unnamed,
+       null::jsonb as named;
+update fr126 set named = private.ingest_inbound_communication('email', '<fr126-2@mail.example>', '<fr126-2@mail.example>', null, 'carebase',
+         'A question', 'How do I export a report?', 'Pat Example', 'pat@lead-126.example', null);
+select is((select c.product_id from private.communications c where c.id = (select (unnamed ->> 'id')::uuid from fr126)),
   (select id from hub.products where slug = 'caremetric-intel'), 'An email from a known sender takes their product');
-select is((select c.product_id from private.communications c
-            where c.id = (private.ingest_inbound_communication('email', '<fr126-2@mail.example>', '<fr126-2@mail.example>', null, 'carebase', 'A question',
-                          'How do I export a report?', 'Pat Example', 'pat@lead-126.example', null) ->> 'id')::uuid),
+select is((select c.product_id from private.communications c where c.id = (select (named ->> 'id')::uuid from fr126)),
   (select id from hub.products where slug = 'carebase'), 'A "+product" address still decides');
 
 -- The Concierge's snapshot names the sender's product for a conversation without one.
