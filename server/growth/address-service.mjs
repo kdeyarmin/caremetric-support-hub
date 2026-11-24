@@ -7,7 +7,10 @@
  * no clear answer (a refusal about the Hub, a temporary answer, no answer at all) is the service asked, address by address in the
  * order given (the best shape of a name first), at most `serviceGuesses` of them, each one reserved in the database under Settings →
  * Customer growth → "Most verification service checks a day". It is used only while "Ask a verification service when a mail server
- * won't answer" is on, the ZeroBounce API key is set, and the database declares platform.agents.growth-address-service.v1.
+ * won't answer" is on, the service's API key is set, and the database declares platform.agents.growth-address-service.v1.
+ *
+ * Two services can answer (owner decision 2026-11-24: not ZeroBounce, Bouncer once its account is verified). The server uses Bouncer
+ * when BOUNCER_API_KEY is set, ZeroBounce when only ZEROBOUNCE_API_KEY is (server/main.mjs, `verificationService`).
  *
  * ZeroBounce (api.zerobounce.net, version 2, checked 2026-11-17): one address per request, at one fixed HTTPS address, no redirects, a
  * bounded answer. Only its status is read: valid confirms the address; invalid, spam trap, abuse and do-not-mail refuse it (except a
@@ -21,6 +24,7 @@ export const growthAddressServiceFeature = 'platform.agents.growth-address-servi
 /** Addresses asked of the service per person: the shapes of a name most likely to be the one in use. */
 export const serviceGuesses = 3;
 const origin = 'https://api.zerobounce.net';
+const bouncerOrigin = 'https://api.usebouncer.com';
 const maxBytes = 100_000;
 // The mail server's answers worth a second opinion: it said nothing about the mailbox. A domain with no mail host, or an address the
 // checker would not ask about, is not.
@@ -59,6 +63,8 @@ async function readJson(response) {
 export function zeroBounce({ apiKey = '', fetchImpl = fetch, timeoutMs = 20_000 } = {}) {
   const key = String(apiKey ?? '').trim();
   return {
+    name: 'ZeroBounce',
+    keyVariable: 'ZEROBOUNCE_API_KEY',
     configured: key.length > 0,
     /** Whether ZeroBounce says `email` can receive mail: { result }. Throws a coded error when it cannot answer. */
     async check(email, { signal } = {}) {
@@ -84,6 +90,61 @@ export function zeroBounce({ apiKey = '', fetchImpl = fetch, timeoutMs = 20_000 
 }
 
 /**
+ * A Bouncer answer as the Hub's checker answers: verified, rejected, catch_all or unknown (docs.usebouncer.com, real-time verify, read
+ * 2026-11-24). Deliverable confirms the address; undeliverable refuses it, and so does a toxicity of 4 or 5, which Bouncer says to
+ * suppress because it can harm the sender's reputation; risky on an accept-all domain is catch-all (it confirms nothing); any other
+ * risky answer (a full mailbox, low quality) and unknown (no answer, a timeout, greylisting) leave the mail server's answer standing.
+ */
+export function bouncerResult(answer) {
+  const status = String(answer?.status ?? '').toLowerCase();
+  if (Number(answer?.toxicity) >= 4) return 'rejected';
+  if (status === 'deliverable') return 'verified';
+  if (status === 'undeliverable') return 'rejected';
+  if (status === 'risky' && String(answer?.domain?.acceptAll ?? '').toLowerCase() === 'yes') return 'catch_all';
+  return 'unknown';
+}
+
+/**
+ * Bouncer's real-time check (GET https://api.usebouncer.com/v1.1/email/verify, key in the x-api-key header): one address per request,
+ * at one fixed HTTPS address, no redirects, a bounded answer, Bouncer's own 10-second verification limit. 402 (no credits left), 401 and
+ * 403 (a wrong key) are refusals; 429 and 5xx are worth trying later. The key never reaches a log, an error or a result, and an address
+ * is never logged.
+ */
+export function bouncer({ apiKey = '', fetchImpl = fetch, timeoutMs = 20_000 } = {}) {
+  const key = String(apiKey ?? '').trim();
+  return {
+    name: 'Bouncer',
+    keyVariable: 'BOUNCER_API_KEY',
+    configured: key.length > 0,
+    /** Whether Bouncer says `email` can receive mail: { result }. Throws a coded error when it cannot answer. */
+    async check(email, { signal } = {}) {
+      if (!key) throw failure('service_not_configured');
+      const address = String(email ?? '').toLowerCase();
+      if (!/^[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,253}\.[a-z]{2,}$/.test(address)) throw failure('service_invalid_address');
+      // URLSearchParams encodes "+" as %2B: Bouncer would otherwise read jane+x@ as "jane x@" (its integration guidelines).
+      const query = new URLSearchParams({ email: address, timeout: '10' });
+      let response;
+      try {
+        response = await fetchImpl(`${bouncerOrigin}/v1.1/email/verify?${query}`, { redirect: 'error', cache: 'no-store',
+          headers: { Accept: 'application/json', 'x-api-key': key },
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) });
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        throw failure('service_unavailable', true);
+      }
+      if (!response.ok) {
+        await response.body?.cancel?.().catch(() => {});
+        const again = response.status === 429 || response.status >= 500;
+        throw failure(again ? 'service_unavailable' : 'service_refused', again);
+      }
+      const answer = await readJson(response);
+      if (typeof answer?.status !== 'string') throw failure('service_response_invalid');
+      return { result: bouncerResult(answer) };
+    },
+  };
+}
+
+/**
  * The Hub's checker (mailbox.mjs), asking the verification service when the mail server gives no clear answer. `enabled` is the owner's
  * setting (a reader), `declared` whether the database can reserve the service's checks, `reserve(n)` that reservation. The answer has
  * the checker's shape; one the service gave carries `via: 'service'`, and a service that could not help leaves the mail server's answer
@@ -100,6 +161,8 @@ export function withAddressService({ mailbox, service = null, enabled = false, d
   return {
     /** The Eastern day the service last refused, or null: the growth.verify task tells the owner (verify.mjs). */
     serviceRefusedOn: () => refusedOn,
+    /** Which service, and the Railway variable holding its key, for the owner's alert. */
+    serviceLabel: () => ({ name: service?.name ?? 'The verification service', keyVariable: service?.keyVariable ?? null }),
     configured: mailbox.configured,
     // The service still answers while the mail servers are resting (three unreachable in a row).
     available: () => mailbox.available?.() !== false || (mailbox.configured === true && on()),

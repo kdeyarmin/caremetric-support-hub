@@ -38,7 +38,7 @@ import { intelFeedReader } from './growth/intel-feed.mjs';
 import { reportLinks } from './growth/report-link.mjs';
 import { npiRegistry } from './growth/npi-registry.mjs';
 import { mailboxChecker } from './growth/mailbox.mjs';
-import { growthAddressServiceFeature, withAddressService, zeroBounce } from './growth/address-service.mjs';
+import { bouncer, growthAddressServiceFeature, withAddressService, zeroBounce } from './growth/address-service.mjs';
 import { growthSender } from './growth/sender.mjs';
 import { socialConfig } from './agents/social/index.mjs';
 import { nativeVisitorReader } from './agents/scorecard/visitors.mjs';
@@ -119,10 +119,11 @@ const roster={feed:intelFeedReader({features,enabled:setting('growth.roster'),ke
 // Decision-makers and their work addresses, found by the Hub itself: the NPI registry, the business's own website and, when the owner
 // chooses it, the business's own mail server (Settings → Customer growth → Finding people's addresses). When a mail server will not
 // answer, a verification service may be asked instead (Settings → Customer growth → "Ask a verification service when a mail server
-// won't answer"; the ZeroBounce API key, ZEROBOUNCE_API_KEY, is the one secret it needs).
+// won't answer"; Bouncer when BOUNCER_API_KEY is set, otherwise ZeroBounce with ZEROBOUNCE_API_KEY: the one secret it needs).
+const verificationService=String(process.env.BOUNCER_API_KEY??'').trim()?bouncer({apiKey:process.env.BOUNCER_API_KEY}):zeroBounce({apiKey:process.env.ZEROBOUNCE_API_KEY});
 const people={mode:setting('growth.enrichment_provider'),registry:npiRegistry(),
   mailbox:withAddressService({mailbox:mailboxChecker({heloName:(()=>{try{return new URL(publicOrigin).hostname;}catch{return '';}})()}),
-    service:zeroBounce({apiKey:process.env.ZEROBOUNCE_API_KEY}),enabled:setting('growth.address_service'),
+    service:verificationService,enabled:setting('growth.address_service'),
     declared:()=>features.has(growthAddressServiceFeature),reserve:checks=>growthStore(pool).addressServiceReserve(checks)})};
 const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),roster,people,
   // Deeper research with web tools (Settings → Customer growth → Research prospects with web search).

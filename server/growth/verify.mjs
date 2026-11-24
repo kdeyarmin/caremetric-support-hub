@@ -45,13 +45,13 @@ export function guardAlert(guard) {
 }
 
 /** The owner's alert while the verification service refuses the Hub's checks: what it means and what to do. */
-export function serviceRefusedAlert() {
+export function serviceRefusedAlert({ name = 'ZeroBounce', keyVariable = 'ZEROBOUNCE_API_KEY' } = {}) {
   return {
     subject: 'The address verification service is refusing checks',
-    body: 'ZeroBounce refused the Hub\'s address checks today. It does that when the account has no credits left or the API key is wrong. '
+    body: `${name} refused the Hub's address checks today. It does that when the account has no credits left or the API key is wrong. `
       + 'Until it answers, addresses a business\'s mail server will not confirm stay unconfirmed, and with Settings → Customer growth → '
       + '"Check an address before the first email" on Strict, cold email to a shared address (info@ and the like) waits. Add credits in '
-      + 'ZeroBounce, or check the ZEROBOUNCE_API_KEY variable in Railway. The Hub asks again tomorrow.',
+      + `${name}${keyVariable ? `, or check the ${keyVariable} variable in Railway` : ''}. The Hub asks again tomorrow.`,
   };
 }
 
@@ -108,7 +108,7 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
     // A refusing service is the owner's to fix (credits or the key), and until it answers Strict holds shared addresses: told once a day.
     let serviceAlerted = false;
     if (notifier && typeof mailbox.serviceRefusedOn === 'function' && mailbox.serviceRefusedOn() === growthDay(now())) {
-      const alert = serviceRefusedAlert();
+      const alert = serviceRefusedAlert(typeof mailbox.serviceLabel === 'function' ? mailbox.serviceLabel() : undefined);
       await notifier.send({ severity: 'warning', subject: alert.subject, body: alert.body, dedupeKey: `growth:address-service-refused:${growthDay(now())}`,
         agentKey: task.agentKey, taskId: task.id, attention: 'now' });
       serviceAlerted = true;
