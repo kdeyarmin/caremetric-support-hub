@@ -624,6 +624,24 @@ Without the migration every message is handled as before.
 - **Trial work stops piling up.** Onboarding, activation and trial success plans for a self-service trial with no permitted contact are
   not planned (the Account Manager's customer emails cover them). The migration closes those already open.
 
+**Which product a message is about (the Nov 24 follow-up;** `platform.agents.first-replies.v1`,
+`20261124151000_first_replies_concierge.sql`**).** An email names its product only when it was sent to a `support+<app>@` address,
+which nobody uses: all 23 emails of the 60 days to November 24 arrived without one, so the model was told "product: unknown".
+
+- **A new email takes the sender's product.** When its address names none, the conversation takes the one product the sender already
+  uses or asked about (`private.communication_sender_product`): their billing account's subscriptions, then their website leads (never
+  a test), then the roster prospect their business is (a reply to a cold email). Two products is "can't tell" and leaves it unset.
+  None of the 23 came from a known sender, so this matters from the first customer, lead or prospect who writes in.
+- **The Concierge works it out for older conversations.** The snapshot names the sender's product (`senderProduct`, a slug only) for a
+  conversation still without one; failing that, the one product the message names unmistakably ("CareMetric Intel" or Intel, not an
+  Intel chip; CareBase; "CareMetric Breathe" or the Breathe app, never the everyday word). The draft then reads that product's guides,
+  and the model is told how the product was known (prompt `concierge.4`). The owner's alert still names the conversation's own product,
+  and the task records `inferredProduct` and `productFrom` (sender or mention).
+- **With no product at all, the model still drafts.** It reads every product's guides (stage 5); each guide now says which products it
+  covers, and the reply names the product its answer is about. When the answer depends on a product nobody can tell, it writes none and
+  the acknowledgment is offered, as before. A sender whose product is Healthcare Advisors stays yours, as an Advisors conversation
+  always was.
+
 Every five minutes (task `concierge.sweep`, "Look for new messages") it asks the database which
 conversations have a newest inbound message that has **settled** (90 seconds old, so a burst of texts counts
 once), is **recent** (within 72 hours, so importing old history never triggers a backlog), has **no reply or
