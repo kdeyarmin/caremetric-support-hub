@@ -28,7 +28,7 @@ const blockedBecause = {
   data_figure: 'a figure that differs from its data', contrast: 'text too faint for its background', platform: 'a platform limit', brand_colors: 'a color outside the brand',
   unsubstantiated_claim: 'a claim the fact sheet does not support', plain_language: 'copy that is not plain', offer_mismatch: 'an offer billing does not have',
 };
-const heldBecause = { address_unchecked: 'waiting for an address check', rejected: 'behind a draft you turned down', bounce_guard: 'behind the bounce guard', other: 'for another reason' };
+const heldBecause = { address_unchecked: 'waiting for an address check', address_unconfirmed: 'waiting for a shared address to be confirmed', rejected: 'behind a draft you turned down', bounce_guard: 'behind the bounce guard', other: 'for another reason' };
 const counted = record => Object.entries(record ?? {}).map(([key, count]) => [key, num(count)]).filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1]);
 const words = code => String(code ?? '').replaceAll('_', ' ');
 // Why an agent's tasks skipped, for the owner.

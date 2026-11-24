@@ -25,6 +25,7 @@ const maxBytes = 100_000;
 // The mail server's answers worth a second opinion: it said nothing about the mailbox. A domain with no mail host, or an address the
 // checker would not ask about, is not.
 const unanswered = new Set(['temporary', 'blocked', 'refused', 'sender_refused', 'unexpected', 'dropped', 'tls_required', 'tls_failed', 'error']);
+const easternDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
 const failure = (code, transient = false) => Object.assign(new Error('The verification service could not be read.'), { code, transient });
 
 /** A ZeroBounce answer as the Hub's checker answers: verified, rejected, catch_all or unknown. */
@@ -88,10 +89,17 @@ export function zeroBounce({ apiKey = '', fetchImpl = fetch, timeoutMs = 20_000 
  * the checker's shape; one the service gave carries `via: 'service'`, and a service that could not help leaves the mail server's answer
  * with `service` saying why (daily_limit, or the service's error code).
  */
-export function withAddressService({ mailbox, service = null, enabled = false, declared = () => false, reserve = null, guesses = serviceGuesses }) {
+export function withAddressService({ mailbox, service = null, enabled = false, declared = () => false, reserve = null, guesses = serviceGuesses,
+  clock = () => Date.now() }) {
   if (!mailbox) return mailbox;
   const on = () => live(enabled) === true && service?.configured === true && typeof reserve === 'function' && declared() === true;
+  // A service that refused (no credits left, or a wrong key: 200 with an error) is not asked again that Eastern day, so the day's
+  // reserved checks are not spent on refusals (the Nov 24 measurement: none answered after November 17), and the refusal is reported.
+  let refusedOn = null;
+  const today = () => easternDay.format(clock());
   return {
+    /** The Eastern day the service last refused, or null: the growth.verify task tells the owner (verify.mjs). */
+    serviceRefusedOn: () => refusedOn,
     configured: mailbox.configured,
     // The service still answers while the mail servers are resting (three unreachable in a row).
     available: () => mailbox.available?.() !== false || (mailbox.configured === true && on()),
@@ -100,6 +108,7 @@ export function withAddressService({ mailbox, service = null, enabled = false, d
       const first = await mailbox.check(domain, addresses, { signal });
       const unclear = first?.result === 'unreachable' || (first?.result === 'unknown' && (!first.reason || unanswered.has(first.reason)));
       if (!unclear || !on()) return first;
+      if (refusedOn === today()) return { ...first, service: 'refused_today' };
       const host = String(domain ?? '').toLowerCase();
       const asked = (addresses ?? []).map(value => String(value).toLowerCase())
         .filter(value => value.slice(value.lastIndexOf('@') + 1) === host).slice(0, guesses);
@@ -111,7 +120,11 @@ export function withAddressService({ mailbox, service = null, enabled = false, d
         if (!reserved) return { ...first, service: 'daily_limit' };
         let answer;
         try { answer = await service.check(email, { signal }); }
-        catch (error) { if (signal?.aborted) throw error; return { ...first, service: error?.code ?? 'service_unavailable' }; }
+        catch (error) {
+          if (signal?.aborted) throw error;
+          if (error?.code === 'service_refused') refusedOn = today();
+          return { ...first, service: error?.code ?? 'service_unavailable' };
+        }
         if (answer?.result === 'verified') return { result: 'verified', email, via: 'service' };
         if (answer?.result === 'catch_all') return { result: 'catch_all', via: 'service' };
         if (answer?.result !== 'rejected') return { ...first, service: 'unknown' };

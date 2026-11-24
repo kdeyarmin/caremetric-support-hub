@@ -44,6 +44,17 @@ export function guardAlert(guard) {
   };
 }
 
+/** The owner's alert while the verification service refuses the Hub's checks: what it means and what to do. */
+export function serviceRefusedAlert() {
+  return {
+    subject: 'The address verification service is refusing checks',
+    body: 'ZeroBounce refused the Hub\'s address checks today. It does that when the account has no credits left or the API key is wrong. '
+      + 'Until it answers, addresses a business\'s mail server will not confirm stay unconfirmed, and with Settings → Customer growth → '
+      + '"Check an address before the first email" on Strict, cold email to a shared address (info@ and the like) waits. Add credits in '
+      + 'ZeroBounce, or check the ZEROBOUNCE_API_KEY variable in Railway. The Hub asks again tomorrow.',
+  };
+}
+
 export function verifyHandlers({ growth, features = null, notifier = null, clock = () => Date.now() }) {
   const declared = features instanceof Set ? features.has(growthAddressCheckFeature) : Array.isArray(features) && features.includes(growthAddressCheckFeature);
   if (!growth || !declared || typeof growth.store?.mailboxCandidates !== 'function') return {};
@@ -70,6 +81,9 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
     // byService: answers the verification service gave when the mail server would not (address-service.mjs).
     const counts = { checked: 0, verified: 0, rejected: 0, catch_all: 0, unknown: 0, unreachable: 0, undeliverable: 0, cancelled: 0, byService: 0 };
     const why = {};
+    // What the verification service said when it was asked and did not settle the address (address-service.mjs): service_refused (no
+    // credits left, or a wrong key), refused_today (not asked again after a refusal), daily_limit, unknown, service_unavailable.
+    const service = {};
     let stopped = null;
     for (const candidate of candidates) {
       signal?.throwIfAborted();
@@ -87,11 +101,21 @@ export function verifyHandlers({ growth, features = null, notifier = null, clock
       counts.checked++; counts[result]++;
       if (answer?.via === 'service') counts.byService++;
       if (reason) why[reason] = (why[reason] ?? 0) + 1;
+      if (typeof answer?.service === 'string') service[answer.service] = (service[answer.service] ?? 0) + 1;
       if (saved?.eligibility === 'undeliverable') counts.undeliverable++;
       counts.cancelled += Number(saved?.cancelled ?? 0);
     }
+    // A refusing service is the owner's to fix (credits or the key), and until it answers Strict holds shared addresses: told once a day.
+    let serviceAlerted = false;
+    if (notifier && typeof mailbox.serviceRefusedOn === 'function' && mailbox.serviceRefusedOn() === growthDay(now())) {
+      const alert = serviceRefusedAlert();
+      await notifier.send({ severity: 'warning', subject: alert.subject, body: alert.body, dedupeKey: `growth:address-service-refused:${growthDay(now())}`,
+        agentKey: task.agentKey, taskId: task.id, attention: 'now' });
+      serviceAlerted = true;
+    }
     const kept = Object.fromEntries(Object.entries(counts).filter(([key, value]) => key === 'checked' || value > 0));
-    return { result: { ...guardResult, ...kept, ...(Object.keys(why).length ? { why } : {}), ...(stopped ? { stopped } : {}) } };
+    return { result: { ...guardResult, ...kept, ...(Object.keys(why).length ? { why } : {}), ...(Object.keys(service).length ? { service } : {}),
+      ...(serviceAlerted ? { serviceAlerted } : {}), ...(stopped ? { stopped } : {}) } };
   }
   return { 'growth.verify': verify };
 }

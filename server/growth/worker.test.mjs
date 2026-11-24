@@ -123,7 +123,7 @@ it('sending disabled defers before claiming a message',async()=>{
  const store={claim:vi.fn()},growth={store,configured:()=>false};const exec=growthExecutors({growth,mail:{configured:true}})['growth.message'];await expect(exec({input:{messageId:'m'}})).rejects.toMatchObject({code:'action_deferred'});expect(store.claim).not.toHaveBeenCalled();
 });
 it('a claim refused for the cap or the send hours waits with its reason, and nothing is sent',async()=>{
- for(const status of ['daily_limit','outside_hours','frequency_limited']) {
+ for(const status of ['daily_limit','outside_hours','frequency_limited','paced']) {
   const store={claim:vi.fn(async()=>({send:false,status})),finish:vi.fn()},mail={configured:true,send:vi.fn()};
   const exec=growthExecutors({growth:{store,configured:()=>true},mail})['growth.message'];
   await expect(exec({input:{messageId:'m'},id:'a'})).rejects.toMatchObject({code:'action_deferred',reason:status});

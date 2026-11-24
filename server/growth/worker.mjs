@@ -630,12 +630,14 @@ export function growthExecutors({growth,mail,publicOrigin,postalAddress,features
   return {'growth.content':async()=>({recorded:true,published:false}),'growth.message':async execution=>{
     if(!growth.configured()||!mail?.configured)throw deferred();
     // A cold email waits (tried again in 15 minutes) while the bounce guard holds cold email, and a first email until its address was
-    // checked. The send claim below still decides everything else.
+    // checked (with Strict, a shared address until it was confirmed, or it goes to review: 20261124150000_first_replies.sql). The send
+    // claim below still decides everything else.
     if(holding&&await growth.store.sendHold(execution.input.messageId))throw deferred();
     const claimed=await growth.store.claim(execution.input.messageId,execution.id);
     if(!claimed.send){
-      // Over the cap, outside the send hours (20261117190000_growth_priority.sql) or waiting on another email: tried again later.
-      if(['frequency_limited','daily_limit','evaluation_required','delivery_unresolved','outside_hours'].includes(claimed.status))throw deferred(claimed.status);
+      // Over the cap, outside the send hours (20261117190000_growth_priority.sql), too soon after the day's last cold email while they are
+      // spread over the hours (20261124150000_first_replies.sql) or waiting on another email: tried again later.
+      if(['frequency_limited','daily_limit','evaluation_required','delivery_unresolved','outside_hours','paced'].includes(claimed.status))throw deferred(claimed.status);
       if(finalRefusals.has(claimed.status))throw Object.assign(new Error('The message was not sent.'),{code:claimed.status});
       return {delivery:claimed.status};
     }
