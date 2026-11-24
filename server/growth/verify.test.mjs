@@ -114,6 +114,7 @@ describe('checking an address before the first email (20261116100000_growth_addr
     expect(notifier.send).toHaveBeenCalledWith(expect.objectContaining({ severity: 'warning', subject: serviceRefusedAlert().subject,
       dedupeKey: 'growth:address-service-refused:2026-11-24' }));
     expect(serviceRefusedAlert().body).toMatch(/no credits left or the API key is wrong/);
+    expect(serviceRefusedAlert({ name: 'Bouncer', keyVariable: 'BOUNCER_API_KEY' }).body).toMatch(/^Bouncer refused[\s\S]*Add credits in Bouncer, or check the BOUNCER_API_KEY variable in Railway\./);
     // Another day, or a service that never refused: no alert.
     const quiet = handler({ mailbox: { ...checker({}), serviceRefusedOn: () => '2026-11-23' }, notifier: { send: vi.fn() } });
     expect((await quiet.run(task, { now: () => new Date('2026-11-24T15:00:00Z') })).result).toEqual({ guard: 'clear', checked: 0 });
