@@ -174,6 +174,31 @@ describe('the contact finder', () => {
     expect(calls.some(call => call.url.startsWith('https://directory.test'))).toBe(false);
   });
 
+  it('for the website search: says where a home page redirects off the domain, never going there, asks the judge of every page, and reads a locations page only while the number is unseen', async () => {
+    const { fetchImpl: moved, calls: movedCalls } = site({ 'https://example.org/': page('', { status: 301, location: 'https://www.newname.example/home' }) });
+    const answer = await growthContactFinder({ fetchImpl: moved, lookup: publicLookup }).find('example.org', { phone: '4125550100' });
+    expect(answer).toMatchObject({ email: null, movedTo: 'newname.example', phoneSeen: false });
+    expect(movedCalls.some(call => call.url.includes('newname.example'))).toBe(false);
+
+    const seen = [];
+    const { fetchImpl, calls } = site({
+      'https://example.org/': page('<p>Welcome</p>'),
+      'https://example.org/contact': page('<footer>Valley Home Health, Pittsburgh, PA 15201</footer> info@example.org'),
+      'https://example.org/locations': page('<li>Pittsburgh office (412) 555-0100</li>'),
+    });
+    const judge = html => { seen.push(html.length); return html.includes('Valley Home Health') ? 'name' : null; };
+    const found = await growthContactFinder({ fetchImpl, lookup: publicLookup }).find('example.org', { phone: '4125550100', judge, morePaths: ['/locations', '/nope?x=1'] });
+    expect(found).toMatchObject({ email: 'info@example.org', judged: 'name', phoneSeen: true });
+    expect(calls.map(call => call.url).at(-1)).toBe('https://example.org/locations');
+    expect(calls.some(call => call.url.includes('nope'))).toBe(false);
+    expect(seen.length).toBeGreaterThan(1);
+    // With the number on a usual page, no extra page is read.
+    const { fetchImpl: plain, calls: plainCalls } = site({ 'https://example.org/': page('(412) 555-0100 info@example.org') });
+    expect(await growthContactFinder({ fetchImpl: plain, lookup: publicLookup }).find('example.org', { phone: '4125550100', morePaths: ['/locations'] }))
+      .toMatchObject({ email: 'info@example.org', phoneSeen: true });
+    expect(plainCalls.some(call => call.url.endsWith('/locations'))).toBe(false);
+  });
+
   it('checks a redirect against the robots.txt of the host it leads to before following it', async () => {
     const { fetchImpl, calls } = site({
       'https://example.org/robots.txt': page('User-agent: *\nDisallow: /private', { type: 'text/plain' }),

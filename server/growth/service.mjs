@@ -7,6 +7,7 @@ import { leadSignature } from '../leads.mjs';
 import { sesGrowthEvents } from '../ses.mjs';
 import { activitySchema, appActivitySchema } from './protocol.mjs';
 import { products, stages } from './policy.mjs';
+import { hasFirstRepliesTwo } from './first-replies.mjs';
 const uuid=z.uuid(), text=(n)=>z.string().max(n), instant=z.iso.datetime({offset:true});
 const https=z.union([z.literal(''),z.url().refine(v=>new URL(v).protocol==='https:' && !new URL(v).username && !new URL(v).password)]);
 export const growthSchemas={
@@ -60,7 +61,14 @@ export function growthService({store,research,contacts=null,roster=null,people=n
         const {offset}=parse(z.object({offset:z.number().int().min(0).max(100000).default(0)}).strict(),data);
         return safe(async()=>({...await store.roster(token,offset),services:{feed:roster?.feed?.readiness?.()??{declared:false,enabled:false,signing:false},
           states:(()=>{const value=live(roster?.states);return Array.isArray(value)?value:[];})(),daily:live(roster?.daily)??25,research:Boolean(research?.configured),
-          companyList:features?.has('platform.agents.ads.v1')===true}}));
+          companyList:features?.has('platform.agents.ads.v1')===true,useSite:hasFirstRepliesTwo(features)}}));
+      }
+      if(operation==='rosterUseSite') {
+        // The owner's "Use this site" (owner decision 2026-11-24): one of the sites the web search suggested for an agency it did not
+        // find. The database checks that the site is one of that agency's suggestions and records the owner as having chosen it.
+        if(!hasFirstRepliesTwo(features))throw new HttpError(503,'Apply the website search database migration first.');
+        const parsed=parse(z.object({ccn:z.string().regex(/^[A-Z0-9]{6,10}$/),domain:z.string().min(4).max(253).regex(/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/)}).strict(),data);
+        return safe(()=>store.rosterUseSite(token,parsed.ccn,parsed.domain));
       }
       if(operation==='rosterCompanies') {
         // The roster's agencies as rows for LinkedIn's company-list template (Growth → Medicare roster → Download).

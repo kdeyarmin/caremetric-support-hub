@@ -254,6 +254,11 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
   async function fetchOnHosts(url, hosts, limit, signal, accept, allowed, anyType) {
     let target = new URL(url);
     for (let hop = 0; hop < 3; hop += 1) {
+      // A redirect to another https host is refused, and that host is said (`movedTo`, its name only) so a caller may read it as a site
+      // of its own: never followed here.
+      if (hop > 0 && target.protocol === 'https:' && !target.username && !target.password && !target.port && !hosts.includes(target.hostname)) {
+        return { outcome: 'refused', movedTo: target.hostname.toLowerCase().replace(/^www\./, '').replace(/\.$/, '') };
+      }
       if (target.protocol !== 'https:' || target.username || target.password || target.port || !hosts.includes(target.hostname)) return { outcome: 'refused' };
       if (!(await safeHost(target.hostname))) return { outcome: 'refused' };
       if (hop > 0 && allowed && !(await allowed(target))) return { outcome: 'refused' };
@@ -278,11 +283,6 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
     }
     return { outcome: 'refused' };
   }
-  // A page: { url, text } or null.
-  async function get(url, hosts, limit, signal, accept, allowed = null) {
-    const result = await fetchOnHosts(url, hosts, limit, signal, accept, allowed, false);
-    return result.outcome === 'ok' ? { url: result.url, text: result.text } : null;
-  }
 
   // One business's site: its hosts, its robots.txt (read once per host) and a page reader that honours it.
   function siteOf(host, signal) {
@@ -306,15 +306,21 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
       return robotsByHost.get(name);
     };
     const allowed = async target => robotsAllows(await robotsFor(target.hostname), `${target.pathname}${target.search}`);
+    let moved = null;
     return {
       hosts,
       /** Whether robots.txt lets the finder read `path` on the business's domain. */
       may: async path => robotsAllows(await robotsFor(host), path),
       /** The page at `path` on the business's domain ({ url, text }), or null; a network error other than the caller's abort is null too. */
       async read(path) {
-        try { return await get(`https://${host}${path}`, hosts, pageBytes, signal, 'text/html', allowed); }
-        catch (error) { if (signal?.aborted) throw error; return null; }
+        try {
+          const result = await fetchOnHosts(`https://${host}${path}`, hosts, pageBytes, signal, 'text/html', allowed, false);
+          if (path === '/' && result.movedTo && !moved) moved = result.movedTo;
+          return result.outcome === 'ok' ? { url: result.url, text: result.text } : null;
+        } catch (error) { if (signal?.aborted) throw error; return null; }
       },
+      /** The other host the home page redirected to, if it did (its name only; never read here). */
+      movedTo: () => moved,
     };
   }
 
@@ -322,28 +328,39 @@ export function growthContactFinder({ fetchImpl = null, lookup = dnsLookup } = {
    * The one role address to record for `domain`, with the page it was on, or why there is none. With `phone` (an agency's ten-digit
    * CMS telephone number), also whether that number is written on one of the pages read (`phoneSeen`): reading continues past the
    * address until it is, or the pages run out. Only the yes or no is returned; no number read from a page is kept.
+   *
+   * For the website search (site-search.mjs, the Nov 24 measurement): `morePaths` are read after the usual pages while the number is
+   * still unseen (a locations page often carries each office's number); `judge(html)` is asked of every page read and its first
+   * answer is returned as `judged` (the page itself is never kept); and a home page that redirects to another host says so
+   * (`movedTo`, the host's name only), since that host is the site the business actually runs.
    */
-  async function find(domain, { signal, phone = null } = {}) {
+  async function find(domain, { signal, phone = null, judge = null, morePaths = [] } = {}) {
     const host = String(domain ?? '').toLowerCase();
     if (!domainPattern.test(host) || host.length > 253) return { email: null, reason: 'invalid_domain' };
     const site = siteOf(host, signal);
     let read = 0;
     const wanted = /^\d{10}$/.test(String(phone ?? '')) ? String(phone) : null;
-    let phoneSeen = false, email = null, sourceUrl = null;
+    let phoneSeen = false, email = null, sourceUrl = null, judged = null;
     // The home page (the first path) also says what the business is: its summary is returned whether or not an address is found.
     let summary = null;
-    for (const path of contactPaths) {
+    const extra = (Array.isArray(morePaths) ? morePaths : []).filter(path => typeof path === 'string' && /^\/[a-z0-9/_-]{0,60}$/i.test(path)
+      && !contactPaths.includes(path)).slice(0, 3);
+    for (const path of [...contactPaths, ...extra]) {
       signal?.throwIfAborted();
+      // The usual pages are read until the address and the number are found; the extra ones only while the number is unseen.
+      if (extra.includes(path) && (!wanted || phoneSeen)) break;
       if (!(await site.may(path))) continue;
       const page = await site.read(path);
       read += 1;
       if (page && path === '/') summary = siteSummary(page.text, page.url);
       if (page && wanted && !phoneSeen && phonesIn(page.text).has(wanted)) phoneSeen = true;
+      if (page && typeof judge === 'function' && !judged) { try { judged = judge(page.text) || null; } catch { judged = null; } }
       const best = page ? roleAddresses(page.text, host)[0] : null;
       if (best && !email) { email = best; sourceUrl = page.url; }
-      if (email && (!wanted || phoneSeen)) break;
+      // Done once the address is found and the agency confirmed: by its number when one was given, else by the judge when asked.
+      if (email && (wanted ? phoneSeen : typeof judge !== 'function' || Boolean(judged))) break;
     }
-    const checked = wanted ? { phoneSeen } : {};
+    const checked = { ...(wanted ? { phoneSeen } : {}), ...(judged ? { judged } : {}), ...(site.movedTo() ? { movedTo: site.movedTo() } : {}) };
     if (email) return { email, sourceUrl, ...(summary ? { site: summary } : {}), ...checked };
     return { email: null, reason: read === 0 ? 'robots' : 'none', ...(summary ? { site: summary } : {}), ...checked };
   }

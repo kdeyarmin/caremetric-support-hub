@@ -45,12 +45,34 @@ function PolicyEditor({policy,onSave}:{policy:GrowthPolicy;onSave:(op:string,dat
  <p>Model-written messages always need individual review. Changes invalidate older drafts.</p>
  <button className="button">Save policy</button></form></details>;
 }
+/**
+ * The sites a web search suggested for an agency it did not find. The owner may use one (owner decision 2026-11-24): the agency joins the
+ * pipeline as if the site had been confirmed, and its public address is found and checked as usual before any email.
+ */
+function SuggestedSites({ccn,name,sites,canUse,onDone}:{ccn:string;name:string;sites:string[];canUse:boolean;onDone:(message:string)=>void}) {
+ const [pending,setPending]=useState(''),[busy,setBusy]=useState(false);
+ const use=async(domain:string)=>{
+  setBusy(true);
+  try {
+   const answer=await growthMutation('rosterUseSite',{ccn,domain}) as {graduated?:boolean}|null;
+   onDone(answer?.graduated?`${name} now uses ${domain} and is in the pipeline.`:`${name} was found meanwhile; nothing changed.`);
+  } catch(e) { onDone(e instanceof Error?e.message:'The site could not be used.'); }
+  finally { setBusy(false); setPending(''); }
+ };
+ return <><br/><small>Suggested by a web search, not confirmed (never written to): {sites.join(', ')}</small>
+  {canUse&&!pending&&sites.map(domain=><button key={domain} type="button" className="button" disabled={busy} onClick={()=>setPending(domain)} aria-label={`Use ${domain} as ${name}'s website`}>Use {domain}</button>)}
+  {canUse&&pending&&<><br/><small>Use {pending} as {name}'s website? Only if you have checked it is theirs.</small>
+   <button type="button" className="button button-primary" disabled={busy} onClick={()=>{void use(pending);}}>Yes, use {pending}</button>
+   <button type="button" className="button" disabled={busy} onClick={()=>setPending('')}>Cancel</button></>}</>;
+}
 const rosterStatus:Record<string,string>={new:'Waiting',resolving:'Looking up',unresolved:'Not found yet',excluded:'Excluded',graduated:'In the pipeline'};
 const rosterReason:Record<string,string>={no_site:'no website matched',not_confirmed:'website not confirmed as theirs',retry:'search unavailable; retrying',shared_host:'website shared with other agencies',closed:'closed in the CMS roster',invalid_site:'website refused'};
 /** The Medicare roster from Intel's feed (Settings → Customer growth): where the read is, and the best-ranked agencies. */
 function RosterPanel({revision}:{revision:number}) {
  const [entry,setEntry]=useState<{revision:number;offset:number;data:z.infer<typeof rosterSchema>}|null>(null),[failure,setFailure]=useState(''),[offset,setOffset]=useState(0);
- useEffect(()=>{const c=new AbortController();void growthPost('roster',{offset},rosterSchema,c.signal).then(data=>{if(!c.signal.aborted){setEntry({revision,offset,data});setFailure('');}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'The Medicare roster could not be loaded.');});return()=>c.abort();},[revision,offset]);
+ // Reloaded after the owner uses a suggested site; `notice` says what happened to that choice.
+ const [reload,setReload]=useState(0),[notice,setNotice]=useState('');
+ useEffect(()=>{const c=new AbortController();void growthPost('roster',{offset},rosterSchema,c.signal).then(data=>{if(!c.signal.aborted){setEntry({revision,offset,data});setFailure('');}}).catch(e=>{if(!c.signal.aborted)setFailure(e instanceof Error?e.message:'The Medicare roster could not be loaded.');});return()=>c.abort();},[revision,offset,reload]);
  const data=entry?.data;
  if(failure)return <section className="panel"><h2>Medicare roster</h2><p>{failure}</p></section>;
  if(!data)return <section className="panel"><h2>Medicare roster</h2><p role="status">Loading the Medicare roster…</p></section>;
@@ -59,8 +81,9 @@ function RosterPanel({revision}:{revision:number}) {
  return <section className="panel" aria-labelledby="growth-roster-title"><h2 id="growth-roster-title">Medicare roster · {data.total} agencies</h2>
   <p>Every Medicare-certified home health agency and hospice in {data.services.states.length?data.services.states.join(', '):'your chosen states'}, from Intel's marketing feed. The Marketing Manager looks up the best-ranked ones' own websites, up to {data.services.daily} a day, and adds those it confirms to the pipeline below.</p>
   {missing.length>0&&<p role="status">To start: {missing.join('; ')}.</p>}
+  {notice&&<p role="status">{notice}</p>}
   <p>Roster {data.sync.period??'not read yet'}{data.sync.syncedAt?` · read ${new Date(data.sync.syncedAt).toLocaleDateString()}`:''}{data.sync.period&&!data.sync.complete?' · reading':''} · {Object.entries(rosterStatus).map(([key,label])=>`${label}: ${data.counts[key]??0}`).join(' · ')}</p>
-  {data.items.length>0&&<table><thead><tr><th>Agency</th><th>Place</th><th>Rank</th><th>Status</th><th>Website</th></tr></thead><tbody>{data.items.map(t=><tr key={t.ccn}><td>{t.name}<br/><small>{t.setting==='hospice'?'Hospice':'Home health'} · CCN {t.ccn}</small></td><td>{[t.city,t.state].filter(Boolean).join(', ')}</td><td>{t.rank}{t.reasons.length>0&&<><br/><small>{t.reasons.join('; ')}</small></>}</td><td>{rosterStatus[t.status]??t.status}{t.reason&&<><br/><small>{rosterReason[t.reason]??t.reason}{t.resolveAfter?` · again ${new Date(t.resolveAfter).toLocaleDateString()}`:''}</small></>}</td><td>{t.domain??''}{t.confirmation&&<><br/><small>confirmed by {t.confirmation==='phone'?'its CMS telephone number':'its name and place'}</small></>}{!t.domain&&t.suggested.length>0&&<><br/><small>Suggested by a web search, not confirmed (never written to): {t.suggested.join(', ')}</small></>}{!t.domain&&t.siteSearchedAt&&<><br/><small>Searched the web {new Date(t.siteSearchedAt).toLocaleDateString()}</small></>}</td></tr>)}</tbody></table>}
+  {data.items.length>0&&<table><thead><tr><th>Agency</th><th>Place</th><th>Rank</th><th>Status</th><th>Website</th></tr></thead><tbody>{data.items.map(t=><tr key={t.ccn}><td>{t.name}<br/><small>{t.setting==='hospice'?'Hospice':'Home health'} · CCN {t.ccn}</small></td><td>{[t.city,t.state].filter(Boolean).join(', ')}</td><td>{t.rank}{t.reasons.length>0&&<><br/><small>{t.reasons.join('; ')}</small></>}</td><td>{rosterStatus[t.status]??t.status}{t.reason&&<><br/><small>{rosterReason[t.reason]??t.reason}{t.resolveAfter?` · again ${new Date(t.resolveAfter).toLocaleDateString()}`:''}</small></>}</td><td>{t.domain??''}{t.confirmation&&<><br/><small>confirmed by {t.confirmation==='phone'?'its CMS telephone number':t.confirmation==='owner'?'you':'its name and place'}</small></>}{!t.domain&&t.suggested.length>0&&<SuggestedSites ccn={t.ccn} name={t.name} sites={t.suggested} canUse={data.services.useSite&&t.status==='unresolved'} onDone={message=>{setNotice(message);setReload(r=>r+1);}}/>}{!t.domain&&t.siteSearchedAt&&<><br/><small>Searched the web {new Date(t.siteSearchedAt).toLocaleDateString()}</small></>}</td></tr>)}</tbody></table>}
   {data.total>50&&<><button disabled={!offset} onClick={()=>setOffset(Math.max(0,offset-50))}>Previous agencies</button><button disabled={offset+50>=data.total} onClick={()=>setOffset(offset+50)}>Next agencies</button></>}
   {data.services.companyList&&data.total>0&&<p><button className="button" onClick={()=>{void growthPost('rosterCompanies',{},companiesSchema).then(answer=>{
    const url=URL.createObjectURL(new Blob([companyListCsv(answer.companies)],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='caremetric-roster-companies.csv';link.click();URL.revokeObjectURL(url);
