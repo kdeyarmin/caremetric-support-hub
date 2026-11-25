@@ -66,7 +66,7 @@ Never add the agency's name, its results, any number or years, or a superlative.
 | Enterprise | Custom | Annual, from about $3,500 per month | Larger footprints and other care settings by agreement |
 
 - 30-day free trial, one county, 3 marketer seats and 1 manager seat. No credit card is needed to start it (owner decision 2026-11-23). A card added in Billing before it ends keeps the plan chosen at sign-up, which then bills automatically unless canceled; without a card the trial simply ends.
-- Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service, applied automatically. Extra seats,
+- Founders Sale: 75% off eligible subscription charges for the first 12 months of paid service, applied automatically. Extra seats,
   branches, states, taxes and custom contracts are excluded.
 - Free onboarding on every plan. Annual billing saves about 17%.
 
@@ -306,7 +306,7 @@ product or a feature. The feature is the reason to believe in the primary text. 
 | 3 | Your best marketer quits. Then what? | Keep every account, contact and visit note in one shared book, and hand the whole book to a teammate in one step. |
 | 4 | Stop writing visit notes at midnight. | After each visit, type what happened. On Growth and Pro, the AI drafts the note and next step, and nothing saves until you check it. |
 | 5 | The hospital asks what you have done lately. | Hand each one a one-page quarterly packet: the referrals it sent, how fast your team answered, and your public quality scores. |
-| Offer (retargeting) | The price is on the website. | Eligible plans get 50% off subscription charges for the first 12 months of paid service, applied automatically. |
+| Offer (retargeting) | The price is on the website. | Eligible plans get 75% off subscription charges for the first 12 months of paid service, applied automatically. |
 
 - **The founder's story** goes in the primary text, never the headline: "CareMetric Intel was custom built by someone who uses it every
   day."

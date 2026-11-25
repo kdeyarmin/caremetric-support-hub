@@ -715,7 +715,7 @@ it('lays a marketing email to an Intel agency out in Intel\'s look, with what th
  expect(second.html).toContain('>FROM YOUR MARKET REPORT TO A PLAN</p>');
  for(const step of weekSteps){expect(second.html).toContain(step.tag.toUpperCase());expect(second.html).toContain(escaped(step.title));}
  expect(second.html).toContain('>FOUNDERS SALE</p>');
- expect(second.html).toContain('50% off your first 12 months');
+ expect(second.html).toContain('75% off your first 12 months');
  expect(anchorOf(second.html,trialOf(2))).toBe('Start your free trial →');
  expect(anchorOf(second.html,link.url)).toBe('Open your market report (PDF)');
  expect(count(second.html,'Dr. Kevin C. Deyarmin')).toBe(1);

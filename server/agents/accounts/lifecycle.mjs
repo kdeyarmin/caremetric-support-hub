@@ -253,7 +253,7 @@ export function planEmails(accounts, now = new Date(), { save = false, trialPath
 export const cardTermsWords = 'Add a card in Billing before the trial ends to keep your plan; it then bills automatically after the trial unless you cancel. Without a card, the trial simply ends.';
 
 /** The Founders Sale as the trial check-in states it: the offer's exact terms (billing applies it automatically at conversion), no price. */
-export const foundersWords = productName => `If you decide to keep ${productName}, the Founders Sale applies on its own: eligible subscription charges are 50% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.`;
+export const foundersWords = productName => `If you decide to keep ${productName}, the Founders Sale applies on its own: eligible subscription charges are 75% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.`;
 
 /**
  * One customer email, from the facts kept on its action: the subject, the inbox preview, the headline, the message blocks and the

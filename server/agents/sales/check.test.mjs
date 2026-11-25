@@ -9,7 +9,7 @@ describe('checking a sales reply', () => {
   it('accepts a fact-sheet answer with the trial page, a help-center guide and the Founders Sale, and adds the greeting', () => {
     const reply = 'CareBase Core is $199 per facility per month, with unlimited residents and staff, so two homes would be $398 a month.';
     expect(ok(reply)).toMatchObject({ ok: false, reason: 'unlisted_price' });
-    const good = 'CareBase Core is $199 per facility per month, with unlimited residents and staff. Under the Founders Sale, eligible subscription charges are 50% off for the first 12 months of paid service.\n\nYou can start a 30-day free trial here:\nhttps://cmcarebase.com/signup\n\nHow to assign annual training:\nhttps://help.caremetric.ai/help/articles/assign-annual-training';
+    const good = 'CareBase Core is $199 per facility per month, with unlimited residents and staff. Under the Founders Sale, eligible subscription charges are 75% off for the first 12 months of paid service.\n\nYou can start a 30-day free trial here:\nhttps://cmcarebase.com/signup\n\nHow to assign annual training:\nhttps://help.caremetric.ai/help/articles/assign-annual-training';
     // The trial page gets the Sales Executive's campaign tags; the help-center guide is never tagged.
     const tagged = good.replace('https://cmcarebase.com/signup\n', 'https://cmcarebase.com/signup?utm_source=caremetric&utm_medium=email&utm_campaign=sales-carebase\n');
     expect(ok(good)).toEqual({ ok: true, reply: tagged, body: `Hello,\n\n${tagged}` });

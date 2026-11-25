@@ -356,7 +356,7 @@ function PromotionSheet({ client, data, onClose, onSaved }: { client: BillingCli
   return <Sheet title="New promotion code" onClose={onClose} busy={action.busy}><form className="billing-form" onSubmit={event => void submit(event)}>
     <div className="billing-form-grid">
       <label>Coupon<select required value={coupon} onChange={event => setCoupon(event.target.value)}>{valid.map(item => <option key={item.id} value={item.id}>{item.name || item.id} · {couponLabel(item)}{item.app ? ` · ${appLabel(item.app)}` : ''}</option>)}</select><small>To limit a code to an application or product, choose a coupon limited that way.</small></label>
-      <label>Code<input required pattern="[A-Za-z0-9\-]{3,50}" value={code} onChange={event => setCode(event.target.value.toUpperCase())} placeholder="FOUNDERS50" /></label>
+      <label>Code<input required pattern="[A-Za-z0-9\-]{3,50}" value={code} onChange={event => setCode(event.target.value.toUpperCase())} placeholder="FOUNDERS75" /></label>
       <label>Maximum redemptions <small>optional</small><input type="number" min={1} value={max} onChange={event => setMax(event.target.value)} /></label>
       <label>Expires <small>optional</small><input type="date" min={dayAfter(1)} value={expires} onChange={event => setExpires(event.target.value)} /></label>
       <label>Minimum order (USD) <small>optional</small><input inputMode="decimal" value={minimum} onChange={event => setMinimum(event.target.value)} /></label>

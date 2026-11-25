@@ -2,7 +2,7 @@ import { HttpError } from './sms-auth.mjs';
 import { foundersCatalog } from './founders-catalog.mjs';
 import { normalizers, withAllSubscriptionItems } from './stripe.mjs';
 
-export const FOUNDERS_COUPON = 'caremetric_founders_sale_50_12m_20261108';
+export const FOUNDERS_COUPON = 'caremetric_founders_sale_75_12m_20261124';
 export const FOUNDERS_OFFER = 'founders_sale_20261108';
 const ref = value => typeof value === 'string' ? value : value?.id;
 const discounts = object => object.discounts ?? (object.discount ? [object.discount] : []);
@@ -64,9 +64,9 @@ export const foundersMetadata = { hub_founders_sale: FOUNDERS_OFFER, hub_founder
 
 export function foundersAmounts(lines) {
   const standard = lines.reduce((sum, line) => sum + (foundersPrice(line.price)?.amount ?? line.amount) * line.quantity, 0);
-  const saving = lines.reduce((sum, line) => sum + Math.round((foundersPrice(line.price)?.amount ?? 0) * line.quantity / 2), 0);
+  const saving = lines.reduce((sum, line) => sum + Math.round((foundersPrice(line.price)?.amount ?? 0) * line.quantity * 3 / 4), 0);
   return { standard_recurring_subtotal: standard, recurring_subtotal: standard - saving,
-    founders_sale: { percent_off: 50, months: 12, savings: saving } };
+    founders_sale: { percent_off: 75, months: 12, savings: saving } };
 }
 
 export async function verifyFoundersCoupon(live) {
@@ -74,7 +74,7 @@ export async function verifyFoundersCoupon(live) {
   // Read the scope explicitly so a valid offer is not mistaken for an unscoped coupon.
   const coupon = await live.get(`/v1/coupons/${FOUNDERS_COUPON}`, { expand: ['applies_to'] });
   const expected = [...new Set(Object.values(foundersCatalog).map(price => price.product))].sort();
-  if (!coupon.valid || coupon.percent_off !== 50 || coupon.duration !== 'repeating' || coupon.duration_in_months !== 12
+  if (!coupon.valid || coupon.percent_off !== 75 || coupon.duration !== 'repeating' || coupon.duration_in_months !== 12
     || JSON.stringify([...(coupon.applies_to?.products ?? [])].sort()) !== JSON.stringify(expected)) {
     throw new HttpError(503, 'The Founders Sale could not be verified. Please try again before paying.');
   }

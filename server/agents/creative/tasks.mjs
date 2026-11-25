@@ -183,7 +183,7 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       const focus = focusFor(first.product, textOf(items), focusTurn, focused);
       if (focus) { focused.add(focus.title); focusTurn += 1; }
       const brief = {
-        product: first.product, goal: goals[pillar], audience: audienceFor(first.product, segment), offerCode: pillar === 'offer' && offerFor('FOUNDERS50')?.products.includes(first.product) ? 'FOUNDERS50' : null,
+        product: first.product, goal: goals[pillar], audience: audienceFor(first.product, segment), offerCode: pillar === 'offer' && offerFor('FOUNDERS75')?.products.includes(first.product) ? 'FOUNDERS75' : null,
         platforms: platforms.length ? platforms : ['meta', 'linkedin'], formats: ['capability', 'offer'].includes(pillar) ? ['static', 'video'] : ['static'], videoLengths: ['15s'],
         angle: `${focus ? `Feature focus: ${focus.title} (${focus.area}). ` : ''}From the ${first.source === 'social.plan' ? `week's ${pillar} posts` : 'approved content brief'}: ${items.map(item => item.text).join(' / ')}`.slice(0, 500),
         source: first.source === 'social.plan' ? 'social.plan' : 'growth.plan', planRef: first.ref, requestKey: `plan:${key}`,

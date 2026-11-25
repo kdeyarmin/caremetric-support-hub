@@ -68,8 +68,8 @@ purchases for those apps are disabled.
   published until the owner approves it on **AI team** (`/admin/team`); see
   [the AI team](docs/AI_TEAM.md#the-content-marketer).
 - **Pricing research and Founders Sale** ([comparison and offer terms](docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md)):
-  official-source competitor pricing, recommended models, and the live **FOUNDERS50** offer for eligible CareBase/Train
-  and Intel subscriptions: 50% off the first 12 months of paid service, applied through CareMetric billing activation.
+  official-source competitor pricing, recommended models, and the live **FOUNDERS75** offer for eligible CareBase/Train
+  and Intel subscriptions: 75% off the first 12 months of paid service, applied through CareMetric billing activation.
 
 Directories and application records come from each application's administration
 connection. Subscriptions and invoices come from the Hub's own billing (the
