@@ -22,7 +22,12 @@ The channel strip at the top of the inbox shows which channels are live.
 - **Email:** `support+<app>@` routes to that application, for example
   `support+pennfit@caremetric.ai` (Breathe) or `support+advisors@caremetric.ai`.
   Repository names are accepted: PennTrain → CareBase, PennFit → Breathe,
-  CareMetric-Pennsync → PennSync, Intel → CareMetric Intel.
+  CareMetric-Pennsync → PennSync, Intel → CareMetric Intel. An email to the
+  plain support address takes the one product its sender already
+  uses or asked about: their billing account's subscriptions, then their
+  website leads, then the roster prospect their business is (a reply to a cold
+  email). A sender with two products, or none, leaves it unset
+  (`private.communication_sender_product`, `20261124151000_first_replies_concierge.sql`).
 - **Chat:** the application the visitor's Help page was opened for.
 - **Phone line:** the application the AI assistant recorded.
 - **Advisors form:** Healthcare Advisors.

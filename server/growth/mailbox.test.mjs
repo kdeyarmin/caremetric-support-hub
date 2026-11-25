@@ -34,15 +34,18 @@ describe('names and address shapes', () => {
   });
 });
 
-// A mail server on the loopback interface. `rcpt` answers each RCPT TO by its address; every command is recorded.
+// A mail server on the loopback interface. `rcpt` answers each RCPT TO by its address; every command is recorded. `silentTls`: after
+// answering STARTTLS it reads nothing more, like a peer that never completes the handshake (the client's TLS hello is binary, and its
+// random bytes can hold a CRLF that would otherwise be answered as a command and fail the handshake at once).
 const servers = [];
-async function mailServer({ rcpt = () => '550 5.1.1 No such user', greeting = '220 mx.valleyhospice.org ESMTP', mailFrom = '250 OK', ehlo = '250-mx.valleyhospice.org\r\n250 SIZE 1000', starttls = '220 2.0.0 Ready to start TLS' } = {}) {
+async function mailServer({ rcpt = () => '550 5.1.1 No such user', greeting = '220 mx.valleyhospice.org ESMTP', mailFrom = '250 OK', ehlo = '250-mx.valleyhospice.org\r\n250 SIZE 1000', starttls = '220 2.0.0 Ready to start TLS', silentTls = false } = {}) {
   const commands = [];
   const server = createServer(socket => {
     socket.setEncoding('latin1');
     socket.write(`${greeting}\r\n`);
-    let buffer = '';
+    let buffer = '', silent = false;
     socket.on('data', chunk => {
+      if (silent) return;
       buffer += chunk;
       let end;
       while ((end = buffer.indexOf('\r\n')) !== -1) {
@@ -53,6 +56,7 @@ async function mailServer({ rcpt = () => '550 5.1.1 No such user', greeting = '2
         const answer = verb === 'EHLO' ? ehlo : verb === 'MAIL' ? mailFrom : verb === 'RCPT' ? rcpt(/<([^>]*)>/.exec(line)[1]) : verb === 'QUIT' ? '221 Bye' : verb === 'STARTTLS' ? starttls : '250 OK';
         socket.write(`${answer}\r\n`);
         if (verb === 'QUIT') socket.end();
+        if (verb === 'STARTTLS' && silentTls) { silent = true; buffer = ''; break; }
       }
     });
     socket.on('error', () => {});
@@ -84,7 +88,7 @@ describe('asking the business\'s mail server', () => {
     const wants = await mailServer({ mailFrom: '530 5.7.0 Must issue a STARTTLS command first' });
     expect(await checker(wants.port).check('valleyhospice.org', guesses)).toEqual({ result: 'unknown', reason: 'tls_required' });
     // Aborting while the TLS handshake is waiting on a silent peer rejects with the abort instead of hanging or reporting tls_failed.
-    const silentTls = await mailServer({ ehlo: '250-mx.valleyhospice.org\r\n250 STARTTLS' });
+    const silentTls = await mailServer({ ehlo: '250-mx.valleyhospice.org\r\n250 STARTTLS', silentTls: true });
     const controller = new AbortController();
     const pending = checker(silentTls.port).check('valleyhospice.org', guesses, { signal: controller.signal });
     setTimeout(() => controller.abort(new Error('task_cancelled')), 30);

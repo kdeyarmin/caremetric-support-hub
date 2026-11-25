@@ -10,6 +10,7 @@ import { replyExecutor } from './executor.mjs';
 import { sweepHandler } from './sweep.mjs';
 import { triageHandler } from './triage.mjs';
 import { salesDeclared } from '../sales/index.mjs';
+import { hasFirstReplies } from '../../growth/first-replies.mjs';
 import { live } from '../../live.mjs';
 
 export const conciergeFeature = 'platform.agents.concierge.v1';
@@ -43,7 +44,9 @@ export function conciergeHandlers({ store, notifier, features = null, log, model
     'concierge.communication': triageHandler({ store, notifier, log, drafting, answers: has(features, answersFeature),
       sales: salesDeclared(features) && typeof store.salesHandoff === 'function',
       // The owner's switch (Settings → AI team → "Send the support acknowledgment on its own") is read for each message.
-      truth: has(features, supportTruthFeature), acknowledge: () => has(features, supportTruthFeature) && live(autoAcknowledge) === true }),
+      truth: has(features, supportTruthFeature), acknowledge: () => has(features, supportTruthFeature) && live(autoAcknowledge) === true,
+      // The product a message with none is about: the sender's, from the snapshot, or the one it names (platform.agents.first-replies.v1).
+      firstReplies: hasFirstReplies(features) }),
   };
 }
 

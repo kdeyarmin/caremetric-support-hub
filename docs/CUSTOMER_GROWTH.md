@@ -616,6 +616,12 @@ first, a third of them on a Sunday afternoon. Each switch below is under Setting
   opening (`private.growth_next_send_at`). Replies and customer emails are never held. Both empty, or "until" not after "from": any time,
   as before. The hours are Eastern for every agency unless the next setting is on: with the roster beyond the East Coast, 11 to 16
   Eastern keeps every email between 8 am and 4 pm for agencies from New York to California (Alaska and Hawaii are earlier).
+- **Spread the day's cold emails over the send hours** (`growth.send_spread`, off; 20261124150000_first_replies.sql). The Nov 24
+  measurement found all ten of each day's emails leaving at 8:00, the moment the hours opened. With it on, the send claim refuses a cold
+  email (`paced`) until the day's last one (the Eastern day, as the cap counts it) is the send hours divided by "Most cold emails a day"
+  old (`private.growth_cold_pace_at`: 8 to 16 and 10 a day, one every 48 minutes), and the email waits for that moment, best first under
+  "Send to the best prospects first". Needs both send hours; replies and customer emails are never held. Turn it on only once the
+  release that knows `paced` is live: an older server takes it for an answer and never sends the email.
 - **Send cold email in each agency's own time zone** (`growth.send_local_time`, off). With it on, the same hours are read where the agency
   is (20261118130000_growth_local_send_time.sql), so 8 to 16 reaches every agency between 8 am and 4 pm its own time, on its own
   Monday to Friday. The zone comes from the state of the agency's Medicare roster record (`private.growth_roster_targets`, linked when the
@@ -779,6 +785,21 @@ emails a day" is under 2%. Two settings, both off until you save them (`20261116
   afresh (audited as `growth.cold_email_resumed`). A trip holds until you resume or change the number: the bounces behind it leaving
   the seven days never start cold email again by themselves (`private.growth_send_guard.tripped_at`). Saving the number also starts them afresh, so bounces from before you switched the
   guard on never trip it. 5 suits a small volume.
+
+Since 2026-11-24 ([measurement](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md#november-24-measurement): every cold email that bounced
+that week, 4 of 55, went to a shared address its mail server never confirmed, 4 of 26 such addresses; none of the 21 confirmed
+addresses bounced; `20261124150000_first_replies.sql`):
+
+- **Strict holds a shared address until it is confirmed.** A role address (info@ and the like, from the Medicare record or the
+  agency's website) is written to only once its mail server or the verification service confirmed it. One that can no longer be
+  confirmed (a catch-all domain, which accepts any address, or no clear answer after three tries) goes to your review: its waiting
+  emails are cancelled, the business's never-emailed opportunities are free for another contact, and the people finder looks there
+  again for a named person, as for an address that does not exist. A named person's address keeps the rule above. Check and Off are
+  unchanged. Shared addresses whose three tries ended while the service refused every check (from November 18) were given one more.
+- **A refusing verification service is reported.** ZeroBounce answers 200 with an error when the account has no credits left or the
+  key is wrong; it answered nothing after November 17 while the Hub reserved 22 to 38 checks a day. Now a refusal stops the Hub
+  asking it for the rest of the Eastern day, the owner is told once a day ("The address verification service is refusing checks"),
+  and `growth.verify` counts what the service said (`service` in its result).
 
 The send claim (`private.growth_claim_message`) is unchanged and still decides every send; the checks above only make an email wait.
 Growth → Send guard shows the mode, the guard's counts and how many addresses were confirmed, accept anything, do not exist, have not

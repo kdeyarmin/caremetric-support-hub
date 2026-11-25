@@ -51,11 +51,11 @@ describe('ZeroBounce', () => {
 
 describe('the mail server first, then the verification service', () => {
   const guesses = ['jane.doe@valleyhospice.org', 'jdoe@valleyhospice.org', 'jane@valleyhospice.org', 'janedoe@valleyhospice.org'];
-  function setup({ server = { result: 'unknown', reason: 'blocked' }, answers = [], on = true, declared = true, reserve = true, configured = true, available = true } = {}) {
+  function setup({ server = { result: 'unknown', reason: 'blocked' }, answers = [], on = true, declared = true, reserve = true, configured = true, available = true, clock } = {}) {
     const mailbox = { configured: true, available: () => available, state: () => 'reachable', check: vi.fn(async () => server) };
     const service = { configured, check: vi.fn(async () => answers.shift() ?? { result: 'unknown' }) };
     const reserved = vi.fn(async () => (typeof reserve === 'function' ? reserve() : reserve));
-    const checker = withAddressService({ mailbox, service, enabled: () => on, declared: () => declared, reserve: reserved });
+    const checker = withAddressService({ mailbox, service, enabled: () => on, declared: () => declared, reserve: reserved, ...(clock ? { clock } : {}) });
     return { mailbox, service, reserved, checker };
   }
 
@@ -97,6 +97,32 @@ describe('the mail server first, then the verification service', () => {
       expect(service.check).not.toHaveBeenCalled();
       expect(reserved).not.toHaveBeenCalled();
     }
+  });
+
+  it('stops asking a service that refused for the rest of the Eastern day, spending no reserved check, and says so', async () => {
+    let now = Date.parse('2026-11-24T15:00:00Z');
+    const refusing = setup({ clock: () => now });
+    refusing.service.check.mockRejectedValue(Object.assign(new Error('x'), { code: 'service_refused' }));
+    expect(refusing.checker.serviceRefusedOn()).toBeNull();
+    expect(await refusing.checker.check('valleyhospice.org', guesses)).toEqual({ result: 'unknown', reason: 'blocked', service: 'service_refused' });
+    expect(refusing.checker.serviceRefusedOn()).toBe('2026-11-24');
+    expect(await refusing.checker.check('valleyhospice.org', guesses)).toEqual({ result: 'unknown', reason: 'blocked', service: 'refused_today' });
+    expect(refusing.service.check).toHaveBeenCalledTimes(1);
+    expect(refusing.reserved).toHaveBeenCalledTimes(1);
+    // 11:30 pm Eastern is still the same day; the next Eastern day asks again.
+    now = Date.parse('2026-11-25T04:30:00Z');
+    await refusing.checker.check('valleyhospice.org', guesses);
+    expect(refusing.service.check).toHaveBeenCalledTimes(1);
+    now = Date.parse('2026-11-25T05:30:00Z');
+    await refusing.checker.check('valleyhospice.org', guesses);
+    expect(refusing.service.check).toHaveBeenCalledTimes(2);
+    // A service that was only unavailable is asked again at once.
+    const flaky = setup({ clock: () => now });
+    flaky.service.check.mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'service_unavailable', transient: true }));
+    await flaky.checker.check('valleyhospice.org', guesses);
+    await flaky.checker.check('valleyhospice.org', guesses);
+    expect(flaky.service.check).toHaveBeenCalledTimes(2);
+    expect(flaky.checker.serviceRefusedOn()).toBeNull();
   });
 
   it('never asks the service about an address on another domain, and still answers while the mail servers rest', async () => {
