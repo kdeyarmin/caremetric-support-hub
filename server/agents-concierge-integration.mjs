@@ -146,7 +146,9 @@ try {
   const rich = await conversation({ messages: [{ ago: 30, body: 'First question', direction: 'inbound' }, { ago: 28, direction: 'note', body: secrets.note }, { ago: 25, direction: 'outbound', body: 'Our answer', requestKey: randomUUID() }, { ago: 5, body: `${secrets.body} ${'x'.repeat(300)}` }] });
   const full = await snapshot(rich.id, null, 10, 200);
   // `account` (20261117240000_support_truth.sql): whether the sender's billing account is trialing or paying, as flags only.
-  assert.deepEqual(Object.keys(full).sort(), ['account', 'answered', 'canEmail', 'canText', 'channel', 'createdAt', 'headMessageId', 'id', 'inboundCount', 'inquiryType', 'latestInboundId', 'messages', 'outboundCount', 'ownReplyDelivery', 'productSlug', 'reference', 'sender', 'sourceSystem', 'status', 'subject', 'updatedAt']);
+  // `senderProduct` (20261124151000_first_replies_concierge.sql): the sender's one product as a slug, only for a conversation with none.
+  assert.deepEqual(Object.keys(full).sort(), ['account', 'answered', 'canEmail', 'canText', 'channel', 'createdAt', 'headMessageId', 'id', 'inboundCount', 'inquiryType', 'latestInboundId', 'messages', 'outboundCount', 'ownReplyDelivery', 'productSlug', 'reference', 'sender', 'senderProduct', 'sourceSystem', 'status', 'subject', 'updatedAt']);
+  assert.equal(full.senderProduct, null, 'a conversation with its own product reads no other');
   const serialized = JSON.stringify(full);
   for (const secret of [secrets.name, secrets.email, secrets.phone, secrets.organization, secrets.note]) assert.ok(!serialized.includes(secret), `the snapshot never carries ${secret.slice(0, 8)}…`);
   assert.deepEqual([full.canEmail, full.canText, full.productSlug, full.subject, full.answered], [true, true, 'carebase', 'A question', false]);

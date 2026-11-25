@@ -10,7 +10,7 @@ const guides = [
 
 describe('the Concierge prompt', () => {
   it('is a constant with a version, free of anything about a request', () => {
-    expect(promptVersion).toBe('concierge.3');
+    expect(promptVersion).toBe('concierge.4');
     expect(promptVersion).toMatch(/^[a-z0-9.-]{1,20}$/);
     expect(typeof systemPrompt).toBe('string');
     expect(systemPrompt).not.toMatch(/\bCM-\d|\$\{|undefined|\bnull\b/);
@@ -65,5 +65,22 @@ describe('the Concierge prompt', () => {
     expect(message).toContain('<guide id="g1" title="Export the &quot;staff&quot; roster">\nDownload a roster.\n\nOpen Reports &lt;then&gt; select Export &amp; choose a month.\n</guide>');
     expect(message).toContain('<guide id="g2" title="Plans">\nPlus costs $49.\n</guide>');
     expect(message.match(/<\/?guides?\b/g)).toHaveLength(2 * 2 + 2);
+  });
+
+  it('says how the product was known when CareMetric worked it out, and which products each guide covers (the Nov 24 follow-up)', () => {
+    const covered = [{ title: 'Export', summary: '', body: 'Open Reports.', products: ['carebase', 'caremetric-intel'] }];
+    const fromSender = buildUserMessage({ channel: 'email', productSlug: 'caremetric-intel', productSource: 'sender', inboundCount: 1, text: 'Hello there', guides: covered });
+    expect(fromSender).toContain("product: caremetric-intel (CareMetric Intel, worked out from the sender's account or earlier contact with CareMetric)");
+    expect(fromSender).toContain('<guide id="g1" title="Export" products="CareMetric CareBase, CareMetric Intel">');
+    const named = buildUserMessage({ channel: 'email', productSlug: 'carebase', productSource: 'mention', inboundCount: 1, text: 'Hello there', guides: [] });
+    expect(named).toContain('product: carebase (CareMetric CareBase, named in the message)');
+    // The conversation's own product reads as before, and so does a guide that names no product.
+    expect(buildUserMessage({ channel: 'email', productSlug: 'carebase', productSource: 'conversation', inboundCount: 1, text: 'Hi', guides })).toContain('product: carebase\n');
+    expect(buildUserMessage({ channel: 'email', productSlug: null, productSource: null, inboundCount: 1, text: 'Hi', guides })).toContain('<guide id="g2" title="Plans">');
+    // A product name is CareMetric's own text, escaped like a title.
+    expect(buildUserMessage({ channel: 'email', productSlug: null, inboundCount: 1, text: 'Hi', guides: [{ title: 'T', summary: '', body: 'B', products: ['x"><y'] }] }))
+      .toContain('products="x&quot;&gt;&lt;y"');
+    expect(systemPrompt).toContain('name the product your answer is about');
+    expect(systemPrompt).toContain('If the answer depends on a product you cannot tell, write no reply.');
   });
 });

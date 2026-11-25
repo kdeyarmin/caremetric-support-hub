@@ -984,3 +984,55 @@ describe('the support truth stage (team review 2026-11-17, stage 5)', () => {
     expect((await before.run()).result).toMatchObject({ outcome: 'skipped', reason: 'channel_off' });
   });
 });
+
+describe('a message that names no product (the Nov 24 follow-up, platform.agents.first-replies.v1)', () => {
+  // Every inbound email of the 60 days to November 24 arrived with no product: the Concierge now works out which one it is about.
+  const run = async ({ snapshot, firstReplies = true, guides = guideList } = {}) => {
+    const base = fixture({ snapshot });
+    const model = { configured: true, run: vi.fn(async () => done()) };
+    const library = { top: vi.fn(async () => guides) };
+    const handler = triageHandler({ store: base.store, notifier: base.notifier, drafting: { model, guides: library, followups: false }, truth: true, firstReplies, log: () => {} });
+    const outcome = await handler(taskOf(), { now });
+    return { ...base, model, library, outcome, user: model.run.mock.calls[0]?.[1]?.user ?? '' };
+  };
+  const noProduct = (body, overrides = {}) => snapshotOf(body, { productSlug: null, subject: 'A question', ...overrides });
+
+  it('drafts for the product the sender already uses, reading that product\'s guides and telling the model how it knows', async () => {
+    const harness = await run({ snapshot: noProduct(`How do I export the staff roster by month? ${canary}`, { senderProduct: 'caremetric-intel' }) });
+    expect(harness.library.top.mock.calls[0][1]).toEqual({ productSlug: 'caremetric-intel', anyProduct: true });
+    expect(harness.user).toContain("product: caremetric-intel (CareMetric Intel, worked out from the sender's account or earlier contact with CareMetric)");
+    expect(harness.outcome).toMatchObject({ status: 'awaiting_approval', result: { product: null, inferredProduct: 'caremetric-intel', productFrom: 'sender', reply: 'proposed', template: 'drafted', draft: 'drafted' } });
+    // The owner's alert names the conversation's own product (none), and nothing the customer wrote is kept.
+    expect(harness.sent[0].subject).toBe('New email: CM-1042');
+    expect(JSON.stringify([harness.sent, harness.outcome, harness.store.finishRun.mock.calls])).not.toContain(canary);
+  });
+
+  it('takes the one product the message names, and reads every product\'s guides when it names none', async () => {
+    const named = await run({ snapshot: noProduct('How do I export the staff roster by month in CareBase?') });
+    expect(named.library.top.mock.calls[0][1]).toEqual({ productSlug: 'carebase', anyProduct: true });
+    expect(named.user).toContain('product: carebase (CareMetric CareBase, named in the message)');
+    expect(named.outcome.result).toMatchObject({ inferredProduct: 'carebase', productFrom: 'mention', draft: 'drafted' });
+    const none = await run({ snapshot: noProduct('How do I export the staff roster by month?') });
+    expect(none.library.top.mock.calls[0][1]).toEqual({ productSlug: null, anyProduct: true });
+    expect(none.user).toContain('product: unknown');
+    expect(none.outcome.result).toMatchObject({ product: null, draft: 'drafted', template: 'drafted' });
+    expect(none.outcome.result).not.toHaveProperty('inferredProduct');
+  });
+
+  it('keeps the conversation\'s own product over the sender\'s, and changes nothing until the database declares the follow-up', async () => {
+    const own = await run({ snapshot: snapshotOf('How do I export the staff roster by month?', { senderProduct: 'caremetric-intel' }) });
+    expect(own.library.top.mock.calls[0][1]).toEqual({ productSlug: 'carebase', anyProduct: true });
+    expect(own.user).toContain('product: carebase\n');
+    expect(own.outcome.result).not.toHaveProperty('inferredProduct');
+    const before = await run({ snapshot: noProduct('How do I export the staff roster in CareBase?', { senderProduct: 'caremetric-intel' }), firstReplies: false });
+    expect(before.library.top.mock.calls[0][1]).toEqual({ productSlug: null, anyProduct: true });
+    expect(before.user).toContain('product: unknown');
+    expect(before.outcome.result).not.toHaveProperty('inferredProduct');
+  });
+
+  it('keeps an Advisors sender\'s message the owner\'s, as an Advisors conversation always was', async () => {
+    const harness = await run({ snapshot: noProduct('How do I export the staff roster by month?', { senderProduct: 'advisors' }) });
+    expect(harness.model.run).not.toHaveBeenCalled();
+    expect(harness.outcome.result).toMatchObject({ reply: 'owner_only', inferredProduct: 'advisors', productFrom: 'sender' });
+  });
+});
