@@ -184,7 +184,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
   async function sweep(task,{signal,now=()=>new Date()}={}) {
     await growth.store.maintenance?.();
     const started=clock(),spent=()=>clock()-started>=workBudgetMs;
-    const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0,reengaged=0,unreviewed=0;
+    const owner=task.kind==='growth.success'?'account_manager':'marketing_manager'; let inspected=0,planned=0,drafted=0,offset=0,total=1,assessed=0,undrafted=0,reengaged=0,unreviewed=0,heldReview=0;
     // Why drafts were not kept, by check (draft.mjs codes), so the run shows which rule throws good openings away.
     const rejected={};
     // First emails not drafted yet because they wait (an address not yet checked, the bounce guard, a brief), by reason.
@@ -267,7 +267,9 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           // feed at most every six hours, and none when the feed is off or does not answer.
           const releases=work.kind==='outreach'&&o.product==='caremetric-intel'&&Number(o.touches??0)===0&&!o.memory?.reengagedAt&&!o.memory?.lead
             ?await recentReleases(growth.roster?.feed,{signal}):[];
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,views,releases,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,views,releases,
+            offers:{oneFact:live(growth.offers?.oneFact)===true,oneOffer:live(growth.offers?.oneOffer)===true,bookingUrl:live(growth.offers?.bookingUrl)??null},
+            onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           const {review,...message}=draft;
@@ -282,6 +284,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
             throw error;
           }
           if(saved.status==='draft')await growth.store.propose(task.id,saved.id);drafted++;
+          if(message.arms?.hold_review==='critic')heldReview++;
           // A review that cannot be recorded never holds the email: it is counted, and the email goes on as proposed.
           if(review&&diagnosing&&saved?.id) {
             try {await growth.store.reviewRecord(saved.id,review);}
@@ -330,7 +333,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
     const written=drafted+quietFollowups+colleagueEmails;
     const count=(n,one,many)=>`${n} ${n===1?one:many}`;
     if(written && notifier)await notifier.send({severity:'info',subject:owner==='account_manager'?'Customer emails are ready on Growth':'Prospect emails are ready on Growth',
-      body:`${count(drafted+quietFollowups,'email','emails')} written${colleagueEmails?`, and ${count(colleagueEmails,'copy','copies')} for other people at the same organizations`:''}. Open Growth to approve ${written===1?'it':'them'}, unless you handed that kind of email over on the AI team page.`,
+      body:`${count(drafted+quietFollowups,'email','emails')} written${colleagueEmails?`, and ${count(colleagueEmails,'copy','copies')} for other people at the same organizations`:''}. Open Growth to approve ${written===1?'it':'them'}, unless you handed that kind of email over on the AI team page.${heldReview?` ${count(heldReview,'email','emails')} scored under 4 after a rewrite, so ${heldReview===1?'it waits':'they wait'} for you even when cold email is handed over.`:''}`,
       dedupeKey:`growth:${owner}:${growthDay(now())}`,agentKey:owner,taskId:task.id,attention:'decision'});
     return {result:{inspected,planned,drafted,...(undrafted?{undrafted}:{}),...(Object.keys(rejected).length?{rejected}:{}),...(Object.keys(held).length?{held}:{}),...(reengaged?{reengaged}:{}),...(unreviewed?{unreviewed}:{}),...(colleagueEmails?{colleagues:colleagueEmails}:{}),...(quietFollowups?{quietFollowups}:{}),...(contacts?.searched?{contacts}:{})}};
   }

@@ -43,12 +43,21 @@ const armNames = {
 };
 // Whether someone at the agency had opened its market report before its second email (views.mjs).
 armNames.viewed = { yes: 'second emails to agencies that had opened their market report', no: 'second emails to agencies that had not opened it' };
+// Why the first email said it was writing now (reason-now.mjs). Compared on report opens until replies exist.
+armNames.reason = {
+  trigger: 'first emails that named something that just happened at the agency',
+  record: 'first emails that named a recent Medicare certification or change of ownership',
+  payment: 'first emails that named a Medicare payment change',
+  crowded: 'first emails that named how many agencies are in the county',
+  release: 'first emails that named a new Medicare data release',
+  none: 'first emails with no dated reason',
+};
 // Which band of the send order an email went in (2026-11-17, "Send to the best prospects first", priority.mjs).
 armNames.band = { 1: 'follow-ups to agencies that opened their report', 2: 'first emails with a brief and a checked named person',
   3: 'first emails with a brief', 4: 'other emails' };
 // The first email's form is no longer compared (2026-11-17): every first email built around a market report is the report and nothing
 // else, so "short" against "standard" would set emails written under different instructions side by side.
-const armOrder = ['viewed', 'band', 'angle_by', 'critic', 'angle', 'subject', 'length'];
+const armOrder = ['viewed', 'band', 'angle_by', 'critic', 'reason', 'angle', 'subject', 'length'];
 const percent = (part, whole) => `${Math.round((100 * part) / whole)}%`;
 const replyRate = arm => arm.replied / arm.sent;
 

@@ -28,7 +28,7 @@
  * An email whose sections were edited after drafting no longer matches (`readCampaign` answers null) and is sent as a letter with its
  * words as written, so nothing an owner changed is replaced.
  */
-import { agencyCampaignBlocks, agencyCampaignText, firstWithoutTrial, isAgencyTrialUrl } from './agency-campaign.mjs';
+import { agencyCampaignBlocks, agencyCampaignText, emailAngles, firstWithoutTrial, isAgencyTrialUrl } from './agency-campaign.mjs';
 import { founder, products as facts } from '../agents/content/facts.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
 import { linkablePages, playbookFor } from './playbook.mjs';
@@ -170,12 +170,12 @@ export const campaignEyebrow = (touch, setting = 'agency') => campaignCopy(setti
  * a nursing home's sections never carry a report. Version 2 is an agency's (agency-campaign.mjs); version 3 the same, except that its first
  * email asks for one thing, the report, and carries no trial (the Nov 24 measurement).
  */
-export function campaignBlock(touch, { trialUrl, reportUrl = null, ownReport = false, setting = 'agency', version = 1 } = {}) {
+export function campaignBlock(touch, { trialUrl, reportUrl = null, ownReport = false, setting = 'agency', version = 1, angle = null } = {}) {
   const n = touchOf(touch);
   const kind = settingOf(setting);
   const agency = version >= 2 && hasReport(kind);
   if (!n || (!trialUrl && !(agency && firstWithoutTrial(n, version)))) return null;
-  if (agency) return agencyCampaignText(n, { trialUrl, reportUrl, ownReport, setting: kind, version });
+  if (agency) return agencyCampaignText(n, { trialUrl, reportUrl, ownReport, setting: kind, version, angle: emailAngles.includes(angle) ? angle : null });
   const copy = copies[kind];
   const reported = hasReport(kind);
   if (n === 1) {
@@ -250,8 +250,11 @@ export function readCampaign(body, { reports = null } = {}) {
       const from = !reported ? [] : touch === 1 ? linesOf(opening).filter(line => linkLine.test(line)) : links.filter(url => url !== trialUrl);
       const reportUrl = from.find(isReport) ?? from.find(url => (untaggedUrl(url) ?? url) === page) ?? null;
       const ownReport = Boolean(reportUrl && isReport(reportUrl));
-      if (campaignBlock(touch, { trialUrl, reportUrl, ownReport, setting, version }) !== block) continue;
-      return { touch, setting, opening, trialUrl, reportUrl, ownReport, ...(version >= 2 ? { version } : {}) };
+      // Email 1 may use the brief's angle. The first line of the block does not change, so each angle is tried against the rest.
+      const angles = version >= 2 && touch === 1 ? [null, ...emailAngles] : [null];
+      const angle = angles.find(candidate => campaignBlock(touch, { trialUrl, reportUrl, ownReport, setting, version, angle: candidate }) === block);
+      if (angle === undefined) continue;
+      return { touch, setting, opening, trialUrl, reportUrl, ownReport, ...(version >= 2 ? { version } : {}), ...(angle ? { angle } : {}) };
     }
   }
   return null;

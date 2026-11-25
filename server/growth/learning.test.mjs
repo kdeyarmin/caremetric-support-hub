@@ -104,6 +104,10 @@ describe('report opens and the reader\'s weaknesses (2026-11-17)', () => {
     // The first email's form is not compared, on opens or on replies: every first email built around a market report is the report and
     // nothing else since 2026-11-17, so "short" against "standard" would set emails written under different instructions side by side.
     expect(composeMemo('caremetric-intel', facts({ arms: [linked('form', 'short', 16, 0, 16, 6), linked('form', 'standard', 15, 0, 15, 1)] })).text).toBeNull();
+    const reasons = composeMemo('caremetric-intel', facts({ arms: [linked('reason', 'trigger', 20, 0, 16, 6), linked('reason', 'none', 20, 0, 15, 1)] }));
+    expect(reasons.text).toContain('first emails that named something that just happened at the agency');
+    expect(reasons.text).toContain('first emails with no dated reason');
+    expect(reasons.text).toContain('report opens');
   });
 
   it('never lets opens override a reply comparison, nor compares the send order or an earlier open on opens', () => {

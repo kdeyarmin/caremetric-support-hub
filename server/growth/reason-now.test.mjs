@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { monthDay, reasonNow, recentReleases, releaseCacheMs, releaseNews, releaseSource } from './reason-now.mjs';
+import { crowdedFromClaim, monthDay, reasonNow, recentReleases, releaseCacheMs, releaseNews, releaseSource } from './reason-now.mjs';
 import { draftMessage, criticMaxTokens, criticPromptVersion } from './draft.mjs';
 import { readCampaign, campaignBlock } from './campaign.mjs';
 import { liveEvaluationCases, gradeCase } from './live-evaluation.mjs';
@@ -31,6 +31,20 @@ describe('the one dated reason a first email goes now', () => {
     expect(reasonNow({ sources: [record(`; certified ${long(daysAgo(900))}; change of ownership recorded ${long(daysAgo(500))}`)], now })).toBeNull();
     // A date in a web page's words is not the Medicare record's.
     expect(reasonNow({ sources: [{ ...site, claim: `Valley Home Health was certified ${long(daysAgo(30))}.` }], now })).toBeNull();
+  });
+
+  it('names a crowded county as a count, and a Medicare payment change with no percent, after a certification', () => {
+    const county = { id: 'county', source_url: 'https://data.cms.gov/', observed_at: now.toISOString(),
+      claim: '48 home health agencies located in Allegheny County (CMS Post-Acute Care Utilization, 2023).' };
+    expect(crowdedFromClaim(county.claim)).toMatchObject({ count: 48, place: 'Allegheny County' });
+    expect(crowdedFromClaim('9 hospices located in Erie County (CMS).')).toBeNull();
+    expect(crowdedFromClaim('48 home health agencies located in Erie County, rank 9 (CMS).')).toBeNull();
+    expect(reasonNow({ sources: [site, county], now })).toEqual({ kind: 'crowded', fact: 'Allegheny County has 48 home health agencies, by CMS\'s count.', date: null, sourceId: 'county' });
+    expect(reasonNow({ sources: [site], paymentCut: true, setting: 'hospice', now })).toEqual({ kind: 'payment', fact: 'Medicare adjusted payments for hospice this year.', date: null, sourceId: 'payment' });
+    expect(reasonNow({ sources: [site], paymentCut: false, now })).toBeNull();
+    // A certification still comes first. The payment line and the county count wait.
+    expect(reasonNow({ sources: [record(`; certified ${long(daysAgo(40))}`), county], paymentCut: true, now }).kind).toBe('record');
+    expect(releaseSource({ kind: 'payment', fact: 'Medicare adjusted payments for home health this year.' }).id).toBe('payment');
   });
 
   it('names a new CMS release for the reader\'s own kind of care, by its month and day, and never one it cannot date', () => {

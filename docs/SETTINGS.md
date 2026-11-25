@@ -191,6 +191,16 @@ The service's wiring, which has to be right before the Hub can start or sign you
 - `HUB_PUBLIC_ORIGIN` (optional): must match the webhook addresses Twilio and SendGrid hold.
 - The `VITE_*` build arguments, which are compiled into the web app.
 
+## First email tests
+
+Three switches under **Settings → Customer growth** stay off until you turn them on. Off, the first email is unchanged: one ask (the report), no rating, no trial, no walkthrough.
+
+- **One fact about the agency in the first email.** Adds one sentence from Intel: a quality of patient care rating of 4 stars or higher, or a rise in Medicare patients. Never a rank, a share, a drop, or a rating under 4.
+- **Trial and Founders Sale on the first email.** Adds a short P.S. with the free trial and the Founders Sale (75% off the first 12 months).
+- **Walkthrough booking link.** Empty means no walkthrough line. An https link adds one line offering a short walkthrough.
+
+The reader still holds a first email that scores under 4 after its rewrite, even when cold email is handed over. The 5% bounce pause and the strict address check are separate and stay as you set them.
+
 ## For developers
 
 Do not add a Railway variable for anything that is not a secret. Add a setting:
