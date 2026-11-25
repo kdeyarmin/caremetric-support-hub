@@ -46,7 +46,7 @@ function fixture({ customer = null, role = 'organization_admin', enabled = true,
   const live = {
     list: vi.fn(async path => structuredClone(path === '/v1/subscriptions' ? subscriptions : path === '/v1/checkout/sessions' ? [...otherSessions, ...(checkout ? [checkout] : [])]
       : workspace.catalog.filter(price => price.id === selectedPrice).map(price => ({ price: { id: price.id }, quantity: price.model === 'flat' ? 1 : 2 })))),
-    get: vi.fn(async path => structuredClone(path.startsWith('/v1/coupons/') ? { valid: true, percent_off: 50, duration: 'repeating', duration_in_months: 12, applies_to: { products: [...new Set(Object.values(foundersCatalog).map(price => price.product))] } } : path.startsWith('/v1/checkout/sessions/') ? checkout : path.startsWith('/v1/subscriptions/') ? subscription
+    get: vi.fn(async path => structuredClone(path.startsWith('/v1/coupons/') ? { valid: true, percent_off: 75, duration: 'repeating', duration_in_months: 12, applies_to: { products: [...new Set(Object.values(foundersCatalog).map(price => price.product))] } } : path.startsWith('/v1/checkout/sessions/') ? checkout : path.startsWith('/v1/subscriptions/') ? subscription
       : path.startsWith('/v1/invoices/') ? invoice : { id: workspace.customer, metadata: { hub_tenant_id: tenant } })),
     post: vi.fn(async (path, params, options) => {
       if (path === '/v1/invoices/create_preview') return { amount_due: total, currency: 'usd', ...(sale ? { total_discount_amounts: [{ amount: 19900 }] } : {}) };
@@ -87,7 +87,7 @@ function fixture({ customer = null, role = 'organization_admin', enabled = true,
 describe('initial subscription Checkout', () => {
   it('automatically discounts the quote and Checkout, and verifies the discount on the paid receipt', async () => {
     const test = fixture({ sale: true }), quote = await test.preview();
-    expect(quote).toMatchObject({ due_now: 19900, recurring_subtotal: 19900, standard_recurring_subtotal: 39800, founders_sale: { savings: 19900, percent_off: 50 } });
+    expect(quote).toMatchObject({ due_now: 9950, recurring_subtotal: 9950, standard_recurring_subtotal: 39800, founders_sale: { savings: 29850, percent_off: 75 } });
     expect(test.live.post.mock.calls.find(([path]) => path === '/v1/invoices/create_preview')[1].discounts).toEqual([{ coupon: FOUNDERS_COUPON }]);
     await test.confirm(quote);
     expect(test.live.post.mock.calls.find(([path]) => path === '/v1/checkout/sessions')[1].discounts).toEqual([{ coupon: FOUNDERS_COUPON }]);

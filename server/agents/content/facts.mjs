@@ -112,8 +112,8 @@ export function intelFactsFromCatalog(catalog) {
   const offers = [
     `A ${catalog.trial_days}-day free trial${catalog.trial_includes ? `, covering ${catalog.trial_includes}` : ''}. ${trialCardTerms}`,
     foundersSaleTerms,
-    `Eligible Intel products: ${listNames(plans.map(item => item.name))}. Intel ${first.name} is ${usd(Math.round(amount(first, 'month') / 2))} per organization per month during the introductory year`
-      + `${amount(first, 'year') ? `, or ${usd(Math.round(amount(first, 'year') / 2))} for the first annual payment` : ''}, then the regular rate.${catalog.free_onboarding ? ' Onboarding is free on every plan.' : ''}`,
+    `Eligible Intel products: ${listNames(plans.map(item => item.name))}. Intel ${first.name} is ${usd(Math.round(amount(first, 'month') / 4))} per organization per month during the introductory year`
+      + `${amount(first, 'year') ? `, or ${usd(Math.round(amount(first, 'year') / 4))} for the first annual payment` : ''}, then the regular rate.${catalog.free_onboarding ? ' Onboarding is free on every plan.' : ''}`,
   ];
   return { trialDays: catalog.trial_days, pricing, offers };
 }
@@ -135,7 +135,7 @@ export const intelReviewedFacts = deepFreeze({
   offers: [
     `A 30-day free trial, covering 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your choice, 1 county. ${trialCardTerms}`,
     foundersSaleTerms,
-    'Eligible Intel products: Starter, Growth and Pro. Intel Starter is $174.50 per organization per month during the introductory year, or $1,740 for the first annual payment, then the regular rate. Onboarding is free on every plan.',
+    'Eligible Intel products: Starter, Growth and Pro. Intel Starter is $87.25 per organization per month during the introductory year, or $870 for the first annual payment, then the regular rate. Onboarding is free on every plan.',
   ],
 });
 
@@ -193,7 +193,7 @@ export const products = deepFreeze({
     offers: [
       'A 30-day free trial, started online at cmcarebase.com/signup.',
       foundersSaleTerms,
-      'Eligible CareBase/Train products: Core, Complete, Compliance Suite, Small Home, Small Home Complete, Train, Train Single Facility, and the eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments add-ons. CareBase Core is $99.50 per facility per month during the introductory year, or $995 for the first annual payment, then the regular rate.',
+      'Eligible CareBase/Train products: Core, Complete, Compliance Suite, Small Home, Small Home Complete, Train, Train Single Facility, and the eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments add-ons. CareBase Core is $49.75 per facility per month during the introductory year, or $497.50 for the first annual payment, then the regular rate.',
       'Legacy founding partners: preserve previously agreed founding-partner pricing held for as long as they subscribe. Previously agreed lifetime terms are separate from the current Founders Sale; do not offer lifetime pricing to new applicants or describe the new sale as a lifetime rate.',
     ],
   },

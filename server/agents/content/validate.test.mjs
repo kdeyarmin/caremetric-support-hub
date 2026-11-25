@@ -18,7 +18,7 @@ describe('an article that passes', () => {
     const offer = 'Founders Sale applies automatically to eligible subscriptions: 75% off for the first 12 months of paid service, then standard pricing resumes. Other promotions cannot be combined.';
     expect(reasons(withSentence(offer))).toEqual([]);
     expect(reasons(withSentence(offer, referral), referral)).toEqual([]);
-    expect(reasons(withSentence(offer.replace('50%', '60%')))).toContain('unlisted_number');
+    expect(reasons(withSentence(offer.replace('75%', '60%')))).toContain('unlisted_number');
   });
 
   it('becomes exactly the action input: address, product, topic, kind, title, description and the assembled Markdown', () => {

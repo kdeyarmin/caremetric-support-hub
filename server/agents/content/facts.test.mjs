@@ -15,7 +15,7 @@ describe('the fact sheet', () => {
     expect(allowedAmounts.length).toBeGreaterThan(25);
     for (const amount of allowedAmounts) expect(doc, amount).toContain(amount);
     for (const percent of allowedPercents) expect(doc, percent).toContain(percent);
-    expect(allowedPercents).toEqual(['17%', '50%']);
+    expect(allowedPercents).toEqual(['17%', '75%']);
     expect(products.carebase.trialDays).toBe(30);
     expect(doc).toContain('a **30-day** free trial');
     expect(products.intel.trialDays).toBe(30);

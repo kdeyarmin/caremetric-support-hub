@@ -148,9 +148,9 @@ const shared = {
   weekHeading: 'A week in CareMetric Intel',
   offerEyebrow: 'Founders Sale',
   offerTitle: '75% off your first 12 months',
-  // The sale's terms in everyday words (facts.mjs `foundersSaleTerms`): half off the plan's own price for the first paid year, applied
+  // The sale's terms in everyday words (facts.mjs `foundersSaleTerms`): three-quarters off the plan's own price for the first paid year, applied
   // by billing with no code. "Your plan's price" leaves out what the terms exclude (setup fees, add-ons, taxes).
-  offerText: 'Half off your plan\'s price for your first 12 months as a paying customer. It\'s applied on its own when your paid plan starts. No code needed.',
+  offerText: 'Three-quarters off your plan\'s price for your first 12 months as a paying customer. It\'s applied on its own when your paid plan starts. No code needed.',
   weekCloseTitle: () => `Try it on your county, free for ${trialDays()} days`,
   weekCloseText: 'Your own county, your own team. No demo to sit through, and the prices are on our website.',
   reportStill: { own: 'Your market report is still here:', page: 'Your free county report is one step away:' },
