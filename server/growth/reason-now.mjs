@@ -9,7 +9,11 @@
  *    from the last 120 days, the newest first; a trigger without a date counts when the page it came from was read in the last 30 days.
  * 2. `record`: the agency's Medicare record (the CMS Provider of Services evidence the roster wrote, roster.mjs `rosterClaim`): a
  *    certification in the last 18 months, or a change of ownership in the last 12.
- * 3. `release`: a new CMS release for the reader's own kind of care, published in the last 45 days, from the releases Intel has loaded
+ * 3. `payment`: Medicare adjusted what it pays this kind of care this year. The email names the change and never the percent, the
+ *    direction or the agency's score. Code sets it from the brief (`paymentCut` is only a boolean).
+ * 4. `crowded`: the county figure already allowed in the email names 10 or more agencies of the reader's own kind. The email states
+ *    that count. It never states a rank, a share or the agency's own place in the list.
+ * 5. `release`: a new CMS release for the reader's own kind of care, published in the last 45 days, from the releases Intel has loaded
  *    (intel-feed.mjs `releases`, catalog metadata only). Stated as Medicare news, with its month and day, never its file's name or year.
  *
  * With none of them there is no dated reason, and the email says only that the report or the next step is ready now. Nothing here is
@@ -17,7 +21,9 @@
  */
 const day = 86_400_000;
 const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-export const reasonKinds = Object.freeze(['trigger', 'record', 'release']);
+export const reasonKinds = Object.freeze(['trigger', 'record', 'payment', 'crowded', 'release']);
+/** A county counts as crowded at this many agencies of the reader's own kind (roster.mjs pressureWeights.crowdedCounty). */
+export const crowdedAt = 10;
 export const triggerDays = 120;
 export const undatedTriggerDays = 30;
 export const certifiedMonths = 18;
@@ -65,7 +71,24 @@ export function releaseNews(releases, { setting = 'agency', now = new Date() } =
  * sourceId }`: `date` is YYYY-MM-DD or null, `sourceId` the evidence the fact comes from ('release' for a release: the drafter adds it
  * as a source of its own, never a stored citation).
  */
-export function reasonNow({ sources = [], triggers = [], releases = [], setting = 'agency', now = new Date() } = {}) {
+const careWord = setting => (setting === 'hospice' ? 'hospice' : setting === 'nursing_home' ? 'nursing homes' : 'home health');
+
+/**
+ * A county figure the email may already state, when it counts at least `crowdedAt` agencies and names no rank. Null otherwise.
+ * `claim` is the sentence figureSentence writes ("48 home health agencies located in Allegheny County (CMS …).").
+ */
+export function crowdedFromClaim(claim) {
+  const text = String(claim ?? '');
+  if (/\b(rank|share|star|rating|patient)\b/i.test(text)) return null;
+  const match = text.match(/\b(\d{1,3}(?:,\d{3})*) (home health agencies|hospices|nursing homes) located in ([A-Za-z][A-Za-z .'-]{1,80}?) \(/);
+  if (!match) return null;
+  const count = Number(match[1].replace(/,/g, ''));
+  if (!Number.isInteger(count) || count < crowdedAt) return null;
+  const place = match[3].replace(/\s+/g, ' ').trim();
+  return { count, kind: match[2], place, fact: `${place} has ${count.toLocaleString('en-US')} ${match[2]}, by CMS's count.` };
+}
+
+export function reasonNow({ sources = [], triggers = [], releases = [], setting = 'agency', now = new Date(), paymentCut = false } = {}) {
   const byId = new Map((sources ?? []).map(source => [source.id, source]));
   // 1. The brief's triggers: dated ones first, the newest; an undated one only from a page read in the last 30 days.
   const dated = [], undated = [];
@@ -94,15 +117,22 @@ export function reasonNow({ sources = [], triggers = [], releases = [], setting 
       return { kind: 'record', fact: `A change of ownership was recorded with Medicare on ${changed.words}.`, date: new Date(changed.at).toISOString().slice(0, 10), sourceId: source.id };
     }
   }
-  // 3. A new CMS release for the reader's own kind of care.
+  // 3. A Medicare payment change, with no percent and no direction. The brief only carries a boolean.
+  if (paymentCut === true) return { kind: 'payment', fact: `Medicare adjusted payments for ${careWord(setting)} this year.`, date: null, sourceId: 'payment' };
+  // 4. A crowded county, as a count the email may already state. Never a rank.
+  for (const source of sources ?? []) {
+    const crowded = crowdedFromClaim(source?.claim);
+    if (crowded) return { kind: 'crowded', fact: crowded.fact, date: null, sourceId: source.id };
+  }
+  // 5. A new CMS release for the reader's own kind of care.
   const news = releaseNews(releases, { setting, now })[0];
   if (news) return { kind: 'release', fact: news.fact, date: news.date, sourceId: 'release' };
   return null;
 }
 
 /** The source a release reason adds to the draft's sources, so its words pass the checks. Never stored as a citation. */
-export const releaseSource = (reason, now = new Date()) => (reason?.kind === 'release'
-  ? { id: 'release', claim: reason.fact, source_url: 'https://data.cms.gov/', observed_at: now.toISOString() } : null);
+export const releaseSource = (reason, now = new Date()) => (reason?.kind === 'release' || reason?.kind === 'payment'
+  ? { id: reason.kind, claim: reason.fact, source_url: 'https://data.cms.gov/', observed_at: now.toISOString() } : null);
 
 // Intel's releases, read at most once every six hours per feed: every first email of a sweep reads the same list.
 const cached = new WeakMap();

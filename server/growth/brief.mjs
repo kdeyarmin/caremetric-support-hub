@@ -28,6 +28,7 @@ import { factSheetText } from '../agents/content/facts.mjs';
 import { allowedNumbers, percentsOf, textProblems } from '../agents/content/validate.mjs';
 import { experimentAngles, intelSetting, playbookText } from './playbook.mjs';
 import { researchOnlyPrefix } from './roster.mjs';
+import { paymentChanged, positiveAgencyFact } from './email-one.mjs';
 import { researchOrganization } from './deep-research.mjs';
 
 export const growthBriefFeature = 'platform.agents.growth-brief.v1';
@@ -258,6 +259,17 @@ export function briefHandlers({ growth, model, features = null, marketed = null,
     }
     if (answer.outcome !== 'completed') return { result: { briefed: 0, outcome: answer.outcome, facts: fresh.length } };
     const parts = briefParts(answer.output, { evidence, countyFigures: figures, people: pick.people, intel: intelForBrief(intel), setting });
+    // A boolean only: the email says "Medicare adjusted payments" and never the percent. A positive fact is one sentence, or nothing.
+    let payment = false;
+    if (feed?.configured && agency?.ccn && typeof feed.agencyFacts === 'function') {
+      try {
+        const facts = await feed.agencyFacts({ ccns: [agency.ccn], signal });
+        payment = paymentChanged((facts?.agencies ?? []).find(item => item.ccn === agency.ccn));
+      } catch (error) { if (signal?.aborted) throw error; }
+    }
+    if (payment) parts.writer.paymentCut = true;
+    const fact = positiveAgencyFact(intel);
+    if (fact) parts.writer.positiveFact = fact;
     const spent = Number(answer.costCents ?? 0) + Number(researched.cents ?? 0);
     const saved = await growth.store.briefSave(pick.id, { ...parts, model: answer.model, promptVersion: briefPromptVersion, costCents: Math.round(spent * 100) / 100 });
     return { result: { briefed: 1, version: saved?.version ?? null, facts: fresh.length, triggers: parts.writer.triggers.length,

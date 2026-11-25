@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { campaignBlock, campaignBlocks, campaignCopy, campaignEyebrow, campaignSettings, campaignTouches, dataFigures, founderQuote, hasReport, readCampaign, reviewPage, withCampaign } from './campaign.mjs';
+import { emailAngles } from './agency-campaign.mjs';
 import { callsDataPublic, citesDataFile, namesCard, outdatedWords, productNumbers } from './draft.mjs';
 import { offersMeeting, playbookFor } from './playbook.mjs';
 import { emailStatesStanding } from './standing.mjs';
@@ -164,6 +165,19 @@ describe('the marketing sections of an email about CareMetric Intel (email revie
     expect(readCampaign(edited, { reports })).toBeNull();
     expect(readCampaign(withCampaign(openings[2], 2, links(2)).replace(trial(2), 'https://example.org/'), { reports })).toBeNull();
     expect(readCampaign('', { reports })).toBeNull();
+  });
+
+  it('writes the first email\'s blocks for the brief\'s angle and reads that angle back', () => {
+    const given = { ...links(1, 'home_health'), version: 3, angle: 'referral_sources' };
+    const body = withCampaign(openings[1], 1, given);
+    expect(emailAngles).toContain('referral_sources');
+    expect(body).toContain('Who to call on in your county');
+    expect(body).not.toContain('For home health teams');
+    expect(body).not.toMatch(/signup=true/);
+    const read = readCampaign(body, { reports });
+    expect(read).toMatchObject({ touch: 1, version: 3, angle: 'referral_sources', setting: 'home_health' });
+    expect(campaignBlock(read.touch, read)).toBe(body.slice(read.opening.length).replace(/^\n+/, ''));
+    expect(withCampaign(openings[1], 1, { ...links(1, 'home_health'), version: 3 })).toContain('For home health teams');
   });
 
   it('lays each email out: the opening, the report\'s card and button, the sections, and the trial', () => {

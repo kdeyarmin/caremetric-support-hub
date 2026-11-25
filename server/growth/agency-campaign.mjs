@@ -41,6 +41,60 @@ const copy = {
 
 export const agencyFounderQuote = 'I run a home health and hospice agency. I built CareMetric Intel to research my competitors and find potential referral sources for my own team.';
 
+/** The account brief's lead angles (playbook.mjs). Email 1's fixed blocks follow the one the draft used. Any other value keeps the general blocks. */
+export const emailAngles = Object.freeze(['referral_sources', 'territory', 'competitors', 'visit_prep', 'hospital_outcomes', 'slipping_sources']);
+
+const angleBlocks = Object.freeze({
+  referral_sources: {
+    heading: 'Who to call on in your county',
+    points: [
+      ['The physicians who certify the most', 'Ranked from Medicare data, with the hospitals residents use.'],
+      ['A list your team can work', 'Save the ones worth a visit and keep the follow-up in one place.'],
+      ['What the visits led to', 'Referrals and admissions by source, from what your team records.'],
+    ],
+  },
+  territory: {
+    heading: 'A week planned around your counties',
+    points: [
+      ['Where a small team should spend its time', 'Counties, referral sources and a visit rhythm, from Medicare data.'],
+      ['One list for the week', 'The accounts worth a stop, saved before anyone leaves the office.'],
+      ['What the week led to', 'Referrals and admissions by source, from what your team records.'],
+    ],
+  },
+  competitors: {
+    heading: 'Who else is working your county',
+    points: [
+      ['The agencies in your territory', 'Each one located there, with an alert when an owner, rating or service area changes.'],
+      ['Where the referrals come from', 'The physicians and hospitals residents use, ranked from Medicare data.'],
+      ['A plan for your own team', 'Who to visit, and a place to keep what the visit led to.'],
+    ],
+  },
+  visit_prep: {
+    heading: 'Walk in knowing why you are there',
+    points: [
+      ['A reason for each stop', 'The account\'s history and what to bring up, before the visit.'],
+      ['A note before you leave', 'A short follow-up and a date, saved from a phone.'],
+      ['Friday\'s picture', 'Referrals and admissions by source, from what your team recorded.'],
+    ],
+  },
+  hospital_outcomes: {
+    heading: 'What you can show a hospital',
+    points: [
+      ['The hospitals your county uses', 'Where residents go, from Medicare data, so the list is not a guess.'],
+      ['A reason for the meeting', 'Response time and quality scores your team can put in front of a discharge planner.'],
+      ['The follow-up in one place', 'Who you saw, what you promised and whether a referral came back.'],
+    ],
+  },
+  slipping_sources: {
+    heading: 'Catch a source before it goes quiet',
+    points: [
+      ['The sources that used to send patients', 'Ranked from Medicare data, so a slow one shows up early.'],
+      ['A visit while it still matters', 'A reason for the stop and a date for the next one.'],
+      ['What changed', 'Referrals by source, from what your team records, with an alert when a top source slips.'],
+    ],
+  },
+});
+
 export function agencyReportSubject(value) {
   const name = String(value ?? '').replace(/[\r\n\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().replace(/[, ]+(?:LLC|Inc\.?|Corp\.?)$/i, '');
   if (!name) return 'Your agency market report';
@@ -53,7 +107,7 @@ export function agencyReportSubject(value) {
 const offerDetail = 'The discount applies automatically to eligible new subscriptions when paid service starts.';
 const trialDetail = 'Try it with your team in one county.';
 
-function content(touch, { setting, trialUrl, reportUrl, ownReport }) {
+function content(touch, { setting, trialUrl, reportUrl, ownReport, angle = null }) {
   const words = copy[setting];
   const trialDays = products.intel.trialDays;
   const offer = products.intel.offers.find((item) => item.startsWith('Founders Sale: '));
@@ -64,9 +118,11 @@ function content(touch, { setting, trialUrl, reportUrl, ownReport }) {
   const note = ownReport
     ? (reportUrl.endsWith('/view') ? 'Read online or download a PDF.' : 'Opens as a printable PDF.')
     : 'Choose your state and county. We’ll email the report as a PDF.';
+  // Email 1 follows the brief's angle. Email 2 and 3 stay the general blocks, so the sequence still says what the product does.
+  const angled = touch === 1 ? angleBlocks[angle] : null;
   if (touch === 1) return {
-    heading: words.title,
-    points: [['Know your market', words.market], ['Plan your outreach', words.field], ['Review the results', words.results]],
+    heading: angled?.heading ?? words.title,
+    points: angled?.points ?? [['Know your market', words.market], ['Plan your outreach', words.field], ['Review the results', words.results]],
     trial, report, note,
   };
   if (touch === 2) return {

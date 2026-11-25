@@ -10,8 +10,9 @@ import { linkTags, tagLinks, untagLinks } from '../agents/links.mjs';
 import { researchOnlyPrefix } from './roster.mjs';
 import { mentionsOpen } from './opens.mjs';
 import { withCampaign } from './campaign.mjs';
-import { agencyReportSubject, agencyTrialUrl } from './agency-campaign.mjs';
+import { agencyReportSubject, agencyTrialUrl, emailAngles } from './agency-campaign.mjs';
 import { reasonNow, releaseSource } from './reason-now.mjs';
+import { allowedPositiveFact, emailOneNote, quotesOldSale } from './email-one.mjs';
 
 /**
  * Growth messages: the Marketing Manager's outreach and the Account Manager's customer-success emails.
@@ -192,7 +193,7 @@ export function draftProblem(answer, { product, sources, outreach, organization 
 }
 
 /** Sources the checks read that are never stored as a citation, and never the one citation outreach needs: the county figure and a release. */
-const checkOnlySources=new Set(['county','release']);
+const checkOnlySources=new Set(['county','release','payment']);
 
 /**
  * Intel's internal words for its own workspace, which a prospect does not know: the fact sheet calls the list of referral sources and
@@ -253,6 +254,8 @@ export function outdatedWords({ product, subject, body, purpose = null }) {
   if (internalWords.test(words)) return 'jargon';
   if (purpose==='marketing'&&namesCard(product,words)) return 'card_terms';
   if (purpose==='marketing'&&callsDataPublic(product,words)) return 'public_data';
+  // A draft written while the Founders Sale was 50% off. The fact sheet is 75%. It is withdrawn and written again.
+  if (quotesOldSale(words)) return 'old_offer';
   return null;
 }
 
@@ -403,7 +406,7 @@ const criticArms=(arms,review)=>{
   if(criticWeaknesses.includes(review.weakness))arms.weakness=review.weakness;else delete arms.weakness;
 };
 
-export async function draftMessage({ opportunity:o, work, task, model, signal, onReject=null, memo=null, report=null, brief=null, quality=false, critic=false, views=false, releases=[] }) {
+export async function draftMessage({ opportunity:o, work, task, model, signal, onReject=null, memo=null, report=null, brief=null, quality=false, critic=false, views=false, releases=[], offers=null }) {
   const rejected=code=>{try{onReject?.(code);}catch{/* reporting never stops a draft */}return null;};
   const approved=o.policy?.approved_claim?.trim();
   if (!approved || screenIdentifiers(approved).flagged || !o.contact_id || !qualify(o.evidence).canDraft && work.kind==='outreach') return null;
@@ -462,7 +465,7 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   // is Intel's to name: CareBase's emails never get one.
   const firstTouch=work.kind==='outreach'&&outreachTouch===1&&!reask&&!lead;
   const briefTriggers=(briefed?.triggers??[]).map(trigger=>({fact:trigger.fact,date:trigger.date||null,sourceId:sources.find(source=>source.source_url===trigger.sourceUrl)?.id??null}));
-  const reason=firstTouch?reasonNow({sources,triggers:briefTriggers,releases:o.product==='caremetric-intel'?releases:[],setting:kind??'agency',now:new Date()}):null;
+  const reason=firstTouch?reasonNow({sources,triggers:briefTriggers,releases:o.product==='caremetric-intel'?releases:[],setting:kind??'agency',now:new Date(),paymentCut:briefed?.paymentCut===true}):null;
   if(firstTouch)arms.reason=reason?.kind??'none';
   const shortForm=arms.form==='short';
   const variant=arms.length;
@@ -479,8 +482,18 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   // Its words are for the reader's own kind of business (owner direction 2026-11-17): a home health agency, a hospice or a nursing
   // home, which has no report.
   const campaign=trialPage&&(intelAgency?reportLink:nursingOutreach)
-    ?{trialUrl:intelAgency?agencyTrialUrl(tagLinks(trialPage,tags)):tagLinks(trialPage,tags),reportUrl:intelAgency?reportLink:null,ownReport:Boolean(intelAgency&&offered),setting:kind,version:intelAgency?3:1}:null;
-  const whole=body=>campaign?withCampaign(body,outreachTouch,campaign):body;
+    ?{trialUrl:intelAgency?agencyTrialUrl(tagLinks(trialPage,tags)):tagLinks(trialPage,tags),reportUrl:intelAgency?reportLink:null,ownReport:Boolean(intelAgency&&offered),setting:kind,version:intelAgency?3:1,
+      ...(emailAngles.includes(arms.angle)?{angle:arms.angle}:{})}:null;
+  // Code adds these after the writer's opening, and only on a first Intel email, when the owner has turned the matching setting on.
+  // Off (the default): the opening is unchanged. The reader's review sees them, because they are part of the email the agency gets.
+  const note=firstTouch&&intelAgency?emailOneNote({
+    oneFact:offers?.oneFact===true, fact:allowedPositiveFact(briefed?.positiveFact),
+    oneOffer:offers?.oneOffer===true, trialUrl:campaign?.trialUrl??null, bookingUrl:offers?.bookingUrl??null,
+  }):'';
+  const whole=body=>{
+    const opening=note?`${String(body??'').trim()}\n\n${note}`:body;
+    return campaign?withCampaign(opening,outreachTouch,campaign):opening;
+  };
   // Without a model, each of the agency's three emails keeps its shape: a short opening, then the email's own sections.
   if(intelAgency&&reportLink) {
     const named=o.name?.trim()||'your agency';
@@ -588,7 +601,8 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
   const criticBrief=input.brief?{summary:input.brief.summary??null,pains:input.brief.pains??[],angle:input.brief.angle??null,...(input.brief.hook?{hook:input.brief.hook}:{})}:null;
   // The reader reads the whole email, the email's own sections included, as the agency would.
   const criticInput=answer=>JSON.stringify({email:{subject:answer.subject,body:whole(answer.body)},agency:{name:o.name??null,summary:criticBrief?.summary??null},
-    ...(criticBrief?{brief:criticBrief}:{}),rules:[...criticRules,...(shortForm||nursingOutreach?[shortCriticRule]:[])]});
+    ...(criticBrief?{brief:criticBrief}:{}),rules:[...criticRules,...(shortForm||nursingOutreach?[shortCriticRule]:[]),
+      ...(note?['A sentence about a Medicare rating or a rise in Medicare patients, a P.S. about the free trial and the Founders Sale, or a walkthrough link was added by code because a setting is on. Keeping it is not a weakness.']:[])]});
   const review=critic&&outreach&&touch===1&&!reask?async answer=>{
     for(const room of [criticMaxTokens,criticMaxTokens*2]) {
       try {
@@ -630,6 +644,8 @@ export async function draftMessage({ opportunity:o, work, task, model, signal, o
         }
       }
       reviewed={promptVersion:criticPromptVersion,first:readerNotes(first),rewrite:second?readerNotes(second):null,outcome,...(problem?{problem}:{})};
+      // Still under 4 after the rewrite (or the rewrite never produced a higher score): Kevin reviews it. A 4 or 5 can go on its own.
+      if(Number(arms.critic)<criticThreshold) arms.hold_review='critic';
     }
   }
   const tagged={...kept,body:tagLinks(kept.body,tags)};

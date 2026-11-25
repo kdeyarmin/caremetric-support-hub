@@ -135,6 +135,8 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   views:{enabled:setting('growth.report_views'),feed:intelFeedReader({features,enabled:setting('growth.report_views'),key:intelFeedSecret})},
   briefs:{enabled:setting('growth.account_brief'),perDay:setting('growth.brief_per_day'),cents:setting('growth.brief_cents'),
     qualityWriter:setting('growth.quality_writer'),critic:setting('growth.draft_critic')},
+  // First-email tests (Settings → Customer growth). Each stays off until the owner turns it on.
+  offers:{oneFact:setting('growth.email_one_fact'),oneOffer:setting('growth.email_one_offer'),bookingUrl:setting('growth.booking_url')},
   // Stage 2 of the 2026-11-17 review (Settings → Customer growth): the best prospects first, a short first email as a test, and a
   // follow-up when a prospect who replied goes quiet. The send hours are read by the send claim itself.
   priority:{enabled:setting('growth.send_priority'),quietFollowup:setting('growth.quiet_followup')},

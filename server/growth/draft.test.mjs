@@ -1,6 +1,6 @@
 import {it,expect,vi} from 'vitest';
 import {callsDataPublic,citesDataFile,criticMaxTokens,criticPromptVersion,criticRules,criticSchema,criticSystem,criticWeaknesses,draftMessage,draftProblem,growthPromptVersion,growthSystem,messageArms,namesCard,outdatedWords,problemHints,shortFormProblem,weaknessMeanings} from './draft.mjs';
-import {nursingHomeAngles,playbookFor,prospectKind,quietPlays,reasonNowRule,reportCloseAngle,reportTouchAngle,reviewFollowupAngle,reviewTouchAngle,shortFormLimits,touchAngle,unviewedTouchAngle,viewedTouchAngle} from './playbook.mjs';
+import {nursingHomeAngles,offersMeeting,playbookFor,prospectKind,quietPlays,reasonNowRule,reportCloseAngle,reportTouchAngle,reviewFollowupAngle,reviewTouchAngle,shortFormLimits,touchAngle,unviewedTouchAngle,viewedTouchAngle} from './playbook.mjs';
 import {readCampaign,founderQuote} from './campaign.mjs';
 import {trialCardTerms} from '../agents/content/facts.mjs';
 import {assessProspect} from './assessment.mjs';
@@ -324,6 +324,7 @@ it('gives the reader the brief\'s writer part and the writer\'s rules, keeps all
  const result=await draftMessage({opportunity:o,work,task:{},model:{configured:true,run},brief,critic:true});
  expect(result.subject).toBe(better.subject);
  expect(result.arms).toMatchObject({critic:'4',criticSpecific:'4',criticRelevant:'5',criticAsk:'4',weakness:'none',rewritten:'1'});
+ expect(result.arms.hold_review).toBeUndefined();
  const reads=run.mock.calls.filter(([,request])=>request.promptVersion===criticPromptVersion).map(([,request])=>JSON.parse(request.user));
  expect(reads[0]).toMatchObject({agency:{name:'Valley Home Health',summary:brief.summary},brief:{summary:brief.summary,pains:[brief.pains[0].question],angle:'referral_sources',hook:brief.hook.sentence}});
  // The writer's rules, then the one that says this first email is the report alone on purpose.
@@ -344,14 +345,34 @@ it('gives the reader the brief\'s writer part and the writer\'s rules, keeps all
  });
  const kept=await draftMessage({opportunity:o,work,task:{},model:{configured:true,run:worse},brief,critic:true});
  expect(kept.subject).toBe(draft.subject);
- expect(kept.arms).toMatchObject({critic:'2',criticSpecific:'2',criticRelevant:'3',criticAsk:'4',weakness:'no_reason_now'});
+ expect(kept.arms).toMatchObject({critic:'2',criticSpecific:'2',criticRelevant:'3',criticAsk:'4',weakness:'no_reason_now',hold_review:'critic'});
  expect(kept.arms.rewritten).toBeUndefined();
+});
+
+it('adds the trial, the sale and one allowed fact only when those settings are on, and follows the brief\'s angle', async () => {
+ const brief={setting:'home_health',summary:'A home health agency in Allegheny County.',triggers:[],pains:[],angle:'referral_sources',
+  positiveFact:'Medicare\'s quality of patient care rating for this agency is 4.5 stars.',paymentCut:true,
+  hook:{sentence:'Valley Home Health serves Allegheny County.',sourceUrl:'https://valleyhh.org/about'}};
+ const quiet=await draftMessage({opportunity:intel,work,task:{},report,brief});
+ expect(quiet.body).toContain('Who to call on in your county');
+ expect(quiet.body).not.toContain('4.5 stars');
+ expect(quiet.body).not.toContain('Founders Sale');
+ expect(quiet.body).not.toContain('walkthrough');
+ expect(quiet.arms.reason).toBe('payment');
+ const loud=await draftMessage({opportunity:intel,work,task:{},report,brief,offers:{oneFact:true,oneOffer:true,bookingUrl:'https://cal.example/kevin'}});
+ expect(loud.body).toContain('Medicare\'s quality of patient care rating for this agency is 4.5 stars.');
+ expect(loud.body).toContain('Founders Sale: 75% off the first 12 months.');
+ expect(loud.body).toContain('https://cal.example/kevin');
+ expect(loud.body.indexOf('4.5 stars')).toBeLessThan(loud.body.indexOf('Who to call on in your county'));
+ const read=readCampaign(loud.body,{reports:{accepts:url=>url===report.url}});
+ expect(read).toMatchObject({angle:'referral_sources',version:3,touch:1});
+ expect(offersMeeting(loud.body)).toBe(false);
 });
 
 it('keeps every arm, the reader\'s and the form\'s included, well inside the arms column\'s 600-byte limit',()=>{
  // 'standard' is the longest value the form arm ever held (emails written before 2026-11-17 keep it).
  const largest={length:'control',length_basis:'applied_v1',trigger:`reask_${'x'.repeat(20)}`,angle:'hospital_outcomes',subject:'question',angle_by:'brief',viewed:'yes',
-  critic:'5',criticSpecific:'5',criticRelevant:'5',criticAsk:'5',weakness:'reads_as_template',rewritten:'1',form:'standard',band:'4'};
+  critic:'5',criticSpecific:'5',criticRelevant:'5',criticAsk:'5',weakness:'reads_as_template',rewritten:'1',form:'standard',band:'4',hold_review:'critic',reason:'payment'};
  expect(Buffer.byteLength(JSON.stringify(largest))).toBeLessThan(500);
 });
 
