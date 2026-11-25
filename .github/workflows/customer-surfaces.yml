@@ -2,7 +2,10 @@ name: External customer surface monitoring
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/15 * * * *'
+    # Hourly. Every 15 minutes billed a full Actions minute each run for a check that takes about
+    # 10 seconds: about 2,900 billed minutes a month. Off the top of the hour, when GitHub's
+    # scheduler is busiest.
+    - cron: '7 * * * *'
 permissions:
   contents: read
 jobs:
