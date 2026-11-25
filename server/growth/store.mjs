@@ -52,6 +52,8 @@ export function growthStore(pool) {
     rosterSiteNext:(limit,daily)=>server('private.growth_roster_site_next',[limit,daily]),
     rosterSiteRecord:(ccn,data)=>server('private.growth_roster_site_record',[ccn,data]),
     roster:(token,offset=0)=>withSession(pool,token,db=>run(db,'hub.growth_roster',[offset])),
+    // The owner's "Use this site" for a site the web search suggested (20261125161000_first_replies_sites.sql).
+    rosterUseSite:(token,ccn,domain)=>withSession(pool,token,db=>run(db,'hub.growth_roster_use_site',[ccn,domain])),
     // Web-found prospects matched to their Medicare record (20261115233000_growth_roster_match.sql). node-pg sends the outcome object
     // as JSON.
     matchNext:(limit,daily)=>server('private.growth_roster_match_next',[limit,daily]),

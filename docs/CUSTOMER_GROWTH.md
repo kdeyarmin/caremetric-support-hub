@@ -685,10 +685,24 @@ Stage 3 of the [November 17 review](AI_WORKFORCE_REVIEW_2026-11-17.md) (`2026111
   search the web for a day", "Most to spend on one website search"; task `growth.sites`, hourly, `server/growth/site-search.mjs`). An
   agency the name and phone searches did not find (`no_site` or `not_confirmed`), not searched in 30 days, gets one web search by the
   Marketing Manager: the model is told only its name, city, state, setting and CMS telephone number and names at most two candidate
-  sites, never a directory or a government site. Each candidate is read by the contact finder and checked exactly as a lookup's
-  (`confirmsSite`: the CMS number on its pages, or the agency's name and place on its home page; the shared-host rule); a confirmed one
-  graduates through `private.growth_roster_resolved`, as a lookup does. An unconfirmed candidate is only a suggestion on Growth ("Suggested
-  by a web search, not confirmed"); nothing is sent to it, and there is no button to use it (owner's decision).
+  sites, never a directory or a government site, each written out in full (`sites.2`): only an address written as one, or a line that is
+  nothing but a domain, is a candidate, never a sentence's "apparently.https" (on 2026-11-25, 53 of the 87 agencies searched and not
+  found had such a fragment stored as a site, and 22 nothing else). Each candidate is read by the contact finder and checked as a lookup's
+  (`confirmsSite`: the CMS number on its pages, or the agency's name and place on its home page; the shared-host rule), and also: a
+  locations page is read while the number is unseen, any page the finder reads that names the agency, its town and its state confirms it
+  by name (`pageNamesAgency`: most agencies print their address in the footer or on the contact page), and a candidate whose home page
+  redirects to another business host is read as that host, once. A confirmed one graduates through `private.growth_roster_resolved`, as
+  a lookup does. An unconfirmed candidate is a suggestion on Growth ("Suggested by a web search, not confirmed"); nothing is sent to it.
+  The owner may use one with **Use this site** (owner decision 2026-11-24, superseding the 2026-11-16 "no approve button";
+  `hub.growth_roster_use_site`, `20261125161000_first_replies_sites.sql`, once `platform.agents.first-replies-2.v1` is declared): only one of
+  that agency's own suggestions, only while it is not found, through the same `private.growth_roster_resolved` with the confirmation
+  `owner` (a host already serving three agencies takes it, as it takes the telephone number), audited as `growth.roster_site_used` with the
+  owner as actor. The business's public address is then found by the usual contact sweep and checked before any email. Of 27 suggested
+  sites read on 2026-11-25 with the finder's own name: 7 named the agency, its town and its state on a page the finder reads (now
+  confirmed), 5 redirected to another host (now read there, unless it is a site builder such as sites.google.com), 10 could not be read
+  by an honest reader at all (a bot check, a page built by script, or a server error), 3 timed out or had no address, and 2 said neither
+  (one a national chain's locations site). For the unreadable ones, "Use this site" is the way. The migration searched every agency not
+  found before it once more with the new reading.
 - **A live writing evaluation each Monday** (Settings → Customer growth → "Run a live writing evaluation each Monday"; task
   `growth.evaluate_live`, 06:50 Eastern, `server/growth/live-evaluation.mjs`). Twelve made-up Intel agencies (invented names, `.example`
   sites, CCNs 990101 to 990104, no person, address or telephone number) cover the four triggers (a new agency, a new owner, a CMS record,

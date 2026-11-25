@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import {
   chooseSite, confirmsSite, displayName, distinctiveWords, phonesIn, pressureFacts, pressureWeights, rankTarget, researchOnlyPrefix, resolutionQuery, rosterClaim,
-  rosterRow, rosterStates, statesNamed,
+  rosterRow, rosterStates, statesNamed, pageNamesAgency, pageWords,
 } from './roster.mjs';
 
 const now = new Date('2026-11-13T12:00:00Z');
@@ -148,6 +148,19 @@ describe('confirming the site is the agency\'s', () => {
   it('accepts the agency\'s name and place on its home page', () => {
     const found = { phoneSeen: false, site: { url: 'https://valleyhospice.org/', claim: "The organization's own home page. Title: Valley Hospice. Opening text: Serving Philadelphia families since 2010." } };
     expect(confirmsSite(target(), found)).toBe('name');
+  });
+
+  it('on any page the finder reads, accepts the agency\'s name with its town and its state, footer and all, and nothing less', () => {
+    const footer = '<header>Compassionate care</header><main><h1>Our team</h1><p>We are here for you.</p></main>'
+      + '<footer><p>Valley Hospice</p><address>9 Elm Road, Philadelphia, PA 19103</address><script>var city="Pittsburgh"</script></footer>';
+    expect(pageNamesAgency(target(), footer)).toBe('name');
+    expect(pageNamesAgency(target(), footer.replace('Philadelphia, ', ''))).toBeNull();
+    expect(pageNamesAgency(target(), footer.replace('PA 19103', 'NJ 08102'))).toBeNull();
+    expect(pageNamesAgency(target(), footer.replace('Valley Hospice', 'Summit Hospice'))).toBeNull();
+    expect(pageNamesAgency(target({ setting: 'home_health' }), footer)).toBeNull();
+    expect(pageNamesAgency(target({ city: 'Pittsburgh' }), footer)).toBeNull();
+    expect(pageNamesAgency(target({ city: null }), footer)).toBeNull();
+    expect(pageWords('<p>Ann&#39;s&nbsp;Choice &amp; Co</p><style>.x{}</style><!-- Pittsburgh -->')).toBe(' ann s choice and co ');
   });
 
   it('reads a state in full or before a ZIP code, never a bare code that is also a word', () => {

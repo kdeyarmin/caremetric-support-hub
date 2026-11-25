@@ -26,6 +26,15 @@ describe('candidate websites from a web search', () => {
     expect(candidateSites('https://valleyhh.org and https://valleyhh.org/contact')).toEqual(['valleyhh.org']);
   });
 
+  it('never reads a sentence as a site: only a written-out address, or a line that is nothing but a domain (the Nov 24 measurement)', () => {
+    // What the answers stored as sites on 2026-11-25: "apparently.https", "string.none", "sometimes.odd", "feeltheadvantage.com.results".
+    expect(candidateSites('The site is apparently.https://www.valleyhh.org/ but the string.none of it was clear. Sometimes.odd')).toEqual(['valleyhh.org']);
+    expect(candidateSites('I could not confirm feeltheadvantage.com.Results were mixed.\nnone')).toEqual([]);
+    expect(candidateSites('1. valleyhh.org\n- www.valleyhomehealth.com.')).toEqual(['valleyhh.org', 'valleyhomehealth.com']);
+    expect(candidateSites('See [their site](https://valleyhh.org/about), or www.valleyhomehealth.com')).toEqual(['valleyhh.org', 'valleyhomehealth.com']);
+    expect(siteSearchPromptVersion).toBe('sites.2');
+  });
+
   it('tells the search only the agency\'s public record: name, city, state, setting and its Medicare telephone number', () => {
     expect(siteSearchInput(target)).toEqual({ agency: { name: 'Valley Home Health', city: 'Pittsburgh', state: 'PA', setting: 'home health', phone: '4125550100' } });
     expect(siteSearchInput({ ...target, setting: 'hospice' }).agency.setting).toBe('hospice');
@@ -73,6 +82,37 @@ describe('growth.sites', () => {
     expect(store.rosterSiteRecord).toHaveBeenCalledWith('397001', { outcome: 'unresolved', suggestions: ['valleyhh.org', 'valleyhomecare.net'] });
     expect(store.recordContact).not.toHaveBeenCalled();
     expect(result).toMatchObject({ searched: 1, graduated: 0, suggested: 1 });
+  });
+
+  it('confirms a site a page of which names the agency, its town and its state, asking the finder to judge every page and read a locations page', async () => {
+    const footerOnly = { phoneSeen: false, judged: 'name', site: { url: 'https://valleyhh.org/', claim: 'Title: Welcome. Opening text: Care that comes to you.' },
+      email: 'info@valleyhh.org', sourceUrl: 'https://valleyhh.org/contact' };
+    const { store, contacts, run } = setup({ read: footerOnly });
+    const { result } = await run();
+    const [, options] = contacts.find.mock.calls[0];
+    expect(options.morePaths).toEqual(['/locations', '/our-locations', '/office-locations']);
+    expect(options.judge('<footer>Valley Home Health · Pittsburgh, PA 15201</footer>')).toBe('name');
+    expect(options.judge('<footer>Valley Home Health · Austin, TX 78701</footer>')).toBeNull();
+    expect(store.rosterSiteRecord).toHaveBeenCalledWith('397001', expect.objectContaining({ outcome: 'graduated', domain: 'valleyhh.org', confirmation: 'name' }));
+    expect(result).toMatchObject({ graduated: 1 });
+  });
+
+  it('reads a candidate that redirects to another host as that host, once, and never a directory it redirects to', async () => {
+    const reads = {
+      'valleyhh.org': { email: null, reason: 'none', movedTo: 'valleyhomehealth.com', phoneSeen: false },
+      'valleyhomehealth.com': ownSite,
+    };
+    const { store, contacts, run } = setup({ answer: 'https://valleyhh.org' });
+    contacts.find.mockImplementation(async domain => reads[domain]);
+    await run();
+    expect(contacts.find.mock.calls.map(call => call[0])).toEqual(['valleyhh.org', 'valleyhomehealth.com']);
+    expect(store.rosterSiteRecord).toHaveBeenCalledWith('397001', expect.objectContaining({ outcome: 'graduated', domain: 'valleyhomehealth.com', confirmation: 'phone' }));
+
+    const toDirectory = setup({ answer: 'https://valleyhh.org' });
+    toDirectory.contacts.find.mockImplementation(async () => ({ email: null, reason: 'none', movedTo: 'www.yelp.com', phoneSeen: false }));
+    await toDirectory.run();
+    expect(toDirectory.contacts.find).toHaveBeenCalledTimes(1);
+    expect(toDirectory.store.rosterSiteRecord).toHaveBeenCalledWith('397001', { outcome: 'unresolved', suggestions: ['valleyhh.org'] });
   });
 
   it('reads no directory the search names, and records that nothing was found', async () => {
