@@ -498,6 +498,13 @@ owner decision 2026-11-13, replacing Apollo). It needs no paid service and no ke
     verification service checks a day (50 until you save a number). It needs the ZeroBounce API key (`ZEROBOUNCE_API_KEY`, a
     Railway secret). The `growth.people` and `growth.verify` results count its answers (`byService`). Only the address is sent to
     ZeroBounce; no name or page.
+  - *Bouncer instead of ZeroBounce* (owner decision 2026-11-24: not ZeroBounce). When `BOUNCER_API_KEY` is set (a Railway secret),
+    Bouncer answers in ZeroBounce's place under the same switch, daily number and three-shapes rule (`bouncer` in
+    `server/growth/address-service.mjs`; its real-time check, `GET https://api.usebouncer.com/v1.1/email/verify`, the key in the
+    `x-api-key` header, Bouncer's own 10-second limit). Deliverable confirms the address; undeliverable refuses it, and so does a
+    toxicity of 4 or 5 (Bouncer says to suppress those); risky on an accept-all domain is catch-all; any other risky answer and unknown
+    confirm nothing. No credits left (402) or a wrong key (401, 403) is a refusal: the Hub stops asking that day and tells the owner;
+    busy (429, 5xx) is tried again later. Only the address is sent to Bouncer.
 - **Every address waits for you** on Growth → Decision-makers to review, which shows how it was found (with the page that publishes
   it) and nothing is sent to it until you permit it. Never a personal address on another domain, never a phone number, never an
   unsubscribed address.

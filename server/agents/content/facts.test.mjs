@@ -15,7 +15,7 @@ describe('the fact sheet', () => {
     expect(allowedAmounts.length).toBeGreaterThan(25);
     for (const amount of allowedAmounts) expect(doc, amount).toContain(amount);
     for (const percent of allowedPercents) expect(doc, percent).toContain(percent);
-    expect(allowedPercents).toEqual(['17%', '50%']);
+    expect(allowedPercents).toEqual(['17%', '75%']);
     expect(products.carebase.trialDays).toBe(30);
     expect(doc).toContain('a **30-day** free trial');
     expect(products.intel.trialDays).toBe(30);
@@ -51,7 +51,7 @@ describe('the fact sheet', () => {
   it('keeps the sale duration, renewal, exclusions and assisted trial redemption with both products', () => {
     for (const product of [products.carebase, products.intel]) {
       const offer = product.offers.find(line => line.startsWith('Founders Sale:'));
-      expect(offer).toContain('50% off');
+      expect(offer).toContain('75% off');
       expect(offer).toContain('first 12 months of paid service');
       expect(offer).toContain('including existing free-trial users');
       expect(offer).toContain('when paid service starts');
@@ -60,7 +60,7 @@ describe('the fact sheet', () => {
       expect(offer).toContain('Other promotional discounts cannot be combined');
       expect(offer).toContain('applied automatically');
     }
-    expect(products.advisors.offers.join(' ')).not.toContain('FOUNDERS50');
+    expect(products.advisors.offers.join(' ')).not.toContain('FOUNDERS75');
   });
 
   it('allows a listed host and its subdomains, and nothing that merely contains one', () => {

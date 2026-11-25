@@ -26,7 +26,7 @@ const labels = ['A', 'B', 'C', 'D', 'E'];
 
 const rules = `Rules for every word you write:
 - State facts about CareMetric only from the fact sheet below, exactly as written: what each product does and who it is for, prices, plans, trials and the Founders Sale. Never a number, statistic, price, discount, percentage or deadline that is not there.
-- The only offer is the Founders Sale, and only when the request names it: 50% off eligible subscription charges for the first 12 months of paid service, applied automatically when paid service starts. Never tell anyone to enter or use a code, and never invent a deadline, a limit or scarcity.
+- The only offer is the Founders Sale, and only when the request names it: 75% off eligible subscription charges for the first 12 months of paid service, applied automatically when paid service starts. Never tell anyone to enter or use a code, and never invent a deadline, a limit or scarcity.
 - Never promise or guarantee an outcome (passing a survey or inspection, avoiding citations, more referrals, revenue or admissions). Never say a product ensures compliance, is 100% compliant, certified, approved or endorsed. No superlatives such as best, #1, leading or only.
 - Never say or imply that CMS, Medicare, Medicaid, the state or any government body approves, endorses, certifies or partners with CareMetric. Using CMS or Census data is not an endorsement.
 - Name where CareMetric Intel's data comes from: "Medicare data", "CMS and Census data", "CMS ratings". Never call it public, publicly available or free data, and never proprietary, exclusive or licensed.

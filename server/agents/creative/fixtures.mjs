@@ -6,7 +6,7 @@ export const content = {
   headline: 'See which counties send your organization the most referrals', primaryText: 'CareMetric Intel turns Medicare and Census data into a territory plan.', description: 'Targeted marketing.',
   cta: 'Start free trial', altText: 'A headline',
   overlay: { kicker: 'For healthcare marketing teams', stat: '30 days', statLabel: 'free trial', statSource: 'CareMetric fact sheet', quote: 'Spend the week with referral sources.', quoteSource: 'CareMetric',
-    offerLine: '50% off your first 12 months', checklist: ['Territory analysis', 'A marketing CRM', 'Referrals in one place'], screenshotId: 's1', beats: ['Medicare and Census data', 'One plan your team can work'] },
+    offerLine: '75% off your first 12 months', checklist: ['Territory analysis', 'A marketing CRM', 'Referrals in one place'], screenshotId: 's1', beats: ['Medicare and Census data', 'One plan your team can work'] },
 };
 
 const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });

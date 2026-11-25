@@ -123,14 +123,14 @@ export function regularPriceLabel(offer: PricedOffer) {
 }
 export const isComplimentary = (offer: Pick<PricedOffer, 'discount_percent'>) => offer.discount_percent >= 100;
 const percent = (value: number) => `${Number.isInteger(value) ? value : value.toFixed(2).replace(/0$/, '')}%`;
-/** How long the discount lasts, after "50% off": "for as long as you subscribe", "for your first 12 months", "on your first invoice". */
+/** How long the discount lasts, after "75% off": "for as long as you subscribe", "for your first 12 months", "on your first invoice". */
 export function durationWords(offer: Pick<PricedOffer, 'discount_duration' | 'discount_months' | 'interval'>) {
   if (offer.discount_duration === 'forever') return 'for as long as you subscribe';
   if (offer.discount_duration === 'once') return offer.interval === 'year' ? 'on your first year' : `on your first ${offer.interval}'s invoice`;
   const months = offer.discount_months ?? 1;
   return months === 1 ? 'for your first month' : `for your first ${months} months`;
 }
-/** "50% off for your first 12 months", "Complimentary (100% off) for as long as you subscribe", or "No discount". */
+/** "75% off for your first 12 months", "Complimentary (100% off) for as long as you subscribe", or "No discount". */
 export function discountLabel(offer: Pick<PricedOffer, 'discount_percent' | 'discount_duration' | 'discount_months' | 'interval'>) {
   if (offer.discount_percent <= 0) return 'No discount';
   if (isComplimentary(offer)) return `Complimentary (100% off) ${durationWords(offer)}`;

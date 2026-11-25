@@ -177,7 +177,7 @@ describe('the Founders Sale after a price change', () => {
     expect(foundersPrice('price_new')).toBeUndefined();
     expect(followFoundersReplacements([old, replacement('price_new', STRIPE_PLANS.starter.month[0], 39900)])).toBe(1);
     expect(foundersPrice('price_new')).toEqual({ app: 'caremetric-intel', product: STRIPE_PLANS.starter.product, kind: 'plan', amount: 39900 });
-    expect(foundersAmounts([{ price: 'price_new', quantity: 1 }])).toMatchObject({ standard_recurring_subtotal: 39900, recurring_subtotal: 19950 });
+    expect(foundersAmounts([{ price: 'price_new', quantity: 1 }])).toMatchObject({ standard_recurring_subtotal: 39900, recurring_subtotal: 9975 });
     // Grandfathered subscribers keep the verified price and its offer.
     expect(foundersPrice(STRIPE_PLANS.starter.month[0])).toMatchObject({ amount: 34900 });
   });
@@ -318,10 +318,10 @@ describe('syncing Stripe from Intel\'s catalog', () => {
     expect(t.audits.map(entry => entry.action)).toEqual(['billing.price.change', 'billing.catalog.sync', 'billing.catalog.facts_stale']);
     expect(t.audits[1].metadata).toMatchObject({ source: 'app_catalog', entitlement: 'starter', interval: 'month', price_from: STRIPE_PLANS.starter.month[0], unit_amount_to: 39900 });
     expect(foundersPrice('price_new_1')).toMatchObject({ app: 'caremetric-intel', kind: 'plan', amount: 39900 });
-    // The AI team quotes $399 at once (and half of it under the Founders Sale); docs/GTM_FACTS.md is flagged for review.
+    // The AI team quotes $399 at once (and a quarter of it under the Founders Sale); docs/GTM_FACTS.md is flagged for review.
     expect(facts.intel.pricing[0]).toMatch(/^Starter: \$399 per month/);
-    expect(result.facts_stale).toEqual(['$199.50', '$399']);
-    expect(t.log.warn).toHaveBeenCalledWith(expect.stringMatching(/GTM_FACTS\.md .* do not state \$199\.50, \$399/));
+    expect(result.facts_stale).toEqual(['$399', '$99.75']);
+    expect(t.log.warn).toHaveBeenCalledWith(expect.stringMatching(/GTM_FACTS\.md .* do not state \$399, \$99\.75/));
   });
 
   it('replaces a changed add-on price, priced per unit like the one it replaces', async () => {

@@ -453,7 +453,7 @@ customer is never billed twice. See [customer invitations](CUSTOMER_INVITATIONS.
 
 ## Current Founders Sale
 
-Eligible new paid CareBase, Train and Intel subscriptions automatically receive **50% off the first 12 paid months**, then regular renewal pricing. No code entry or assisted activation is needed. Checkout verifies the discount in its preview, session and receipt. Hub subscription creation applies it automatically; trial conversions apply it on the first paid invoice so the free trial does not consume the year. Eligibility, no stacking, one introductory year and exact public prices are checked server-side. See [pricing, exclusions and operational details](PRICING_RESEARCH_AND_FOUNDERS_SALE.md). Existing founding agreements retain their terms.
+Eligible new paid CareBase, Train and Intel subscriptions automatically receive **75% off the first 12 paid months**, then regular renewal pricing. No code entry or assisted activation is needed. Checkout verifies the discount in its preview, session and receipt. Hub subscription creation applies it automatically; trial conversions apply it on the first paid invoice so the free trial does not consume the year. Eligibility, no stacking, one introductory year and exact public prices are checked server-side. See [pricing, exclusions and operational details](PRICING_RESEARCH_AND_FOUNDERS_SALE.md). Existing founding agreements retain their terms.
 
 ## Intel trial signup
 

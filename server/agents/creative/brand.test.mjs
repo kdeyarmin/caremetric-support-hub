@@ -35,9 +35,9 @@ describe('brand helpers', () => {
 
 describe('offers from billing', () => {
   it('reads the Founders Sale from the live coupon', () => {
-    expect(FOUNDERS_COUPON).toContain('_50_12m_');
-    expect(liveOffers.FOUNDERS50).toMatchObject({ percentOff: 50, months: 12, automatic: true, products: ['carebase', 'caremetric-intel'] });
-    expect(offerFor('founders50')?.code).toBe('FOUNDERS50');
+    expect(FOUNDERS_COUPON).toContain('_75_12m_');
+    expect(liveOffers.FOUNDERS75).toMatchObject({ percentOff: 75, months: 12, automatic: true, products: ['carebase', 'caremetric-intel'] });
+    expect(offerFor('founders75')?.code).toBe('FOUNDERS75');
     expect(offerFor('SPRING20')).toBeNull();
   });
 });

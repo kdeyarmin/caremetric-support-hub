@@ -70,7 +70,7 @@ export const trialMention = `Offer the free trial in plain words: its length and
  * proprietary, exclusive or licensed either, and a reader who asks where it comes from gets a plain answer.
  */
 export const dataMention = 'Name where the data comes from: "Medicare data", "CMS and Census data", "CMS ratings". Never call it public, publicly available or free data, and never proprietary, exclusive or licensed. When someone asks where it comes from or whether anyone can get it, answer plainly: it is CMS, NPPES and Census Bureau data that CareMetric Intel links and analyzes.';
-const foundersSaleTerms = 'Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service on new paid product subscriptions, including existing free-trial users. The discount is applied automatically to eligible subscriptions after the trial, when paid service starts. No code or activation request is needed. Monthly billing receives 50% off the regular monthly rate; annual billing receives 50% off the published annual price paid upfront. Standard pricing resumes after the introductory year. Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization and product; plan eligibility and capacity limits still apply. No enrollment deadline or cap has been set. Source: live Stripe offer verified 2026-11-08; docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md.';
+const foundersSaleTerms = 'Founders Sale: 75% off eligible subscription charges for the first 12 months of paid service on new paid product subscriptions, including existing free-trial users. The discount is applied automatically to eligible subscriptions after the trial, when paid service starts. No code or activation request is needed. Monthly billing receives 75% off the regular monthly rate; annual billing receives 75% off the published annual price paid upfront. Standard pricing resumes after the introductory year. Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization and product; plan eligibility and capacity limits still apply. No enrollment deadline or cap has been set. Source: live Stripe offer verified 2026-11-24; docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md.';
 
 const usd = cents => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 const listNames = names => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '');
@@ -112,8 +112,8 @@ export function intelFactsFromCatalog(catalog) {
   const offers = [
     `A ${catalog.trial_days}-day free trial${catalog.trial_includes ? `, covering ${catalog.trial_includes}` : ''}. ${trialCardTerms}`,
     foundersSaleTerms,
-    `Eligible Intel products: ${listNames(plans.map(item => item.name))}. Intel ${first.name} is ${usd(Math.round(amount(first, 'month') / 2))} per organization per month during the introductory year`
-      + `${amount(first, 'year') ? `, or ${usd(Math.round(amount(first, 'year') / 2))} for the first annual payment` : ''}, then the regular rate.${catalog.free_onboarding ? ' Onboarding is free on every plan.' : ''}`,
+    `Eligible Intel products: ${listNames(plans.map(item => item.name))}. Intel ${first.name} is ${usd(Math.round(amount(first, 'month') / 4))} per organization per month during the introductory year`
+      + `${amount(first, 'year') ? `, or ${usd(Math.round(amount(first, 'year') / 4))} for the first annual payment` : ''}, then the regular rate.${catalog.free_onboarding ? ' Onboarding is free on every plan.' : ''}`,
   ];
   return { trialDays: catalog.trial_days, pricing, offers };
 }
@@ -135,7 +135,7 @@ export const intelReviewedFacts = deepFreeze({
   offers: [
     `A 30-day free trial, covering 3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your choice, 1 county. ${trialCardTerms}`,
     foundersSaleTerms,
-    'Eligible Intel products: Starter, Growth and Pro. Intel Starter is $174.50 per organization per month during the introductory year, or $1,740 for the first annual payment, then the regular rate. Onboarding is free on every plan.',
+    'Eligible Intel products: Starter, Growth and Pro. Intel Starter is $87.25 per organization per month during the introductory year, or $870 for the first annual payment, then the regular rate. Onboarding is free on every plan.',
   ],
 });
 
@@ -193,7 +193,7 @@ export const products = deepFreeze({
     offers: [
       'A 30-day free trial, started online at cmcarebase.com/signup.',
       foundersSaleTerms,
-      'Eligible CareBase/Train products: Core, Complete, Compliance Suite, Small Home, Small Home Complete, Train, Train Single Facility, and the eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments add-ons. CareBase Core is $99.50 per facility per month during the introductory year, or $995 for the first annual payment, then the regular rate.',
+      'Eligible CareBase/Train products: Core, Complete, Compliance Suite, Small Home, Small Home Complete, Train, Train Single Facility, and the eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments add-ons. CareBase Core is $49.75 per facility per month during the introductory year, or $497.50 for the first annual payment, then the regular rate.',
       'Legacy founding partners: preserve previously agreed founding-partner pricing held for as long as they subscribe. Previously agreed lifetime terms are separate from the current Founders Sale; do not offer lifetime pricing to new applicants or describe the new sale as a lifetime rate.',
     ],
   },

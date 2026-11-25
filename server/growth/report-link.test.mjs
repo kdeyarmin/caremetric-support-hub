@@ -187,7 +187,7 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
     expect(offered.sent.body).toMatch(/Start your 30-day free trial\nhttps:\/\/www\.caremetricintel\.com\/login\?signup=true&utm_source=caremetric&utm_medium=email&utm_campaign=growth-intel-touch2/);
     expect(offered.plan).toMatch(/the Founders Sale, the 30-day free trial button, and a link back to the report/);
     expect(offered.sent.body).toContain('A week of outreach');
-    expect(offered.sent.body).toContain('Founders Sale: 50% off the first 12 months');
+    expect(offered.sent.body).toContain('Founders Sale: 75% off the first 12 months');
     expect((await second('You can try it risk-free for 30 days on one county:')).sent).toBeNull();
     expect((await second(`See the report.\n${link.url}`)).sent).toBeNull();
     expect((await second('You can try it free for 30 days, with no credit card needed:')).sent).toBeNull();

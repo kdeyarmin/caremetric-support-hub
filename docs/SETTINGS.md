@@ -162,7 +162,7 @@ Secrets, which are never shown on screen or stored in the database:
 - `HUB_SES_ACCESS_KEY_ID`, `HUB_SES_SECRET_ACCESS_KEY` (Amazon SES sending key, [AMAZON_SES.md](AMAZON_SES.md))
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `HUB_GROWTH_SIGNING_KEY`, `HUB_GROWTH_SEARCH_API_KEY`, `HUB_GROWTH_CAREBASE_EVENT_KEY`, `HUB_GROWTH_INTEL_EVENT_KEY`
-- `ZEROBOUNCE_API_KEY` (only for Settings → Customer growth → Ask a verification service when a mail server won't answer)
+- `BOUNCER_API_KEY` or `ZEROBOUNCE_API_KEY` (only for Settings → Customer growth → Ask a verification service when a mail server won't answer; Bouncer is used when its key is set)
 - `HUB_LEAD_SECRET_CAREBASE`, `HUB_LEAD_SECRET_INTEL`, `HUB_LEAD_SECRET_ADVISORS`
 - `HUB_SOCIAL_CREDENTIALS_KEY` (server encryption key for the Meta and LinkedIn connection cards)
 - `HUB_META_ACCESS_TOKEN` (legacy fallback until the Meta card is first saved)

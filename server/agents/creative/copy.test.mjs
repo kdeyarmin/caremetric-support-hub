@@ -74,8 +74,8 @@ describe('creative copy', () => {
     expect(normalizeVariant(variant('proof', 'stat')).layout).toBe('headline');
     expect(normalizeVariant(variant('demo', 'screenshot', { overlay: { ...variant().overlay, screenshotId: 'nope' } }), { screenshots: [{ id: 's1' }] }).layout).toBe('headline');
     expect(normalizeVariant(variant('demo', 'screenshot', { overlay: { ...variant().overlay, screenshotId: 's1' } }), { screenshots: [{ id: 's1' }] }).layout).toBe('screenshot');
-    expect(normalizeVariant(variant('offer', 'offer', { overlay: { ...variant().overlay, offerLine: '50% off your first 12 months' } })).layout).toBe('headline');
-    expect(normalizeVariant(variant('offer', 'offer', { overlay: { ...variant().overlay, offerLine: '50% off your first 12 months' } }), { offer: { code: 'FOUNDERS50' } }).layout).toBe('offer');
+    expect(normalizeVariant(variant('offer', 'offer', { overlay: { ...variant().overlay, offerLine: '75% off your first 12 months' } })).layout).toBe('headline');
+    expect(normalizeVariant(variant('offer', 'offer', { overlay: { ...variant().overlay, offerLine: '75% off your first 12 months' } }), { offer: { code: 'FOUNDERS75' } }).layout).toBe('offer');
   });
 
   it('chooses three to five variants on different hooks, the hero first', () => {
@@ -98,7 +98,7 @@ describe('creative copy', () => {
   it('sends people only to the product\'s own pages', () => {
     expect(landingFor('carebase', 'carebase-signup')).toBe('https://cmcarebase.com/signup');
     expect(landingFor('carebase', 'intel-home')).toBe('https://cmcarebase.com/signup');
-    const message = JSON.parse(briefUserMessage({ brief: { product: 'carebase', goal: 'g', audience: 'a', angle: '', platforms: ['meta'], formats: ['static'], videoLengths: [], offerCode: 'FOUNDERS50' }, brandKit: { voiceNotes: 'Warm' }, learnings: [] }));
+    const message = JSON.parse(briefUserMessage({ brief: { product: 'carebase', goal: 'g', audience: 'a', angle: '', platforms: ['meta'], formats: ['static'], videoLengths: [], offerCode: 'FOUNDERS75' }, brandKit: { voiceNotes: 'Warm' }, learnings: [] }));
     expect(message.offer.name).toBe('Founders Sale');
     expect(message.pages.every(page => page.id.startsWith('carebase-'))).toBe(true);
     expect(message.brandTheme).toEqual({ name: 'CareBase', mode: 'light', tagline: null });
