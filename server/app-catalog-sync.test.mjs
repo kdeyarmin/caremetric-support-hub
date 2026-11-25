@@ -320,8 +320,8 @@ describe('syncing Stripe from Intel\'s catalog', () => {
     expect(foundersPrice('price_new_1')).toMatchObject({ app: 'caremetric-intel', kind: 'plan', amount: 39900 });
     // The AI team quotes $399 at once (and a quarter of it under the Founders Sale); docs/GTM_FACTS.md is flagged for review.
     expect(facts.intel.pricing[0]).toMatch(/^Starter: \$399 per month/);
-    expect(result.facts_stale).toEqual(['$99.75', '$399']);
-    expect(t.log.warn).toHaveBeenCalledWith(expect.stringMatching(/GTM_FACTS\.md .* do not state \$99\.75, \$399/));
+    expect(result.facts_stale).toEqual(['$399', '$99.75']);
+    expect(t.log.warn).toHaveBeenCalledWith(expect.stringMatching(/GTM_FACTS\.md .* do not state \$399, \$99\.75/));
   });
 
   it('replaces a changed add-on price, priced per unit like the one it replaces', async () => {
