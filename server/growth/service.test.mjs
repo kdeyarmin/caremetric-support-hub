@@ -85,3 +85,14 @@ it('keeps valid delivery and opt-out events when unusable events appear in the s
   ['unsubscribe-1',message,'unsubscribe',new Date(now).toISOString()],
  ]);
 });
+it('offers the owner\'s "Use this site" only once the database declares it, and sends the database only a roster number and a domain',async()=>{
+ const rosterUseSite=vi.fn(async()=>({graduated:true,organizationId:'org'}));
+ const without=growthService({store:{rosterUseSite},features:new Set(['platform.agents.customer-growth.v1'])});
+ await expect(without.admin('token',{operation:'rosterUseSite',data:{ccn:'397001',domain:'valleyhh.org'}})).rejects.toMatchObject({status:503});
+ const service=growthService({store:{rosterUseSite},features:new Set(['platform.agents.customer-growth.v1','platform.agents.first-replies-2.v1'])});
+ await expect(service.admin('token',{operation:'rosterUseSite',data:{ccn:'397001',domain:'https://valleyhh.org/'}})).rejects.toMatchObject({status:400});
+ await expect(service.admin('token',{operation:'rosterUseSite',data:{ccn:'397001',domain:'valleyhh.org',confirmation:'phone'}})).rejects.toMatchObject({status:400});
+ expect(rosterUseSite).not.toHaveBeenCalled();
+ await expect(service.admin('token',{operation:'rosterUseSite',data:{ccn:'397001',domain:'valleyhh.org'}})).resolves.toEqual({graduated:true,organizationId:'org'});
+ expect(rosterUseSite).toHaveBeenCalledWith('token','397001','valleyhh.org');
+});

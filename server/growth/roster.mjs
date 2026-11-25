@@ -353,3 +353,33 @@ export function confirmsSite(target, found, choice = null) {
   if ((choice?.inDomain ?? 0) >= 1 && named >= 0.5 && setting && place) return 'name';
   return null;
 }
+
+/** A page's visible words (scripts, styles and tags removed, the usual entities read), space-separated with a space at each end. */
+export function pageWords(html) {
+  const text = String(html ?? '').slice(0, 400_000)
+    .replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&(?:nbsp|#160|#xa0);/gi, ' ').replace(/&(?:amp|#38);/gi, '&').replace(/&(?:apos|rsquo|#39|#8217);/gi, '\'');
+  return ` ${words(text).join(' ')} `;
+}
+
+/**
+ * Whether one page of a candidate site names the agency where it is (the Nov 24 measurement, docs/CUSTOMER_GROWTH.md): two in three of its
+ * distinctive name words, its town and its state, and its kind of care, anywhere on the page, footer included. `confirmsSite` judges the
+ * home page by its opening text only (the summary kept as evidence), and most agencies print their town and state in the footer or on
+ * their contact page: of 27 suggested sites read on 2026-11-25, 7 named the agency, its town and its state on a page the finder reads,
+ * and none had been confirmed. Stricter than the home page rule: the town and the state are both needed. 'name' or null; a host already
+ * serving three agencies still needs the telephone number (private.growth_roster_resolved).
+ */
+export function pageNamesAgency(target, html) {
+  const distinct = distinctiveWords(target?.name);
+  const city = words(target?.city).join(' ');
+  const own = String(target?.state ?? '').toUpperCase();
+  const setting = settingWords[target?.setting];
+  if (!distinct.length || city === '' || !Object.hasOwn(stateNames, own) || !setting) return null;
+  const page = pageWords(html);
+  if (distinct.filter(word => page.includes(` ${word} `)).length / distinct.length < 0.67) return null;
+  if (!page.includes(` ${city} `) || !statesNamed(page).has(own)) return null;
+  return setting.some(word => page.includes(` ${word} `)) ? 'name' : null;
+}

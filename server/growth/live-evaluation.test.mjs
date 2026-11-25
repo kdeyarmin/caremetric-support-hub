@@ -12,10 +12,10 @@ const policy = { enabled: true, approvedClaim: 'CareMetric Intel shows home heal
 const scheduled = (over = {}) => ({ id: '00000000-0000-4000-8000-0000000000aa', agentKey: 'marketing_manager', kind: 'growth.evaluate_live', sourceKind: 'schedule', attempts: 1,
   requestKey: 'schedule:00000000-0000-4000-8000-000000000001:20261116T115000Z', agent: { autonomy: 'act' }, ...over });
 
-// A reader-and-writer model stand-in: writes a first email in the form every agency gets (a free report and one question, linking
+// A reader-and-writer model stand-in: writes a first email in the form every agency gets (a free report and no question, linking
 // the case's own report, or Intel's free county report page for a case without one), and scores it as told.
 const reviewPage = 'https://www.caremetricintel.com/county-report';
-const email = (link, source) => ({ subject: 'A market report for your agency', body: `I put together a free market report for your agency from Medicare data.\n${link}\n\nDoes it match what your team sees in the field?`,
+const email = (link, source) => ({ subject: 'A market report for your agency', body: `I put together a free market report for your agency from Medicare data.\n${link}\n\nIt is a quick way to see who leads the county before you plan next month's visits.`,
   citations: [source], needsHuman: false });
 function stubModel({ score = 4, weakness = 'none', outcome = 'completed', failOn = null } = {}) {
   const calls = [];
@@ -25,7 +25,7 @@ function stubModel({ score = 4, weakness = 'none', outcome = 'completed', failOn
     if (request.promptVersion === criticPromptVersion) return { outcome: 'completed', output: { specific: 4, relevant: 4, clearAsk: 4, wouldReply: typeof score === 'function' ? score() : score, weakness, weakestSentence: '' } };
     const input = JSON.parse(request.user);
     const report = input.links.find(link => link.url.includes('/report/'))?.url ?? input.links.find(link => link.url === reviewPage).url;
-    const source = input.sources.find(item => item.id !== 'county').id;
+    const source = input.sources.find(item => !['county', 'release'].includes(item.id)).id;
     if (failOn && failOn(input)) return { outcome: 'completed', output: { ...email(report, source), body: `${email(report, source).body}\n\nWe guarantee more referrals.` } };
     return { outcome: 'completed', output: email(report, source) };
   }) };
@@ -114,10 +114,10 @@ describe('growth.evaluate_live', () => {
     expect([product, version, passed]).toEqual(['caremetric-intel', liveEvaluationVersion, true]);
     expect(version).not.toBe(growthEvaluationVersion);
     expect(results.results).toHaveLength(12);
-    expect(JSON.stringify(results)).not.toMatch(/free market report|what your team sees|report\/live-eval|market-review|county-report/);
+    expect(JSON.stringify(results)).not.toMatch(/free market report|who leads the county|report\/live-eval|market-review|county-report/);
     expect(JSON.stringify(results).length).toBeLessThan(12_000);
     expect(model.calls.filter(version => version === criticPromptVersion).length).toBeGreaterThanOrEqual(12);
-    expect(criticPromptVersion).toBe('critic.5');
+    expect(criticPromptVersion).toBe('critic.6');
     // Six were written around the agency's own report and six around the free county report page, each in the one first-email form.
     const written = model.run.mock.calls.filter(([, request]) => request.promptVersion !== criticPromptVersion).map(([, request]) => JSON.parse(request.user));
     expect(written.filter(input => input.touchPlan === reportTouchAngle && input.report === true)).toHaveLength(6);

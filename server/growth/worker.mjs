@@ -6,6 +6,7 @@ import { assessProspect } from './assessment.mjs';
 import { planOpportunity, products } from './policy.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
 import { draftMessage, outdatedWords } from './draft.mjs';
+import { recentReleases } from './reason-now.mjs';
 import { growthBriefFeature } from './brief.mjs';
 import { growthReportViewsFeature } from './views.mjs';
 import { growthLearningFeature } from './learning.mjs';
@@ -262,7 +263,11 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
           const report=work.kind==='outreach'&&growth.reports?(growth.reports.checkedLinkFor?await growth.reports.checkedLinkFor(o,{signal}):growth.reports.linkFor?.(o))??null:null;
           if(quality)topDrafts++;
           const views=viewing&&live(growth.views?.enabled)===true;
-          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,views,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
+          // A first email to an Intel agency may name a new CMS release as its reason to answer now (reason-now.mjs): read from Intel's
+          // feed at most every six hours, and none when the feed is off or does not answer.
+          const releases=work.kind==='outreach'&&o.product==='caremetric-intel'&&Number(o.touches??0)===0&&!o.memory?.reengagedAt&&!o.memory?.lead
+            ?await recentReleases(growth.roster?.feed,{signal}):[];
+          const draft=await oneAnswer(()=>draftMessage({opportunity:o,work,task,model,signal,memo,report,brief,quality,critic,views,releases,onReject:code=>{rejected[code]=(rejected[code]??0)+1;}}),signal);
           if(!draft){if(model?.configured){unanswered.set(wanted,clock());undrafted++;}continue;}
           signal?.throwIfAborted();
           const {review,...message}=draft;
@@ -617,7 +622,7 @@ export function growthEmail({product,purpose=null,quiet=false,subject,body,posta
   const campaign=product===campaignProduct&&purpose==='marketing'?readCampaign(words,{reports}):null;
   if(!campaign)return letter;
   const designed=renderEmail({layout:'branded',theme:themeFor(product),title:subject,preheader:preheader.slice(0,150),
-    eyebrow:campaign.version===2?null:campaignEyebrow(campaign.touch,campaign.setting),heading:subject,greeting:`Hello${greeting?` ${greeting}`:''},`,
+    eyebrow:campaign.version>=2?null:campaignEyebrow(campaign.touch,campaign.setting),heading:subject,greeting:`Hello${greeting?` ${greeting}`:''},`,
     blocks:campaignBlocks(campaign,{links:messageLinks(product,campaign.opening,reports)}).filter(Boolean),
     // The first email carries the founder's words as a signed quote, so it needs no second sign-off under its closing panel.
     signature:campaign.touch===1?[]:signature,footer});

@@ -16,3 +16,14 @@ export const firstRepliesFeature = 'platform.agents.first-replies.v1';
 /** Whether the database declares the follow-up (`features` is the backend contract's list or a Set). */
 export const hasFirstReplies = features => (features instanceof Set ? features.has(firstRepliesFeature)
   : Array.isArray(features) && features.includes(firstRepliesFeature));
+
+/**
+ * The follow-up's second part (20261125161000_first_replies_sites.sql and fork A's writing change): the website search reads the sites it
+ * names, and the owner can use a suggested site in one click on Growth. Declared by the database separately, so the first part could
+ * ship alone.
+ */
+export const firstRepliesTwoFeature = 'platform.agents.first-replies-2.v1';
+
+/** Whether the database declares the second part (`features` is the backend contract's list or a Set). */
+export const hasFirstRepliesTwo = features => (features instanceof Set ? features.has(firstRepliesTwoFeature)
+  : Array.isArray(features) && features.includes(firstRepliesTwoFeature));

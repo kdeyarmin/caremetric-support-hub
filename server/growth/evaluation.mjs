@@ -3,6 +3,7 @@ import { draftMessage, growthPromptVersion } from './draft.mjs';
 import { discoveryQuery, operatorHost, playbookFor, reportTouchAngle, reviewTouchAngle, unviewedTouchAngle } from './playbook.mjs';
 import { assessProspect } from './assessment.mjs';
 import { readCampaign } from './campaign.mjs';
+import { reasonNow } from './reason-now.mjs';
 
 /**
  * The key the database's send claim requires for a recent passing evaluation (`version='growth.1'` in private.growth_claim_message).
@@ -59,12 +60,13 @@ export async function evaluateGrowth(now = new Date()) {
     check('tagged link to another host rejected', await invoke({ ...draft, body: 'Would a free trial help?\n\nhttps://unsupported.example.org/?utm_source=x&utm_medium=y&utm_campaign=z' }) === null);
     check('tag carrying another address rejected', await invoke({ ...draft, body: `Would a free trial help?\n\n${page}?utm_source=x&utm_medium=y&utm_campaign=z&next=https://unsupported.example.org` }) === null);
     // The first email to a CareMetric Intel agency (owner direction 2026-11-17): the writer's opening, held by code to the report's one
-    // link and at most one question, then what the software does and the trial, added by code. No prospect email brings up how the
-    // trial bills, or says a card is required to start it (none is, since 2026-11-23).
+    // link, then what the software does, added by code. It asks for one thing, the report: no question, and the trial comes in the second
+    // email (the Nov 24 measurement). No prospect email brings up how the trial bills, or says a card is required to start it (none is,
+    // since 2026-11-23).
     const report = { label: 'Free market report for the agency', url: 'https://www.caremetricintel.com/report/synthetic.case' };
     const reviewPage = 'https://www.caremetricintel.com/county-report';
     const inside = 'It shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county\'s residents use most and the highest-ranked physicians for outreach.';
-    const close = 'I run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nDoes it match what your team sees in the field?';
+    const close = 'I run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nIt is a quick way to see who leads the county before you plan next month\'s visits.';
     const firstBody = `I put together a free market report for your agency from Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\n${inside}\n\n${close}`;
     const seen = [];
     const capture = output => ({ configured: true, run: async (_task, request) => { seen.push(JSON.parse(request.user)); return { outcome: 'completed', output }; } });
@@ -72,10 +74,17 @@ export async function evaluateGrowth(now = new Date()) {
     const first = (body, options = { report }) => draftMessage({ opportunity: base, work, task: {}, model: capture({ ...firstDraft, body }), ...options });
     if (product === 'caremetric-intel') {
       const written = await first(firstBody);
-      check('first email to an agency is its market report and one question', written?.modelGenerated === true && written.arms?.form === 'short' && seen.at(-1)?.touchPlan === reportTouchAngle);
+      check('first email to an agency asks one thing: to open its market report', written?.modelGenerated === true && written.arms?.form === 'short' && seen.at(-1)?.touchPlan === reportTouchAngle
+        && !/free trial|signup=true/.test(written.body.slice(firstBody.length)));
+      check('first email asking the reader a question rejected', await first(`${firstBody} Which county matters most to you?`) === null);
       check('first email offering the trial rejected', await first(`${firstBody}\n\nYou can also try it free for 30 days:\n${playbookFor(product).nextStep.url}`) === null);
       check('first email over its length rejected', await first(`${firstBody}${' The report also lists the county\'s largest agencies and the hospitals its residents use.'.repeat(6)}`) === null);
-      check('first email with a second question rejected', await first(`${firstBody} Which county matters most to you?`) === null);
+      // The one dated reason code gives the writer (reason-now.mjs): a recent change of ownership on the Medicare record, else none.
+      const record = { id: 'cms-record', source_url: 'https://data.cms.gov/provider-data/', confidence: 'high', observed_at: at,
+        claim: `CMS Provider of Services file, 2026Q3: Synthetic Home Health (CCN 990199) is a Medicare-certified home health agency in Erie, PA; change of ownership recorded ${new Date(now - 60 * 86400000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}.` };
+      const dated = await draftMessage({ opportunity: { ...base, evidence: [...evidence, record] }, work, task: {}, model: capture({ ...firstDraft, body: firstBody }), report });
+      check('first email is given its one dated reason, and none is invented', dated?.arms?.reason === 'record' && seen.at(-1)?.reasonNow?.sourceId === 'cms-record'
+        && written.arms?.reason === 'none' && seen.length && reasonNow({ sources: evidence, now }) === null);
       check('first email without its report link rejected', await first(firstBody.replace(`\n${report.url}`, '')) === null);
       const review = await first(`A free report on your county, built from Medicare and Census data, is one step away. Choose your state and county and it is emailed to you as a PDF.\n${reviewPage}`, {});
       check('first email without a roster report points to the free county report page', review?.modelGenerated === true && review.arms?.form === 'short' && seen.at(-1)?.touchPlan === reviewTouchAngle);
@@ -90,8 +99,10 @@ export async function evaluateGrowth(now = new Date()) {
       // Each of the agency's three emails carries its marketing sections after the writer's opening (campaign.mjs), and reads back whole.
       const whole = touches => draftMessage({ opportunity: { ...base, touches }, work, task: {}, report });
       const laid = async touches => readCampaign((await whole(touches))?.body, { reports: { accepts: url => url === report.url } });
-      check('agency email says what the software does and offers the trial', (await laid(0))?.version === 2 && (await laid(1))?.touch === 2 && (await laid(2))?.touch === 3
-        && written.body.includes('Know your market') && written.body.includes('Start your 30-day free trial'));
+      const laidFirst = await laid(0);
+      check('agency email says what the software does, and offers the trial from the second email on', laidFirst?.version === 3 && laidFirst?.trialUrl === null
+        && (await laid(1))?.touch === 2 && (await laid(2))?.touch === 3
+        && written.body.includes('Know your market') && !written.body.includes('Start your 30-day free trial') && followup.body.includes('Start your 30-day free trial'));
       check('prospect email calling the data public rejected', await second(`One page of the report, built from public Medicare data, lists the hospitals your county's residents use. Does your team plan its week around them?`) === null);
       check('prospect email naming the card rejected', await second(`Does your team plan its week around the hospitals your county's residents use?\n\nA credit card is required to start the subscription.`) === null);
     } else {

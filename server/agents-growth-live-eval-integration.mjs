@@ -24,8 +24,8 @@ const refused = code => error => error?.code === code;
 const seedPolicy = await row("select approved_claim from private.growth_policies where product = 'caremetric-intel'");
 const runs = [];
 
-// A stand-in writer and reader: a first email in the form every agency gets (its report and one question, citing the agency's own
-// record), and the score it is told to give. Half of the cases carry the agency's own report; the rest have none, and are pointed to
+// A stand-in writer and reader: a first email in the form every agency gets (its report as the one ask, no question: growth.21, the Nov
+// 24 follow-up; citing the agency's own record), and the score it is told to give. Half of the cases carry the agency's own report; the rest have none, and are pointed to
 // Intel's free county report page.
 const stand = score => ({ configured: true, run: async (_task, request) => {
   if (request.promptVersion === criticPromptVersion) return { outcome: 'completed', output: { specific: 4, relevant: 4, clearAsk: 4, wouldReply: score, weakness: score < 4 ? 'generic_opening' : 'none', weakestSentence: '' } };
@@ -33,7 +33,7 @@ const stand = score => ({ configured: true, run: async (_task, request) => {
   const own = input.links.find(link => link.url.includes('/report/'));
   const report = (own ?? input.links.find(link => link.url.endsWith('/county-report'))).url;
   return { outcome: 'completed', output: { subject: own ? 'A market report for your agency' : 'A free report on your county', citations: [input.sources.find(source => source.id !== 'county').id], needsHuman: false,
-    body: `${own ? 'I put together a free market report for your agency from Medicare data.' : 'A free report on your county, built from Medicare and Census data, is one step away.'}\n${report}\n\nDoes it match what your team sees in the field?` } };
+    body: `${own ? 'I put together a free market report for your agency from Medicare data.' : 'A free report on your county, built from Medicare and Census data, is one step away.'}\n${report}\n\nIt shows where your county's referrals come from.` } };
 } });
 // A clock a minute on at each reading: a try writes one batch and then finds its time for starting new batches spent, as a real run
 // with a slow model would, so the twelve cases take several tries without the test waiting minutes.

@@ -157,6 +157,15 @@ snapshot reports `senderProduct` and stays the server's. Each test fails closed.
 feature is declared; it handles the claim's `paced` whatever the contract
 ([team review, November 24 measurement](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md#november-24-measurement)).
 
+`20261125169000_first_replies_two_contract.sql` declares `platform.agents.first-replies-2.v1` once the first part of the follow-up,
+the website search and the roster are declared; a roster agency may be confirmed by the owner (`confirmation 'owner'`);
+`private.growth_roster_resolved` accepts that confirmation, treats it as the telephone number on a host already serving three agencies
+and stays the Hub server's; and `hub.growth_roster_use_site` is a security definer with an empty search path that `authenticated` may
+call and `anon` and `service_role` may not, which checks the owner's current session (`hub.authorize_app_command()`), takes only one of
+the agency's own suggested sites, resolves it through `private.growth_roster_resolved` with the owner's confirmation and records
+`growth.roster_site_used`. Each test fails closed. The Hub server offers "Use this site" only when the feature is declared
+([team review, November 24 measurement](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md#november-24-measurement)).
+
 `20261118120100_owner_summary_contract.sql` declares `platform.agents.owner-summary.v1` once the settings and AI team hardening
 features are declared, the three summary settings (`agents.daily_summary`, `agents.summary_hour`, `agents.approvals_right_away`) have
 rows of their kinds, `private.owner_notifications` admits the `held` status and only a held row carries an `attention`,
