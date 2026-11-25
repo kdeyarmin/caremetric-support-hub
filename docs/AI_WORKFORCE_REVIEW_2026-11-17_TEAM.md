@@ -136,9 +136,35 @@ Feature `platform.agents.first-replies.v1` (`20261124150000_first_replies.sql`, 
     we wrote to.
   - Without one, the Concierge uses the one product the message names, or drafts from every product's guides and names the product
     its answer is about (prompt `concierge.4`).
-- **Not yet built** (work stopped at the account's weekly usage limit; they follow in their own pull request):
-  - the first email with one ask and a dated reason to answer now;
-  - the website search confirming more of its finds, and the owner's one-click "Use this site".
+- **Owner decisions after the first part (November 24):** no ZeroBounce. The verification service is off, and Strict and the
+  spread are on. A Bouncer connection (#308) waits behind the same switch for Bouncer to verify the owner's account.
+
+### What changed (November 24 follow-up, part 2)
+
+Feature `platform.agents.first-replies-2.v1` (`20261125161000_first_replies_sites.sql`, gate
+`20261125169000_first_replies_two_contract.sql`; pgTAP 127):
+- **The first email asks one thing and gives a dated reason to answer now** (writer `growth.21`, reader `critic.6`). The week's
+  reader named too many asks in 23 of 51 first emails and no reason to answer now in 17, and the live evaluation named the second in
+  7 of 12.
+  - An Intel agency's first email now asks only that the reader open the report, with no question. Its free trial moves to the
+    second email, which already offered it (campaign version 3). Emails approved before the change go as approved.
+  - Code picks one true dated reason (`server/growth/reason-now.mjs`), in this order:
+    1. a recent trigger in the account brief;
+    2. a recent certification or change of ownership on the agency's Medicare record;
+    3. new CMS data for its kind of care, published in the last 45 days.
+
+    The writer may not invent one. With none, the email says the report is ready. `arms.reason` records which kind was used.
+  - The reader has room to answer: 6 of 182 reads that week were cut off and left unscored.
+- **The website search reads the sites it finds.**
+  - In 53 of the 87 agencies it searched but did not resolve, a fragment of the model's own sentence (such as "apparently.https")
+    was stored as a site. In 22 of them that was the only thing stored, so the real site was never read.
+  - Now only written-out web addresses are taken (`sites.2`).
+  - A page confirms the agency when it shows the agency's name, town and state, read from the footer, the contact page and the
+    locations pages. A site that moved is read at its new host once.
+  - Every unresolved agency is searched once more, at 10 a day.
+- **"Use this site" on Growth.** For a site no honest reader can open (about a third of those tried sit behind bot checks or are
+  built by script), the owner can use one of the agency's own suggested sites. That choice is recorded as the owner's, and the
+  agency joins the pipeline as a confirmed one would. Owner decision of 2026-11-24, replacing "no approve button" (2026-11-16).
 
 ## What the review found
 
