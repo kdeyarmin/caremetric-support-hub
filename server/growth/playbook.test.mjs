@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { products, productPages, trialCardTerms, trialMention } from '../agents/content/facts.mjs';
 import { allowedNumbers, textProblems } from '../agents/content/validate.mjs';
 import {
-  discoveryPages, discoveryQueries, discoveryQueriesPerDay, discoveryQuery, discoveryQueryCount, inboundSequence, intelSetting, lifecyclePlay, linkablePages, offersMeeting, operatorHost, playbookText, playbookVersion, quietPlays, reaskAngle,
+  discoveryPages, discoveryQueries, discoveryQueriesPerDay, discoveryQuery, discoveryQueryCount, inboundSequence, intelSetting, lifecyclePlay, linkablePages, offersMeeting, operatorHost, playbookText, playbookVersion, quietPlays, reaskAngle, reasonNowRule,
   reportCloseAngle, reportTouchAngle, reviewFollowupAngle, reviewTouchAngle, salesPlaybook, sequencePlan, shortFormLimits, touchAngle, unviewedTouchAngle, viewedTouchAngle,
 } from './playbook.mjs';
 
@@ -120,7 +120,7 @@ describe('sales playbook', () => {
 
   it('gives a CareMetric Intel agency three marketing emails around its market report, and asks the writer for the opening of each (owner direction 2026-11-17)', () => {
     expect(playbookVersion).toBe('sales-playbook.7');
-    expect(shortFormLimits).toEqual({ words: 120, questions: 1 });
+    expect(shortFormLimits).toEqual({ words: 120, questions: 1, firstQuestions: 0 });
     // Six plans, each its own job.
     const plans = [reportTouchAngle, reviewTouchAngle, viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle, reportCloseAngle];
     expect(new Set(plans).size).toBe(6);
@@ -129,11 +129,14 @@ describe('sales playbook', () => {
       expect(plan).toMatch(/You write only the opening of this email, as its first words under the greeting\./);
       expect(plan).toMatch(/The email adds: /);
     }
-    // The first: the report for this agency, its one link, at most one question; the email itself tells the story and offers the trial.
+    // The first: the report for this agency, its one link, no question (the Nov 24 measurement: one ask, and the one dated reason code
+    // gives it); the email itself tells the story, and the trial comes in the second.
     for (const first of [reportTouchAngle, reviewTouchAngle]) {
       expect(first).toMatch(/^First email, built around /);
       expect(first).toMatch(/Never state or hint at the agency's own figure, rank or rating: the reader opens the report to see them\./);
-      expect(first).toMatch(/three ways CareMetric Intel helps the team, a short founder quote, and a link to the free trial/);
+      expect(first).toMatch(/three ways CareMetric Intel helps the team and a short founder quote\. The free trial comes in the second email\./);
+      expect(first).toMatch(/Ask for one thing only: that the reader open the report\./);
+      expect(first).toContain(reasonNowRule);
       expect(first).toMatch(/No other link, no free trial, no price and no story about yourself in your words\./);
       expect(first).not.toMatch(/Founders Sale|risk-free|three questions|two links/);
     }

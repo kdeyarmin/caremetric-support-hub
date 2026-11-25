@@ -1432,8 +1432,9 @@ reader and why it matters, stay inside what the catalog says (plan and module la
 a tool as making anyone compliant or survey-ready, or a readiness score as a prediction, never promise savings, and quote none of its
 percentages. Each agent's checks allow the numbers a catalog states for text about its own product only; a catalog vouches for no claim.
 Prompt versions: `content.5`, `outreach.6`, `sales.8`, `social-plan.10`, `social-ads.7`, `social-reply.7`, `creative-concept.11`,
-`creative-variants.11`, `creative-vision.1`, `google-search.2`, `research.1`, the growth writer's `growth.19` (`growth.19-r` for its one repair pass and
-`growth.19-mN` when it writes with the owner-approved memo N), `growth-fit.3` and `sales-playbook.7`.
+`creative-variants.11`, `creative-vision.1`, `google-search.2`, `research.1`, the growth writer's `growth.21` (`growth.21-r` for its one repair pass and
+`growth.21-mN` when it writes with the owner-approved memo N; since the Nov 24 measurement a first cold email asks for one thing and is
+given the one dated reason code finds, `server/growth/reason-now.mjs`), the first email's reader `critic.6`, `growth-fit.3` and `sales-playbook.7`.
 
 **The bigger picture, the founder and plain words (owner direction 2026-11-12).** Every writer on the team reads the fact sheet, so the
 owner's direction lives there (`server/agents/content/facts.mjs`, docs/GTM_FACTS.md):

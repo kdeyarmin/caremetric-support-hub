@@ -302,10 +302,14 @@ post-acute file gets its county's report built around it, saying CMS hasn't publ
 directory doesn't list yet has no report, so its email offers Intel's free county report page instead of a link that opens to "No
 report for this link".
 
-**The first email leads with the report, then says what the software does and offers the trial** (owner direction 2026-11-15 for
+**The first email leads with the report and says what the software does; the trial comes in the second** (owner direction 2026-11-15 for
 the report; owner direction 2026-11-17 for the rest: a first email that was the report and nothing else, which this section
 described for a few hours that day, was "the worst marketing email that I've ever seen", with "no explanation of what else the
-software does"). A prospect that is clearly a nursing home gets the same designed email without a report, as an agency's own
+software does"). Since the Nov 24 measurement (`growth.21`, [review](AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md)) it asks for one
+thing, to open the report: the reader's commonest weaknesses in the week to November 24 were "it asks the reader for more than one
+thing" (23 of 51 first emails: the report, a question and the trial) and "nothing says why this matters now" (17 of 51, and 7 of the
+12 live evaluation cases). So the opening asks no question, the trial's panel left the first email for the second (which already
+carried it), and code gives the writer the one dated reason it may state (below). A prospect that is clearly a nursing home gets the same designed email without a report, as an agency's own
 market report covers home health and hospice agencies only (see "Written for the reader's kind of business" below). The email goes to the agency's best contact: a named owner, administrator or marketing leader
 when the team found one, else the role address, and, as separate emails, the other decision-makers there (see
 [Several decision-makers at one organization](#several-decision-makers-at-one-organization)).
@@ -313,9 +317,18 @@ when the team found one, else the role address, and, as separate emails, the oth
 **Who writes what.** The writer writes only the **opening**, for this one agency (`reportTouchAngle` and `reviewTouchAngle` in
 `playbook.mjs`, `growth.17`): two or three sentences that say a free market report was made for the agency, by name, from Medicare
 data (or, for an agency without its own report, that Intel's free county report is one step away), with the report's link on its own
-line and at most one question. A county figure from the brief comes first, about the county.
-Code holds the opening to that (`shortFormProblem`): at most 120 words, at most one question, the report's link and no other, no
-trial and no price. Everything after the opening is written once, for each kind of business, in `server/growth/campaign.mjs` from
+line and no question. A county figure from the brief comes first, about the county.
+Code holds the opening to that (`shortFormProblem`, and `first_question` for a question in any first email's opening): at most 120
+words, no question, the report's link and no other, no trial and no price.
+
+**The one dated reason to answer now** (`server/growth/reason-now.mjs`, `reasonNow`). Code picks it, and the writer is told to state it
+once and never to invent one (`reasonNowRule` in `playbook.mjs`): first a dated trigger in the account brief from the last 120 days (or
+an undated one from a page read this month), then the agency's Medicare record (a certification in the last 18 months or a change of
+ownership in the last 12), then a new CMS release for the reader's own kind of care published in the last 45 days, read from Intel's
+feed (`releases`, at most every six hours) and stated by its month and day ("CMS released new home health data on November 12"), never
+its file or year. A release is a source for the checks only, never a stored citation and never the one citation an email needs. With
+none of them the email says only that the report is ready. Each first email records which it had (`arms.reason`: `trigger`, `record`,
+`release` or `none`), so the memo can compare them. Everything after the opening is written once, for each kind of business, in `server/growth/campaign.mjs` from
 the fact sheet, and added to the email when it is drafted (`withCampaign`). So **the email you approve on the Growth page is the
 whole email**, sections included, and the sent text part is those words. `campaign.test.mjs` runs every section through the checks
 a written email passes (the fact sheet's numbers, no card, no "public", no rank or rating of an agency, no demo, nothing about opens).
@@ -324,7 +337,7 @@ What the three emails hold, in order:
 
 | Email | Line above the headline | The writer's opening | Then, the sections for that kind of agency |
 | --- | --- | --- | --- |
-| First | Your free market report is ready | The report made for this agency, and its link | A card that previews the report (where you stand, who leads the county, top hospitals, top physicians for outreach; the values stay in the report) with the button "Open your market report". What CareMetric Intel does, in five numbered points. Four figures about its data. The founder's story as a signed quote. A closing panel with the 30-day free trial's button. |
+| First | Your free market report is ready | The report made for this agency, and its link | A card that previews the report (where you stand, who leads the county, top hospitals, top physicians for outreach; the values stay in the report) with the button "Open your market report". What CareMetric Intel does for that kind of team, in three points. The founder's story as a signed quote. No trial (since `growth.21`, campaign version 3; an email drafted before keeps its trial line and is sent as approved). |
 | Second, four days later | From your market report to a plan | What a team does with a report, and one question | A week in CareMetric Intel in four cards (Monday, every day, after each visit, Friday). The Founders Sale, in its approved words. The free trial's button, and the report's link again. |
 | Third | A last note | A short close: the report stays, forward it to whoever handles marketing | The report's button, three lines on what Intel does, and the trial as a link. |
 
@@ -591,6 +604,9 @@ text), a rewrite is told the weakness too, and the Monday memo names the commone
 Since `critic.3` (2026-11-17, later that day): the reader sees the whole first email to an Intel agency and is told that the writer
 wrote only its opening, so it judges the opening (does it make you open the report?) and never scores opening with the county or the
 report as a weakness. Scores under `critic.2` and `critic.3` judge different emails and are not compared.
+Since `critic.6` (the Nov 24 measurement): the reader is told a first email asks for one thing on purpose, so an opening with no
+question, or no trial, is not a weakness. It has 4,000 tokens to answer (1,500 before: 6 of 182 reads in the week to November 24 were cut
+off, which the live evaluation counted as "unread"), and a read that is still cut off is asked once more with twice the room.
 
 **Money.** A brief costs about 30 to 45 cents (research on the draft tier, the brief on the top model); a first email on the top model
 about 7 to 15 cents, the review about a cent. The migration raises the Marketing Manager's daily budget to $15 (owner decision
@@ -694,7 +710,9 @@ Stage 3 of the [November 17 review](AI_WORKFORCE_REVIEW_2026-11-17.md) (`2026111
   sites, CCNs 990101 to 990104, no person, address or telephone number) cover the four triggers (a new agency, a new owner, a CMS record,
   the web), each with three of the four pairings of brief or none and the agency's own report or the free county report page
   (until 2026-11-17, short or standard). Each is written on the real writer, with the active memo and the top model as the settings say, and
-  read by the reader (`critic.3`). The run passes when every draft passes the
+  read by the reader (`critic.6`). Like the sweep, each case gets the one dated reason code finds (the brief's dated trigger, the invented
+  agency's Medicare record, or a CMS release from Intel's feed); the CMS-record-only case has no trigger of its own, and each grade
+  records the reason's kind. The run passes when every draft passes the
   checks, the reader scored every draft, the average "would reply" is at least 3.5 and none is below 2. Each grade is kept as it is
   written (`private.growth_live_eval_cases`, 120 days), so the twelve run over a few tries inside the scheduler's limit. The result is
   recorded as `growth.live.1`, never `growth.1`, so it never holds up sending; the Monday scorecard reports it, and you are told only when

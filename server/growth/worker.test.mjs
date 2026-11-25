@@ -436,9 +436,9 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  const sweep=async(enabled)=>{
   const store={snapshot:vi.fn(async()=>({total:2,items:[o,{...o,id:'next',organization_id:'org2'}]})),plan:vi.fn(async()=> 'work'),draft:vi.fn(async()=>({id:'message',status:'draft'})),propose:vi.fn(),
    learningActive:vi.fn(async()=>({version:5,memo:'- Shorter emails drew more replies.'}))};
-  // A first email to an Intel agency is a free report and one question (here Intel's free county report: it has no roster report).
+  // A first email to an Intel agency is a free report and no question (here Intel's free county report: it has no roster report).
   const model={configured:true,run:vi.fn(async()=>({outcome:'completed',output:{subject:'A free report on your county',citations:['source'],needsHuman:false,
-   body:'A free report on your county, built from Medicare and Census data, is one step away. Choose the state and county and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/county-report\n\nWhich hospitals send your agency the most patients?'}}))};
+   body:'A free report on your county, built from Medicare and Census data, is one step away. Choose the state and county and it is emailed to you as a PDF:\nhttps://www.caremetricintel.com/county-report\n\nIt shows the hospitals your county\'s residents use most.'}}))};
   const growth={store,signingReady:true,hash:x=>x,unsubscribeToken:()=> 'token',learning:{enabled}};
   const outcome=await growthHandlers({growth,model,features:new Set([growthLearningFeature])})['growth.pipeline']({id:'task',agent:{autonomy:'propose'},kind:'growth.pipeline'});
   expect(outcome.result.rejected).toBeUndefined();
@@ -447,14 +447,14 @@ it('drafts outreach with the active memo while the owner\'s setting is on, readi
  const on=await sweep(true);
  expect(on.store.learningActive).toHaveBeenCalledTimes(1);
  expect(on.store.learningActive).toHaveBeenCalledWith('caremetric-intel');
- expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.20-m5');
+ expect(on.model.run.mock.calls[0][1].promptVersion).toBe('growth.21-m5');
  expect(on.store.draft).toHaveBeenCalledWith('opp','work',expect.objectContaining({memoVersion:5}));
  // The report-only form needs no switch: the sweep hands the writer none, and the email records its form.
  expect(on.store.draft.mock.calls[0][2].arms).toMatchObject({form:'short',length:'report'});
  expect(JSON.parse(on.model.run.mock.calls[0][1].user).style).toBe('Write two or three sentences, never more than 120 words.');
  const off=await sweep(false);
  expect(off.store.learningActive).not.toHaveBeenCalled();
- expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.20');
+ expect(off.model.run.mock.calls[0][1].promptVersion).toBe('growth.21');
  expect(off.store.draft.mock.calls[0][2].memoVersion).toBeUndefined();
 });
 

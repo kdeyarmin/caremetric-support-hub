@@ -11,6 +11,9 @@
  * 2. Each is written on the real writer path (draft.mjs `draftMessage`, the real model, the top model where the sweep would use it, the
  *    approved learning memo where the sweep would use it) and read by the real reader (draft.mjs `criticPromptVersion`), as a first
  *    email built around a report. Nothing is saved as a message and nothing is sent.
+ *    Like the sweep, it gives the writer the one dated reason code finds (reason-now.mjs, the Nov 24 measurement): the brief's dated
+ *    trigger, the invented agency's Medicare record, or a CMS release Intel loaded, read from the same feed. The CMS-record-only case has
+ *    no trigger of its own, so it shows what the email says when only a release, or nothing, gives a reason.
  * 3. It passes when every draft passed the code checks, the reader scored every one, their average "would reply" is at least 3.5 and
  *    none is below 2 (`gradeLiveEvaluation`). Recorded as private.agent_evaluations version 'growth.live.1' (reach.mjs
  *    `liveEvaluationVersion`), which the send claim never reads (it reads 'growth.1'): a weak week never holds up sending. The Monday
@@ -27,6 +30,7 @@ import { weekStart } from '../agents/accounts/week.mjs';
 import { dueMoment } from '../agents/tasks/shared.mjs';
 import { draftMessage, weaknessMeanings } from './draft.mjs';
 import { hasGrowthReach, liveEvaluationVersion } from './reach.mjs';
+import { recentReleases } from './reason-now.mjs';
 
 const product = 'caremetric-intel';
 const day = 86_400_000;
@@ -75,8 +79,11 @@ function briefFor(trigger, agency, evidence) {
     setting: 'home_health', briefVersion: 1,
     summary: `${agency.name} is a home health agency serving ${agency.county}, offering skilled nursing, therapy and aide visits.`,
     serviceArea: agency.county, ownership: trigger === 'cms_record' ? 'Non-profit' : 'Proprietary',
-    triggers: [{ fact: trigger === 'new_owner' ? 'A change of ownership was recorded with CMS this year.' : trigger === 'new_agency' ? 'It was newly certified by Medicare this year.'
-      : 'It is hiring a community liaison to work with hospitals.', date: null, sourceUrl: evidence[0].source_url }],
+    // A trigger only where the evidence states one, dated where it gives a date: the Medicare record's change of ownership or
+    // certification, and the agency's own news page. The CMS record alone states no trigger (until 2026-11-24 it was given the hiring one).
+    triggers: trigger === 'cms_record' ? [] : [{ fact: trigger === 'new_owner' ? 'A change of ownership was recorded with CMS this year.' : trigger === 'new_agency' ? 'It was newly certified by Medicare this year.'
+      : 'It is hiring a community liaison to work with hospitals.', date: trigger === 'web' ? null : evidence[0].claim.match(/\b(\d{4}-\d{2}-\d{2})\b/)?.[1] ?? null,
+      sourceUrl: (trigger === 'web' ? evidence.find(item => item.id.startsWith('news-')) : evidence[0]).source_url }],
     pains: [{ question: 'Which hospitals and physicians send home health patients in the county today?', capability: 'referral sources' },
       { question: 'Which referral sources have slowed down in recent months?', capability: 'slipping sources' }],
     angle: trigger === 'web' ? 'hospital_outcomes' : 'referral_sources',
@@ -118,6 +125,8 @@ export function gradeCase(item, draft, problems = []) {
     wouldReply: ok && Number.isInteger(score) && score >= 1 && score <= 5 ? score : null,
     ...(ok && typeof draft.arms?.weakness === 'string' ? { weakness: draft.arms.weakness } : {}),
     ...(ok && draft.arms?.form ? { formWritten: draft.arms.form } : {}),
+    // The kind of dated reason the email was given (reason-now.mjs): trigger, record, release or none.
+    ...(ok && typeof draft.arms?.reason === 'string' ? { reason: draft.arms.reason } : {}),
     ...(!ok && problems.length ? { problem: String(problems.at(-1)).slice(0, 60) } : {}),
   };
 }
@@ -159,7 +168,7 @@ export function liveEvaluationHandlers({ growth, model, notifier = null, feature
   if (!growth || !hasGrowthReach(features) || typeof growth.store?.liveEvalState !== 'function' || typeof growth.store?.liveEvalRecord !== 'function'
     || typeof growth.store?.evaluate !== 'function') return {};
 
-  async function writeCase(item, task, { signal, memo, quality }) {
+  async function writeCase(item, task, { signal, memo, quality, releases }) {
     let exhausted = false;
     // The real model, watched for a day's budget running out (the draft then comes back empty and would read as a failed check).
     const watched = { configured: true, run: async (...args) => {
@@ -170,7 +179,7 @@ export function liveEvaluationHandlers({ growth, model, notifier = null, feature
     const problems = [];
     const draft = await draftMessage({ opportunity: item.opportunity, work: { kind: 'outreach', key: 'outreach:0', action: 'Offer one relevant next step based on verified product fit.',
       success: 'A qualified reply, trial or explicit disposition is recorded.' }, task, model: watched, signal, memo, report: item.report,
-      brief: item.briefPart, quality: Boolean(item.briefPart) && quality, critic: true, onReject: code => problems.push(code) });
+      brief: item.briefPart, quality: Boolean(item.briefPart) && quality, critic: true, releases, onReject: code => problems.push(code) });
     return { exhausted, grade: gradeCase(item, draft, problems) };
   }
 
@@ -193,6 +202,8 @@ export function liveEvaluationHandlers({ growth, model, notifier = null, feature
     const memo = live(growth.learning?.enabled) === true && typeof growth.store.learningActive === 'function'
       ? await growth.store.learningActive(product).catch(() => null) : null;
     const quality = live(growth.briefs?.qualityWriter) === true;
+    // The CMS releases the sweep would name, from the same feed (none when the feed is off or does not answer).
+    const releases = await recentReleases(growth.roster?.feed, { signal });
     const started = clock();
     // Each case stops at the run's deadline, so a slow one is written again next time rather than the scheduler stopping the task.
     const deadline = new AbortController();
@@ -205,7 +216,7 @@ export function liveEvaluationHandlers({ growth, model, notifier = null, feature
       for (let at = 0; at < pending.length && !exhausted && !retry; at += liveConcurrency) {
         if (clock() - started > liveStartBudgetMs) break;
         const batch = pending.slice(at, at + liveConcurrency);
-        const outcomes = await Promise.all(batch.map(item => writeCase(item, task, { signal: caseSignal, memo, quality }).then(outcome => ({ item, outcome }), error => ({ item, error }))));
+        const outcomes = await Promise.all(batch.map(item => writeCase(item, task, { signal: caseSignal, memo, quality, releases }).then(outcome => ({ item, outcome }), error => ({ item, error }))));
         signal?.throwIfAborted();
         for (const { item, outcome, error } of outcomes) {
           if (error) {
