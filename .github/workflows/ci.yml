@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
+# Runners: every job runs on Ubicloud's managed GitHub Actions runners (the Ubicloud Managed Runners app,
+# installed November 25, 2026), about a seventh of GitHub's per-minute price. `ubicloud-standard-2` is
+# 2 vCPU / 8 GB like GitHub's standard runner. To go back, set `runs-on` to `ubuntu-latest` again.
 jobs:
   runtime-image:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +47,7 @@ jobs:
           echo 'Runtime image resolved startup imports and rejected missing configuration.'
 
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     timeout-minutes: 15
     env:
       SUPPORT_HUB_ALLOW_DEMO_BUILD: "true"
@@ -80,7 +83,7 @@ jobs:
       - run: node scripts/evaluate-growth.mjs
 
   database:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     timeout-minutes: 30
     steps:
       - name: Reserve the disposable Supabase ports
