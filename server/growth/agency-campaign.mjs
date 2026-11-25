@@ -77,15 +77,23 @@ function content(touch, { setting, trialUrl, reportUrl, ownReport }) {
   return { points: [], trial, report, note };
 }
 
+/**
+ * Version 3 (the Nov 24 measurement, docs/AI_WORKFORCE_REVIEW_2026-11-17_TEAM.md): the first email asks for one thing, its report, so its
+ * sections no longer close on the free trial; the second email offers the trial, as it did. Version 2's first email (with the trial) is
+ * still read back and laid out as written, so an email drafted before the change goes out as it was approved.
+ */
+export const firstWithoutTrial = (touch, version) => Number(touch) === 1 && Number(version) >= 3;
+
 export function agencyCampaignText(touch, links) {
-  if (!copy[links.setting] || !links.trialUrl || !links.reportUrl) return null;
+  const noTrial = firstWithoutTrial(touch, links.version);
+  if (!copy[links.setting] || (!links.trialUrl && !noTrial) || !links.reportUrl) return null;
   const { heading, points, offerTitle, trial, report, note } = content(touch, links);
   const trialLine = `${trialDetail}\n${trial.label}\n${trial.url}`;
   const reportCaption = `${report.label}\n${note}`;
   const reportLine = `${reportCaption}\n${report.url}`;
   if (touch === 1) return [
     reportCaption, heading, ...points.map(([label, detail]) => `${label}\n${detail}`),
-    `"${agencyFounderQuote}"`, trialLine,
+    `"${agencyFounderQuote}"`, ...(noTrial ? [] : [trialLine]),
   ].join('\n\n');
   if (touch === 2) return [
     heading, ...points.map(([label, detail]) => `${label}\n${detail}`), offerTitle ? `${offerTitle}\n${offerDetail}` : null, trialLine, reportLine,
@@ -103,7 +111,7 @@ export function agencyCampaignBlocks(campaign, links) {
     message, reportAction,
     { type: 'points', title: heading, items: points },
     { type: 'quote', text: agencyFounderQuote, name: founder.signOff[0], role: founder.signOff[1] },
-    { type: 'points', items: [], link: trialLink },
+    ...(firstWithoutTrial(touch, campaign.version) ? [] : [{ type: 'points', items: [], link: trialLink }]),
   ];
   if (touch === 2) return [
     message, { type: 'points', title: heading, items: points },

@@ -28,7 +28,7 @@
  * An email whose sections were edited after drafting no longer matches (`readCampaign` answers null) and is sent as a letter with its
  * words as written, so nothing an owner changed is replaced.
  */
-import { agencyCampaignBlocks, agencyCampaignText, isAgencyTrialUrl } from './agency-campaign.mjs';
+import { agencyCampaignBlocks, agencyCampaignText, firstWithoutTrial, isAgencyTrialUrl } from './agency-campaign.mjs';
 import { founder, products as facts } from '../agents/content/facts.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
 import { linkablePages, playbookFor } from './playbook.mjs';
@@ -167,13 +167,15 @@ export const campaignEyebrow = (touch, setting = 'agency') => campaignCopy(setti
  * The sections of one email as plain text, which is how they are stored and approved, and what a mail program without HTML shows.
  * `trialUrl` and `reportUrl` are written as given (the trial link already carries its campaign tags). The first email's report link is in
  * the writer's own opening, so its sections carry only the trial. `setting` is the reader's kind of organization (`campaignSettings`);
- * a nursing home's sections never carry a report.
+ * a nursing home's sections never carry a report. Version 2 is an agency's (agency-campaign.mjs); version 3 the same, except that its first
+ * email asks for one thing, the report, and carries no trial (the Nov 24 measurement).
  */
 export function campaignBlock(touch, { trialUrl, reportUrl = null, ownReport = false, setting = 'agency', version = 1 } = {}) {
   const n = touchOf(touch);
-  if (!n || !trialUrl) return null;
   const kind = settingOf(setting);
-  if (version === 2 && hasReport(kind)) return agencyCampaignText(n, { trialUrl, reportUrl, ownReport, setting: kind });
+  const agency = version >= 2 && hasReport(kind);
+  if (!n || (!trialUrl && !(agency && firstWithoutTrial(n, version)))) return null;
+  if (agency) return agencyCampaignText(n, { trialUrl, reportUrl, ownReport, setting: kind, version });
   const copy = copies[kind];
   const reported = hasReport(kind);
   if (n === 1) {
@@ -229,9 +231,9 @@ export function readCampaign(body, { reports = null } = {}) {
   if (!text || !trial) return null;
   const isReport = url => reports?.accepts?.(url) === true;
   const probe = 'https://probe.invalid/';
-  for (const version of [2, 1]) for (const touch of campaignTouches) {
+  for (const version of [3, 2, 1]) for (const touch of campaignTouches) {
     for (const setting of campaignSettings) {
-      if (version === 2 && !hasReport(setting)) continue;
+      if (version >= 2 && !hasReport(setting)) continue;
       const reported = hasReport(setting);
       // Where these sections would begin: the first line `campaignBlock` writes for this touch and kind (for a last email with a
       // report, its report line, which differs with whose report it is).
@@ -241,14 +243,15 @@ export function readCampaign(body, { reports = null } = {}) {
       const opening = text.slice(0, at).trim();
       const block = text.slice(at + 2);
       const links = linesOf(block).filter(line => linkLine.test(line));
-      const trialUrl = links.find(url => version === 2 ? isAgencyTrialUrl(url) : (untaggedUrl(url) ?? url) === trial) ?? null;
-      if (!trialUrl || !opening) continue;
+      const trialUrl = links.find(url => version >= 2 ? isAgencyTrialUrl(url) : (untaggedUrl(url) ?? url) === trial) ?? null;
+      // A version 3 first email carries no trial: its one ask is the report.
+      if ((!trialUrl && !firstWithoutTrial(touch, version)) || !opening) continue;
       // The first email's report link is in the opening; the others' is in their sections. A nursing home's emails have none.
       const from = !reported ? [] : touch === 1 ? linesOf(opening).filter(line => linkLine.test(line)) : links.filter(url => url !== trialUrl);
       const reportUrl = from.find(isReport) ?? from.find(url => (untaggedUrl(url) ?? url) === page) ?? null;
       const ownReport = Boolean(reportUrl && isReport(reportUrl));
       if (campaignBlock(touch, { trialUrl, reportUrl, ownReport, setting, version }) !== block) continue;
-      return { touch, setting, opening, trialUrl, reportUrl, ownReport, ...(version === 2 ? { version } : {}) };
+      return { touch, setting, opening, trialUrl, reportUrl, ownReport, ...(version >= 2 ? { version } : {}) };
     }
   }
   return null;
@@ -260,7 +263,7 @@ export function readCampaign(body, { reports = null } = {}) {
  * shown as the card's button, not as a line of text.
  */
 export function campaignBlocks(campaign, { links = [] } = {}) {
-  if (campaign.version === 2) return agencyCampaignBlocks(campaign, links);
+  if (campaign.version >= 2) return agencyCampaignBlocks(campaign, links);
   const { touch, opening, trialUrl, reportUrl, ownReport } = campaign;
   const copy = campaignCopy(campaign.setting);
   const openingLines = linesOf(opening).filter(line => line !== reportUrl);
