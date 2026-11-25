@@ -204,7 +204,7 @@ export function checkCopy({ product, platform, copy = {}, offerCode = null, bran
   if (codeEntry.test(text)) findings.push(block('offer_mismatch', 'It asks people to enter a code, but the Founders Sale is applied automatically when paid service starts.'));
   if (urgency.test(text)) findings.push(block('offer_mismatch', 'It claims a deadline or limited availability the offer does not have.'));
   if (offerMention.test(text)) {
-    const named = offer ?? liveOffers.FOUNDERS50;
+    const named = offer ?? liveOffers.FOUNDERS75;
     if (!named.products.includes(product)) findings.push(block('offer_mismatch', `The ${named.name} does not apply to this product.`));
     for (const match of text.matchAll(/(\d{1,3})\s?%\s+off\b/gi)) {
       if (Number(match[1]) !== named.percentOff) findings.push(block('offer_mismatch', `It says ${match[1]}% off; billing applies ${named.percentOff}%.`));

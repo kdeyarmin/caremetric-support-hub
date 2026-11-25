@@ -3,7 +3,7 @@ import { FOUNDERS_COUPON, FOUNDERS_OFFER, applyFoundersToInvoice, foundersAmount
 import { foundersCatalog } from './founders-catalog.mjs';
 
 const price = 'price_1UUyUyB06O2UFlNzdfXwJUXW';
-const coupon = { valid: true, percent_off: 50, duration: 'repeating', duration_in_months: 12,
+const coupon = { valid: true, percent_off: 75, duration: 'repeating', duration_in_months: 12,
   applies_to: { products: [...new Set(Object.values(foundersCatalog).map(value => value.product))] } };
 const saleDiscount = { id: 'di_sale', coupon: { id: FOUNDERS_COUPON } };
 const start = Date.parse('2026-12-08T12:00:00Z') / 1000;
@@ -55,8 +55,8 @@ describe('automatic Founders Sale', () => {
     expect(t.live.post).not.toHaveBeenCalled();
   });
   it.each([
-    ['month', 'price_1URvziB06O2UFlNzzVpLGAIv', 89900, 44950],
-    ['year', 'price_1URvziB06O2UFlNzfHPKmesB', 898800, 449400],
+    ['month', 'price_1URvziB06O2UFlNzzVpLGAIv', 89900, 22475],
+    ['year', 'price_1URvziB06O2UFlNzfHPKmesB', 898800, 224700],
   ])('applies the verified offer to the first paid Intel Growth %s invoice after its full trial', async (cadence, selectedPrice, standard, discounted) => {
     const t = fixture();
     t.sub.metadata.app = 'caremetric-intel'; t.sub.metadata.hub_source = 'app_trial';
@@ -86,7 +86,7 @@ describe('automatic Founders Sale', () => {
       .toEqual({ start: paid, end: Date.parse('2029-02-28T12:00:00Z') / 1000 });
   });
   it('uses exact published cents and quantity, excluding private and retired prices', async () => {
-    expect(foundersAmounts([{ price, quantity: 3 }])).toMatchObject({ standard_recurring_subtotal: 59700, recurring_subtotal: 29850, founders_sale: { savings: 29850 } });
+    expect(foundersAmounts([{ price, quantity: 3 }])).toMatchObject({ standard_recurring_subtotal: 59700, recurring_subtotal: 14925, founders_sale: { savings: 44775 } });
     const t = fixture();
     expect(await foundersEligibility(t.live, { app: 'carebase', customer: null, lines: t.lines })).toBe(true);
     expect(await foundersEligibility(t.live, { app: 'carebase', customer: null, lines: [{ price: 'price_custom', quantity: 1 }] })).toBe(false);

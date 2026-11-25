@@ -51,9 +51,9 @@ describe('the Creative screen\'s operations', () => {
 
   it('starts an owner brief once per request key and wakes the team', async () => {
     const { admin, calls, kick } = harness();
-    const brief = { product: 'caremetric-intel', goal: 'Drive trials', audience: 'Agency owners', platforms: ['meta', 'linkedin'], formats: ['static', 'video'], requestKey: '11111111-1111-4111-8111-111111111111', offerCode: 'FOUNDERS50' };
+    const brief = { product: 'caremetric-intel', goal: 'Drive trials', audience: 'Agency owners', platforms: ['meta', 'linkedin'], formats: ['static', 'video'], requestKey: '11111111-1111-4111-8111-111111111111', offerCode: 'FOUNDERS75' };
     await admin.brief(token, brief);
-    expect(JSON.parse(calls[0].args[0])).toMatchObject({ videoLengths: ['15s'], offerCode: 'FOUNDERS50' });
+    expect(JSON.parse(calls[0].args[0])).toMatchObject({ videoLengths: ['15s'], offerCode: 'FOUNDERS75' });
     expect(calls[0].args[1]).toBe(brief.requestKey);
     await new Promise(resolve => setImmediate(resolve));
     expect(kick).toHaveBeenCalled();

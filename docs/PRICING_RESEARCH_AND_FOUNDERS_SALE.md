@@ -4,11 +4,11 @@ Researched and verified November 8, 2026. All prices are USD, before applicable 
 
 ## Recommendation
 
-Keep the current regular prices for this launch. Use **per-facility subscription pricing for CareBase**, **flat organization pricing for Train**, and **organization tiers with included seats, branches and territories for Intel**. Preserve monthly and annual options, and introduce **50% off the first 12 months of paid service** through the Founders Sale.
+Keep the current regular prices for this launch. Use **per-facility subscription pricing for CareBase**, **flat organization pricing for Train**, and **organization tiers with included seats, branches and territories for Intel**. Preserve monthly and annual options, and introduce the Founders Sale — **50% off the first 12 months of paid service** at launch on 2026-11-08, raised by the owner to **75% off** on 2026-11-24.
 
 These are the best-supported launch models from the available evidence, not a measured profit-maximizing price. Customer willingness to pay, acquisition cost, churn and delivery costs were not available. Validate those before making a permanent price cut or increasing the upper tiers.
 
-The sale is configured in the live CareMetric Stripe account as **FOUNDERS50**. The regular catalog prices were read from Stripe and agree with the existing product fact sheet. The live public sites corroborate CareBase's monthly prices and Intel's displayed annual prices. No existing customer subscription was changed.
+The sale is configured in the live CareMetric Stripe account as **FOUNDERS75** (75% coupon; the original 50% configuration is recorded in docs/evidence/founders-sale-20261108.json). The regular catalog prices were read from Stripe and agree with the existing product fact sheet. The live public sites corroborate CareBase's monthly prices and Intel's displayed annual prices. No existing customer subscription was changed.
 
 ## Competitors and current public pricing
 
@@ -62,39 +62,39 @@ Do not raise Intel prices merely because enterprise data vendors use quote-based
 
 ## Founders Sale prices
 
-Monthly and annual billing are alternative choices. The annual sale is **50% off the published annual price**, paid upfront, not 50% of twelve monthly payments. Thus the built-in annual savings remain; other coupons do not stack.
+Monthly and annual billing are alternative choices. The annual sale is **75% off the published annual price**, paid upfront, not 75% of twelve monthly payments. Thus the built-in annual savings remain; other coupons do not stack.
 
 | Plan / billing unit | Regular monthly | Monthly during first year | Regular annual | First annual payment |
 | --- | ---: | ---: | ---: | ---: |
-| Train Single Facility | $119 | $59.50 | $1,190 | $595 |
-| Train — organization | $239 | $119.50 | $2,390 | $1,195 |
-| CareBase Core — facility | $199 | $99.50 | $1,990 | $995 |
-| Small Home — eligible facility | $199 | $99.50 | $1,990 | $995 |
-| Compliance Suite — facility | $279 | $139.50 | $2,790 | $1,395 |
-| Small Home Complete — eligible facility | $399 | $199.50 | $3,990 | $1,995 |
-| CareBase Complete — facility | $649 | $324.50 | $6,490 | $3,245 |
-| Intel Starter — organization | $349 | $174.50 | $3,480 | $1,740 |
-| Intel Growth — organization | $899 | $449.50 | $8,988 | $4,494 |
-| Intel Pro — organization | $1,999 | $999.50 | $19,980 | $9,990 |
-| CareBase eMAR add-on — facility | $149 | $74.50 | $1,490 | $745 |
-| CareBase Staff Training add-on — facility | $99 | $49.50 | $990 | $495 |
-| CareBase Workforce add-on — facility | $99 | $49.50 | $990 | $495 |
-| CareBase Survey & Compliance add-on — facility | $149 | $74.50 | $1,490 | $745 |
-| CareBase Resident Billing & Payments add-on — facility | $99 | $49.50 | $990 | $495 |
+| Train Single Facility | $119 | $29.75 | $1,190 | $297.50 |
+| Train — organization | $239 | $59.75 | $2,390 | $597.50 |
+| CareBase Core — facility | $199 | $49.75 | $1,990 | $497.50 |
+| Small Home — eligible facility | $199 | $49.75 | $1,990 | $497.50 |
+| Compliance Suite — facility | $279 | $69.75 | $2,790 | $697.50 |
+| Small Home Complete — eligible facility | $399 | $99.75 | $3,990 | $997.50 |
+| CareBase Complete — facility | $649 | $162.25 | $6,490 | $1,622.50 |
+| Intel Starter — organization | $349 | $87.25 | $3,480 | $870 |
+| Intel Growth — organization | $899 | $224.75 | $8,988 | $2,247 |
+| Intel Pro — organization | $1,999 | $499.75 | $19,980 | $4,995 |
+| CareBase eMAR add-on — facility | $149 | $37.25 | $1,490 | $372.50 |
+| CareBase Staff Training add-on — facility | $99 | $24.75 | $990 | $247.50 |
+| CareBase Workforce add-on — facility | $99 | $24.75 | $990 | $247.50 |
+| CareBase Survey & Compliance add-on — facility | $149 | $37.25 | $1,490 | $372.50 |
+| CareBase Resident Billing & Payments add-on — facility | $99 | $24.75 | $990 | $247.50 |
 
 Small Home plans require fewer than 20 licensed beds; Train Single Facility requires a one-facility organization. Per-facility amounts multiply by the number of active billed facilities. Included features and capacity do not change during the sale.
 
-Examples: Core monthly costs **$1,194** over the first twelve months versus **$2,388** at the regular monthly rate. Core annual costs **$995 upfront**, then the regular annual rate (currently **$1,990**) at renewal. Intel Growth monthly costs **$5,394** in first-year subscription charges plus its **$500** onboarding fee, for **$5,894 before tax**; annual costs **$4,494 upfront**, with its existing onboarding waiver. Intel Pro annual is **$9,990 + $1,500 onboarding = $11,490 before tax**.
+Examples: Core monthly costs **$597** over the first twelve months versus **$2,388** at the regular monthly rate. Core annual costs **$497.50 upfront**, then the regular annual rate (currently **$1,990**) at renewal. Intel Growth monthly costs **$2,697** in first-year subscription charges plus its **$500** onboarding fee, for **$3,197 before tax**; annual costs **$2,247 upfront**, with its existing onboarding waiver. Intel Pro annual is **$4,995 + $1,500 onboarding = $6,495 before tax**.
 
 ## Customer-facing offer copy
 
-> **Founders Sale — 50% off your first year**
+> **Founders Sale — 75% off your first year**
 >
-> Start with CareMetric CareBase, CareMetric Train, or CareMetric Intel and save 50% on eligible subscription charges for your first 12 months of paid service.
+> Start with CareMetric CareBase, CareMetric Train, or CareMetric Intel and save 75% on eligible subscription charges for your first 12 months of paid service.
 >
-> CareBase Core starts at **$99.50/month per facility** during the offer, and Intel Starter starts at **$174.50/month per organization** on monthly billing. Annual plans are also 50% off their published annual subscription price.
+> CareBase Core starts at **$49.75/month per facility** during the offer, and Intel Starter starts at **$87.25/month per organization** on monthly billing. Annual plans are also 75% off their published annual subscription price.
 >
-> Start your free trial. **Your 50% discount is applied automatically to eligible subscriptions — no code needed.**
+> Start your free trial. **Your 75% discount is applied automatically to eligible subscriptions — no code needed.**
 >
 > For new paid subscriptions to eligible plans; existing free-trial users qualify. Standard subscription pricing resumes after the introductory year. Setup fees, Intel extra seats/locations/states, taxes and custom contracts are excluded. Other promotional discounts cannot be combined. Plan eligibility, capacity limits and regular cancellation terms apply.
 
@@ -104,7 +104,7 @@ No enrollment deadline or redemption cap was supplied, so none was invented. The
 
 ## Automatic application
 
-The existing live coupon `caremetric_founders_sale_50_12m_20261108` remains 50%, repeating for 12 months, restricted to the same 15 products. Customers do not enter FOUNDERS50 or request assisted activation. The billing service applies the underlying coupon after server-side paid-history checks, including eligible trial conversions.
+The live coupon is now `caremetric_founders_sale_75_12m_20261124` — 75%, repeating for 12 months, restricted to the same 15 products (owner change 2026-11-24). The earlier coupon `caremetric_founders_sale_50_12m_20261108` remains in place for subscriptions already on it. Customers do not enter FOUNDERS75 or request assisted activation. The billing service applies the underlying coupon after server-side paid-history checks, including eligible trial conversions.
 
 - Checkout previews and sessions use the same coupon, with the exact saving persisted in the quote and checked against the paid receipt. Customers see standard price, saving, discounted recurring subtotal, and amount due before payment.
 - New paid subscriptions created in Hub administration automatically receive the offer unless an explicit agreement/discount was selected. Published price IDs are allowlisted; private contract prices and retired plans are excluded. Setup, onboarding and Intel expansions remain full price.
@@ -132,4 +132,4 @@ The evidence supports the current pricing structure and a temporary acquisition 
 - Regular catalog prices and existing customer contracts are retained. Automatic sale quotes and receipts validate the discounted totals. Public cards lead with the sale price and clearly show standard renewal pricing.
 - Release tracking: [Intel #394](https://github.com/kdeyarmin/intel/pull/394), [CareBase/Train #866](https://github.com/kdeyarmin/PennTrain/pull/866), and [Support Hub #151](https://github.com/kdeyarmin/caremetric-support-hub/pull/151). These pull requests contain validation results and merge status; Railway deploys their main-branch commits.
 
-Legacy-code review: `INTELFOUNDING` (`promo_1UV1uvB06O2UFlNz4wIpiWU7`) remains active in Stripe with zero redemptions at the November 8 read-back. All new-offer app copy now uses FOUNDERS50. The connected Stripe API does not expose promotion-code updates, so the older code has not been deactivated. New eligible subscriptions use the automatic Founders Sale; existing agreed lifetime terms are preserved.
+Legacy-code review: `INTELFOUNDING` (`promo_1UV1uvB06O2UFlNz4wIpiWU7`) remains active in Stripe with zero redemptions at the November 8 read-back. All new-offer app copy now uses FOUNDERS75. The connected Stripe API does not expose promotion-code updates, so the older code has not been deactivated. New eligible subscriptions use the automatic Founders Sale; existing agreed lifetime terms are preserved.

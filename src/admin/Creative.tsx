@@ -141,7 +141,7 @@ function BriefForm({ client, busy, change }: { client: CreativeClient; busy: str
         <label className="team-field">Product<select value={brief.product} onChange={event => edit({ product: event.target.value as CreativeProduct })}>
           {creativeProducts.map(product => <option key={product} value={product}>{productLabels[product]}</option>)}</select></label>
         <label className="team-field">Offer<select value={brief.offerCode ?? ""} onChange={event => edit({ offerCode: event.target.value || null })}>
-          <option value="">No offer</option><option value="FOUNDERS50">Founders Sale (FOUNDERS50)</option></select></label>
+          <option value="">No offer</option><option value="FOUNDERS75">Founders Sale (FOUNDERS75)</option></select></label>
         <label className="team-field creative-wide">Goal<input required maxLength={500} value={brief.goal} onChange={event => edit({ goal: event.target.value })} placeholder="Drive free-trial starts from marketing leaders" /></label>
         <label className="team-field creative-wide">Audience<input required maxLength={500} value={brief.audience} onChange={event => edit({ audience: event.target.value })} placeholder={audienceExamples[brief.product]} /></label>
         <label className="team-field creative-wide">Angle (optional)<textarea rows={2} maxLength={500} value={brief.angle} onChange={event => edit({ angle: event.target.value })} /></label>

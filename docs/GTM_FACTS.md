@@ -407,20 +407,20 @@ slipping referral sources (`experimentAngles`).
 
 ## Founders Sale — CareBase, Train and Intel
 
-Owner-requested 2026-11-08. **50% off eligible subscription charges for the first 12 months of paid service.**
-The live coupon is `caremetric_founders_sale_50_12m_20261108`, with promotion code **FOUNDERS50** in CareMetric's
+Owner-requested 2026-11-08 at 50% off; raised by the owner to 75% off on 2026-11-24. **75% off eligible subscription charges for the first 12 months of paid service.**
+The live coupon is `caremetric_founders_sale_75_12m_20261124`, with promotion code **FOUNDERS75** in CareMetric's
 `acct_1SinLKB06O2UFlNz` account. [Research, full price table, customer copy and redemption steps](PRICING_RESEARCH_AND_FOUNDERS_SALE.md)
 and [the verified live configuration](evidence/founders-sale-20261108.json) are the sources for this offer.
 
 - New paid product subscriptions qualify, including existing free-trial users. The discount is applied automatically
   when paid service starts, after the free trial. No code or activation request is needed.
-- Monthly subscriptions receive 50% off the regular monthly rate for the introductory year. Annual subscriptions receive
-  50% off the published annual price, paid upfront. Standard pricing resumes after the introductory year.
+- Monthly subscriptions receive 75% off the regular monthly rate for the introductory year. Annual subscriptions receive
+  75% off the published annual price, paid upfront. Standard pricing resumes after the introductory year.
 - Includes current CareBase Core, Complete, Compliance Suite, Small Home, Small Home Complete, Train, Train Single Facility,
   and the eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments add-ons; Intel Starter,
   Growth and Pro. Small Home and single-facility eligibility and all capacity limits still apply.
-- Core example: **$99.50 per facility per month**, or **$995 for the first annual payment**, then the regular rate.
-  Intel Starter example: **$174.50 per organization per month**, or **$1,740 for the first annual payment**, then the regular rate.
+- Core example: **$49.75 per facility per month**, or **$497.50 for the first annual payment**, then the regular rate.
+  Intel Starter example: **$87.25 per organization per month**, or **$870 for the first annual payment**, then the regular rate.
 - Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Intel onboarding
   is free on every plan. Other promotional discounts cannot be combined. One introductory year per organization
   and product; cancellation/restart does not reset it. No enrollment deadline or redemption cap has been set.

@@ -80,11 +80,11 @@ describe('copy compliance', () => {
   });
 
   it('offer_mismatch: only the live offer, its own terms, for its products, with no code to type and no deadline', () => {
-    expect(intel({ overlay: { offerLine: '50% off your first 12 months' } }, { offerCode: 'FOUNDERS50' })).toEqual([]);
+    expect(intel({ overlay: { offerLine: '75% off your first 12 months' } }, { offerCode: 'FOUNDERS75' })).toEqual([]);
     expect(rulesOf(intel({}, { offerCode: 'SPRING20' }))).toContain('block:offer_mismatch');
-    expect(rulesOf(intel({ overlay: { offerLine: '40% off your first 12 months' } }, { offerCode: 'FOUNDERS50' }))).toContain('block:offer_mismatch');
-    expect(rulesOf(intel({ overlay: { offerLine: '50% off your first 6 months' } }, { offerCode: 'FOUNDERS50' }))).toContain('block:offer_mismatch');
-    expect(rulesOf(intel({ primaryText: 'Use code FOUNDERS50 at checkout.' }))).toContain('block:offer_mismatch');
+    expect(rulesOf(intel({ overlay: { offerLine: '40% off your first 12 months' } }, { offerCode: 'FOUNDERS75' }))).toContain('block:offer_mismatch');
+    expect(rulesOf(intel({ overlay: { offerLine: '75% off your first 6 months' } }, { offerCode: 'FOUNDERS75' }))).toContain('block:offer_mismatch');
+    expect(rulesOf(intel({ primaryText: 'Use code FOUNDERS75 at checkout.' }))).toContain('block:offer_mismatch');
     expect(rulesOf(intel({ primaryText: 'Take SAVE30 for a discount.' }))).toContain('block:offer_mismatch');
     expect(rulesOf(intel({ headline: 'Founders Sale ends Friday' }))).toContain('block:offer_mismatch');
     expect(rulesOf(intel({ primaryText: 'Intel Starter is $649 per month.' }))).toContain('block:offer_mismatch');

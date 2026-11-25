@@ -137,7 +137,7 @@ export const salesPlaybook = deepFreeze({
       'Would you start with training only, or with records and daily tasks as well?',
     ],
     objections: [
-      { key: 'price', when: 'Cost or budget.', answer: 'Pricing is per facility with unlimited residents and staff. Quote only the fact sheet: Core, Small Home for fewer than 20 licensed beds, Train for training only, and the Founders Sale (50% off eligible subscription charges for the first 12 months of paid service, after the free trial). Never invent a discount.' },
+      { key: 'price', when: 'Cost or budget.', answer: 'Pricing is per facility with unlimited residents and staff. Quote only the fact sheet: Core, Small Home for fewer than 20 licensed beds, Train for training only, and the Founders Sale (75% off eligible subscription charges for the first 12 months of paid service, after the free trial). Never invent a discount.' },
       { key: 'timing', when: 'Not now, too busy, after the holidays or after an inspection.', answer: 'Acknowledge it, note that the free trial can start whenever suits them, and ask when to check back. Record a dated follow-up instead of pushing.' },
       { key: 'current_system', when: 'They already use another system or a training-only tool.', answer: 'Ask what it leaves out or makes hard (training, records, daily tasks, survey documentation). Never name or criticize another product.' },
       { key: 'switching', when: 'Switching is hard, or staff will not adopt it.', answer: 'Suggest starting with one workflow, such as staff training, during the free trial, and offer help setting up facilities and the staff roster.' },
@@ -199,7 +199,7 @@ export const salesPlaybook = deepFreeze({
       'Who else would weigh in on choosing a tool?',
     ],
     objections: [
-      { key: 'price', when: 'Cost or budget.', answer: 'Quote only the fact sheet: Starter, Growth and Pro with seats and counties, annual billing saving about 17%, and the Founders Sale (50% off eligible subscription charges for the first 12 months of paid service). Never promise more referrals or revenue.' },
+      { key: 'price', when: 'Cost or budget.', answer: 'Quote only the fact sheet: Starter, Growth and Pro with seats and counties, annual billing saving about 17%, and the Founders Sale (75% off eligible subscription charges for the first 12 months of paid service). Never promise more referrals or revenue.' },
       { key: 'timing', when: 'Not now or busy.', answer: `Acknowledge it, say the ${facts.intel.trialDays}-day free trial can start whenever suits them, and ask when to check back. Record a dated follow-up.` },
       { key: 'current_system', when: 'They already use a CRM, a spreadsheet or another data tool.', answer: 'Ask what it leaves out (territory analysis, focused lists, recorded referrals in one place). Never name or criticize another product.' },
       { key: 'data_trust', when: 'They ask whether the data shows real referrals.', answer: 'Be precise: Medicare and Census figures are research signals; referrals are what the organization records in Intel. Name the source (Medicare, CMS, the Census Bureau) without calling it public. If they ask whether the data is public or where it comes from, say plainly that it is CMS, NPPES and Census Bureau data that CareMetric Intel analyzes; never call it proprietary, exclusive or licensed.' },

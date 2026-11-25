@@ -147,7 +147,7 @@ const shared = {
   closeNote: 'Have a question first? Just reply. I\'ll answer it.',
   weekHeading: 'A week in CareMetric Intel',
   offerEyebrow: 'Founders Sale',
-  offerTitle: '50% off your first 12 months',
+  offerTitle: '75% off your first 12 months',
   // The sale's terms in everyday words (facts.mjs `foundersSaleTerms`): half off the plan's own price for the first paid year, applied
   // by billing with no code. "Your plan's price" leaves out what the terms exclude (setup fees, add-ons, taxes).
   offerText: 'Half off your plan\'s price for your first 12 months as a paying customer. It\'s applied on its own when your paid plan starts. No code needed.',
