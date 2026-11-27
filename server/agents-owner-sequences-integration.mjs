@@ -31,7 +31,9 @@ const guardGate = await readFile(new URL('../supabase/migrations/20261127210100_
 const guardOrgs = [];
 // The batches' gate, once its migration is in this checkout (20261127220100_owner_sequence_batches_contract.sql).
 const batchesGate = await readFile(new URL('../supabase/migrations/20261127220100_owner_sequence_batches_contract.sql', import.meta.url), 'utf8').catch(() => null);
-const batchSettings = ['growth.owner_sequence_batches', 'growth.owner_sequence_batch_approve'];
+// Hunter's gate, once its migration is in this checkout (20261127230100_growth_hunter_contract.sql).
+const hunterGate = await readFile(new URL('../supabase/migrations/20261127230100_growth_hunter_contract.sql', import.meta.url), 'utf8').catch(() => null);
+const batchSettings = ['growth.owner_sequence_batches', 'growth.owner_sequence_batch_approve', 'growth.hunter', 'growth.hunter_daily'];
 const batchSeed = batchesGate ? (await admin.query('select key, value from private.hub_settings where key = any($1::text[])', [batchSettings])).rows : [];
 const strangers = [];
 const run = randomUUID().slice(0, 8);
@@ -335,6 +337,37 @@ try {
     await admin.query("update private.owner_sequence_requests set status = 'failed', finished_at = now() where id = $1", [queued.id]);
     assert.deepEqual(await store.batchPlan(5), { due: false, why: 'built_this_week' });
     assert.deepEqual(await store.batchQueue({ name: 'Again', csv: 'ref,email\n' }), { queued: false, why: 'built_this_week' });
+
+    // 9c. Hunter (20261127230000_growth_hunter.sql): off, nobody is looked up; on, the agencies the batch would take but for an address;
+    // a lookup is reserved once in 180 days an agency and under the day's number; an address Hunter found is recorded as confirmed.
+    if (hunterGate) {
+      const server = async (sql, values = []) => (await pool.query(sql, values)).rows[0].r;
+      await assert.rejects(admin.query('select private.growth_hunter_next(5)'), refused('42501'));
+      await admin.query("update private.hub_settings set value = 'false'::jsonb where key = 'growth.hunter'");
+      assert.deepEqual(await server('select private.growth_hunter_next(25) as r'), []);
+      await admin.query("update private.hub_settings set value = 'true'::jsonb where key = 'growth.hunter'");
+      await admin.query("update private.hub_settings set value = '1'::jsonb where key = 'growth.hunter_daily'");
+      const victor = left[2];
+      const named = (await server('select private.growth_hunter_next(25) as r')).filter(item => [ready, ...left].includes(item.id));
+      assert.deepEqual(named.map(item => item.id).sort(), [victor, left[5]].sort(), 'the catch-all and off-domain agencies, still missing an address');
+      const victorPerson = named.find(item => item.id === victor).people[0];
+      assert.equal(victorPerson.source, 'cms_owners');
+      const lookup = await server('select private.growth_hunter_begin($1, $2) as r', [victor, victorPerson.id]);
+      assert.ok(lookup);
+      assert.equal(await server('select private.growth_hunter_begin($1, $2) as r', [victor, victorPerson.id]), null, 'once in 180 days');
+      const yankeePerson = named.find(item => item.id === left[5]).people[0];
+      assert.equal(await server('select private.growth_hunter_begin($1, $2) as r', [left[5], yankeePerson.id]), null, 'the day\'s number');
+      await assert.rejects(pool.query('select private.growth_hunter_begin($1, $2)', [left[5], victorPerson.id]), refused('22023'));
+      await assert.rejects(pool.query("select private.growth_hunter_finish($1, 'maybe')", [lookup]), refused('22023'));
+      assert.equal(await server("select private.growth_hunter_finish($1, 'found') as r", [lookup]), true);
+      assert.equal(await server("select private.growth_hunter_finish($1, 'found') as r", [lookup]), false);
+      const saved = await server("select private.growth_person_address($1, $2, 'Jane Doe', 'hunter', null) as r", [victorPerson.id, `owner.victor@${domainOf('victor')}`]);
+      assert.equal(saved.found, true); assert.equal(saved.eligibility, 'review');
+      assert.deepEqual(await row('select c.mailbox_result, p.address_found from private.growth_people p join private.growth_contacts c on c.id = p.contact_id where p.id = $1', [victorPerson.id]),
+        { mailbox_result: 'verified', address_found: 'hunter' });
+      await assert.rejects(pool.query("select private.growth_person_address($1, $2, 'Jane Doe', 'hunter', 'https://example.org/x')", [yankeePerson.id, `x@${domainOf('yankee')}`]), refused('22023'));
+      assert.deepEqual((await server('select private.growth_hunter_next(25) as r')).filter(item => [victor].includes(item.id)), [], 'found: no longer looked up');
+    }
   }
 
   // 10. The gate refuses drift and declares nothing on a database that no longer keeps its promises.
@@ -351,6 +384,14 @@ try {
     await assert.rejects(again.query(gate), refused('55000', /not scheduled/));
   } finally { await again.query('rollback'); again.release(); }
 
+  if (hunterGate) {
+    const drift = await admin.connect();
+    try {
+      await drift.query('begin');
+      await drift.query('grant select on private.growth_hunter_lookups to hub_app_server');
+      await assert.rejects(drift.query(hunterGate), refused('55000', /closed to hub_app_server/));
+    } finally { await drift.query('rollback'); drift.release(); }
+  }
   if (batchesGate) {
     const drift = await admin.connect();
     try {

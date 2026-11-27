@@ -323,6 +323,16 @@ three-argument `private.creative_data_counties` is executable by `hub_app_server
 out for 56 days after it is pictured and reports the setting it was pictured with last. Each test fails closed. The Hub server picks
 counties from Intel's list of the roster's states only when the feature is declared, and otherwise from the roster's own counties as before.
 
+`20261127230100_growth_hunter_contract.sql` declares `platform.agents.growth-hunter.v1` only after the people finder and the owner
+sequence guard are declared and the two Hunter settings exist. It also checks that:
+- the lookups table has row level security and is closed to every role;
+- the next, begin and finish functions are executable by `hub_app_server` alone and require the Hub server connection;
+- the candidates are the batch's (the guard, the sequences, CMS's control type, the owner's home area) and follow the setting;
+- a lookup is reserved under the daily number;
+- an address Hunter found is accepted but never permitted for the Marketing Manager on its own.
+
+Each test fails closed.
+
 `20261127220100_owner_sequence_batches_contract.sql` declares `platform.agents.owner-sequence-batches.v1` only after the owner sequence
 requests and guard are declared and the three batch settings exist. It also checks that:
 - the plan and queue functions are executable by `hub_app_server` alone and require the Hub server connection;

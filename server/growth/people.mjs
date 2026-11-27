@@ -35,6 +35,7 @@ import { live } from '../live.mjs';
 import { marketedNow, markets } from '../agents/marketing.mjs';
 import { addressFits, addressGuesses, learnPattern, nameParts, unansweredReason } from './mailbox.mjs';
 import { titleRank } from './team.mjs';
+import { huntOwners } from './hunter.mjs';
 
 export { titleRank } from './team.mjs';
 export const growthPeopleFeature = 'platform.agents.growth-people.v1';
@@ -134,10 +135,16 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
     const registry = finder && typeof sources.registry?.officials === 'function' ? sources.registry : null;
     const site = finder && typeof growth.contacts?.team === 'function' ? growth.contacts : null;
     const mailbox = mode === 'verify' && typeof sources.mailbox?.check === 'function' ? sources.mailbox : null;
-    if (!feed?.configured && !registry && !site) return { result: { skipped: 'no_source' } };
+    // The owners the weekly batch still needs an address for, looked up with Hunter first (hunter.mjs; Settings → Customer growth → Find
+    // owners' addresses with Hunter). Its own reserved, capped lookups; nothing else in this run depends on it.
+    let hunter = null;
+    try { hunter = await huntOwners({ store: growth.store, finder: sources.hunter, features, signal }); }
+    catch (error) { if (signal?.aborted) throw error; hunter = { failed: String(error?.code ?? 'hunter_failed').slice(0, 80) }; }
+    const withHunter = result => (hunter ? { ...result, hunter } : result);
+    if (!feed?.configured && !registry && !site) return { result: withHunter({ skipped: 'no_source' }) };
     const list = await marketedNow(marketed);
     const candidates = (await growth.store.peopleCandidates(peopleLookupsPerRun)).filter(item => markets(list, item.product));
-    if (!candidates.length) return { result: { searched: 0 } };
+    if (!candidates.length) return { result: withHunter({ searched: 0 }) };
     // The CMS owners of every candidate the roster knows, in one request.
     const ccns = [...new Set(candidates.flatMap(item => item.ccns ?? []))].slice(0, 25);
     const factsByCcn = new Map();
@@ -226,7 +233,7 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
         }
       } catch (error) { if (error?.code !== '22023') throw error; }
     }
-    return { result: { ...counts, ...(byPlace ? { byPlace } : {}), ...(byService ? { byService } : {}), ...(Object.keys(answers).length ? { answers } : {}), ...(Object.keys(why).length ? { why } : {}) } };
+    return { result: withHunter({ ...counts, ...(byPlace ? { byPlace } : {}), ...(byService ? { byService } : {}), ...(Object.keys(answers).length ? { answers } : {}), ...(Object.keys(why).length ? { why } : {}) }) };
   }
   return { 'growth.people': people };
 }

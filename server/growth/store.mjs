@@ -66,6 +66,11 @@ export function growthStore(pool) {
     enrichmentReserve:credits=>server('private.growth_enrichment_reserve',[credits]),
     // The verification service's checks today (20261117233000_growth_address_service.sql): false once the owner's daily number is used.
     addressServiceReserve:checks=>server('private.growth_address_service_reserve',[checks]),
+    // Hunter's lookups for the owners' batches (20261127230000_growth_hunter.sql): the agencies, a reserved lookup (null once the day's number
+    // is used or the setting is off) and its answer.
+    hunterNext:limit=>server('private.growth_hunter_next',[limit]),
+    hunterBegin:(org,person)=>server('private.growth_hunter_begin',[org,person]),
+    hunterFinish:(id,result)=>server('private.growth_hunter_finish',[id,result]),
     enrichedContact:(person,email,name)=>server('private.growth_enriched_contact',[person,email,name??null]),
     // A found address and how: 'published' with its page on the business's own site, or 'mail_server' (20261113290000_growth_people_finder.sql).
     personAddress:(person,email,name,found,sourceUrl)=>server('private.growth_person_address',[person,email,name??null,found,sourceUrl??null]),
