@@ -28,6 +28,7 @@ export const hunterLookupsPerRun = 2;
 /** The least score Hunter gives an address that is kept. */
 export const hunterMinScore = 80;
 const endpoint = 'https://api.hunter.io/v2/email-finder';
+const companyEndpoint = 'https://api.hunter.io/v2/domain-search';
 const maxBytes = 100_000;
 const timeoutMs = 15_000;
 // The roles worth a batch's email: owner (0), CEO or president (1), administrator (2), executive director (3).
@@ -104,6 +105,46 @@ export function screenAgencies(agencies, facts = new Map()) {
     kept.push(agency);
   }
   return { kept, screened };
+}
+
+/**
+ * The Medicare roster's second website search (owner, 2026-11-27: Brave and Hunter both, Hunter when Brave finds no confirmed site or
+ * cannot search; worker.mjs `lookUp`): Hunter's Domain Search asked by company name answers the domain it knows for that name. `find({ name })` answers { result: 'found', domain,
+ * organization } or { result: 'not_found' | 'refused' | 'error' }. It is only a candidate: the roster reads the site and keeps it only when
+ * the site confirms it is the agency's own (roster.mjs confirmsSite: its CMS telephone number, or its name and place). Asked with
+ * limit=1, so a lookup costs at most one search credit, and none when Hunter returns no address.
+ */
+export function hunterCompanyFinder({ apiKey = '', fetchImpl = globalThis.fetch, paceMs = 1100 } = {}) {
+  const key = () => String(live(apiKey) ?? '').trim();
+  return {
+    paceMs,
+    get configured() { return key().length > 0 && typeof fetchImpl === 'function'; },
+    async find({ name, signal } = {}) {
+      const company = String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+      if (!key() || company.length < 2) return { result: key() ? 'not_found' : 'refused' };
+      const url = new URL(companyEndpoint);
+      url.searchParams.set('company', company);
+      url.searchParams.set('limit', '1');
+      let response;
+      try {
+        response = await fetchImpl(url, { method: 'GET', redirect: 'error', headers: { accept: 'application/json', 'x-api-key': key() },
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs) });
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        return { result: 'error' };
+      }
+      if ([401, 403].includes(response.status)) return { result: 'refused' };
+      if ([400, 404, 451].includes(response.status)) return { result: 'not_found' };
+      if (!response.ok) return { result: 'error' };
+      const text = await response.text();
+      if (text.length > maxBytes * 3) return { result: 'error' };
+      let body;
+      try { body = JSON.parse(text); } catch { return { result: 'error' }; }
+      const domain = String(body?.data?.domain ?? '').trim().toLowerCase().replace(/^www\./, '');
+      if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(domain) || domain.length > 253) return { result: 'not_found' };
+      return { result: 'found', domain, organization: String(body?.data?.organization ?? '').slice(0, 200) || null };
+    },
+  };
 }
 
 /**

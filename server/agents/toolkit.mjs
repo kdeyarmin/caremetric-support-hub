@@ -45,7 +45,7 @@ export function marketingToolkit({ features = null, growth = null, growthMail = 
       [feed.enabled === true, 'Turn on Settings → Customer growth → Find prospects from the Medicare roster.'],
       [Array.isArray(rosterStates) && rosterStates.length > 0, 'Choose Settings → Customer growth → States to prospect in.'],
       [feed.signing === true, 'Set HUB_INTEL_FEED_SECRET on the Hub to the same value as HUB_MARKETING_FEED_SECRET on Intel (at least 32 characters).'],
-      [growth?.research?.configured === true, 'Set HUB_GROWTH_SEARCH_API_KEY on the Hub service.'],
+      [growth?.research?.configured === true || growth?.sites?.configured === true, 'Set HUB_GROWTH_SEARCH_API_KEY (Brave) or HUNTER_API_KEY on the Hub service: either finds each agency\'s website.'],
     ], '/admin/growth');
   const addressMode = live(growth?.people?.mode);
   add('decision_makers', 'Named decision-makers', ['marketing_manager'],

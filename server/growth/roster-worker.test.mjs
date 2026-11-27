@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { growthHandlers, growthAutonomyFeature } from './worker.mjs';
 import { rosterLookupsPerRun } from './roster.mjs';
 
@@ -14,7 +14,7 @@ function setup({ sync = { period: null, states: [], cursor: null, complete: fals
   search = async () => [{ domain: 'valleyhospice.org', url: 'https://valleyhospice.org/', name: 'Valley Hospice | Philadelphia', claim: 'Hospice care in Philadelphia.' }],
   found = { email: 'info@valleyhospice.org', sourceUrl: 'https://valleyhospice.org/contact', phoneSeen: true,
     site: { url: 'https://valleyhospice.org/', claim: "The organization's own home page. Title: Valley Hospice." } },
-  states = ['PA'], daily = 25, research = true } = {}) {
+  states = ['PA'], daily = 25, research = true, sites = null } = {}) {
   const queue = [...targets];
   const store = {
     rosterSyncState: vi.fn(async () => sync),
@@ -26,6 +26,7 @@ function setup({ sync = { period: null, states: [], cursor: null, complete: fals
   };
   const feed = { configured: true, paceMs: 0, roster: vi.fn(async () => pages.shift() ?? page([])) };
   const growth = { store, roster: { feed, states, daily }, research: { configured: research, paceMs: 0, search: vi.fn(search) },
+    ...(sites ? { sites: { configured: true, paceMs: 0, find: vi.fn(sites) } } : {}),
     contacts: { configured: true, find: vi.fn(async () => found) } };
   const run = (task = { id: 't', agent: { autonomy: 'propose' } }) => growthHandlers({ growth, features, marketed: ['caremetric-intel'] })['growth.roster'](task, { now });
   return { store, feed, growth, run };
@@ -171,4 +172,61 @@ it('leaves the agency unresolved when no site found by its number shows it, and 
   const plain = setup({ targets: [{ ...target, facts: {} }], search: vi.fn(async () => []), sync: { period: '2026Q3', states: ['PA'], cursor: null, complete: true, syncedAt: '2026-11-12T00:00:00Z' } });
   await plain.run();
   expect(plain.growth.research.search).toHaveBeenCalledTimes(1);
+});
+
+describe('Hunter after Brave (owner, 2026-11-27)', () => {
+  const fresh = { period: '2026Q3', states: ['PA'], cursor: null, complete: true, syncedAt: '2026-11-12T00:00:00Z' };
+  const own = { email: 'info@valleyhospice.org', sourceUrl: 'https://valleyhospice.org/contact', phoneSeen: true, site: { url: 'https://valleyhospice.org/', claim: 'Valley Hospice.' } };
+
+  it('asks Hunter only when Brave finds no confirmed site, and graduates the site Hunter names once its pages confirm it', async () => {
+    const graduatedByBrave = setup({ sync: fresh, sites: async () => ({ result: 'found', domain: 'other.example' }) });
+    expect((await graduatedByBrave.run()).result).toMatchObject({ graduated: 1 });
+    expect(graduatedByBrave.growth.sites.find).not.toHaveBeenCalled();
+
+    const { store, growth, run } = setup({ sync: fresh, search: async () => [], sites: async () => ({ result: 'found', domain: 'valleyhospice.org', organization: 'Valley Hospice' }) });
+    growth.contacts.find = vi.fn(async () => own);
+    const { result } = await run();
+    expect(growth.sites.find).toHaveBeenCalledWith(expect.objectContaining({ name: 'valley hospice' }));
+    expect(store.rosterResolved).toHaveBeenCalledWith('391501', expect.objectContaining({ outcome: 'graduated', domain: 'valleyhospice.org', confirmation: 'phone' }));
+    expect(result).toMatchObject({ looked: 1, graduated: 1, byHunter: 1 });
+  });
+
+  it('keeps a site Hunter names out unless its pages confirm it, never reads a directory, and never reads a site twice', async () => {
+    const wrong = setup({ sync: fresh, search: async () => [], sites: async () => ({ result: 'found', domain: 'valleyplumbing.example' }),
+      found: { email: null, phoneSeen: false, site: { url: 'https://valleyplumbing.example/', claim: 'Valley Plumbing. Drains in Ohio.' } } });
+    expect((await wrong.run()).result).toMatchObject({ graduated: 0, unresolved: 1 });
+    expect(wrong.store.rosterResolved).toHaveBeenCalledWith('391501', { outcome: 'unresolved', reason: 'not_confirmed' });
+    const directory = setup({ sync: fresh, search: async () => [], sites: async () => ({ result: 'found', domain: 'yelp.com' }) });
+    await directory.run();
+    expect(directory.growth.contacts.find).not.toHaveBeenCalled();
+    expect(directory.store.rosterResolved).toHaveBeenCalledWith('391501', { outcome: 'unresolved', reason: 'no_site' });
+    // Brave's own choice was read and did not confirm: Hunter naming the same domain does not read it again.
+    const same = setup({ sync: fresh, targets: [{ ...target, facts: {} }], sites: async () => ({ result: 'found', domain: 'valleyhospice.org' }),
+      found: { email: null, phoneSeen: false, site: { url: 'https://valleyhospice.org/', claim: 'Valley Plumbing. Drains in Ohio.' } } });
+    await same.run();
+    expect(same.growth.contacts.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('when Brave cannot search, Hunter alone decides; when neither can answer, the agency is tried again and the run stops', async () => {
+    const braveDown = async () => { throw Object.assign(new Error('x'), { code: 'research_unavailable', transient: true }); };
+    const byHunter = setup({ sync: fresh, search: braveDown, sites: async () => ({ result: 'found', domain: 'valleyhospice.org' }) });
+    byHunter.growth.contacts.find = vi.fn(async () => own);
+    expect((await byHunter.run()).result).toMatchObject({ graduated: 1, byHunter: 1 });
+    const nothing = setup({ sync: fresh, search: braveDown, sites: async () => ({ result: 'not_found' }) });
+    await nothing.run();
+    expect(nothing.store.rosterResolved).toHaveBeenCalledWith('391501', { outcome: 'unresolved', reason: 'no_site' });
+    for (const sites of [null, async () => ({ result: 'refused' }), async () => ({ result: 'error' })]) {
+      const stuck = setup({ sync: fresh, targets: [target, { ...target, ccn: '391502' }], search: braveDown, sites });
+      expect((await stuck.run()).result).toMatchObject({ looked: 1, unresolved: 1 });
+      expect(stuck.store.rosterResolved).toHaveBeenCalledWith('391501', { outcome: 'unresolved', reason: 'retry' });
+      expect(stuck.store.rosterNext).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('looks agencies up with Hunter alone when Brave is not set up', async () => {
+    const { growth, run } = setup({ sync: fresh, research: false, sites: async () => ({ result: 'found', domain: 'valleyhospice.org' }) });
+    growth.contacts.find = vi.fn(async () => own);
+    expect((await run()).result).toMatchObject({ looked: 1, graduated: 1, byHunter: 1 });
+    expect(growth.research.search).not.toHaveBeenCalled();
+  });
 });

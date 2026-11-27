@@ -302,6 +302,19 @@ export function chooseSite(target, rows) {
   return { domain: first.domain, url: first.url, score: first.score, inDomain: first.inDomain };
 }
 
+/**
+ * The domain Hunter gave for an agency, as the site the roster reads (worker.mjs `lookUp`): an operator's own host, never a directory or a
+ * social network, with how much of the agency's distinctive name the domain carries (confirmsSite weighs it). Null otherwise.
+ */
+export function domainChoice(target, domain) {
+  const host = String(domain ?? '').trim().toLowerCase().replace(/^www\./, '');
+  if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/.test(host) || !operatorHost(host)) return null;
+  const distinct = distinctiveWords(target?.name);
+  const label = domainLabel(host);
+  const inDomain = distinct.filter(word => label.includes(word)).length / Math.max(distinct.length, 1);
+  return { domain: host, url: `https://${host}/`, inDomain };
+}
+
 /** Every ten-digit North American telephone number written in a page (text, tel: links). */
 export function phonesIn(text) {
   const found = new Set();
