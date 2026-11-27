@@ -98,6 +98,7 @@ const marketingConnectionContracts=await Promise.all([
   ['platform.agents.owner-sequence-guard.v1','20261127210100_owner_sequence_guard_contract.sql'],
   ['platform.agents.owner-sequence-batches.v1','20261127220100_owner_sequence_batches_contract.sql'],
   ['platform.agents.growth-hunter.v1','20261127230100_growth_hunter_contract.sql'],
+  ['platform.agents.owner-sequence-open.v1','20261127240100_owner_sequence_open_contract.sql'],
 ].map(async([feature,file])=>({feature,sql:await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8')})));
 // The owner's 2026-11-15 hand-over (20261115200000_autonomy_handover.sql) lifted two refusals the founder post and paid ads gates read
 // when they were declared: any automatic approval of those kinds, and any autonomy step naming a founder post. Their replays run against
@@ -125,6 +126,10 @@ const ownerSequenceGuardMigration=await readFile(new URL('../supabase/migrations
 // Applying the work recovery and address service migrations again redefines the address function without Hunter's address (20261127230000),
 // so that migration (idempotent too) is applied again before its own gate is replayed.
 const growthHunterMigration=await readFile(new URL('../supabase/migrations/20261127230000_growth_hunter.sql',import.meta.url),'utf8');
+// The batch and Hunter gates check the proprietary, one-office screen those migrations wrote; the open screening (20261127240000) removes
+// it, so the batch migration is applied again before its gate, and the open screening again before its own.
+const ownerSequenceBatchesMigration=await readFile(new URL('../supabase/migrations/20261127220000_owner_sequence_batches.sql',import.meta.url),'utf8');
+const ownerSequenceOpenMigration=await readFile(new URL('../supabase/migrations/20261127240000_owner_sequence_open.sql',import.meta.url),'utf8');
 const beforeHandover=`delete from private.agent_autonomy_steps where requires_feature='platform.agents.autonomy-handover.v1';
 alter table private.agent_actions drop constraint agent_actions_founder_post_check, add constraint agent_actions_founder_post_check check (
   kind <> 'social.founder_post' or coalesce(agent_key = 'social_manager' and target_kind = 'social_item' and target_id ~ '^founder:[0-9]{4}-[0-9]{2}-[0-9]{2}:[1-5]$'
@@ -419,7 +424,9 @@ try {
       if(entry.feature==='platform.agents.owner-sequences.v1') await client.query(ownerSequencesMigration);
       if(entry.feature==='platform.agents.owner-sequence-requests.v1') await client.query(ownerSequenceRequestsMigration);
       if(entry.feature==='platform.agents.owner-sequence-guard.v1') await client.query(ownerSequenceGuardMigration);
+      if(entry.feature==='platform.agents.owner-sequence-batches.v1') await client.query(ownerSequenceBatchesMigration);
       if(entry.feature==='platform.agents.growth-hunter.v1') await client.query(growthHunterMigration);
+      if(entry.feature==='platform.agents.owner-sequence-open.v1') await client.query(ownerSequenceOpenMigration);
       expected.features.push(entry.feature);
       await client.query(entry.sql);
       assert.deepEqual(await readContract(),expected,`${entry.feature} adds only its own feature`);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { agencyDisplay, buildSendList, decider, firstNameOf, hostedSite, nextBatchDates, ownershipProblem, sequenceBatches } from './sequence-batches.mjs';
+import { agencyDisplay, buildSendList, decider, firstNameOf, hostedSite, nextBatchDates, sequenceBatches } from './sequence-batches.mjs';
 import { ownerSequences, readSendList } from './owner-sequence.mjs';
 
 const feature = 'platform.agents.owner-sequence-batches.v1';
@@ -23,12 +23,7 @@ describe('the next batch\'s dates', () => {
 });
 
 describe('screening an agency', () => {
-  it('takes only agencies CMS lists as owned by people, on a website of their own', () => {
-    expect(ownershipProblem(null)).toBe('owners_unknown');
-    expect(ownershipProblem({ owners: [] })).toBe('owners_unknown');
-    expect(ownershipProblem({ owners: [{ name: 'Jane Doe', kind: 'individual' }, { name: 'AT HOME SERVICES HOLDING GROUP LLC', kind: 'organization' }] })).toBe('owned_by_organization');
-    expect(ownershipProblem({ owners: [{ name: 'Jane Doe', kind: 'individual' }, { name: 'John Doe', kind: null }] })).toBe('owned_by_organization');
-    expect(ownershipProblem({ owners: [{ name: 'Jane Doe', kind: 'individual' }] })).toBeNull();
+  it('tells a page builder\'s site (no mailbox of its own) from an agency\'s own domain', () => {
     for (const domain of ['elitehomehealthcare.lovable.app', 'deermeadowshomehealth.weebly.com', 'kathleenchupka.dr-leonardo.com', 'x.wixsite.com']) expect(hostedSite(domain)).toBe(true);
     for (const domain of ['maylathhealth.com', 'athomerehabllc.com', 'wix-home-health.com']) expect(hostedSite(domain)).toBe(false);
   });
@@ -55,7 +50,7 @@ describe('screening an agency', () => {
 });
 
 describe('the send list', () => {
-  it('takes agencies in the database\'s order up to the batch size, leaves out the ones that fail a check, and reads back as a send list', () => {
+  it('takes agencies in the database\'s order up to the batch size, whoever owns them, leaves out the ones that fail a check, and reads back as a send list', () => {
     const list = [candidate(1, { domain: 'agency1.weebly.com' }), candidate(2), candidate(3, { people: [person('Pat Nurse', 'Director of Nursing', 'pnurse@agency3.example', 'website')] }),
       candidate(4, { name: 'SMITH, JONES & CO HOME CARE, INC.', targets: [{ ...candidate(4).targets[0], name: 'SMITH, JONES & CO HOME CARE, INC.', setting: 'hospice' }] }),
       candidate(5, { targets: [{ ...candidate(5).targets[0], countyFips: '42999' }] }), candidate(6), candidate(7), candidate(8)];
@@ -63,9 +58,12 @@ describe('the send list', () => {
     facts.set(list[5].targets[0].ccn, { ccn: list[5].targets[0].ccn, owners: [{ name: 'BIG CAPITAL PARTNERS LP', kind: 'organization', role: ownerRole }] });
     facts.set(list[2].targets[0].ccn, { ccn: list[2].targets[0].ccn, owners: [{ name: 'JANE ROE', kind: 'individual', role: ownerRole }] });
     const out = buildSendList(list, { size: 3, number: 3, facts, counties });
-    expect(out.people.map(p => [p.ref, p.ccn])).toEqual([['pa-b3-01', list[1].targets[0].ccn], ['pa-b3-02', list[3].targets[0].ccn], ['pa-b3-03', list[6].targets[0].ccn]]);
+    // Agency 6 is owned by a company (CMS): it is taken all the same (owner, 2026-11-27: no agency is off limits).
+    expect(out.people.map(p => [p.ref, p.ccn])).toEqual([['pa-b3-01', list[1].targets[0].ccn], ['pa-b3-02', list[3].targets[0].ccn], ['pa-b3-03', list[5].targets[0].ccn]]);
     expect(out.skipped).toEqual([{ agency: 'AGENCY 1 HOME HEALTH LLC', reason: 'no_website_of_its_own' }, { agency: 'AGENCY 3 HOME HEALTH LLC', reason: 'no_decider' },
-      { agency: 'AGENCY 5 HOME HEALTH LLC', reason: 'county_unknown' }, { agency: 'AGENCY 6 HOME HEALTH LLC', reason: 'owned_by_organization' }]);
+      { agency: 'AGENCY 5 HOME HEALTH LLC', reason: 'county_unknown' }]);
+    // Without CMS's owners, the people's own titles decide.
+    expect(buildSendList(list, { size: 3, number: 3, counties }).people.map(p => p.ref)).toEqual(['pa-b3-01', 'pa-b3-02', 'pa-b3-03']);
     const read = readSendList(out.csv);
     expect(read.problems).toEqual([]);
     expect(read.people[1]).toMatchObject({ ref: 'pa-b3-02', agency: 'Smith, Jones & Co Home Care', matchName: 'SMITH, JONES & CO HOME CARE, INC.', county: 'Luzerne', setting: 'hospice',

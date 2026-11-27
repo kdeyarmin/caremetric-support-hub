@@ -8,9 +8,8 @@
  * "Find owners' addresses with Hunter" is on and HUNTER_API_KEY is set, the Marketing Manager asks Hunter about the agencies the batch would
  * take but for an address (the database names them), one person each: the one whose role decides most. Each lookup is reserved first under
  * "Most Hunter lookups a day"; Hunter charges a credit only when it finds an address. An agency is asked about once in 180 days.
- * Before a lookup is reserved the agency is screened as the batch screens it (20261127233000): an agency whose only website is on a page
- * builder's host, or whose CMS owners (Intel's agency_facts) are unknown or include an organization (a chain, a health system, a holding
- * company, private equity) is left alone, since the batch would leave it out anyway. Without the feed, nobody is looked up.
+ * Every agency the batch would take is looked up, whoever owns it, smallest first (20261127240000; owner, 2026-11-27: "I don't think any
+ * agencies should be off limits"). Only an agency whose only website is on a page builder's host is skipped: it has no mailbox of its own.
  *
  * An address is kept only when it is on the agency's own domain, Hunter's own check calls it valid, its score is 80 or more, and, for a
  * domain that accepts every address, Hunter saw it published somewhere. It is recorded as confirmed for the owner's batches and never
@@ -20,7 +19,7 @@
 import { live } from '../live.mjs';
 import { nameParts } from './mailbox.mjs';
 import { mergePeople } from './people.mjs';
-import { hostedSite, ownershipProblem } from './sequence-batches.mjs';
+import { hostedSite } from './sequence-batches.mjs';
 
 export const growthHunterFeature = 'platform.agents.growth-hunter.v1';
 /** Lookups asked per `growth.people` run (every half hour), before the daily number. */
@@ -89,19 +88,11 @@ export function hunterFinder({ apiKey = '', fetchImpl = globalThis.fetch } = {})
   };
 }
 
-/**
- * The agencies of Hunter's queue a batch would take, with the reasons the others were left out: an agency needs a website of its own and
- * CMS owners who are all people. `facts` maps a CCN to its agency_facts entry.
- */
-export function screenAgencies(agencies, facts = new Map()) {
+/** The agencies of Hunter's queue that have a mailbox of their own to look up, with how many were skipped: a page builder's site has none. */
+export function screenAgencies(agencies) {
   const kept = []; const screened = {};
-  const leave = reason => { screened[reason] = (screened[reason] ?? 0) + 1; };
   for (const agency of agencies ?? []) {
-    const ccns = Array.isArray(agency?.ccns) ? agency.ccns.filter(Boolean) : [];
-    if (!agency?.domain || hostedSite(agency.domain)) { leave('no_website_of_its_own'); continue; }
-    if (!ccns.length) { leave('owners_unknown'); continue; }
-    const problem = ccns.map(ccn => ownershipProblem(facts.get(ccn))).find(Boolean);
-    if (problem) { leave(problem); continue; }
+    if (!agency?.domain || hostedSite(agency.domain)) { screened.no_website_of_its_own = (screened.no_website_of_its_own ?? 0) + 1; continue; }
     kept.push(agency);
   }
   return { kept, screened };
@@ -151,22 +142,12 @@ export function hunterCompanyFinder({ apiKey = '', fetchImpl = globalThis.fetch,
  * One run's lookups: { asked, found, notFound, refused, errors, screened? }, or null when Hunter is not in use. Stops at the daily number
  * (the database refuses to reserve), at a refused key, and after `limit` lookups.
  */
-export async function huntOwners({ store, finder, feed = null, features = null, limit = hunterLookupsPerRun, signal } = {}) {
+export async function huntOwners({ store, finder, features = null, limit = hunterLookupsPerRun, signal } = {}) {
   const declared = features instanceof Set ? features.has(growthHunterFeature) : Array.isArray(features) && features.includes(growthHunterFeature);
   if (!declared || !finder?.configured || typeof store?.hunterNext !== 'function') return null;
   const counts = { asked: 0, found: 0, notFound: 0, refused: 0, errors: 0 };
   const queue = await store.hunterNext(Math.min(25, limit * 10));
-  const listed = (Array.isArray(queue) ? queue : []).filter(agency => agency?.domain && !hostedSite(agency.domain));
-  if (!listed.length) return counts;
-  // The agencies' CMS owners, read before any lookup is reserved: without them nobody is looked up.
-  if (!feed?.configured || typeof feed.agencyFacts !== 'function') return { ...counts, skipped: 'feed' };
-  const facts = new Map();
-  const ccns = [...new Set(listed.flatMap(agency => (Array.isArray(agency.ccns) ? agency.ccns : []).filter(Boolean)))];
-  for (let at = 0; at < ccns.length; at += 25) {
-    signal?.throwIfAborted();
-    for (const agency of (await feed.agencyFacts({ ccns: ccns.slice(at, at + 25), signal })).agencies ?? []) facts.set(agency.ccn, agency);
-  }
-  const { kept, screened } = screenAgencies(queue, facts);
+  const { kept, screened } = screenAgencies(Array.isArray(queue) ? queue : []);
   if (Object.keys(screened).length) counts.screened = screened;
   for (const agency of kept) {
     if (counts.asked >= limit) break;
