@@ -1068,7 +1068,8 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
    * (server/app-catalog-sync.mjs), and the AI team's facts with them. A missing
    * add-on product is created; missing plan and add-on prices are created and
    * changed ones replaced through the administrator's own commands,
-   * grandfathering every current subscriber; a change outside the automatic
+   * grandfathering every current subscriber; a product's description follows
+   * the catalog's, its name and unit label do not; a change outside the automatic
    * range, or an ambiguous product, is held and logged for an administrator.
    * Replacements of Founders Sale prices keep the offer. Each change commits on
    * its own under a per-price lock, with request keys derived from the change,
@@ -1155,6 +1156,27 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
       } catch (error) {
         failed.push(step);
         log.warn(`${app} ${step.entitlement_key}${step.plan ? ` (${step.plan})` : ''} ${step.interval} price could not be brought to ${step.unit_amount} cents (${error?.message ?? 'error'}).`);
+      }
+    }
+    // Descriptions follow the catalog; names and unit labels stay as an administrator set them. The request key names the
+    // description being replaced, so a retried run reuses it and a later edit in Stripe is answered with a new one.
+    for (const step of plan.descriptions) {
+      try {
+        const updated = await transaction(pool, async db => {
+          const lockKey = `billing_catalog_sync:${app}:${step.product}:description`;
+          if (!(await one(db, 'select pg_try_advisory_xact_lock(hashtextextended($1,0)) as ok', [lockKey])).ok) return false;
+          const product = await live.post(`/v1/products/${step.product}`, { description: step.description },
+            { idempotencyKey: `hub-catalog-description-${deterministicKey(app, step.product, step.from, step.description)}` });
+          await mirror(db, 'product', product, new Date(now()), { live });
+          await audit(db, null, 'billing.catalog.description', null, await appId(db, app), {
+            source: 'app_catalog', version: catalog.version, entitlement: step.entitlement_key, ...(step.plan ? { plan: step.plan } : {}), product: step.product,
+          });
+          return true;
+        });
+        if (updated) applied.push({ ...step, action: 'product.describe' });
+      } catch (error) {
+        failed.push(step);
+        log.warn(`${app} ${step.entitlement_key}${step.plan ? ` (${step.plan})` : ''} description could not be brought in step (${error?.message ?? 'error'}).`);
       }
     }
     await refreshFounders().catch(() => log.warn('Founders Sale replacements could not be refreshed; they will be on the next run.'));

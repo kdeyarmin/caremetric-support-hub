@@ -9,8 +9,9 @@ import { maxAmountCents } from '../src/billing/billingProtocol.ts';
  * Hub reads that catalog and keeps Stripe in step: a plan or add-on price that
  * is missing is created (an add-on's product too), and a price whose amount
  * changed is replaced through the same `price.change` command an administrator
- * uses, grandfathering everyone already subscribed. The application never talks
- * to Stripe. The same catalog feeds the AI team's fact sheet
+ * uses, grandfathering everyone already subscribed, and a product's description
+ * follows the catalog's (its name and unit label are left as they are). The
+ * application never talks to Stripe. The same catalog feeds the AI team's fact sheet
  * (server/agents/content/facts.mjs, useAppCatalogFacts).
  *
  * This module only decides; billing.mjs (syncAppCatalog) carries the plan out.
@@ -88,12 +89,17 @@ function publicRecurring(price) {
 }
 
 const productOf = price => (typeof price.product === 'string' ? price.product : price.product?.id);
+/** Whether Stripe's description already says what the catalog's does, spacing aside. */
+const sameDescription = (stripe, catalog) => stripe.replace(/\s+/g, ' ').trim() === catalog;
 
 /**
  * What it takes to make Stripe match the catalog:
  * - `productCreates`: an add-on (per plan, when its price depends on the plan) with no Stripe product yet;
  * - `creates`: a plan or add-on product with no published price for an interval gets one;
  * - `changes`: a published price at another amount is replaced (grandfathered);
+ * - `descriptions`: a plan or add-on product whose description differs from the
+ *   catalog's gets the catalog's; a catalog item with no description clears
+ *   nothing, and names and unit labels are never changed;
  * - `held`: a change outside AUTOMATIC_CHANGE_RANGE, or a product with several
  *   published prices for one interval, waits for an administrator;
  * - `missing`: a plan the catalog sells that has no Stripe product (plans are
@@ -105,7 +111,7 @@ export function planCatalogSync(catalog, stripeProducts, stripePrices) {
   const products = stripeProducts.map(product => ({ raw: product, view: normalizeProduct(product) }))
     .filter(({ view }) => view.app === catalog.app && view.active && view.entitlement_key);
   const planNames = new Map(catalog.products.filter(item => item.kind === 'plan').map(item => [item.entitlement_key, item.name]));
-  const plan = { productCreates: [], creates: [], changes: [], held: [], missing: [], skipped: [], unchanged: 0 };
+  const plan = { productCreates: [], creates: [], changes: [], descriptions: [], held: [], missing: [], skipped: [], unchanged: 0 };
   const syncPrices = (item, product, forPlan, targets) => {
     for (const target of targets) {
       const current = stripePrices.filter(price => productOf(price) === product.id && publicRecurring(price) && price.recurring.interval === target.interval);
@@ -151,6 +157,11 @@ export function planCatalogSync(catalog, stripeProducts, stripePrices) {
             name, description: item.description, unit_label: item.unit_label, prices: targets });
         }
         continue;
+      }
+      const { view } = matches[0];
+      if (item.description && !sameDescription(view.description, item.description)) {
+        plan.descriptions.push({ entitlement_key: item.entitlement_key, kind: item.kind, ...(forPlan ? { plan: forPlan } : {}), product: view.id,
+          from: view.description, description: item.description });
       }
       syncPrices(item, matches[0].raw, forPlan, targets);
     }
