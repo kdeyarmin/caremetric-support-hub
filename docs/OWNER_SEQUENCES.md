@@ -90,8 +90,9 @@ Once a week, on its `growth.sequences` run, it:
    - any of its CMS owners (Intel's `agency_facts`) is an organization rather than a person, which rules out chains, health systems,
      holding companies and private equity;
    - its website is on a page builder's host;
-   - its person does not decide. Only an owner, a corporate officer, the president or CEO, the administrator or the executive director
-     counts.
+   - its person does not decide. Only an owner, a corporate officer, the president or CEO, the administrator, the executive director or
+     a managing employee CMS lists counts. CMS's "managing employee" covers administrators but also directors; the owner chose to include
+     them (November 27, 2026). An owner CMS lists is still picked first.
 3. Writes the send list (refs `pa-b<N>-01`, the agency's CCN given so it is used as is). It queues the list as a request in the owner's
    name, "Pennsylvania cold email, batch N", and sets three dates:
    - the first Tuesday at least four days out and a week after the previous batch's first email;
@@ -128,7 +129,7 @@ On each `growth.people` run (every half hour), before its usual work, it:
    a health system, a holding company, private equity). Without the feed nobody is looked up. Hunter's first queue held Crossroads
    Hospice, a national chain, third.
 3. Picks each agency's person whose role decides most: an owner, officer, president or CEO, the authorized official the NPI registry
-   names, the administrator or the executive director.
+   names, the administrator, the executive director, or a managing employee CMS lists (the owner's choice, November 27, 2026).
 4. Reserves one lookup under **Most Hunter lookups a day** (default 5; Hunter charges a credit only when it finds an address, and its free
    plan has about 25 a month), then asks Hunter. At most two lookups a run.
 5. Keeps an address only if all of these hold:
