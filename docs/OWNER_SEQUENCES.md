@@ -123,11 +123,15 @@ On each `growth.people` run (every half hour), before its usual work, it:
 1. Asks the database for the agencies the weekly batch would take but for an address. These pass the same tests as a batch and have
    people named, but no confirmed address on their own domain, and nobody asked Hunter about them in the last 180 days. Those with the
    most Medicare patients come first.
-2. Picks each agency's person whose role decides most: an owner, officer, president or CEO, the authorized official the NPI registry
+2. Leaves out an agency the batch would leave out, before any lookup is reserved (`20261127233000_growth_hunter_screen.sql`): one whose
+   only website is on a page builder's host, or whose CMS owners (Intel's `agency_facts`) are unknown or include an organization (a chain,
+   a health system, a holding company, private equity). Without the feed nobody is looked up. Hunter's first queue held Crossroads
+   Hospice, a national chain, third.
+3. Picks each agency's person whose role decides most: an owner, officer, president or CEO, the authorized official the NPI registry
    names, the administrator or the executive director.
-3. Reserves one lookup under **Most Hunter lookups a day** (default 5; Hunter charges a credit only when it finds an address, and its free
+4. Reserves one lookup under **Most Hunter lookups a day** (default 5; Hunter charges a credit only when it finds an address, and its free
    plan has about 25 a month), then asks Hunter. At most two lookups a run.
-4. Keeps an address only if all of these hold:
+5. Keeps an address only if all of these hold:
    - it is on the agency's own domain;
    - Hunter's own check calls it valid;
    - its score is 80 or more;
