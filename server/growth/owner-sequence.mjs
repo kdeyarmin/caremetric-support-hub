@@ -23,8 +23,11 @@ export const ownerSequenceRequestsFeature = 'platform.agents.owner-sequence-requ
 export const sequenceLinkDays = 90;
 /** The most people one prepared sequence holds: each needs a few feed requests, paced a second apart. */
 export const maxPeople = 30;
-/** Cambria County and the seven counties bordering it: they compete with the company the owner manages (owner handoff 2026-11-27). */
-export const excludedCounties = Object.freeze(['Cambria', 'Clearfield', 'Centre', 'Blair', 'Bedford', 'Somerset', 'Westmoreland', 'Indiana']);
+/**
+ * Cambria County, the owner's home county (owner, 2026-11-27: "Only exclude Cambria county"). Batch 1's handoff also left out the seven
+ * counties bordering it (Clearfield, Centre, Blair, Bedford, Somerset, Westmoreland, Indiana); they are no longer left out.
+ */
+export const excludedCounties = Object.freeze(['Cambria']);
 /** Mail services whose domain says nothing about the business (the database's growth_free_mail). */
 const freeMail = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'ymail.com', 'icloud.com',
   'me.com', 'mac.com', 'aol.com', 'comcast.net', 'verizon.net', 'att.net', 'sbcglobal.net', 'bellsouth.net', 'cox.net', 'charter.net', 'protonmail.com',
@@ -452,7 +455,7 @@ async function tell(review, { notifier, task }) {
 
 /** Why a row was left out, in the owner's words (the Growth panel's `leftOut`). */
 export const leftOutWords = Object.freeze({
-  home_area: 'in Cambria County or a county bordering it', do_not_contact: 'said no before (on the do-not-contact list)',
+  home_area: 'in Cambria County, your home county', do_not_contact: 'said no before (on the do-not-contact list)',
   suppressed: 'on the suppression list', in_sequence: 'already in an approved sequence',
   growth_contacted: 'the Marketing Manager emailed this agency in the last 90 days', duplicate_ref: 'reference repeated', duplicate_email: 'address repeated',
 });

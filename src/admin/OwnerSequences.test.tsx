@@ -62,7 +62,7 @@ it('prepares a send list and says why each left-out row was left out', async () 
   fireEvent.change(screen.getByLabelText('Email 3 date'), { target: { value: '2026-12-09' } });
   fireEvent.change(screen.getByLabelText('Or paste it'), { target: { value: 'ref,email\npa-b1-09,a@b.example' } });
   fireEvent.click(screen.getByRole('button', { name: 'Prepare the emails' }));
-  expect(await screen.findByText(/Hill Home Health: In Cambria County or a county bordering it/)).toBeTruthy();
+  expect(await screen.findByText(/Hill Home Health: In Cambria County, your home county/)).toBeTruthy();
   expect(screen.getByText(/Old Agency: Said no before: on the do-not-contact list/)).toBeTruthy();
   expect(calls.find(call => call.operation === 'sequencePrepare')?.data).toEqual({ name: 'Pennsylvania cold email, batch 1', csv: 'ref,email\npa-b1-09,a@b.example',
     template: 'intel-pa-cold-2026-11', campaign: 'pa-cold-email', sendDates: ['2026-12-01', '2026-12-04', '2026-12-09'], dailyLimit: 8 });
