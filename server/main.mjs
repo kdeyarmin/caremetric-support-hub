@@ -33,7 +33,7 @@ import { publicArticleFeed, publicArticlesFeature } from './public-articles.mjs'
 import { growthStore, ownerSequenceStore } from './growth/store.mjs';
 import { ownerSequences } from './growth/owner-sequence.mjs';
 import { sequenceBatches } from './growth/sequence-batches.mjs';
-import { hunterFinder } from './growth/hunter.mjs';
+import { hunterCompanyFinder, hunterFinder } from './growth/hunter.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
@@ -129,7 +129,8 @@ const people={mode:setting('growth.enrichment_provider'),registry:npiRegistry(),
   mailbox:withAddressService({mailbox:mailboxChecker({heloName:(()=>{try{return new URL(publicOrigin).hostname;}catch{return '';}})()}),
     service:verificationService,enabled:setting('growth.address_service'),
     declared:()=>features.has(growthAddressServiceFeature),reserve:checks=>growthStore(pool).addressServiceReserve(checks)})};
-const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),contacts:growthContactFinder(),roster,people,
+// The roster's website search: Brave first (HUB_GROWTH_SEARCH_API_KEY), then Hunter's company search (HUNTER_API_KEY; growth/hunter.mjs).
+const growth=growthService({store:growthStore(pool),research:growthResearch({apiKey:process.env.HUB_GROWTH_SEARCH_API_KEY}),sites:hunterCompanyFinder({apiKey:process.env.HUNTER_API_KEY}),contacts:growthContactFinder(),roster,people,
   // Deeper research with web tools (Settings → Customer growth → Research prospects with web search).
   deepResearch:{enabled:setting('growth.deep_research'),perDay:setting('growth.deep_research_per_day'),cents:setting('growth.deep_research_cents')},
   // The weekly "what is working" memo, used in drafts once the owner approves it (Settings → Customer growth → Write from what is working).

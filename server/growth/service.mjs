@@ -28,7 +28,7 @@ const equal=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));retu
 // A failure that must not opt the contact out (a transient or undetermined bounce, a reject) needs the five-argument delivery event
 // (20261113280000_growth_soft_bounce_reporting.sql). Until its contract declares this feature such an event is not recorded, as before.
 export const growthSoftBounceFeature='platform.agents.growth-soft-bounce.v1';
-export function growthService({store,research,contacts=null,roster=null,people=null,deepResearch=null,learning=null,briefs=null,views=null,reports=null,priority=null,liveEvaluation=null,sequences:sequenceFactory=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
+export function growthService({store,research,sites=null,contacts=null,roster=null,people=null,deepResearch=null,learning=null,briefs=null,views=null,reports=null,priority=null,liveEvaluation=null,sequences:sequenceFactory=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
   // The sending switch and the footer's postal address are Hub settings; either may be a function, read on each use.
   const sending=()=>live(enabled)===true; const postal=()=>String(live(postalAddress)??'');
   // How far the people step goes for an address (Settings → Customer growth → Finding people's addresses), and whether the businesses'
@@ -50,7 +50,7 @@ export function growthService({store,research,contacts=null,roster=null,people=n
     if(e?.code==='40001')throw new HttpError(409,typeof e.message==='string'&&e.message.length<=300?e.message:'This sequence changed. Refresh it.');
     return safe(()=>{throw e;});}};
   return {
-    ready, store, research, contacts, roster, people, deepResearch, learning, briefs, views, reports, priority, liveEvaluation, sequences, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
+    ready, store, research, sites, contacts, roster, people, deepResearch, learning, briefs, views, reports, priority, liveEvaluation, sequences, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
     // Configuration only: no provider request and no credential value leaves this service.
     readiness() {
       let deliveryFeedback = false;
@@ -70,7 +70,7 @@ export function growthService({store,research,contacts=null,roster=null,people=n
         if(!features?.has('platform.agents.growth-roster.v1'))throw new HttpError(503,'Apply the roster database migration first.');
         const {offset}=parse(z.object({offset:z.number().int().min(0).max(100000).default(0)}).strict(),data);
         return safe(async()=>({...await store.roster(token,offset),services:{feed:roster?.feed?.readiness?.()??{declared:false,enabled:false,signing:false},
-          states:(()=>{const value=live(roster?.states);return Array.isArray(value)?value:[];})(),daily:live(roster?.daily)??25,research:Boolean(research?.configured),
+          states:(()=>{const value=live(roster?.states);return Array.isArray(value)?value:[];})(),daily:live(roster?.daily)??25,research:Boolean(research?.configured),sites:Boolean(sites?.configured),
           companyList:features?.has('platform.agents.ads.v1')===true,useSite:hasFirstRepliesTwo(features)}}));
       }
       if(operation==='rosterUseSite') {

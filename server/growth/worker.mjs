@@ -19,7 +19,7 @@ import { campaignBlocks, campaignEyebrow, campaignProduct, readCampaign } from '
 import { isAgencyTrialUrl } from './agency-campaign.mjs';
 import { searchResultLimit } from './research.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
-import { chooseSite, confirmsSite, phoneCandidates, phoneQuery, rankTarget, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates } from './roster.mjs';
+import { chooseSite, confirmsSite, domainChoice, phoneCandidates, phoneQuery, rankTarget, resolutionQuery, rosterLookupsPerRun, rosterPagesPerRun, rosterRefreshMs, rosterRow, rosterStates, searchName } from './roster.mjs';
 // Why it waits goes with it: the send claim's status ('daily_limit', 'outside_hours', ...), read by private.growth_defer_action.
 const deferred=(reason=null)=>Object.assign(new Error('Action is deferred'),{code:'action_deferred',...(reason?{reason}:{})});
 const easternDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
@@ -428,23 +428,25 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
       }
     }
     // 2. Look up the day's best agencies. Without a search provider nothing is claimed, so no agency waits a week for nothing.
-    const looked={looked:0,graduated:0,unresolved:0,contacts:0,byPhone:0};
+    const looked={looked:0,graduated:0,unresolved:0,contacts:0,byPhone:0,byHunter:0};
     const daily=Number.isInteger(live(roster.daily))?live(roster.daily):25;
-    if(growth.research?.configured&&growth.contacts?.configured&&daily>0&&!stopped) {
+    // Brave first; Hunter's company search when Brave finds no confirmed site or cannot search (owner, 2026-11-27). Either one is enough.
+    const searching=growth.research?.configured||growth.sites?.configured;
+    if(searching&&growth.contacts?.configured&&daily>0&&!stopped) {
       for(let n=0;n<rosterLookupsPerRun;n++) {
         signal?.throwIfAborted(); if(spent())break;
         const [target]=await growth.store.rosterNext(1,daily);
         if(!target)break;
         looked.looked++;
         const outcome=await lookUp(target,{signal});
-        if(outcome.graduated){looked.graduated++;if(outcome.contact)looked.contacts++;if(outcome.byPhone)looked.byPhone++;}else looked.unresolved++;
+        if(outcome.graduated){looked.graduated++;if(outcome.contact)looked.contacts++;if(outcome.byPhone)looked.byPhone++;if(outcome.byHunter)looked.byHunter++;}else looked.unresolved++;
         if(outcome.retry)break;
-        await pause(Number(growth.research.paceMs)||0,signal);
+        await pause(Number(growth.research?.configured?growth.research.paceMs:growth.sites?.paceMs)||0,signal);
       }
     }
-    const {byPhone,...counts}=looked;
+    const {byPhone,byHunter,...counts}=looked;
     const {facts:factCalls,factsStopped,...pagesRead}=read;
-    return {result:{period,states:states.length,...(read.pages?{read:{...pagesRead,...(factCalls?{facts:factCalls}:{}),...(factsStopped?{factsStopped}:{})}}:{}),...(stopped?{stopped}:{}),...counts,...(byPhone?{byPhone}:{})}};
+    return {result:{period,states:states.length,...(read.pages?{read:{...pagesRead,...(factCalls?{facts:factCalls}:{}),...(factsStopped?{factsStopped}:{})}}:{}),...(stopped?{stopped}:{}),...counts,...(byPhone?{byPhone}:{}),...(byHunter?{byHunter}:{})}};
   }
   /**
    * The open agencies of one roster page with their `agency_facts` entry (HHVBP payment adjustment, Hospice Care Index), read 25 at a
@@ -473,13 +475,18 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
    * One roster agency: find its own website, confirm it, and graduate it into the pipeline with its public record as evidence. The search
    * by its name and place comes first; when it finds no site that confirms, one search by its CMS telephone number, whose results are
    * accepted only when the site itself shows that number (2026-11-16: the name search left 35 of the first 44 agencies unresolved).
+   * Then, when Brave found nothing that confirms or could not search, Hunter's company search for the agency's name (2026-11-27: Brave
+   * refused every search for a week), confirmed the same way.
    */
   async function lookUp(target,{signal}) {
-    let rows;
-    try {rows=await growth.research.search('caremetric-intel',{query:resolutionQuery(target),count:10,signal});}
-    catch(error) {if(signal?.aborted)throw error; await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'retry'}); return {graduated:false,retry:true};}
-    let choice=chooseSite(target,rows),found=null,confirmation=null,byPhone=false;
-    const reason=choice?'not_confirmed':'no_site', tried=new Set();
+    let rows=null;
+    if(growth.research?.configured) {
+      try {rows=await growth.research.search('caremetric-intel',{query:resolutionQuery(target),count:10,signal});}
+      catch(error) {if(signal?.aborted)throw error;}
+    }
+    let choice=rows?chooseSite(target,rows):null,found=null,confirmation=null,byPhone=false,byHunter=false;
+    let reason=choice?'not_confirmed':'no_site';
+    const tried=new Set();
     if(choice) {
       tried.add(choice.domain);
       try {found=await growth.contacts.find(choice.domain,{signal,phone:target.facts?.phone??null});}
@@ -487,17 +494,38 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
       confirmation=confirmsSite(target,found,choice);
     }
     const phone=phoneQuery(target);
-    if(!confirmation&&phone) {
+    if(!confirmation&&phone&&rows) {
       let phoneRows=[];
       try {await pause(Number(growth.research.paceMs)||0,signal); phoneRows=await growth.research.search('caremetric-intel',{query:phone,count:10,signal});}
       catch(error) {if(signal?.aborted)throw error;}
       for(const candidate of phoneCandidates(target,phoneRows,tried)) {
+        tried.add(candidate.domain);
         let read;
         try {read=await growth.contacts.find(candidate.domain,{signal,phone:target.facts.phone});} catch(error) {if(signal?.aborted)throw error; continue;}
         if(read?.phoneSeen===true){choice=candidate;found=read;confirmation='phone';byPhone=true;break;}
       }
     }
-    if(!confirmation){await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason});return {graduated:false,phoneSearched:Boolean(phone)};}
+    // Hunter's company search, when Brave found no confirmed site or could not search: the domain Hunter knows for the agency's name,
+    // kept only when its own pages confirm it (its CMS telephone number, or its name and place), as any other site.
+    let hunter=null;
+    if(!confirmation&&growth.sites?.configured) {
+      try {if(rows)await pause(Number(growth.sites.paceMs)||0,signal); hunter=await growth.sites.find({name:searchName(target.name)||target.name,signal});}
+      catch(error) {if(signal?.aborted)throw error; hunter={result:'error'};}
+      const hunted=hunter?.result==='found'?domainChoice(target,hunter.domain):null;
+      if(hunted&&!tried.has(hunted.domain)) {
+        tried.add(hunted.domain);
+        let read=null;
+        try {read=await growth.contacts.find(hunted.domain,{signal,phone:target.facts?.phone??null});} catch(error) {if(signal?.aborted)throw error;}
+        const confirmed=read?confirmsSite(target,read,hunted):null;
+        if(confirmed){choice=hunted;found=read;confirmation=confirmed;byPhone=confirmed==='phone';byHunter=true;}
+        else reason='not_confirmed';
+      }
+    }
+    // Neither search could answer (Brave failed and Hunter is missing, refused or failed): the agency is tried again in an hour and the
+    // run stops, so a broken key spends nothing.
+    const answered=rows!==null||hunter?.result==='found'||hunter?.result==='not_found';
+    if(!confirmation&&!answered){await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason:'retry'}); return {graduated:false,retry:true};}
+    if(!confirmation){await growth.store.rosterResolved(target.ccn,{outcome:'unresolved',reason});return {graduated:false,phoneSearched:Boolean(phone&&rows)};}
     const site=found.site;
     const evidence=site?.claim&&/^https:\/\//.test(site.url??'')?[{url:String(site.url).slice(0,2000),claim:String(site.claim).slice(0,4000)}]:[];
     let resolved;
@@ -512,7 +540,7 @@ export function growthHandlers({growth,model,notifier,features=null,marketed=nul
       catch(error) {if(error?.code!=='22023')throw error; recorded=await growth.store.recordContact(resolved.organizationId,null,null);}
       contact=Boolean(recorded?.found);
     }
-    return {graduated:true,contact,byPhone};
+    return {graduated:true,contact,byPhone,byHunter};
   }
   // The guardrail check that messages nobody approved need (growth.1, within 30 days). Synthetic cases only: no model, no customer data.
   async function evaluate(task,{now=()=>new Date()}={}) {

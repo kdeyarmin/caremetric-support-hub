@@ -32,6 +32,12 @@ The existing Billing and weekly account report remain the source of MRR/ARR. The
    while it is in its pilot (see "What the team markets" in [AI_TEAM.md](AI_TEAM.md)): discovery, scoring, plans and cold email skip
    every product switched off, from their next run, and customers' onboarding and support are unaffected.
 5. For automatic discovery, configure `HUB_GROWTH_SEARCH_API_KEY` for Brave Search. The adapter requests bounded public search results; snippets are unverified evidence. It does not invent emails. Owner-supplied source evidence works without this provider. Intel's tenant-owned provider lists and campaigns are not imported into CareMetric's sales audience.
+   The Medicare roster finds each agency's own website with Brave first (its name and place, then its CMS telephone number). When Brave
+   finds no site that confirms, or cannot search, it asks Hunter's company search for the domain Hunter knows for the agency's name
+   (`HUNTER_API_KEY`; `hunterCompanyFinder` in `server/growth/hunter.mjs`; owner decision, November 27, 2026, after Brave refused every
+   search for a week). A site Hunter names is read and kept only when its own pages show the agency's CMS telephone number, or its name
+   and place, exactly as a Brave result is. Hunter is asked for one result, so a lookup costs at most one search credit, and none when it
+   returns no address. Either key alone is enough for the roster; when neither can answer, the agency is tried again in an hour.
 6. Configure the signed SendGrid Event Webhook at `/api/growth/delivery` and set `HUB_SENDGRID_EVENT_PUBLIC_KEY`. Subscribe to delivery, bounce, dropped, spam report and unsubscribe events. Keep the existing signed Inbound Parse route for replies; the growth sender's Reply-To points to the configured support inbox.
 7. In Growth, map existing tenants to their organizations and classify internal accounts. Add the correct buyer/champion, verify its business source and outreach eligibility, record the goal, and qualify the opportunity. Review each product benefit in its policy (there is no booking link: CareMetric does no demos, calls or meetings). Policies start disabled.
 8. Resume Marketing Manager and Account Manager in **Propose** mode for the pilot. The scheduler also needs Settings → AI team → "Run the AI team" switched on. Switch on Settings → Customer growth → "Send growth email" only when the configured channel and reviewed cohort are ready. Approve exact messages in Team; changing policy, contact, or opportunity invalidates stale drafts.

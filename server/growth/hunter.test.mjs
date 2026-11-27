@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { huntOwners, hunterAddress, hunterFinder, hunterPerson, screenAgencies } from './hunter.mjs';
+import { huntOwners, hunterAddress, hunterCompanyFinder, hunterFinder, hunterPerson, screenAgencies } from './hunter.mjs';
 import { peopleHandlers } from './people.mjs';
 
 const feature = 'platform.agents.growth-hunter.v1';
@@ -62,6 +62,31 @@ describe('Hunter\'s Email Finder', () => {
     expect(await answer({ status: 200, ok: true, text: async () => 'not json' })).toEqual({ result: 'error' });
     expect(await hunterFinder({ apiKey: 'k', fetchImpl: async () => { throw new Error('reset'); } }).find({ name: 'Jane Doe', domain: 'agency.example' })).toEqual({ result: 'error' });
     expect(hunterFinder({ apiKey: '  ' }).configured).toBe(false);
+  });
+});
+
+describe('Hunter\'s company search for the roster', () => {
+  it('asks by the company\'s name for one result, with the key in a header, and answers the domain Hunter knows', async () => {
+    const fetchImpl = vi.fn(async () => reply(200, { data: { domain: 'WWW.ValleyHospice.org', organization: 'Valley Hospice', emails: [] } }));
+    const finder = hunterCompanyFinder({ apiKey: 'secret-key', fetchImpl });
+    expect(finder.configured).toBe(true);
+    expect(await finder.find({ name: ' valley  hospice ' })).toEqual({ result: 'found', domain: 'valleyhospice.org', organization: 'Valley Hospice' });
+    const [url, options] = fetchImpl.mock.calls[0];
+    expect(String(url)).toBe('https://api.hunter.io/v2/domain-search?company=valley+hospice&limit=1');
+    expect(String(url)).not.toContain('secret-key');
+    expect(options).toMatchObject({ method: 'GET', redirect: 'error', headers: { 'x-api-key': 'secret-key' } });
+  });
+
+  it('says not found, refused or error, and never names a malformed domain', async () => {
+    const answer = async response => hunterCompanyFinder({ apiKey: 'k', fetchImpl: async () => response }).find({ name: 'Valley Hospice' });
+    expect(await answer(reply(200, { data: { domain: null } }))).toEqual({ result: 'not_found' });
+    expect(await answer(reply(200, { data: { domain: 'not a domain' } }))).toEqual({ result: 'not_found' });
+    expect(await answer(reply(401, {}))).toEqual({ result: 'refused' });
+    expect(await answer(reply(400, {}))).toEqual({ result: 'not_found' });
+    expect(await answer(reply(503, {}))).toEqual({ result: 'error' });
+    expect(await hunterCompanyFinder({ apiKey: 'k', fetchImpl: async () => { throw new Error('reset'); } }).find({ name: 'Valley Hospice' })).toEqual({ result: 'error' });
+    expect(await hunterCompanyFinder({ apiKey: '' }).find({ name: 'Valley Hospice' })).toEqual({ result: 'refused' });
+    expect(hunterCompanyFinder({ apiKey: '' }).configured).toBe(false);
   });
 });
 

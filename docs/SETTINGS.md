@@ -169,7 +169,7 @@ Secrets, which are never shown on screen or stored in the database:
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `HUB_GROWTH_SIGNING_KEY`, `HUB_GROWTH_SEARCH_API_KEY`, `HUB_GROWTH_CAREBASE_EVENT_KEY`, `HUB_GROWTH_INTEL_EVENT_KEY`
 - `BOUNCER_API_KEY` or `ZEROBOUNCE_API_KEY` (only for Settings → Customer growth → Ask a verification service when a mail server won't answer; Bouncer is used when its key is set)
-- `HUNTER_API_KEY` (only for Settings → Customer growth → Find owners' addresses with Hunter)
+- `HUNTER_API_KEY` (Settings → Customer growth → Find owners' addresses with Hunter, and the roster's website search when Brave finds no confirmed site)
 - `HUB_LEAD_SECRET_CAREBASE`, `HUB_LEAD_SECRET_INTEL`, `HUB_LEAD_SECRET_ADVISORS`
 - `HUB_SOCIAL_CREDENTIALS_KEY` (server encryption key for the Meta and LinkedIn connection cards)
 - `HUB_META_ACCESS_TOKEN` (legacy fallback until the Meta card is first saved)

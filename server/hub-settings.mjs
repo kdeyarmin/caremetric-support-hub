@@ -137,7 +137,7 @@ export const settingsCatalog = Object.freeze([
   { key: 'growth.roster_states', group: 'growth', kind: 'list', input: 'lines', default: [], env: null, valid: listOf(matches(/^[A-Z]{2}$/), 60),
     label: 'States to prospect in', help: 'Two-letter state codes, one per line (PA, OH, …), at most 60. Empty: the roster is not read.' },
   { key: 'growth.roster_daily_resolutions', group: 'growth', kind: 'number', input: 'number', default: 25, min: 0, max: 200, unit: 'agencies', env: null, valid: wholeNumber(0, 200),
-    label: 'Most roster agencies to look up a day', help: 'Each look-up is one web search and a read of the agency\'s own site (0 to 200 per Eastern day). 25 a day is about 750 searches a month on your search plan. 0 stops looking up.' },
+    label: 'Most roster agencies to look up a day', help: 'Each look-up is a Brave web search (two when the agency\'s phone number is searched too) and a read of its own site, then Hunter\'s company search when Brave finds nothing that confirms (0 to 200 per Eastern day). 0 stops looking up.' },
   { key: 'growth.roster_match_daily', group: 'growth', kind: 'number', input: 'number', default: 40, min: 0, max: 200, unit: 'prospects', env: null, valid: wholeNumber(0, 200),
     label: 'Most web prospects to match a day', help: 'Agencies found on the web are matched to their Medicare record through Intel, by a phone number on their own website or their name and place, so each gets its own market report (0 to 200 per Eastern day). Only a certain match is kept. Runs while Find prospects from the Medicare roster is on; uses no web search. 0 stops matching.' },
   { key: 'growth.inbound_followup', group: 'growth', kind: 'flag', input: 'toggle', default: false, env: null,

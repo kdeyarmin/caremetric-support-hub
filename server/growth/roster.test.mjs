@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { screenIdentifiers } from '../agents/concierge/screen.mjs';
 import {
-  chooseSite, confirmsSite, displayName, distinctiveWords, phonesIn, pressureFacts, pressureWeights, rankTarget, researchOnlyPrefix, resolutionQuery, rosterClaim,
+  chooseSite, confirmsSite, displayName, distinctiveWords, domainChoice, phonesIn, pressureFacts, pressureWeights, rankTarget, researchOnlyPrefix, resolutionQuery, rosterClaim,
   rosterRow, rosterStates, statesNamed, pageNamesAgency, pageWords,
 } from './roster.mjs';
 
@@ -201,4 +201,11 @@ describe("CareMetric's own agency", () => {
     expect(ownAgencies.has('398009')).toBe(true);
     expect(rankTarget({ ccn: '398009', state: 'PA', name: 'PENN HOME HEALTH, INC', setting: 'home_health' })).toMatchObject({ excluded: true, rank: 0 });
   });
+});
+
+it('reads a domain Hunter names only when it is an operator\'s own host, with how much of the agency\'s name it carries', () => {
+  const agency = { name: 'VALLEY HOSPICE, INC.', setting: 'hospice' };
+  expect(domainChoice(agency, 'WWW.ValleyHospice.org')).toEqual({ domain: 'valleyhospice.org', url: 'https://valleyhospice.org/', inDomain: 1 });
+  expect(domainChoice(agency, 'caringhands.example')).toMatchObject({ domain: 'caringhands.example', inDomain: 0 });
+  for (const host of ['yelp.com', 'facebook.com', 'not a domain', '', null]) expect(domainChoice(agency, host)).toBeNull();
 });

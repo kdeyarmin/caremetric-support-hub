@@ -48,6 +48,7 @@ describe('marketing toolkit configuration', () => {
     const result = marketingToolkit();
     expect(result.every(tool => tool.configured === false)).toBe(true);
     expect(row(result, 'prospect_research').missing.join(' ')).toContain('HUB_GROWTH_SEARCH_API_KEY');
+    expect(row(result, 'prospect_roster').missing.join(' ')).toContain('HUNTER_API_KEY');
     expect(row(result, 'growth_email').missing.join(' ')).toContain('Mailing address in email footers');
     expect(row(result, 'content_publication').missing.join(' ')).toContain('public articles');
     expect(row(result, 'visitor_conversion_analytics')).toMatchObject({ configured: false });
