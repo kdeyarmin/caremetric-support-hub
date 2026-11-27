@@ -23,6 +23,10 @@ const appUrl = new URL(databaseUrl); appUrl.username = 'hub_app_server'; appUrl.
 const pool = new pg.Pool({ connectionString: appUrl.href });
 const store = ownerSequenceStore(pool);
 const gate = await readFile(new URL('../supabase/migrations/20261127150100_owner_sequences_contract.sql', import.meta.url), 'utf8');
+// The requests' gate, once its migration is in this checkout (20261127200100_owner_sequence_requests_contract.sql).
+const requestsGate = await readFile(new URL('../supabase/migrations/20261127200100_owner_sequence_requests_contract.sql', import.meta.url), 'utf8').catch(() => null);
+const requests = [];
+const strangers = [];
 const run = randomUUID().slice(0, 8);
 const owner = randomUUID();
 const token = `owner-sequences-${randomUUID()}`;
@@ -202,7 +206,53 @@ try {
   assert.equal(await row('select 1 as ok from private.owner_sequences where id = $1', [third.id]), undefined);
   assert.ok((await ownerCall('hub.owner_sequences_list')).some(item => item.id === second.id));
 
-  // 9. The gate refuses drift and declares nothing on a database that no longer keeps its promises.
+  // 9. Requests an operator queued (20261127200000_owner_sequence_requests.sql): the Hub server cannot queue one; one for someone who is not
+  // a CareMetric admin fails; one for the owner is prepared, saved in the owner's name and approved when it asked; a draft the database
+  // refuses fails the request with the reason; a request is finished once.
+  if (requestsGate) {
+    await assert.rejects(pool.query("insert into private.owner_sequence_requests(requested_by, payload) values ($1, '{}')", [owner]), refused('42501'));
+    const stranger = randomUUID(); strangers.push(stranger);
+    await admin.query('insert into auth.users(id,email,is_anonymous) values ($1,$2,false)', [stranger, `owner-sequences-stranger-${run}@test.invalid`]);
+    const notAdmin = (await row("insert into private.owner_sequence_requests(requested_by, payload, approve) values ($1, '{}', true) returning id", [stranger])).id;
+    requests.push(notAdmin);
+    const requestDates = await weekdaysFrom(3, (await row("select ($1::date + 14)::text as d", [firstDay])).d);
+    const queued = (await row("insert into private.owner_sequence_requests(requested_by, payload, approve) values ($1, $2, true) returning id",
+      [owner, JSON.stringify({ name: 'Queued', csv: 'ref,email' })])).id;
+    requests.push(queued);
+    const next = await store.requestNext();
+    assert.equal(next.id, queued); assert.equal(next.approve, true); assert.equal(next.payload.name, 'Queued');
+    assert.deepEqual((await row('select status, result from private.owner_sequence_requests where id = $1', [notAdmin])), { status: 'failed', result: { error: 'not_an_admin' } });
+    assert.equal(await store.requestNext(), null);
+    await assert.rejects(store.requestCheck(notAdmin, []), refused('42501'));
+    assert.equal((await store.requestCheck(queued, [{ ref: 'g', email: `x@${domainOf('golf')}`, domain: domainOf('golf') }])).g, 'do_not_contact');
+    const queuedPerson = person('juliet', { dates: requestDates });
+    const done = await store.requestFinish(queued, { name: `Queued ${run}`, template: 'intel-pa-cold-2026-11', campaign: 'pa-cold-email', sendDates: requestDates,
+      dailyLimit: 8, sender: { fromName: 'Kevin Deyarmin' }, people: [queuedPerson] }, [{ row: null, ref: 'pa-x', agency: 'Left', reason: 'growth_contacted' }], null);
+    assert.equal(done.status, 'prepared'); assert.equal(done.approved, true);
+    sequences.push(done.sequenceId);
+    const saved = await row('select status, created_by, approved_by from private.owner_sequences where id = $1', [done.sequenceId]);
+    assert.deepEqual(saved, { status: 'approved', created_by: owner, approved_by: owner });
+    assert.equal((await row("select metadata ->> 'via' as via from private.audit_events where action = 'growth.owner_sequence_approved' and entity_id = $1", [done.sequenceId])).via, 'request');
+    assert.deepEqual((await row('select status, sequence_id, result from private.owner_sequence_requests where id = $1', [queued])),
+      { status: 'prepared', sequence_id: done.sequenceId, result: { problems: [{ row: null, ref: 'pa-x', agency: 'Left', reason: 'growth_contacted' }], approved: true, people: 1 } });
+    await assert.rejects(store.requestFinish(queued, null, [], 'again'), refused('40001'));
+    // A draft the database refuses (a person on the do-not-contact list) fails the request; nothing is saved.
+    const refusedRequest = (await row("insert into private.owner_sequence_requests(requested_by, payload, approve) values ($1, '{}', true) returning id", [owner])).id;
+    requests.push(refusedRequest);
+    assert.equal((await store.requestNext()).id, refusedRequest);
+    const forbidden = { ...person('kilo', { dates: requestDates }), email: `y@${domainOf('golf')}`, domain: domainOf('golf') };
+    const failed = await store.requestFinish(refusedRequest, { name: `Refused ${run}`, template: 'intel-pa-cold-2026-11', campaign: 'pa-cold-email', sendDates: requestDates,
+      people: [forbidden] }, [], null);
+    assert.equal(failed.status, 'failed'); assert.match(failed.error, /may not be emailed/);
+    assert.equal(await row("select 1 as ok from private.owner_sequences where name = $1", [`Refused ${run}`]), undefined);
+    // A request a restart left half done is taken up again after 15 minutes.
+    const stale = (await row("insert into private.owner_sequence_requests(requested_by, payload, status, claimed_at) values ($1, '{}', 'preparing', now() - interval '20 minutes') returning id", [owner])).id;
+    requests.push(stale);
+    assert.equal((await store.requestNext()).id, stale);
+    await store.requestFinish(stale, null, [], 'test');
+  }
+
+  // 10. The gate refuses drift and declares nothing on a database that no longer keeps its promises.
   const client = await admin.connect();
   try {
     await client.query('begin');
@@ -216,6 +266,15 @@ try {
     await assert.rejects(again.query(gate), refused('55000', /not scheduled/));
   } finally { await again.query('rollback'); again.release(); }
 
+  if (requestsGate) {
+    const drift = await admin.connect();
+    try {
+      await drift.query('begin');
+      await drift.query('grant insert on private.owner_sequence_requests to hub_app_server');
+      await assert.rejects(drift.query(requestsGate), refused('55000', /closed to hub_app_server/));
+    } finally { await drift.query('rollback'); drift.release(); }
+  }
+
   console.log('Owner sequences integration passed: the owner\'s session alone saves, approves, stops and discards; nothing is claimed before approval or with the setting off; one email at a time in step order, one step a day; a reply stops, an out-of-office does not, a "no thanks" forbids the address, the domain and the CCN for later sequences and the Marketing Manager\'s cold email; bounces, complaints and the unsubscribe stop and suppress; opens count after the first email; and gate drift. Nothing was fetched or sent.');
 } finally {
   if (shifted.length) await admin.query("update private.growth_messages set attempted_at = attempted_at + interval '2 days' where id = any($1::uuid[])", [shifted]);
@@ -225,7 +284,9 @@ try {
   await admin.query("delete from private.outreach_do_not_contact where (kind = 'email_hash' and value = any($1::text[])) or (kind = 'domain' and value like $2) or (kind = 'ccn' and value = any($3::text[]))",
     [hashes.map(h => h.h), `%-${run}.example.org`, hashes.map(h => h.ccn).filter(Boolean)]);
   await admin.query('delete from private.email_suppressions where email_hash = any($1::text[])', [hashes.map(h => h.h)]);
+  if (requests.length) await admin.query('delete from private.owner_sequence_requests where id = any($1::uuid[])', [requests]);
   await admin.query('delete from private.owner_sequences where id = any($1::uuid[])', [sequences]);
+  if (strangers.length) await admin.query('delete from auth.users where id = any($1::uuid[])', [strangers]);
   await removeTestIdentities(admin, [owner], { also: ['delete from private.audit_events where actor_id = any($1::uuid[])'] });
   await pool.end(); await admin.end();
 }

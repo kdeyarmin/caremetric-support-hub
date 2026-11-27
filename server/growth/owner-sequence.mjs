@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { live } from '../live.mjs';
 
 export const ownerSequencesFeature = 'platform.agents.owner-sequences.v1';
+export const ownerSequenceRequestsFeature = 'platform.agents.owner-sequence-requests.v1';
 /** A report link in an owner sequence lives 90 days (the handoff); Intel accepts up to 180. */
 export const sequenceLinkDays = 90;
 /** The most people one prepared sequence holds: each needs a few feed requests, paced a second apart. */
@@ -286,6 +287,67 @@ export function ownerSequences({ store, feed = null, reports = null, features = 
   unsubscribeToken = null, hash = null, optOutPath = '/api/growth/preferences/', now = () => new Date() }) {
   const declared = () => (features instanceof Set ? features.has(ownerSequencesFeature) : Array.isArray(features) && features.includes(ownerSequencesFeature));
   const unsubscribeKey = recipientId => `owner-sequence:${recipientId}`;
+  const requestsDeclared = () => (features instanceof Set ? features.has(ownerSequenceRequestsFeature) : Array.isArray(features) && features.includes(ownerSequenceRequestsFeature))
+    && typeof store?.requestNext === 'function';
+  /**
+   * Reads a send list and prepares every person: the record the database saves as a draft, or null when every row was left out, and the
+   * rows left out ({ row, ref, agency, reason }). `check` asks the database which people may not be emailed (the owner's command on Growth,
+   * or the server's own for a request).
+   */
+  async function prepareRecord({ name, csv, template = defaultTemplate, campaign, sendDates, dailyLimit = 8 } = {}, { check, signal } = {}) {
+    const copy = templates[template];
+    if (!copy) throw Object.assign(new Error('Choose the copy to send.'), { code: 'template' });
+    if (!campaignPattern.test(String(campaign ?? ''))) throw Object.assign(new Error('The campaign tag is lower-case letters, digits and hyphens.'), { code: 'campaign' });
+    const dateProblem = checkDates(sendDates, easternToday(now()));
+    if (dateProblem) throw Object.assign(new Error('Each send date is a weekday from today on, in order.'), { code: dateProblem });
+    if (sendDates.length !== copy.steps) throw Object.assign(new Error(`This copy has ${copy.steps} emails: give one date for each.`), { code: 'steps' });
+    if (!Number.isInteger(dailyLimit) || dailyLimit < 1 || dailyLimit > 30) throw Object.assign(new Error('Most emails a day is 1 to 30.'), { code: 'daily_limit' });
+    if (typeof unsubscribeToken !== 'function' || typeof hash !== 'function') throw Object.assign(new Error('Set the growth signing key first.'), { code: 'signing' });
+    const list = readSendList(csv);
+    if (list.people.length > maxPeople) throw Object.assign(new Error(`A sequence holds at most ${maxPeople} people.`), { code: 'too_many' });
+    const problems = [...list.problems];
+    const leaveOut = (people, blocked) => people.filter(person => {
+      if (!blocked?.[person.ref]) return true;
+      problems.push({ row: null, ref: person.ref, agency: person.agency, reason: blocked[person.ref] }); return false;
+    });
+    const asked = people => people.map(person => ({ ref: person.ref, email: person.email, domain: person.domain, ccn: person.ccn }));
+    const allowed = list.people.length ? leaveOut(list.people, await check(asked(list.people))) : [];
+    if (!allowed.length) return { record: null, problems };
+    const ready = await preparePeople(allowed, { feed, reports, template, campaign, sendDates, signal });
+    problems.push(...ready.problems);
+    // A CCN found here can be on the do-not-contact list too: the database refuses the draft, so check once more by CCN.
+    const withCcn = ready.people.filter(person => person.ccn);
+    const people = withCcn.length ? leaveOut(ready.people, await check(asked(withCcn))) : ready.people;
+    if (!people.length) return { record: null, problems };
+    return { problems, record: {
+      name: String(name ?? '').trim().slice(0, 120) || 'Owner sequence', template, campaign, sendDates, dailyLimit, sender: { fromName: copy.fromName },
+      people: people.map(person => ({ id: person.id, ref: person.ref, email: person.email, domain: person.domain, firstName: person.firstName,
+        agency: person.agency, county: person.county, setting: person.setting, ccn: person.ccn, reportUrl: person.reportUrl,
+        unsubscribeHash: hash(unsubscribeToken(unsubscribeKey(person.id))), notes: person.notes,
+        messages: person.messages.map(message => ({ step: message.step, sendOn: message.sendOn, subject: message.subject, body: message.body })) })),
+    } };
+  }
+  /**
+   * The next request an operator queued for the owner (20261127200000_owner_sequence_requests.sql): prepared exactly as the Growth page
+   * prepares a send list, saved in the owner's name and approved when the request asked. The owner is told what came of it.
+   */
+  async function prepareRequest({ notifier, task, signal }) {
+    if (!requestsDeclared()) return null;
+    const request = await store.requestNext();
+    if (!request?.id) return null;
+    const payload = request.payload ?? {};
+    let outcome; let problems = [];
+    try {
+      const prepared = await prepareRecord(payload, { check: people => store.requestCheck(request.id, people), signal });
+      problems = prepared.problems;
+      outcome = await store.requestFinish(request.id, prepared.record, problems, prepared.record ? null : 'nothing_prepared');
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      outcome = await store.requestFinish(request.id, null, problems, String(error?.code ?? error?.message ?? 'prepare_failed').slice(0, 300));
+    }
+    await tellRequest({ notifier, task, request, payload, outcome, problems });
+    return { request: request.id, status: outcome?.status ?? 'failed', approved: outcome?.approved === true };
+  }
   const service = {
     declared, get enabled() { return live(enabled) === true; },
     templates: Object.entries(templates).map(([id, copy]) => ({ id, label: copy.label, steps: copy.steps })),
@@ -299,42 +361,9 @@ export function ownerSequences({ store, feed = null, reports = null, features = 
     stop: (token, id, recipient = null) => store.stop(token, id, recipient),
     discard: (token, id) => store.discard(token, id),
     /** Reads the send list, prepares every person and saves the draft for the owner's review. */
-    async prepare(token, { name, csv, template = defaultTemplate, campaign, sendDates, dailyLimit = 8 }, { signal } = {}) {
-      const copy = templates[template];
-      if (!copy) throw Object.assign(new Error('Choose the copy to send.'), { code: 'template' });
-      if (!campaignPattern.test(String(campaign ?? ''))) throw Object.assign(new Error('The campaign tag is lower-case letters, digits and hyphens.'), { code: 'campaign' });
-      const dateProblem = checkDates(sendDates, easternToday(now()));
-      if (dateProblem) throw Object.assign(new Error('Each send date is a weekday from today on, in order.'), { code: dateProblem });
-      if (sendDates.length !== copy.steps) throw Object.assign(new Error(`This copy has ${copy.steps} emails: give one date for each.`), { code: 'steps' });
-      if (typeof unsubscribeToken !== 'function' || typeof hash !== 'function') throw Object.assign(new Error('Set the growth signing key first.'), { code: 'signing' });
-      const list = readSendList(csv);
-      if (list.people.length > maxPeople) throw Object.assign(new Error(`A sequence holds at most ${maxPeople} people.`), { code: 'too_many' });
-      const problems = [...list.problems];
-      const blocked = list.people.length ? await store.check(token, list.people.map(person => ({ ref: person.ref, email: person.email, domain: person.domain, ccn: person.ccn }))) : {};
-      const allowed = list.people.filter(person => {
-        if (!blocked?.[person.ref]) return true;
-        problems.push({ row: null, ref: person.ref, agency: person.agency, reason: blocked[person.ref] }); return false;
-      });
-      if (!allowed.length) return { saved: null, problems };
-      const ready = await preparePeople(allowed, { feed, reports, template, campaign, sendDates, signal });
-      problems.push(...ready.problems);
-      if (!ready.people.length) return { saved: null, problems };
-      // A CCN found here can be on the do-not-contact list too: the database refuses the draft, so check once more by CCN.
-      const withCcn = ready.people.filter(person => person.ccn);
-      const late = withCcn.length ? await store.check(token, withCcn.map(person => ({ ref: person.ref, email: person.email, domain: person.domain, ccn: person.ccn }))) : {};
-      const people = ready.people.filter(person => {
-        if (!late?.[person.ref]) return true;
-        problems.push({ row: null, ref: person.ref, agency: person.agency, reason: late[person.ref] }); return false;
-      });
-      if (!people.length) return { saved: null, problems };
-      const saved = await store.create(token, {
-        name: String(name ?? '').trim().slice(0, 120) || 'Owner sequence', template, campaign, sendDates, dailyLimit, sender: { fromName: copy.fromName },
-        people: people.map(person => ({ id: person.id, ref: person.ref, email: person.email, domain: person.domain, firstName: person.firstName,
-          agency: person.agency, county: person.county, setting: person.setting, ccn: person.ccn, reportUrl: person.reportUrl,
-          unsubscribeHash: hash(unsubscribeToken(unsubscribeKey(person.id))), notes: person.notes,
-          messages: person.messages.map(message => ({ step: message.step, sendOn: message.sendOn, subject: message.subject, body: message.body })) })),
-      });
-      return { saved, problems };
+    async prepare(token, input, { signal } = {}) {
+      const { record, problems } = await prepareRecord(input, { check: people => store.check(token, people), signal });
+      return { saved: record ? await store.create(token, record) : null, problems };
     },
     /** The mail service's event for a sequence's email. */
     delivery: (event, id, kind, at, suppress = true) => store.delivery(event, id, kind, at, suppress),
@@ -349,8 +378,9 @@ export function ownerSequences({ store, feed = null, reports = null, features = 
       if (!declared()) return { result: { skipped: 'not_declared' } };
       if (live(enabled) !== true) return { result: { skipped: 'off' } };
       if (task?.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
+      const request = await prepareRequest({ notifier, task, signal });
       const review = await store.review();
-      const told = await tell(review, { notifier, task });
+      const told = { ...await tell(review, { notifier, task }), ...(request ? { request } : {}) };
       if (!mail?.configured) return { result: { ...told, skipped: 'mail_not_configured' } };
       if (typeof unsubscribeToken !== 'function') return { result: { ...told, skipped: 'signing' } };
       signal?.throwIfAborted();
@@ -412,6 +442,27 @@ async function tell(review, { notifier, task }) {
     }
   }
   return { stopped: stopped.length, opened: opened.length };
+}
+
+/** Why a row was left out, in the owner's words (the Growth panel's `leftOut`). */
+export const leftOutWords = Object.freeze({
+  home_area: 'in Cambria County or a county bordering it', do_not_contact: 'said no before (on the do-not-contact list)',
+  suppressed: 'on the suppression list', in_sequence: 'already in an approved sequence',
+  growth_contacted: 'the Marketing Manager emailed this agency in the last 90 days', duplicate_ref: 'reference repeated', duplicate_email: 'address repeated',
+});
+
+async function tellRequest({ notifier, task, request, payload, outcome, problems }) {
+  if (!notifier) return;
+  const name = String(payload?.name ?? 'Your sequence').slice(0, 120);
+  const left = (problems ?? []).map(p => `${[p.ref, p.agency].filter(Boolean).join(' · ') || `row ${p.row}`}: ${leftOutWords[p.reason] ?? p.reason}`);
+  const dates = Array.isArray(payload?.sendDates) ? payload.sendDates.join(', ') : '';
+  const prepared = outcome?.status === 'prepared';
+  await notifier.send({ severity: prepared ? 'info' : 'warning', attention: prepared ? 'update' : 'now',
+    subject: prepared ? `"${name}" is ${outcome.approved ? 'approved and scheduled' : 'ready for your review'}` : `"${name}" could not be prepared`,
+    body: prepared
+      ? `${outcome.approved ? 'Approved as you asked: the emails go out' : 'Prepared: read every email on Growth → Your own sequences, then approve. The emails go out'} on ${dates}, weekdays from 9:00 Eastern.${left.length ? `\n\nLeft out:\n${left.join('\n')}` : ''}`
+      : `Nothing was saved (${String(outcome?.error ?? 'unknown').slice(0, 300)}).${left.length ? `\n\nLeft out:\n${left.join('\n')}` : ''}`,
+    dedupeKey: `owner-sequence:request:${request.id}`, agentKey: task?.agentKey ?? null, taskId: task?.id ?? null });
 }
 
 async function warn(notifier, task, claimed, body) {

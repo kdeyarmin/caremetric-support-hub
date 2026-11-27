@@ -122,5 +122,9 @@ export function ownerSequenceStore(pool) {
     delivery:(event,id,kind,at,suppress=true)=>server('private.owner_sequence_delivery',[event,id,kind,at,suppress]),
     unsubscribe:hash=>server('private.owner_sequence_unsubscribe',[hash]),
     views:views=>server('private.owner_sequence_views',[JSON.stringify(views)]),
+    // Requests an operator queued for the owner (20261127200000_owner_sequence_requests.sql).
+    requestNext:()=>server('private.owner_sequence_request_next'),
+    requestCheck:(id,people)=>server('private.owner_sequence_request_check',[id,JSON.stringify(people)]),
+    requestFinish:(id,record,problems,error)=>server('private.owner_sequence_request_finish',[id,record?JSON.stringify(record):null,JSON.stringify(problems??[]),error??null]),
   };
 }

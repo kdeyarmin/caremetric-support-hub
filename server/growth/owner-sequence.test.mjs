@@ -256,3 +256,50 @@ describe('sending', () => {
     expect(Object.keys(sequenceHandlers({ sequences: ownerSequences({ store: {}, features: ['platform.agents.owner-sequences.v1'] }) }))).toEqual(['growth.sequences']);
   });
 });
+
+describe('requests an operator queued for the owner', () => {
+  const header = 'ref,first_name,email,agency_display,agency_name_for_matching,city,county,setting';
+  const csv = `${header}\npa-b1-01,Mario,mario@traditional.example,Traditional Home Health Care,Traditional Home Health Care,Dunmore,Lackawanna,hha\npa-b1-05,Mary,mtobin@gateway.example,Gateway Hospice,Gateway Hospice,Pittsburgh,Allegheny,hospice\n`;
+  const payload = { name: 'Pennsylvania cold email, batch 1', csv, campaign: 'pa-cold-email', sendDates: ['2026-12-01', '2026-12-04', '2026-12-09'] };
+  function service({ request = { id: 'req-1', payload, approve: true }, check = { 'pa-b1-05': 'growth_contacted' }, finish = { status: 'prepared', approved: true } } = {}) {
+    const store = { requestNext: vi.fn(async () => request), requestCheck: vi.fn(async () => check), requestFinish: vi.fn(async () => finish),
+      review: vi.fn(async () => ({ stopped: [], opened: [] })), claim: vi.fn(async () => ({ send: false, status: 'none_due' })) };
+    const notifier = { send: vi.fn(async () => []) };
+    const sequences = ownerSequences({ store, features: new Set(['platform.agents.owner-sequences.v1', 'platform.agents.owner-sequence-requests.v1']), enabled: true,
+      mail: { configured: true, send: vi.fn() }, feed: null, reports: null, unsubscribeToken: key => `t-${key}`, hash: value => `h-${value}`, now: () => new Date('2026-11-27T20:00:00Z') });
+    return { store, notifier, sequences };
+  }
+
+  it('prepares the queued send list as Growth does, through the server\'s own check, and tells the owner who was left out', async () => {
+    const { store, notifier, sequences } = service();
+    const out = await sequences.run({ agent: { autonomy: 'act' }, agentKey: 'marketing_manager', id: 't1' }, { notifier });
+    expect(out.result.request).toEqual({ request: 'req-1', status: 'prepared', approved: true });
+    expect(store.requestCheck).toHaveBeenCalledWith('req-1', [{ ref: 'pa-b1-01', email: 'mario@traditional.example', domain: 'traditional.example', ccn: null },
+      { ref: 'pa-b1-05', email: 'mtobin@gateway.example', domain: 'gateway.example', ccn: null }]);
+    const [id, record, problems, error] = store.requestFinish.mock.calls[0];
+    expect([id, error]).toEqual(['req-1', null]);
+    expect(problems).toEqual([{ row: null, ref: 'pa-b1-05', agency: 'Gateway Hospice', reason: 'growth_contacted' }]);
+    expect(record.people.map(p => p.ref)).toEqual(['pa-b1-01']);
+    expect(record).toMatchObject({ name: 'Pennsylvania cold email, batch 1', template: 'intel-pa-cold-2026-11', campaign: 'pa-cold-email', dailyLimit: 8, sender: { fromName: 'Kevin Deyarmin' } });
+    // No feed: the agency gets the county report email; the unsubscribe hash is the server's signing of the person's own key.
+    expect(record.people[0].messages[0].subject).toBe('Which hospitals Lackawanna County residents use most');
+    expect(record.people[0].unsubscribeHash).toBe(`h-t-owner-sequence:${record.people[0].id}`);
+    const told = notifier.send.mock.calls[0][0];
+    expect(told.subject).toBe('"Pennsylvania cold email, batch 1" is approved and scheduled');
+    expect(told.body).toContain('2026-12-01, 2026-12-04, 2026-12-09');
+    expect(told.body).toContain('pa-b1-05 · Gateway Hospice: the Marketing Manager emailed this agency in the last 90 days');
+  });
+
+  it('fails a request it cannot prepare and says why, and does nothing without the feature', async () => {
+    const bad = service({ request: { id: 'req-2', payload: { ...payload, sendDates: ['2026-12-05', '2026-12-08', '2026-12-09'] }, approve: true }, finish: { status: 'failed', error: 'weekday' } });
+    const out = await bad.sequences.run({ agent: { autonomy: 'act' } }, { notifier: bad.notifier });
+    expect(out.result.request).toEqual({ request: 'req-2', status: 'failed', approved: false });
+    expect(bad.store.requestFinish).toHaveBeenCalledWith('req-2', null, [], 'weekday');
+    expect(bad.notifier.send.mock.calls[0][0]).toMatchObject({ severity: 'warning', subject: '"Pennsylvania cold email, batch 1" could not be prepared' });
+    const off = service();
+    const without = ownerSequences({ store: off.store, features: new Set(['platform.agents.owner-sequences.v1']), enabled: true, mail: { configured: true, send: vi.fn() },
+      unsubscribeToken: key => key, hash: value => value });
+    expect((await without.run({ agent: { autonomy: 'act' } })).result.request).toBeUndefined();
+    expect(off.store.requestNext).not.toHaveBeenCalled();
+  });
+});

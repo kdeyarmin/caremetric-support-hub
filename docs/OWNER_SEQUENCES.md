@@ -44,6 +44,25 @@ December 1 from 9:00 Eastern, about one every five minutes, then email 2 on Dece
 | Report links | The CCN comes from Intel's `agency_match` (name for matching, city, PA); a match of the other setting is not taken. The token is Intel's format with `s` from the sheet, `e` 90 days out and `r` the sheet's ref, at `/report/<token>/view` when Intel serves the web view. The Hub checks each link once, signed without `r`, so the check is never counted as an open. No confident match, or no report: the county report version of email 1. When the report names another county, that county is used in all three emails. |
 | Opens | Intel's opens are read with the Marketing Manager's report views (Settings → Customer growth → Learn which agencies opened their report). An open counts only from two minutes after the person's first email; the owner is told of each agency's first open. |
 
+## A request instead of the Growth page
+
+Preparing a sequence signs each report link and each unsubscribe link with keys only the Hub server holds, and Growth needs the owner's
+signed-in session. When the owner asks someone working for them (CareMetric staff with database access, or Claude Code) to do it, that
+person queues a **request**: a row in `private.owner_sequence_requests` (no application role can write it) naming the owner, the send list
+and its choices, and whether to approve it (`20261127200000_owner_sequence_requests.sql`, feature `platform.agents.owner-sequence-requests.v1`).
+
+```sql
+insert into private.owner_sequence_requests (requested_by, approve, payload)
+values ('<the owner''s user id>', true, jsonb_build_object('name', 'Pennsylvania cold email, batch 1', 'campaign', 'pa-cold-email',
+  'sendDates', jsonb_build_array('2026-12-01', '2026-12-04', '2026-12-09'), 'dailyLimit', 8, 'csv', '<the send list as text>'));
+```
+
+The Marketing Manager's next `growth.sequences` run (within five minutes, while **Send your own email sequences** is on) prepares it
+exactly as the Growth page does: the same checks and left-out reasons, the same matching, links and copy. It saves the draft in the owner's
+name and approves it when the request asked (the audit says `via: request`). The owner gets an alert saying it was approved or is ready for
+review, with each row left out and why. A request is prepared only for an active CareMetric admin; one the database refuses (a person who
+may not be emailed, a date that passed) fails with the reason and saves nothing.
+
 ## The send list
 
 A CSV, one row per person. Columns (header names are read loosely, in any order): `ref` (letters, digits, `-` or `_`; it is the report

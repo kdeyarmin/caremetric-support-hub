@@ -323,6 +323,12 @@ three-argument `private.creative_data_counties` is executable by `hub_app_server
 out for 56 days after it is pictured and reports the setting it was pictured with last. Each test fails closed. The Hub server picks
 counties from Intel's list of the roster's states only when the feature is declared, and otherwise from the roster's own counties as before.
 
+`20261127200100_owner_sequence_requests_contract.sql` declares `platform.agents.owner-sequence-requests.v1` only after owner sequences are
+declared, the requests table has row level security and is closed to every role, the request functions are executable by `hub_app_server`
+alone and require the Hub server connection, the shared save, check and approval cannot be run directly, a request is prepared only for a
+CareMetric admin, saved in its requester's name and approved only when it asked, and the owner's commands still need the owner's session and
+use the shared functions. Each test fails closed.
+
 `20261127150100_owner_sequences_contract.sql` declares `platform.agents.owner-sequences.v1` only after the settings, customer growth, growth
 autonomy and support truth features are declared, the `growth.owner_sequences` setting exists, the sequence tables and the do-not-contact list
 have row level security and are closed to every role, the claim, finish, review, delivery, unsubscribe and report-open functions are
