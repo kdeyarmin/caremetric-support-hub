@@ -284,7 +284,7 @@ export async function preparePeople(people, { feed, reports, template, campaign,
  * switch). `reports`: the report link signer. `unsubscribeToken`/`hash`: growth's signing. `mail`: a SendGrid sender for growth email.
  */
 export function ownerSequences({ store, feed = null, reports = null, features = null, enabled = false, mail = null, publicOrigin = '',
-  unsubscribeToken = null, hash = null, optOutPath = '/api/growth/preferences/', now = () => new Date() }) {
+  unsubscribeToken = null, hash = null, optOutPath = '/api/growth/preferences/', now = () => new Date(), batches = null }) {
   const declared = () => (features instanceof Set ? features.has(ownerSequencesFeature) : Array.isArray(features) && features.includes(ownerSequencesFeature));
   const unsubscribeKey = recipientId => `owner-sequence:${recipientId}`;
   const requestsDeclared = () => (features instanceof Set ? features.has(ownerSequenceRequestsFeature) : Array.isArray(features) && features.includes(ownerSequenceRequestsFeature))
@@ -378,9 +378,15 @@ export function ownerSequences({ store, feed = null, reports = null, features = 
       if (!declared()) return { result: { skipped: 'not_declared' } };
       if (live(enabled) !== true) return { result: { skipped: 'off' } };
       if (task?.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
+      // The AI team's weekly batch (server/growth/sequence-batches.mjs), queued as a request and prepared just below. A failure here never
+      // holds back the sequences' own emails.
+      let batch = null;
+      if (typeof batches?.build === 'function') {
+        try { batch = await batches.build({ notifier, task, signal }); } catch (error) { if (signal?.aborted) throw error; batch = { failed: String(error?.code ?? 'batch_failed').slice(0, 80) }; }
+      }
       const request = await prepareRequest({ notifier, task, signal });
       const review = await store.review();
-      const told = { ...await tell(review, { notifier, task }), ...(request ? { request } : {}) };
+      const told = { ...await tell(review, { notifier, task }), ...(request ? { request } : {}), ...(batch ? { batch } : {}) };
       if (!mail?.configured) return { result: { ...told, skipped: 'mail_not_configured' } };
       if (typeof unsubscribeToken !== 'function') return { result: { ...told, skipped: 'signing' } };
       signal?.throwIfAborted();

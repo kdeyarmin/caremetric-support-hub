@@ -64,6 +64,81 @@ name and approves it when the request asked (the audit says `via: request`). The
 review, with each row left out and why. A request is prepared only for an active CareMetric admin; one the database refuses (a person who
 may not be emailed, a date that passed) fails with the reason and saves nothing.
 
+## The AI team builds the next batch
+
+Owner, November 27, 2026: "train my AI workforce on how to do this". Batch 2 was built by hand; from then on the Marketing Manager builds
+each batch itself (`server/growth/sequence-batches.mjs`, `20261127220000_owner_sequence_batches.sql`, feature
+`platform.agents.owner-sequence-batches.v1`), while Settings → Customer growth → **Build your next sequence batch** is on.
+
+Once a week, on its `growth.sequences` run, it:
+
+1. Asks the database for the agencies ready for a batch (`private.owner_sequence_batch_plan`). These are Pennsylvania roster agencies the
+   roster graduated. Each one must pass every test below:
+   - every roster entry is proprietary (CMS's control type);
+   - it has one office (one street address);
+   - it is outside Cambria County and its seven neighbors;
+   - it has a domain of its own;
+   - the Marketing Manager has never written to it;
+   - it is not stopped (opted out, do-not-contact, or the guard above);
+   - it is in no owner sequence, by domain or CCN;
+   - it has a person whose work address the people step confirmed on that domain. The people step names owners from CMS, the NPI
+     registry and the agency's own pages, then checks the address with the mail server or the verification service. Never a guessed
+     address.
+
+   The agencies with the most Medicare patients come first.
+2. Leaves out an agency in any of these cases:
+   - any of its CMS owners (Intel's `agency_facts`) is an organization rather than a person, which rules out chains, health systems,
+     holding companies and private equity;
+   - its website is on a page builder's host;
+   - its person does not decide. Only an owner, a corporate officer, the president or CEO, the administrator or the executive director
+     counts.
+3. Writes the send list (refs `pa-b<N>-01`, the agency's CCN given so it is used as is). It queues the list as a request in the owner's
+   name, "Pennsylvania cold email, batch N", and sets three dates:
+   - the first Tuesday at least four days out and a week after the previous batch's first email;
+   - that Friday;
+   - the next Wednesday.
+
+   At most 10 emails a day go out from it. The owner is told who is in it.
+4. The request is then prepared within five minutes like any other ([A request instead of the Growth page](#a-request-instead-of-the-growth-page)),
+   with every check again. It is approved only while **Approve the batches the AI team builds** is on; otherwise it waits on Growth.
+
+The builder skips a week in four cases:
+- a request is still waiting;
+- it already built a batch in the last six days;
+- no CareMetric admin has approved a sequence yet (the newest approver is the owner the batch is queued for);
+- fewer than three agencies (or the batch size, if smaller) are ready.
+
+**Agencies in each batch** sets the size (default 8). Building a batch sends nothing: **Send your own email sequences** sends it.
+
+## Finding the owners' addresses with Hunter
+
+A batch needs an owner or administrator whose address is confirmed. The Marketing Manager's people step names people from public records
+but confirms few addresses: most agencies' mail servers refuse the Hub's cloud server (November 24, 2026: 15 checks, none confirmed), and no
+verification service is in use. Built by hand, batch 2 found 8 of 10 owners with Hunter's Email Finder, which looks a person up by name
+and domain and checks the address itself. So the Marketing Manager now asks Hunter too (`server/growth/hunter.mjs`,
+`20261127230000_growth_hunter.sql`, feature `platform.agents.growth-hunter.v1`), while Settings → Customer growth → **Find owners' addresses
+with Hunter** is on and `HUNTER_API_KEY` is set.
+
+On each `growth.people` run (every half hour), before its usual work, it:
+1. Asks the database for the agencies the weekly batch would take but for an address. These pass the same tests as a batch and have
+   people named, but no confirmed address on their own domain, and nobody asked Hunter about them in the last 180 days. Those with the
+   most Medicare patients come first.
+2. Picks each agency's person whose role decides most: an owner, officer, president or CEO, the authorized official the NPI registry
+   names, the administrator or the executive director.
+3. Reserves one lookup under **Most Hunter lookups a day** (default 5; Hunter charges a credit only when it finds an address, and its free
+   plan has about 25 a month), then asks Hunter. At most two lookups a run.
+4. Keeps an address only if all of these hold:
+   - it is on the agency's own domain;
+   - Hunter's own check calls it valid;
+   - its score is 80 or more;
+   - where the domain accepts every address, Hunter saw it published somewhere.
+
+   Kept addresses are recorded as confirmed (`address_found = 'hunter'`) and wait for review: they are never permitted for the Marketing
+   Manager's own cold email on their own, so the agency stays for your batch.
+
+The next weekly batch then takes the agencies Hunter found addresses for. A refused key stops the lookups for that run and says so in
+the task's result. The key goes in a header, never in a URL, a log or a result.
+
 ## The send list
 
 A CSV, one row per person. Columns (header names are read loosely, in any order): `ref` (letters, digits, `-` or `_`; it is the report
