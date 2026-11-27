@@ -40,6 +40,7 @@ December 1 from 9:00 Eastern, about one every five minutes, then email 2 on Dece
 | 7. Do not change the facts | The copy is in code (`templates` in `owner-sequence.mjs`), word for word, with only blank lines between paragraphs; `owner-sequence.test.mjs` pins every email. Only the merge fields change. |
 | 8. The founder line | "I've managed a home health and hospice company…", never "own". The Marketing Manager's own founder story was corrected the same day (GTM facts, 2026-11-27). |
 | 9. Replies go to Kevin; he approves any answer | Each reply is an alert to the owner and sits in Communications. The Support Concierge never answers or acknowledges a sequence's person (or a colleague on the agency's domain) on its own: `agent_answer_begin` and `agent_acknowledge_begin` refuse with `owner_sequence` unless the owner approved. |
+| The two kinds of cold email stay apart | A sequence leaves out an agency the Marketing Manager emailed in the last 90 days, matched by its address, its domain or the CCN the roster tied to the organization it wrote to (batch 1's All Care Home Care had had three emails to an address on another domain). And the Marketing Manager's own cold email leaves alone, for 180 days from approval, any organization whose domain, or a CCN the roster tied to it, is a person of an approved sequence (`private.growth_outreach_stopped`; `20261127210000_owner_sequence_guard.sql`, feature `platform.agents.owner-sequence-guard.v1`). |
 | 10. Not the 17 skipped agencies, nor Cambria and its seven neighbours | The send list holds only the 8. A row in Cambria, Clearfield, Centre, Blair, Bedford, Somerset, Westmoreland or Indiana County is left out, by the list's county and again by the county the agency's report covers. |
 | Report links | The CCN comes from Intel's `agency_match` (name for matching, city, PA); a match of the other setting is not taken. The token is Intel's format with `s` from the sheet, `e` 90 days out and `r` the sheet's ref, at `/report/<token>/view` when Intel serves the web view. The Hub checks each link once, signed without `r`, so the check is never counted as an open. No confident match, or no report: the county report version of email 1. When the report names another county, that county is used in all three emails. |
 | Opens | Intel's opens are read with the Marketing Manager's report views (Settings → Customer growth → Learn which agencies opened their report). An open counts only from two minutes after the person's first email; the owner is told of each agency's first open. |
@@ -70,7 +71,7 @@ link's reference and each link's `utm_term`), `email`, `first_name` (empty: "Hi 
 `city`, `county` ("Erie" or "Erie County"), `setting` (`hha` or `hospice`), and optionally `state` (Pennsylvania only), `website` and
 `ccn` (when given it is used as is). A row is left out, with the reason shown, for a missing or malformed field, another state, the
 owner's home area, a repeated ref or address, the do-not-contact or suppression list, a person already in an approved sequence, or an
-agency the Marketing Manager emailed in the last 90 days. At most 30 people a sequence.
+agency the Marketing Manager emailed in the last 90 days (by address, domain or CCN). At most 30 people a sequence.
 
 ## Changing the copy
 
