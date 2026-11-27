@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { growthPost, growthMutation, workspaceSchema, detailSchema, rosterSchema, peopleSchema, learningSchema, sendGuardSchema, briefSchema, companiesSchema, companyListCsv, importRows } from './growthClient';
 import type { GrowthOpportunity, GrowthPolicy } from './growthClient';
 import type { z } from 'zod';
+import { OwnerSequencesPanel } from './OwnerSequences';
 import './admin.css';
 const names={carebase:'CareBase','caremetric-intel':'CareMetric Intel'};
 const stages=['identified','researched','qualified','contacted','engaged','demo','trial','activated','paying','retained','nurture','lost','churned','disqualified'];
@@ -197,6 +198,7 @@ export function Growth() {
  {error&&<p role="alert">{error}</p>}{workspaceError&&<p role="alert">{workspaceError}</p>}{!data&&!workspaceError&&<p role="status">Loading customer growth…</p>}
  <button className="button" onClick={()=>setRevision(n=>n+1)}>Refresh</button>
  {data&&<><section className="panel"><h2>Readiness</h2><p>Sending: {data.services.sending?'enabled':'disabled'} · Research: {data.services.research?'ready':'not configured'} · Unsubscribe signing: {data.services.signing?'ready':'not configured'} · Sender address: {data.services.postalAddress?'ready':'needed'}</p><p>Sending also requires an active agent, a reviewed policy and an eligible verified contact.</p></section>
+ {data.services.sequences&&<OwnerSequencesPanel revision={revision}/>}
  {data.services.roster&&<RosterPanel revision={revision}/>}
  {data.services.people&&<PeoplePanel revision={revision} onSave={save}/>}
  {data.services.addressCheck&&<SendGuardPanel revision={revision} onSave={save}/>}

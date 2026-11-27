@@ -101,3 +101,26 @@ export function growthStore(pool) {
     importList:(token,rows)=>withSession(pool,token,db=>run(db,'hub.growth_import',[JSON.stringify(rows)])),
   };
 }
+
+/** The owner's own email sequences (20261127150000_owner_sequences.sql; owner-sequence.mjs). */
+export function ownerSequenceStore(pool) {
+  const run=(client,fn,args)=>client.query(`select ${fn}(${args.map((_,i)=>`$${i+1}`).join(',')}) as result`,args).then(r=>r.rows[0].result);
+  const server=(fn,args=[])=>transaction(pool,db=>run(db,fn,args));
+  const owner=(token,fn,args=[])=>withSession(pool,token,db=>run(db,fn,args));
+  return {
+    list:token=>owner(token,'hub.owner_sequences_list'),
+    detail:(token,id)=>owner(token,'hub.owner_sequence_detail',[id]),
+    // node-pg sends a JavaScript array as a Postgres array: jsonb arguments are sent as JSON text.
+    check:(token,people)=>owner(token,'hub.owner_sequence_check',[JSON.stringify(people)]),
+    create:(token,record)=>owner(token,'hub.owner_sequence_create',[JSON.stringify(record)]),
+    approve:(token,id,version)=>owner(token,'hub.owner_sequence_approve',[id,version]),
+    stop:(token,id,recipient=null)=>owner(token,'hub.owner_sequence_stop',[id,recipient]),
+    discard:(token,id)=>owner(token,'hub.owner_sequence_discard',[id]),
+    claim:()=>server('private.owner_sequence_claim'),
+    finish:(id,status,provider)=>server('private.owner_sequence_finish',[id,status,provider]),
+    review:()=>server('private.owner_sequence_review'),
+    delivery:(event,id,kind,at,suppress=true)=>server('private.owner_sequence_delivery',[event,id,kind,at,suppress]),
+    unsubscribe:hash=>server('private.owner_sequence_unsubscribe',[hash]),
+    views:views=>server('private.owner_sequence_views',[JSON.stringify(views)]),
+  };
+}

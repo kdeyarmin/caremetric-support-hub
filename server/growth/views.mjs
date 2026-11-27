@@ -12,6 +12,7 @@ import { live } from '../live.mjs';
 export const growthReportViewsFeature = 'platform.agents.growth-report-views.v1';
 export const viewPagesPerRun = 5;
 const pageSize = 200;
+const uuidRef = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function viewsHandlers({ growth, features = null, notifier = null }) {
   const declared = features instanceof Set ? features.has(growthReportViewsFeature) : Array.isArray(features) && features.includes(growthReportViewsFeature);
@@ -27,6 +28,10 @@ export function viewsHandlers({ growth, features = null, notifier = null }) {
       signal?.throwIfAborted();
       const answer = await feed.reportViews({ afterId: after, limit: pageSize, signal });
       if (!answer.views.length) break;
+      // An owner sequence's link carries the send list's own reference (owner-sequence.mjs), never an opportunity's id: its opens are the
+      // sequence's to record, before the cursor moves on.
+      const sequenceViews = answer.views.filter(view => !uuidRef.test(String(view.ref ?? ''))).map(view => ({ ref: view.ref, viewed_at: view.viewed_at }));
+      if (sequenceViews.length && growth.sequences?.declared?.()) counts.sequences = (counts.sequences ?? 0) + Number(await growth.sequences.recordViews(sequenceViews) ?? 0);
       const saved = await growth.store.reportViewsRecord(answer.views.map(view => ({ id: view.id, ref: view.ref, ccn: view.ccn, viewed_at: view.viewed_at })), answer.next_after_id);
       counts.read += answer.views.length; counts.recorded += Number(saved?.recorded ?? 0); counts.ignored += Number(saved?.ignored ?? 0);
       for (const first of saved?.firstViews ?? []) {

@@ -71,7 +71,8 @@ export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', fromN
     get configured() { const now = sender(); return typeof apiKey === 'string' && apiKey.startsWith('SG.') && emailAddress.test(now.from) && emailAddress.test(now.replyTo) && /^[a-z0-9-]{1,40}$/.test(category); },
     // `messageFromName`: one message's own display name (a founder-signed growth email), used unless the owner saved a display name
     // (`fromNameLocked`) or it is not one a mail service accepts.
-    async send({ to, subject, text, html, unsubscribeUrl, messageId, fromName: messageFromName = null }) {
+    // `customArgs`: the message's own reference for delivery events when it is not a growth message (an owner sequence's email).
+    async send({ to, subject, text, html, unsubscribeUrl, messageId, fromName: messageFromName = null, customArgs = null }) {
       const { from, fromName: senderName, replyTo } = sender();
       const fromName = messageFromName && live(fromNameLocked) !== true && validGrowthFromName(messageFromName) ? messageFromName.trim() : senderName;
       const personalization = { to: [{ email: to }], ...(unsubscribeUrl ? { headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } } : {}) };
@@ -80,7 +81,7 @@ export function sendgridBulkMail({ apiKey, from = 'support@caremetric.ai', fromN
         response = await fetchImpl('https://api.sendgrid.com/v3/mail/send', {
           method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(15000),
           body: JSON.stringify({
-            personalizations: [personalization], ...(messageId ? { custom_args: { growth_message_id: messageId } } : {}), from: { email: from, name: fromName }, reply_to: { email: replyTo }, subject,
+            personalizations: [personalization], ...(messageId || customArgs ? { custom_args: { ...(customArgs ?? {}), ...(messageId ? { growth_message_id: messageId } : {}) } } : {}), from: { email: from, name: fromName }, reply_to: { email: replyTo }, subject,
             content: [{ type: 'text/plain', value: text }, ...(html ? [{ type: 'text/html', value: html }] : [])], categories: [category],
             tracking_settings: { click_tracking: { enable: false }, open_tracking: { enable: false }, subscription_tracking: { enable: false } },
           }),

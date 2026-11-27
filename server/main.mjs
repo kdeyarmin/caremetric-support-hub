@@ -30,7 +30,8 @@ import { leadRetention } from './lead-retention.mjs';
 import { helpCenter } from './help-center.mjs';
 import { articleHomeUrl, helpCenterOrigin, servedElsewhere } from './agents/content/facts.mjs';
 import { publicArticleFeed, publicArticlesFeature } from './public-articles.mjs';
-import { growthStore } from './growth/store.mjs';
+import { growthStore, ownerSequenceStore } from './growth/store.mjs';
+import { ownerSequences } from './growth/owner-sequence.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
@@ -143,7 +144,15 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   // The Monday live writing evaluation (Settings → Customer growth → Run a live writing evaluation each Monday; stage 3).
   liveEvaluation:{enabled:setting('growth.live_evaluation')},
   // Each Medicare roster agency's free market report on Intel, linked in its outreach (growth/report-link.mjs; the feed's shared secret).
-  reports:reportLinks({key:intelFeedSecret}),importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
+  reports:reportLinks({key:intelFeedSecret}),
+  // The owner's own email sequences (docs/OWNER_SEQUENCES.md; Settings → Customer growth → Send your own email sequences): the owner's
+  // words, sent in the owner's name from the growth sender through SendGrid only (never Amazon SES), replies to the support inbox. Matching
+  // an agency to its CCN is the owner's own request, so it does not wait for the roster's switch.
+  sequences:({unsubscribeToken,hash})=>ownerSequences({store:ownerSequenceStore(pool),feed:intelFeedReader({features,enabled:true,key:intelFeedSecret}),
+    reports:reportLinks({key:intelFeedSecret}),features,enabled:setting('growth.owner_sequences'),publicOrigin,unsubscribeToken,hash,
+    mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,category:'hub-owner-sequence',from:()=>growthIdentity().from,fromName:()=>growthIdentity().fromName,
+      fromNameLocked:()=>growthIdentity().fromNameSet,replyTo:()=>growthIdentity().replyTo})}),
+  importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
   sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});
 // Cold email and sales follow-ups may come from their own address (Settings → Email → Growth email sender, normally on a subdomain), so
 // prospecting can never hurt the support address's reputation. Replies still go to the support inbox. Unset: the support sender.

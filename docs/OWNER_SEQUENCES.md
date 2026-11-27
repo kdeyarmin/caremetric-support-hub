@@ -1,0 +1,64 @@
+# Your own email sequences
+
+Owner handoff of November 27, 2026 ("Pennsylvania cold email, batch 1"): send a three-email sequence the owner wrote, word for word, to
+people the owner chose, on dates the owner chose, in the owner's name, and hand the owner the replies. The Marketing Manager's own cold
+email cannot do that: it writes its own words, lays an Intel email out as a designed page and paces sends by its own rules. A sequence is
+the owner's exact emails, reviewed once on Growth and then sent by the Marketing Manager.
+
+Code: `server/growth/owner-sequence.mjs` (the copy, the send list, preparation and the `growth.sequences` task),
+`src/admin/OwnerSequences.tsx` (Growth → Your own sequences), `supabase/migrations/20261127150000_owner_sequences.sql` and its gate
+`20261127150100_owner_sequences_contract.sql` (feature `platform.agents.owner-sequences.v1`).
+
+## Sending batch 1
+
+1. Apply the two migrations, deploy, and check that Growth shows **Your own sequences**.
+2. In Settings → Email, set **Growth email sender** to a mailbox in Kevin's name on a domain authenticated in the Hub's SendGrid account (see
+   [A separate sender for prospecting](CUSTOMER_GROWTH.md#a-separate-sender-for-prospecting)). The display name is "Kevin Deyarmin" unless
+   **Growth email display name** is set, which wins. Replies go to the support inbox's Reply-To, where the Hub reads them.
+3. On Growth → Your own sequences → Prepare a sequence from a send list: name "Pennsylvania cold email, batch 1", campaign tag
+   `pa-cold-email`, dates **December 1, December 4 and December 9, 2026**, most emails a day 8, and the send list `pa-batch1-send-list.csv`.
+   Preparing takes a minute: each agency is matched to its CMS certification number and its report link is checked.
+4. Read the **Left out** list and every person's three emails. Each row says whether the agency gets its own market report or the county
+   report email, and when the report's county replaced the list's.
+5. Tick "I read every email above" and **Approve and schedule**.
+6. Turn on Settings → Customer growth → **Send your own email sequences**. The Marketing Manager must be resumed (Propose or Act; Observe
+   holds everything) and Settings → AI team → Run the AI team must be on.
+
+From then on each run (every five minutes) first reports what changed, then sends at most one due email: email 1 to the 8 people on
+December 1 from 9:00 Eastern, about one every five minutes, then email 2 on December 4 and email 3 on December 9.
+
+## What the handoff asked, and where it is kept
+
+| Handoff rule | How the Hub keeps it |
+| --- | --- |
+| 1. Sender: Kevin's mailbox or a Hub mailbox in his name; never Intel's SendGrid or Amazon SES | The Hub's growth sender, through the Hub's own SendGrid key (`HUB_SENDGRID_API_KEY`), never Amazon SES whatever **Growth email service** says. Confirm that key belongs to a SendGrid account separate from Intel's. |
+| 2. At most 20 to 30 cold emails a day from one mailbox; 8 a day for this batch | The sequence's own limit (8), and a sequence email goes out only while the day's prospecting emails from the growth sender (the sequences' and the Marketing Manager's own cold email together) number fewer than 25 (`private.owner_sequence_claim`). The Marketing Manager's cold email does not count the sequences toward its own cap, so keep Settings → Customer growth → Most cold emails a day low enough (10 or fewer) that the two stay within 20 to 30. |
+| 3. Plain text, one recipient per message, no attachment, image or tracking pixel | The approved words are the whole text part; there is no HTML part. SendGrid's open, click and subscription tracking are off. Each email carries one-click unsubscribe headers (not visible in the message). |
+| 4. Weekdays 9 to 11 Eastern on December 1, 4 and 9 | An email is sent only on a weekday, between 9:00 and 11:00 Eastern, on or after its date, after the person's previous email went out on an earlier day. A server outage carries an email to the next weekday's window rather than sending two to one person in a day. |
+| 5. Stop on any reply, a bounce, or an auto-reply saying the person left; a hard bounce removes the contact | Before each email and on every run, the database reads replies from the address and from the agency's own domain since the first email. Any reply stops the person; an out-of-office reply is noted and stops nothing unless it says the person has left. Any bounce stops the person; a hard bounce also suppresses the address. No other address is ever tried. |
+| 6. Opt-outs are permanent, in this and every later batch | "No thanks", "not interested", "unsubscribe", "remove me" and the like, a spam complaint or the one-click unsubscribe put the address (as its hash), the agency's domain and its CCN on `private.outreach_do_not_contact`. No later sequence takes them (preparing leaves them out; saving and approving refuse them) and the Marketing Manager's own cold email never writes to an organization on that domain (`private.growth_outreach_stopped`). |
+| 7. Do not change the facts | The copy is in code (`templates` in `owner-sequence.mjs`), word for word, with only blank lines between paragraphs; `owner-sequence.test.mjs` pins every email. Only the merge fields change. |
+| 8. The founder line | "I've managed a home health and hospice company…", never "own". The Marketing Manager's own founder story was corrected the same day (GTM facts, 2026-11-27). |
+| 9. Replies go to Kevin; he approves any answer | Each reply is an alert to the owner and sits in Communications. The Support Concierge never answers or acknowledges a sequence's person (or a colleague on the agency's domain) on its own: `agent_answer_begin` and `agent_acknowledge_begin` refuse with `owner_sequence` unless the owner approved. |
+| 10. Not the 17 skipped agencies, nor Cambria and its seven neighbours | The send list holds only the 8. A row in Cambria, Clearfield, Centre, Blair, Bedford, Somerset, Westmoreland or Indiana County is left out, by the list's county and again by the county the agency's report covers. |
+| Report links | The CCN comes from Intel's `agency_match` (name for matching, city, PA); a match of the other setting is not taken. The token is Intel's format with `s` from the sheet, `e` 90 days out and `r` the sheet's ref, at `/report/<token>/view` when Intel serves the web view. The Hub checks each link once, signed without `r`, so the check is never counted as an open. No confident match, or no report: the county report version of email 1. When the report names another county, that county is used in all three emails. |
+| Opens | Intel's opens are read with the Marketing Manager's report views (Settings → Customer growth → Learn which agencies opened their report). An open counts only from two minutes after the person's first email; the owner is told of each agency's first open. |
+
+## The send list
+
+A CSV, one row per person. Columns (header names are read loosely, in any order): `ref` (letters, digits, `-` or `_`; it is the report
+link's reference and each link's `utm_term`), `email`, `first_name` (empty: "Hi there,"), `agency_display`, `agency_name_for_matching`,
+`city`, `county` ("Erie" or "Erie County"), `setting` (`hha` or `hospice`), and optionally `state` (Pennsylvania only), `website` and
+`ccn` (when given it is used as is). A row is left out, with the reason shown, for a missing or malformed field, another state, the
+owner's home area, a repeated ref or address, the do-not-contact or suppression list, a person already in an approved sequence, or an
+agency the Marketing Manager emailed in the last 90 days. At most 30 people a sequence.
+
+## Changing the copy
+
+A new batch with the same emails uses the same copy. Different words are a code change: add a template to `templates` in
+`owner-sequence.mjs` with its test pinning each email, and check every product claim against Intel's code as the handoff did.
+
+## Stopping
+
+Stop one person or the whole sequence on Growth; turning the setting off holds every approved email where it is. An email the mail
+service did not confirm is never sent again on its own: check SendGrid's activity for the address first.

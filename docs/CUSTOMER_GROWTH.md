@@ -134,6 +134,13 @@ from the sender's own words only (`private.growth_reply_reading`, 2026-11-13):
 
 When capture fails, the inbox keeps the email and its fallback still honours a request to stop by the same reading.
 
+## The owner's own sequences
+
+Emails the owner wrote word for word, to a send list the owner chose, on dates the owner chose (owner handoff 2026-11-27, Pennsylvania
+cold email batch 1) go through **Your own sequences** on Growth, not the Marketing Manager's cold email: plain text exactly as approved, from
+the growth sender in the owner's name, stopped by any reply, bounce or opt-out. A "no" to a sequence also keeps the Marketing Manager's cold
+email away from that agency's domain. See [Your own email sequences](OWNER_SEQUENCES.md).
+
 ## A separate sender for prospecting
 
 Cold email and sales follow-ups (every `growth.message`, whichever step approved it) can come from their own address, so that
@@ -242,7 +249,7 @@ terms (owner decision 2026-11-08).
 **Outreach from the founder, easy to read (owner direction 2026-11-12, now `growth.8`).** Prospect outreach is written in the founder's
 first person and signed with the founder's name and title (`senderFor` in `server/growth/playbook.mjs`, from `founder` in
 `server/agents/content/facts.mjs`). Touch 1 tells the founder's story in one or two sentences, exactly as the fact sheet gives it: the
-founder runs a home health and hospice agency and a healthcare consulting company, needed a way to research competitors and find every potential referral source, and built
+founder manages a home health and hospice company (and owns no agency: owner correction 2026-11-27) and runs a healthcare consulting company, needed a way to research competitors and find every potential referral source, and built
 CareMetric Intel, which the founder uses every day. The story carries no result, agency name or number, and is told only about Intel. For
 Intel, the email names the part of the whole workspace that answers the reader's problem, never email campaigns as the point. A draft
 with an empty buzzword, a string of fragments or a sentence over 30 words is refused as `unclear` (`unclearCopy`). Customer messages are
