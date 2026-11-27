@@ -6,7 +6,7 @@
  * 1. The database names the agencies ready for a batch (private.owner_sequence_batch_plan; 20261127240000_owner_sequence_open.sql):
  *    every Pennsylvania roster agency, whoever owns it and however many offices it has (owner, 2026-11-27: "I don't think any agencies
  *    should be off limits. Maybe focus on smaller organizations"), smallest first (fewer offices, then fewer Medicare patients), outside
- *    the owner's home area, on a domain of its own, never written to by the Marketing Manager, not stopped, in no sequence, with a person
+ *    Cambria County (the owner's home county), on a domain of its own, never written to by the Marketing Manager, not stopped, in no sequence, with a person
  *    whose work address the Marketing Manager's people step or Hunter confirmed.
  * 2. Here, for each: its website is not a page builder's or another business's host (it has no mailbox of its own there), and its person
  *    must decide (an owner, a corporate officer, the president or CEO, the administrator, the executive director or a managing employee

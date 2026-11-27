@@ -94,8 +94,9 @@ describe('the send list', () => {
     ]);
   });
 
-  it('leaves out Cambria County and the seven counties bordering it, another state, bad fields and repeats', () => {
-    expect(excludedCounties).toEqual(['Cambria', 'Clearfield', 'Centre', 'Blair', 'Bedford', 'Somerset', 'Westmoreland', 'Indiana']);
+  it('leaves out Cambria County alone, another state, bad fields and repeats', () => {
+    // The owner's home county only (owner, 2026-11-27); its neighbors, here Indiana and Westmoreland, are no longer left out.
+    expect(excludedCounties).toEqual(['Cambria']);
     const rows = [
       'r1,A,a@one.com,One,One,Ebensburg,Cambria,PA,hha,',
       'r2,B,b@two.com,Two,Two,Indiana,indiana county,PA,hospice,',
@@ -109,11 +110,11 @@ describe('the send list', () => {
       'r10,J,j@gmail.com,Ten,Ten,Erie,Erie,PA,hha,',
     ];
     const { people, problems } = readSendList(`${header}\n${rows.join('\n')}`);
-    expect(problems.map(problem => `${problem.ref}:${problem.reason}`)).toEqual(['r1:home_area', 'r2:home_area', 'r3:home_area', 'r4:state', 'r5:email',
+    expect(problems.map(problem => `${problem.ref}:${problem.reason}`)).toEqual(['r1:home_area', 'r4:state', 'r5:email',
       'r6:setting', 'r7:duplicate_ref', 'r9:duplicate_email']);
-    expect(people.map(row => row.ref)).toEqual(['r7', 'r10']);
+    expect(people.map(row => row.ref)).toEqual(['r2', 'r3', 'r7', 'r10']);
     // A free mail service's domain says nothing about the agency.
-    expect(people[1].domain).toBeNull();
+    expect(people.find(row => row.ref === 'r10').domain).toBeNull();
     expect(readSendList('ref,email\nx,y@z.com').problems[0].reason).toBe('missing_columns:agency,county,setting');
   });
 
@@ -152,7 +153,7 @@ describe('preparing people', () => {
         { key: 'pa-b1-03', ccn: null, matched_by: null, reason: 'no_match', agency: null },
         { key: 'pa-b1-04', ccn: '397004', matched_by: 'phone', reason: null, agency: agency('home_health') },
       ] })),
-      agencyBrief: vi.fn(async ({ ccn }) => ({ found: true, brief: { county: ccn === '397004' ? { fips: '42111', name: 'Somerset', state: 'PA' } : { fips: '42049', name: 'Erie County', state: 'PA' } } })),
+      agencyBrief: vi.fn(async ({ ccn }) => ({ found: true, brief: { county: ccn === '397004' ? { fips: '42021', name: 'Cambria', state: 'PA' } : { fips: '42049', name: 'Erie County', state: 'PA' } } })),
     };
     const requested = [];
     const fetchImpl = vi.fn(async url => { requested.push(url); return opens(url)
@@ -167,7 +168,7 @@ describe('preparing people', () => {
     const result = await preparePeople(people, { feed, reports, template: defaultTemplate, campaign: 'pa-cold-email', sendDates: ['2026-12-01', '2026-12-04', '2026-12-09'], wait: async () => {} });
     expect(feed.agencyMatch).toHaveBeenCalledOnce();
     expect(feed.agencyMatch.mock.calls[0][0].candidates[0]).toEqual({ key: 'pa-b1-01', name: 'Valley Home Health', state: 'PA', city: 'Erie', domain: 'valleyhh.com' });
-    // A report in Somerset County (the owner's home area) leaves the person out, whatever the list said.
+    // A report in Cambria County (the owner's home county) leaves the person out, whatever the list said.
     expect(result.problems).toEqual([{ row: null, ref: 'pa-b1-04', agency: 'Hill Home Health', reason: 'home_area' }]);
     const [valley, ridge, lake] = result.people;
     const expires = Math.floor(Date.UTC(2026, 10, 27, 15) / 1000) + sequenceLinkDays * 86_400;

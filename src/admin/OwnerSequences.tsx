@@ -4,7 +4,7 @@ import { growthMutation, growthPost, sequenceListSchema, sequencePrepareSchema, 
 
 /** Why a row of the send list was left out, in the owner's words. */
 const leftOut: Record<string, string> = {
-  home_area: 'In Cambria County or a county bordering it',
+  home_area: 'In Cambria County, your home county',
   do_not_contact: 'Said no before: on the do-not-contact list',
   suppressed: 'On the suppression list (an earlier bounce, complaint or opt-out)',
   in_sequence: 'Already in an approved sequence',

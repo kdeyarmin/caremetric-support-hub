@@ -33,6 +33,8 @@ const guardOrgs = [];
 const batchesGate = await readFile(new URL('../supabase/migrations/20261127220100_owner_sequence_batches_contract.sql', import.meta.url), 'utf8').catch(() => null);
 // Hunter's gate, once its migration is in this checkout (20261127230100_growth_hunter_contract.sql).
 // The open screening's gate, once its migration is in this checkout (20261127240100_owner_sequence_open_contract.sql).
+// Only Cambria County left out, once that migration is in this checkout (20261127250000_owner_sequence_home_county.sql).
+const homeCountyOnly = await readFile(new URL('../supabase/migrations/20261127250000_owner_sequence_home_county.sql', import.meta.url), 'utf8').then(() => true, () => false);
 const openGate = await readFile(new URL('../supabase/migrations/20261127240100_owner_sequence_open_contract.sql', import.meta.url), 'utf8').catch(() => null);
 const hunterGate = await readFile(new URL('../supabase/migrations/20261127230100_growth_hunter_contract.sql', import.meta.url), 'utf8').catch(() => null);
 const batchSettings = ['growth.owner_sequence_batches', 'growth.owner_sequence_batch_approve', 'growth.hunter', 'growth.hunter_daily'];
@@ -321,7 +323,9 @@ try {
     };
     const ready = await agency('sierra');
     const left = [await agency('tango', { control: 'Voluntary nonprofit, private' }), await agency('uniform', { county: '42021' }), await agency('victor', { mailbox: 'catch_all' }),
-      await agency('whiskey', { offices: 2 }), await agency('xray', { emailed: true }), await agency('yankee', { onDomain: false })];
+      await agency('whiskey', { offices: 2 }), await agency('xray', { emailed: true }), await agency('yankee', { onDomain: false }),
+      // Somerset County, next to Cambria: taken once only Cambria is left out (20261127250000_owner_sequence_home_county.sql).
+      await agency('zulu', { county: '42111' })];
     const plan = await store.batchPlan(200);
     assert.equal(plan.due, true); assert.equal(plan.owner, owner);
     const found = plan.candidates.filter(candidate => [ready, ...left].includes(candidate.id));
@@ -329,8 +333,9 @@ try {
     // two-office agency are taken, after the one-office ones; the home area, a catch-all, an agency already written to and an address on
     // another domain are still left out.
     if (openGate) {
-      assert.deepEqual(found.map(candidate => candidate.id), [ready, left[0], left[3]], 'every agency outside the home area, never emailed, with a confirmed address on its domain, smallest first');
-      assert.deepEqual(found.map(candidate => candidate.offices), [1, 1, 2]);
+      const neighbor = homeCountyOnly ? [left[6]] : [];
+      assert.deepEqual(found.map(candidate => candidate.id), [ready, left[0], ...neighbor, left[3]], 'every agency outside Cambria County, never emailed, with a confirmed address on its domain, smallest first');
+      assert.deepEqual(found.map(candidate => candidate.offices), [1, 1, ...neighbor.map(() => 1), 2]);
     } else {
       assert.deepEqual(found.map(candidate => candidate.id), [ready], 'only the proprietary, one-office agency outside the home area, never emailed, with a confirmed address on its domain');
     }
