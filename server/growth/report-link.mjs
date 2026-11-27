@@ -99,6 +99,19 @@ export function reportLinks({ key = null, now = () => Date.now(), fetchImpl = gl
   }
   return {
     configured,
+    /**
+     * An owner sequence's link (owner-sequence.mjs): one agency's report signed with the owner's own reference and lifetime, given only
+     * once Intel answers it with the PDF (the web view when Intel advertises it), or null. The check is signed without the reference, so
+     * Intel never records it as an open.
+     */
+    async checkedAgencyLink({ ccn, setting, ref, days }, { signal } = {}) {
+      if (!configured) return null;
+      if (!Number.isSafeInteger(days) || days < 1 || days > 180) throw new TypeError('A report link lives 1 to 180 days.');
+      const url = `${reportOrigin}/report/${reportToken({ ccn, setting, expires: Math.floor(now() / 1000) + days * 86_400, ref }, key)}`;
+      const probe = `${reportOrigin}/report/${reportToken({ ccn, setting, expires: Math.floor(now() / 1000) + 3_600 }, key)}`;
+      const mode = await opens(ccn, probe, signal);
+      return mode === 'web' ? `${url}/view` : mode === 'pdf' ? url : null;
+    },
     // Rendering only: drafting still allows exactly the report issued for that opportunity.
     accepts(url) {
       if (!configured || typeof url !== 'string') return false;

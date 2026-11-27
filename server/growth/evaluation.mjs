@@ -66,7 +66,7 @@ export async function evaluateGrowth(now = new Date()) {
     const report = { label: 'Free market report for the agency', url: 'https://www.caremetricintel.com/report/synthetic.case' };
     const reviewPage = 'https://www.caremetricintel.com/county-report';
     const inside = 'It shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county\'s residents use most and the highest-ranked physicians for outreach.';
-    const close = 'I run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nIt is a quick way to see who leads the county before you plan next month\'s visits.';
+    const close = 'I manage a home health and hospice company, and I built CareMetric Intel to see my own market this way.\n\nIt is a quick way to see who leads the county before you plan next month\'s visits.';
     const firstBody = `I put together a free market report for your agency from Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\n${inside}\n\n${close}`;
     const seen = [];
     const capture = output => ({ configured: true, run: async (_task, request) => { seen.push(JSON.parse(request.user)); return { outcome: 'completed', output }; } });

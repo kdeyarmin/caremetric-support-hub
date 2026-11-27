@@ -35,7 +35,7 @@ it('tells the writer which touch it is writing, the playbook angle for it and th
  expect(input.links.map(link=>link.url)).not.toContain('https://www.caremetricintel.com/');
  expect(request.system[0].text).toContain('CareMetric fact sheet');
  expect(request.system[0].text).toContain('sales playbook');
- expect(request.promptVersion).toBe('growth.21');
+ expect(request.promptVersion).toBe('growth.22');
  // No booking page is ever offered to the writer (no personal demos with anyone, owner decision 2026-11-09).
  expect(input.bookingUrl).toBeUndefined();
  expect(input.links.map(link=>link.url)).not.toContain(opportunity.policy.booking_url);
@@ -124,10 +124,10 @@ it('writes prospect outreach as the founder, with the founder\'s story in touch 
  expect(growthSystem).toMatch(/In touch 1, after the sentence about the organization, tell the founder's story/);
  expect(growthSystem).toContain('never write the name in the body');
  expect(growthSystem).toContain('never email campaigns as the point');
- expect(growthSystem).toContain('I run a home health and hospice agency and a healthcare consulting company.');
+ expect(growthSystem).toContain('I manage a home health and hospice company, and I run a healthcare consulting company.');
  const answer=body=>({subject:'Referral sources in your county',body,citations:['s'],needsHuman:false});
  const sources=[{id:'s'}];
- expect(draftProblem(answer('I run a home health and hospice agency. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBeNull();
+ expect(draftProblem(answer('I manage a home health and hospice company. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBeNull();
  expect(draftProblem(answer('Unlock seamless referral growth for your agency.'),{product:'caremetric-intel',sources,outreach:true})).toBe('unclear');
 });
 it('lets a draft state the numbers and percentages its own cited sources state, and ignores the prospect\'s own name in the word checks',()=>{
@@ -206,7 +206,7 @@ it('repairs a draft once, telling the writer what to fix, and reports why one wa
  const draft=await draftMessage({opportunity,work,task:{},model,onReject:code=>reasons.push(code)});
  expect(draft).toMatchObject({modelGenerated:true,body:'How do you track training hours today?'});
  const repair=model.run.mock.calls[1][1];
- expect(repair.promptVersion).toBe('growth.21-r');
+ expect(repair.promptVersion).toBe('growth.22-r');
  expect(repair.system[0].text).toBe(growthSystem);
  expect(JSON.parse(repair.user)).toMatchObject({previousDraft:{body:'A seamless way to train staff.'},fix:expect.stringMatching(/plain words/)});
  expect(reasons).toEqual([]);
@@ -242,7 +242,7 @@ it('writes outreach with the owner-approved memo as a last cached block, after t
  expect(request.system[1].text).toMatch(/^CareMetric CareBase capabilities/);
  expect(request.system[2].text).toContain('memo 3');
  expect(request.system[2].text).toContain('Too long');
- expect(request.promptVersion).toBe('growth.21-m3');
+ expect(request.promptVersion).toBe('growth.22-m3');
  expect(draft.memoVersion).toBe(3);
  // A customer's message and an unusable memo are written without it.
  model.run.mockClear();
@@ -252,7 +252,7 @@ it('writes outreach with the owner-approved memo as a last cached block, after t
  expect(customer?.memoVersion).toBeUndefined();
  model.run.mockClear();
  await draftMessage({opportunity,work,task:{},model,memo:{version:'3',memo:'x'}});
- expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.21');
+ expect(model.run.mock.calls[0][1].promptVersion).toBe('growth.22');
 });
 
 it('records the applied report length without changing angle, subject or ordinary length treatments', async () => {
@@ -278,7 +278,7 @@ const report={label:'Free market report for Valley Home Health',url:'https://www
 const trial=playbookFor('caremetric-intel').nextStep.url;
 const reviewPage='https://www.caremetricintel.com/county-report';
 const inside='It shows where your agency stands among the agencies located in Allegheny County, which agencies lead the county and the hospitals its residents use most. It also lists the highest-ranked physicians for home health outreach.';
-const signed='I run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.';
+const signed='I manage a home health and hospice company, and I built CareMetric Intel to see my own market this way.';
 // A first email asks for one thing, the report (the Nov 24 measurement): its opening ends on a plain sentence, never a question.
 const closing='It is a quick way to see who leads the county before you plan next month\'s visits.';
 const firstBody=`I put together a free market report for Valley Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\n${inside}\n\n${signed}\n\n${closing}`;
@@ -293,9 +293,9 @@ const firstEmail=async(o,{offered=report,output=firstDraft,critic=false,views=fa
 };
 const wordsIn=text=>text.replace(/https?:\/\/\S+/g,' ').split(/\s+/).filter(word=>/[A-Za-z0-9]/.test(word)).length;
 
-it('bumps the writer to growth.21 and the reader to critic.6, with a weakness code from a fixed list and a scale a good email can reach',()=>{
+it('bumps the writer to growth.22 and the reader to critic.6, with a weakness code from a fixed list and a scale a good email can reach',()=>{
  expect(criticMaxTokens).toBe(4000);
- expect(growthPromptVersion).toBe('growth.21');
+ expect(growthPromptVersion).toBe('growth.22');
  expect(criticPromptVersion).toBe('critic.6');
  expect(criticWeaknesses).toEqual(['none','generic_opening','about_sender','too_long','too_many_asks','unclear_ask','wrong_problem','no_reason_now','reads_as_template']);
  expect(criticSchema.required).toEqual(['specific','relevant','clearAsk','wouldReply','weakness','weakestSentence']);
@@ -470,7 +470,7 @@ it('accepts the email review\'s example first email, and refuses it with the tri
  const sources=[{id:'e1',claim:'Valley Home Health is a Medicare-certified home health agency in Erie, Pennsylvania (CMS Provider of Services file).',source_url:'https://data.cms.gov/',observed_at:now},
   {id:'county',claim:'Erie County has 48 home health agencies, by CMS\'s count.',source_url:'https://data.cms.gov/',observed_at:now}];
  const example={subject:'Valley Home Health\'s Erie County market report',citations:['e1','county'],needsHuman:false,
-  body:`I put together a free market report for Valley Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\nCMS counts 48 home health agencies in Erie County. The report shows where yours stands among them, which agencies lead the county, the hospitals Erie County residents use most and the highest-ranked physicians for home health outreach. It ends with up to three moves to consider.\n\nI run a home health and hospice agency myself, and I built CareMetric Intel to see my own market this way.\n\nIt is yours to keep and share with your team.`};
+  body:`I put together a free market report for Valley Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${report.url}\n\nCMS counts 48 home health agencies in Erie County. The report shows where yours stands among them, which agencies lead the county, the hospitals Erie County residents use most and the highest-ranked physicians for home health outreach. It ends with up to three moves to consider.\n\nI manage a home health and hospice company, and I built CareMetric Intel to see my own market this way.\n\nIt is yours to keep and share with your team.`};
  const check=(body,over={})=>draftProblem({...example,body},{product:'caremetric-intel',sources,outreach:true,organization:'Valley Home Health',extraLinks:[report.url],form:'short',formLinks:[report.url],...over});
  expect(check(example.body)).toBeNull();
  expect(example.subject.length).toBeLessThan(60);
@@ -844,4 +844,18 @@ it('never withholds the free county report from a nursing home: it serves every 
  const lead=await firstEmail({...home,touches:1,memory:{lead:{kind:'county_report',place:'Erie County, PA'}}},{offered:null,output:general});
  expect(lead.input.links.map(link=>link.url)).toContain(county);
  expect(lead.input.touchPlan).toMatch(/If they asked for a county report, it was already emailed to them: never send them to a page to ask for it again or to enter anything more to get a report\./);
+});
+
+// The owner, 2026-11-27: the founder manages a home health and hospice company and owns no agency. A draft that says otherwise is
+// refused, and an email written before the correction is withdrawn when its turn to send comes.
+it('never has the founder own or run an agency of their own',()=>{
+ const sources=[{id:'e1',claim:'Valley Home Health serves Erie County.'}];
+ const answer=body=>({subject:'Erie County referral sources',body,citations:['e1'],needsHuman:false});
+ expect(draftProblem(answer('I run a home health and hospice agency. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBe('founder_owns');
+ expect(draftProblem(answer('I built CareMetric Intel for my own agency. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBe('founder_owns');
+ expect(draftProblem(answer('I manage a home health and hospice company. Which referral sources does your team visit each week?'),{product:'caremetric-intel',sources,outreach:true})).toBeNull();
+ expect(problemHints.founder_owns).toContain('manages a home health and hospice company');
+ const waiting={product:'caremetric-intel',subject:'Your market report',body:'I run a home health and hospice agency and a healthcare consulting company.'};
+ expect(outdatedWords({...waiting,purpose:'marketing'})).toBe('founder_owns');
+ expect(outdatedWords({...waiting,body:'I manage a home health and hospice company, and I run a healthcare consulting company.',purpose:'marketing'})).toBeNull();
 });

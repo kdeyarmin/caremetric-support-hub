@@ -38,6 +38,7 @@ export const testPhoneRegistry = Object.freeze({
   'agents-lifecycle-integration': { owner: '+12025550612' },
   'agents-marketing-integration': { owner: '+12025550626' },
   'agents-offers-integration': { owner: '+12025550624' },
+  'agents-owner-sequences-integration': { owner: '+12025550985' },
   'agents-runtime-integration': { owner: '+12025550613' },
   'agents-scorecard-integration': { owner: '+12025550628' },
   'ai-automation-integration': { owner: '+12025550631', customer: '+12025550632' },

@@ -28,7 +28,7 @@ const equal=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));retu
 // A failure that must not opt the contact out (a transient or undetermined bounce, a reject) needs the five-argument delivery event
 // (20261113280000_growth_soft_bounce_reporting.sql). Until its contract declares this feature such an event is not recorded, as before.
 export const growthSoftBounceFeature='platform.agents.growth-soft-bounce.v1';
-export function growthService({store,research,contacts=null,roster=null,people=null,deepResearch=null,learning=null,briefs=null,views=null,reports=null,priority=null,liveEvaluation=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
+export function growthService({store,research,contacts=null,roster=null,people=null,deepResearch=null,learning=null,briefs=null,views=null,reports=null,priority=null,liveEvaluation=null,sequences:sequenceFactory=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
   // The sending switch and the footer's postal address are Hub settings; either may be a function, read on each use.
   const sending=()=>live(enabled)===true; const postal=()=>String(live(postalAddress)??'');
   // How far the people step goes for an address (Settings → Customer growth → Finding people's addresses), and whether the businesses'
@@ -39,8 +39,18 @@ export function growthService({store,research,contacts=null,roster=null,people=n
   const safe=async work=>{try{return await work();}catch(e){if(e instanceof HttpError)throw e; if(['22023','22007','23514','23503','23505'].includes(e?.code))throw new HttpError(400,'Check the growth record and its references.'); if(e?.code==='40001')throw new HttpError(409,'This record changed. Refresh and review it again.'); if(e?.code==='28000')throw new HttpError(401,'Sign in again.'); if(e?.code==='42501')throw new HttpError(403,'Not permitted.'); throw e;}};
   const parse=(schema,input)=>{const parsed=schema.safeParse(input); if(!parsed.success)throw new HttpError(400,'Invalid growth request.');return parsed.data;};
   const unsubscribeToken=workId=>createHmac('sha256',signingKey).update(`growth:${workId}`).digest('hex');
+  // The owner's own email sequences (owner-sequence.mjs), given growth's signing for their unsubscribe links. Without the signing key their
+  // links cannot be made, so preparing and sending refuse until it is set.
+  const sequences=typeof sequenceFactory==='function'?sequenceFactory(signingKey.length>=32?{unsubscribeToken,hash}:{unsubscribeToken:null,hash:null}):sequenceFactory;
+  // An owner sequence's own words for a refusal it raised (a person who may not be emailed, a date, a stale version), else growth's.
+  const sequenceSafe=async work=>{try{return await work();}catch(e){
+    if(e instanceof HttpError)throw e;
+    if(['template','campaign','dates','weekday','order','steps','signing','too_many','too_large','unclosed_quote'].includes(e?.code))throw new HttpError(400,e.message);
+    if(['22023','P0002'].includes(e?.code)&&typeof e.message==='string'&&e.message.length<=300)throw new HttpError(e.code==='P0002'?404:400,e.message);
+    if(e?.code==='40001')throw new HttpError(409,typeof e.message==='string'&&e.message.length<=300?e.message:'This sequence changed. Refresh it.');
+    return safe(()=>{throw e;});}};
   return {
-    ready, store, research, contacts, roster, people, deepResearch, learning, briefs, views, reports, priority, liveEvaluation, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
+    ready, store, research, contacts, roster, people, deepResearch, learning, briefs, views, reports, priority, liveEvaluation, sequences, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
     // Configuration only: no provider request and no credential value leaves this service.
     readiness() {
       let deliveryFeedback = false;
@@ -54,7 +64,7 @@ export function growthService({store,research,contacts=null,roster=null,people=n
     configured:()=>sending()&&signingKey.length>=32&&postal().trim().length>0&&/^https:\/\//.test(publicOrigin??''),
     async admin(token,input) {
       ready(); const {operation,data}=parse(z.object({operation:z.string(),data:z.record(z.string(),z.unknown()).default({})}).strict(),input);
-      if(operation==='workspace') {const {offset}=parse(z.object({offset:z.number().int().min(0).default(0)}).strict(),data);return safe(async()=>({...await store.workspace(token,offset),services:{sending:sending(),signing:signingKey.length>=32,postalAddress:Boolean(postal().trim()),research:Boolean(research?.configured),roster:features?.has('platform.agents.growth-roster.v1')===true,people:features?.has('platform.agents.growth-people.v1')===true,learning:features?.has('platform.agents.growth-learning.v1')===true,addressCheck:features?.has('platform.agents.growth-address-check.v1')===true,briefs:features?.has('platform.agents.growth-brief.v1')===true}}));}
+      if(operation==='workspace') {const {offset}=parse(z.object({offset:z.number().int().min(0).default(0)}).strict(),data);return safe(async()=>({...await store.workspace(token,offset),services:{sending:sending(),signing:signingKey.length>=32,postalAddress:Boolean(postal().trim()),research:Boolean(research?.configured),roster:features?.has('platform.agents.growth-roster.v1')===true,people:features?.has('platform.agents.growth-people.v1')===true,learning:features?.has('platform.agents.growth-learning.v1')===true,addressCheck:features?.has('platform.agents.growth-address-check.v1')===true,briefs:features?.has('platform.agents.growth-brief.v1')===true,sequences:sequences?.declared?.()===true}}));}
       if(operation==='roster') {
         // The Medicare roster's progress (Settings → Customer growth → Find prospects from the Medicare roster).
         if(!features?.has('platform.agents.growth-roster.v1'))throw new HttpError(503,'Apply the roster database migration first.');
@@ -111,6 +121,20 @@ export function growthService({store,research,contacts=null,roster=null,people=n
         for(const row of rows) await safe(()=>store.manage(token,'evidence',{opportunityId:parsed.id,sourceUrl:row.url,claim:row.claim,confidence:'low',observedAt:new Date().toISOString()}));
         return {count:rows.length};
       }
+      if(['sequences','sequence','sequencePrepare','sequenceApprove','sequenceStop','sequenceDiscard'].includes(operation)) {
+        // The owner's own email sequences (docs/OWNER_SEQUENCES.md).
+        if(!sequences?.declared?.())throw new HttpError(503,'Apply the owner sequences database migration first.');
+        if(operation==='sequences'){parse(z.object({}).strict(),data);return sequenceSafe(async()=>({sequences:await sequences.list(token),templates:sequences.templates,services:sequences.readiness()}));}
+        if(operation==='sequence')return sequenceSafe(()=>sequences.detail(token,parse(z.object({id:uuid}).strict(),data).id));
+        if(operation==='sequencePrepare') {
+          const parsed=parse(z.object({name:text(120).min(1),csv:text(30000).min(1),template:text(60).optional(),campaign:z.string().regex(/^[a-z0-9-]{1,60}$/),
+            sendDates:z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).min(1).max(5),dailyLimit:z.number().int().min(1).max(30).default(8)}).strict(),data);
+          return sequenceSafe(()=>sequences.prepare(token,parsed));
+        }
+        if(operation==='sequenceApprove'){const parsed=parse(z.object({id:uuid,version:z.number().int().positive()}).strict(),data);return sequenceSafe(()=>sequences.approve(token,parsed.id,parsed.version));}
+        if(operation==='sequenceStop'){const parsed=parse(z.object({id:uuid,recipient:uuid.optional()}).strict(),data);return sequenceSafe(()=>sequences.stop(token,parsed.id,parsed.recipient??null));}
+        return sequenceSafe(()=>sequences.discard(token,parse(z.object({id:uuid}).strict(),data).id));
+      }
       if(!growthSchemas[operation])throw new HttpError(400,'Unsupported growth action.');
       return safe(()=>store.manage(token,operation,parse(growthSchemas[operation],data)));
     },
@@ -155,6 +179,13 @@ export function growthService({store,research,contacts=null,roster=null,people=n
       for(const row of rows) {
         // One unusable provider event must not prevent the rest of the signed batch (especially opt-outs and complaints) from being
         // recorded. A finite number can still be outside Date's range, and an empty event id cannot be used for deduplication.
+        // An owner sequence's email carries its own reference (owner-sequence.mjs), never a growth message's.
+        if(row&&typeof row==='object'&&!Array.isArray(row)&&z.uuid().safeParse(row.owner_sequence_message_id).success&&sequences?.declared?.()
+          &&typeof row.event==='string'&&Object.hasOwn(kinds,row.event)&&typeof row.sg_event_id==='string'&&row.sg_event_id.trim()&&row.sg_event_id.length<=200
+          &&Number.isFinite(row.timestamp)&&Number.isFinite(new Date(row.timestamp*1000).getTime())) {
+          await sequences.delivery(row.sg_event_id,row.owner_sequence_message_id,kinds[row.event],new Date(row.timestamp*1000).toISOString(),!(row.event==='bounce'&&row.type==='blocked'));
+          accepted++; continue;
+        }
         if(!row||typeof row!=='object'||Array.isArray(row)||typeof row.event!=='string'||!Object.hasOwn(kinds,row.event)
           ||!z.uuid().safeParse(row.growth_message_id).success||typeof row.sg_event_id!=='string'||!row.sg_event_id.trim()||row.sg_event_id.length>200
           ||!Number.isFinite(row.timestamp))continue;
@@ -181,7 +212,7 @@ export function growthService({store,research,contacts=null,roster=null,people=n
     },
     async unsubscribe(token,confirm) {
       ready(); if(!/^[a-f0-9]{64}$/.test(token))throw new HttpError(400,'Invalid unsubscribe link.');
-      if(confirm)await store.unsubscribe(hash(token));
+      if(confirm){const done=await store.unsubscribe(hash(token)); if(done!==true&&sequences?.declared?.())await sequences.unsubscribe(hash(token));}
       return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>CareMetric preferences</title><h1>${confirm?'Your preference is recorded':'CareMetric email preferences'}</h1>${confirm?'<p>You will receive no more messages from these growth campaigns.</p>':'<form method="post"><button>Unsubscribe from growth messages</button></form>'}</html>`;
     },
   };

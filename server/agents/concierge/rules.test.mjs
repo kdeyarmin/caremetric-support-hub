@@ -108,7 +108,7 @@ describe('message categories by word matching', () => {
 });
 
 describe('a reply with the original email quoted under it', () => {
-  const outreach = 'I run a home health and hospice agency. You can try CareMetric Intel free for 30 days, no credit card needed.\n\nOpt out of these emails: https://hub.example.org/api/growth/preferences/abc';
+  const outreach = 'I manage a home health and hospice company. You can try CareMetric Intel free for 30 days, no credit card needed.\n\nOpt out of these emails: https://hub.example.org/api/growth/preferences/abc';
   const quoted = outreach.split('\n').map(line => `> ${line}`).join('\n');
   const replies = [
     `Yes, tell me more about the free trial.\n\nOn Tue, Nov 10, 2026 at 3:14 PM Kevin Deyarmin <growth@example.org> wrote:\n${quoted}`,

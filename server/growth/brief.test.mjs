@@ -197,7 +197,7 @@ describe('a first email written from the brief', () => {
     const result = await draftMessage({ opportunity: o, work, task: { id: 't' }, model, brief, quality: true });
     expect(result).toBeTruthy();
     const [, request] = model.run.mock.calls[0];
-    expect(request).toMatchObject({ tier: 'quality', effort: 'high', maxTokens: 6000, timeoutMs: 120_000, promptVersion: 'growth.21' });
+    expect(request).toMatchObject({ tier: 'quality', effort: 'high', maxTokens: 6000, timeoutMs: 120_000, promptVersion: 'growth.22' });
     const input = JSON.parse(request.user);
     expect(input.brief).toMatchObject({ hook: brief.hook.sentence, hookSourceId: 'e2', angle: 'referral_sources' });
     expect(input.sources.find(source => source.id === 'county').claim).toBe(brief.countyFact.claim);
@@ -255,7 +255,7 @@ describe('a first email written from the brief', () => {
     const result = await draftMessage({ opportunity: o, work, task: { id: 't' }, model: { configured: true, run }, brief, critic: true });
     expect(result.subject).toBe(better.subject);
     expect(result.arms).toMatchObject({ critic: '4', rewritten: '1' });
-    const rewrite = run.mock.calls.find(([, request]) => request.promptVersion === 'growth.21-c')[1];
+    const rewrite = run.mock.calls.find(([, request]) => request.promptVersion === 'growth.22-c')[1];
     expect(JSON.parse(rewrite.user).fix).toMatch(/scored this email 2 of 5.*certify the most home health patients in Butler County/);
     // What the reader said on both reads travels with the draft, to be recorded beside it.
     expect(result.review).toEqual({ promptVersion: 'critic.6', outcome: 'kept',

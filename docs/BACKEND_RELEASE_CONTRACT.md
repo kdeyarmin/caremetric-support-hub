@@ -323,6 +323,16 @@ three-argument `private.creative_data_counties` is executable by `hub_app_server
 out for 56 days after it is pictured and reports the setting it was pictured with last. Each test fails closed. The Hub server picks
 counties from Intel's list of the roster's states only when the feature is declared, and otherwise from the roster's own counties as before.
 
+`20261127150100_owner_sequences_contract.sql` declares `platform.agents.owner-sequences.v1` only after the settings, customer growth, growth
+autonomy and support truth features are declared, the `growth.owner_sequences` setting exists, the sequence tables and the do-not-contact list
+have row level security and are closed to every role, the claim, finish, review, delivery, unsubscribe and report-open functions are
+executable by `hub_app_server` alone and require the Hub server connection, the owner's commands need an owner session (saving, approving,
+stopping and discarding a current one), the helpers cannot be run directly, the claim reads the setting, the weekday, the 25-a-day mailbox
+limit, the do-not-contact list and the replies, a "no" forbids the address and the agency, the Marketing Manager's cold email reads the
+do-not-contact list, the Support Concierge's answer and acknowledgment gates leave a sequence's person to the owner, and the Marketing
+Manager's `growth.sequences` task is scheduled. Each test fails closed. The Hub server registers the task and the Growth panel only when the
+feature is declared ([Your own email sequences](OWNER_SEQUENCES.md)).
+
 `20261116120100_growth_report_views_contract.sql` declares `platform.agents.growth-report-views.v1` only after the settings, growth autonomy
 and roster features are declared, the `growth.report_views` setting exists, an activity event may be `report_viewed`, the read cursor has row
 level security and is closed to every role, `private.growth_report_views_cursor` and `private.growth_report_views_record` are executable by

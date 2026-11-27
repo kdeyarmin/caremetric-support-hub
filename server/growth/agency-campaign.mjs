@@ -39,7 +39,7 @@ const copy = {
   },
 };
 
-export const agencyFounderQuote = 'I run a home health and hospice agency. I built CareMetric Intel to research my competitors and find potential referral sources for my own team.';
+export const agencyFounderQuote = 'I manage a home health and hospice company. I built CareMetric Intel to research my competitors and find potential referral sources for my own team.';
 
 /** The account brief's lead angles (playbook.mjs). Email 1's fixed blocks follow the one the draft used. Any other value keeps the general blocks. */
 export const emailAngles = Object.freeze(['referral_sources', 'territory', 'competitors', 'visit_prep', 'hospital_outcomes', 'slipping_sources']);

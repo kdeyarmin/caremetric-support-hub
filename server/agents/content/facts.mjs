@@ -463,7 +463,8 @@ export const allowedHost = host => {
  * CareMetric's founder, and why Intel exists, in the owner's own words (owner direction 2026-11-12: make cold outreach warmer with the
  * owner's name and story). Prospect outreach is written in the founder's first person and signed `signOff` (growth/worker.mjs). The story
  * carries no result, no agency or company name and no number, and nothing may be added to it. The owner confirmed the wording on
- * 2026-11-12: the founder built Intel and currently runs the agency and the consulting company.
+ * 2026-11-12: the founder built Intel and runs the consulting company. Corrected by the owner on 2026-11-27: the founder manages a home
+ * health and hospice company and owns no agency, so no text may say the founder owns or runs one of their own.
  */
 export const founder = deepFreeze({
   name: 'Dr. Kevin C. Deyarmin',
@@ -472,12 +473,12 @@ export const founder = deepFreeze({
   // The name a founder-signed email arrives from, when Settings → Email → Growth email display name is empty (owner decision 2026-11-17).
   fromName: 'Dr. Kevin Deyarmin, CareMetric',
   story: [
-    'I run a home health and hospice agency and a healthcare consulting company.',
+    'I manage a home health and hospice company, and I run a healthcare consulting company.',
     'I needed a way to do business intelligence research on my competitors and to find every potential referral source in my market.',
     'So I built CareMetric Intel. It was custom built by someone who uses it every day, and I still do.',
   ],
-  storyAbout: 'CareMetric Intel was custom built by someone who uses it every day: its founder, who runs a home health and hospice agency and a healthcare consulting company, and needed a way to research competitors and find every potential referral source in the market.',
-  rules: 'Tell the story only as written: the founder\'s own agency, competitor research and finding referral sources, built for that need and used every day. Add nothing to it: no results from the founder\'s agency (referrals, admissions, census, revenue or growth), no agency or company name, no number, no years and no superlative. It is about Intel, so tell it only in text about Intel.',
+  storyAbout: 'CareMetric Intel was custom built by someone who uses it every day: its founder, who manages a home health and hospice company and runs a healthcare consulting company, and needed a way to research competitors and find every potential referral source in the market.',
+  rules: 'Tell the story only as written: the home health and hospice company the founder manages, competitor research and finding referral sources, built for that need and used every day. Add nothing to it: never say the founder owns an agency (the founder manages one), no results from that company (referrals, admissions, census, revenue or growth), no agency or company name, no number, no years and no superlative. It is about Intel, so tell it only in text about Intel.',
 });
 
 /** The fixed line every article about a regulation ends with. */

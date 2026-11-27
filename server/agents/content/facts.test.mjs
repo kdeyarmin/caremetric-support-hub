@@ -7,6 +7,7 @@ import {
 } from './facts.mjs';
 import { allowedNumbers, namesCompetitor, textProblems } from './validate.mjs';
 import { parseAppCatalog } from '../../app-catalog-sync.mjs';
+import { foundersAgency } from '../../growth/draft.mjs';
 
 const doc = readFileSync(new URL('../../../docs/GTM_FACTS.md', import.meta.url), 'utf8');
 
@@ -193,7 +194,9 @@ describe('the fact sheet', () => {
     const text = factSheetText();
     expect(text).toContain(`CareMetric's founder: ${facts.founder.name}`);
     for (const line of facts.founder.story) expect(text).toContain(`- ${line}`);
-    expect(facts.founder.story.join(' ')).toMatch(/home health and hospice agency.*competitors.*referral source.*every day/);
+    expect(facts.founder.story.join(' ')).toMatch(/manage a home health and hospice company.*competitors.*referral source.*every day/);
+    // The founder manages the company and owns no agency (owner correction 2026-11-27): no line says otherwise.
+    expect([...facts.founder.story, facts.founder.storyAbout].join(' ')).not.toMatch(foundersAgency);
     const story = [...facts.founder.story, facts.founder.storyAbout, facts.founder.rules].join('\n');
     expect(story).not.toMatch(/\d/);
     for (const line of [...facts.founder.story, facts.founder.storyAbout]) expect(textProblems(line, { product: 'intel' }), line).toEqual([]);

@@ -125,7 +125,7 @@ describe('agency report links', () => {
     const opportunity = { id: 'o1', product: 'caremetric-intel', name: 'Riverbend Home Health', version: 1, contact_id: 'c', touches: 0,
       policy: { approved_claim: 'CareMetric Intel helps home health agencies focus their marketing.' }, evidence: [roster()], events: [] };
     const work = { kind: 'outreach', action: 'First touch', success: 'Reply' };
-    const body = `I put together a free market report for Riverbend Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nI run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nIt is a quick way to see who leads the county before you plan next month's visits.`;
+    const body = `I put together a free market report for Riverbend Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nI manage a home health and hospice company, and I built CareMetric Intel to see my own market this way.\n\nIt is a quick way to see who leads the county before you plan next month's visits.`;
     const model = { configured: true, run: vi.fn(async () => ({ outcome: 'completed', output: { subject: 'Your county market', body, citations: ['roster-1'], needsHuman: false } })) };
     const draft = await draftMessage({ opportunity, work, task: {}, model, report: link });
     expect(draft).toMatchObject({ modelGenerated: true });
@@ -151,7 +151,7 @@ describe('the report-led first email (owner direction 2026-11-15)', () => {
 
   it('has the writer open with the agency\'s own market report and adds what the software does below it (owner direction 2026-11-17), with the trial in the second email (the Nov 24 measurement)', async () => {
     const link = reportLinks({ key }).linkFor(opportunity);
-    const body = `I put together a free market report for Riverbend Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nIt shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county's residents use most and the highest-ranked physicians for outreach.\n\nI run a home health and hospice agency, and I built CareMetric Intel to see my own market this way.\n\nIt is a quick way to see who leads the county before you plan next month's visits.`;
+    const body = `I put together a free market report for Riverbend Home Health from Medicare data. It opens as a PDF, with nothing to sign up for:\n${link.url}\n\nIt shows where your agency stands among the agencies located in its county and which agencies lead the county. It also shows the hospitals the county's residents use most and the highest-ranked physicians for outreach.\n\nI manage a home health and hospice company, and I built CareMetric Intel to see my own market this way.\n\nIt is a quick way to see who leads the county before you plan next month's visits.`;
     const model = reply(body);
     const draft = await draftMessage({ opportunity, work, task: {}, model, report: link });
     expect(draft).toMatchObject({ modelGenerated: true });
