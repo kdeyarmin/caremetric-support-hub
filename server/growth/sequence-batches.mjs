@@ -3,13 +3,14 @@
  * and keep hitting accept all day"). Batch 2 was built by hand; this is the same work, done by the Marketing Manager once a week while
  * Settings → Customer growth → "Build your next sequence batch" is on (docs/OWNER_SEQUENCES.md, "The AI team builds the next batch").
  *
- * 1. The database names the agencies ready for a batch (20261127220000_owner_sequence_batches.sql, private.owner_sequence_batch_plan):
- *    Pennsylvania roster agencies, every entry proprietary, one office, outside the owner's home area, on a domain of their own, never
- *    written to by the Marketing Manager, not stopped, in no sequence, with a person whose work address the Marketing Manager's people
- *    step confirmed (growth.people: CMS owners, the NPI registry, the agency's own pages, then the mail server or the verification service).
- * 2. Here, for each: the agency's CMS owners (Intel's agency_facts) must all be individuals, so no chain, health system, holding company or
- *    private-equity owner; its website is not a page builder's or another business's host; and its person must decide (an owner, a
- *    corporate officer, the president or CEO, the administrator or the executive director).
+ * 1. The database names the agencies ready for a batch (private.owner_sequence_batch_plan; 20261127240000_owner_sequence_open.sql):
+ *    every Pennsylvania roster agency, whoever owns it and however many offices it has (owner, 2026-11-27: "I don't think any agencies
+ *    should be off limits. Maybe focus on smaller organizations"), smallest first (fewer offices, then fewer Medicare patients), outside
+ *    the owner's home area, on a domain of its own, never written to by the Marketing Manager, not stopped, in no sequence, with a person
+ *    whose work address the Marketing Manager's people step or Hunter confirmed.
+ * 2. Here, for each: its website is not a page builder's or another business's host (it has no mailbox of its own there), and its person
+ *    must decide (an owner, a corporate officer, the president or CEO, the administrator, the executive director or a managing employee
+ *    CMS lists). An owner CMS lists (Intel's agency_facts) is preferred when the people step named one.
  * 3. The send list is queued as a request in the owner's name with the next week's dates (a Tuesday at least four days out and a week
  *    after the previous batch's first email, then that Friday and the next Wednesday, as batches 1 and 2). The request is prepared exactly
  *    as the Growth page prepares a send list, with every check again, and approved only while "Approve the batches the AI team builds" is on.
@@ -49,14 +50,6 @@ export function nextBatchDates(today, lastFirstDate = null) {
   if (lastFirstDate && Number.isFinite(utc(lastFirstDate))) earliest = Math.max(earliest, utc(lastFirstDate) + 7 * day);
   const tuesday = earliest + ((2 - new Date(earliest).getUTCDay() + 7) % 7) * day;
   return [iso(tuesday), iso(tuesday + 3 * day), iso(tuesday + 8 * day)];
-}
-
-/** Why an agency's CMS owners keep it out of a batch, or null: unknown owners, or any owner that is an organization. */
-export function ownershipProblem(facts) {
-  const owners = Array.isArray(facts?.owners) ? facts.owners : [];
-  if (!owners.length) return 'owners_unknown';
-  if (owners.some(owner => owner?.kind !== 'individual')) return 'owned_by_organization';
-  return null;
 }
 
 const same = (a, b) => { const x = nameParts(a); const y = nameParts(b); return Boolean(x && y && x.first === y.first && x.last === y.last); };
@@ -108,12 +101,9 @@ export function buildSendList(candidates, { size = defaultBatchSize, number, fac
     const target = (Array.isArray(candidate?.targets) ? candidate.targets : [])[0];
     if (!target?.ccn) { skip('no_roster_entry'); continue; }
     if (!candidate.domain || hostedSite(candidate.domain)) { skip('no_website_of_its_own'); continue; }
-    const owners = facts.get(target.ccn);
-    const ownership = ownershipProblem(owners);
-    if (ownership) { skip(ownership); continue; }
     const county = counties.get(target.countyFips);
     if (!county) { skip('county_unknown'); continue; }
-    const person = decider(candidate.people, owners.owners);
+    const person = decider(candidate.people, facts.get(target.ccn)?.owners ?? []);
     if (!person) { skip('no_decider'); continue; }
     const firstName = firstNameOf(person.name);
     people.push({ ref: `pa-b${number}-${String(people.length + 1).padStart(2, '0')}`, firstName: firstName ?? '', email: person.email,
@@ -125,8 +115,8 @@ export function buildSendList(candidates, { size = defaultBatchSize, number, fac
   return { people, skipped, csv: `${[header, ...rows].map(row => row.map(csvCell).join(',')).join('\n')}\n` };
 }
 
-const skipWords = { no_roster_entry: 'no roster entry', no_website_of_its_own: 'no website of its own', owners_unknown: 'CMS lists no owners',
-  owned_by_organization: 'owned by a company, not a person', county_unknown: 'county unknown', no_decider: 'no owner or administrator with a confirmed address' };
+const skipWords = { no_roster_entry: 'no roster entry', no_website_of_its_own: 'no website of its own', county_unknown: 'county unknown',
+  no_decider: 'no owner or administrator with a confirmed address' };
 
 /**
  * The weekly builder. `build` returns null when the feature is not declared or the setting is off, else what it did: { skipped } or
@@ -141,15 +131,21 @@ export function sequenceBatches({ store, feed = null, features = null, enabled =
     const wanted = batchSize();
     const plan = await store.batchPlan(Math.min(200, wanted * 5));
     if (plan?.due !== true) return { skipped: plan?.why ?? 'not_due' };
-    if (!feed?.configured || typeof feed.agencyFacts !== 'function' || typeof feed.counties !== 'function') return { skipped: 'feed' };
+    if (!feed?.configured || typeof feed.counties !== 'function') return { skipped: 'feed' };
     const candidates = Array.isArray(plan.candidates) ? plan.candidates : [];
     const today = easternToday(now());
     if (candidates.length < Math.min(minimumBatch, wanted)) return { skipped: 'too_few_ready', ready: candidates.length };
+    // The agencies' CMS owners, only so an owner CMS lists is preferred among the people with a confirmed address: never a reason to
+    // leave an agency out, and a feed that fails leaves the choice to the people's titles.
     const facts = new Map();
     const ccns = [...new Set(candidates.map(candidate => candidate?.targets?.[0]?.ccn).filter(Boolean))];
-    for (let at = 0; at < ccns.length; at += 25) {
-      signal?.throwIfAborted();
-      for (const agency of (await feed.agencyFacts({ ccns: ccns.slice(at, at + 25), signal })).agencies ?? []) facts.set(agency.ccn, agency);
+    if (typeof feed.agencyFacts === 'function') {
+      try {
+        for (let at = 0; at < ccns.length; at += 25) {
+          signal?.throwIfAborted();
+          for (const agency of (await feed.agencyFacts({ ccns: ccns.slice(at, at + 25), signal })).agencies ?? []) facts.set(agency.ccn, agency);
+        }
+      } catch (error) { if (signal?.aborted) throw error; }
     }
     const counties = new Map(((await feed.counties({ states: ['PA'], signal })).counties ?? []).map(county => [county.county_fips, county.county_name]));
     const number = Number(plan.lastNumber ?? 0) + 1;
@@ -163,7 +159,7 @@ export function sequenceBatches({ store, feed = null, features = null, enabled =
       const lines = list.people.map(p => `- ${p.ref}: ${p.agency} (${p.county} County, ${p.setting === 'hospice' ? 'hospice' : 'home health'}): ${p.name}, ${String(p.title ?? '').toLowerCase() || 'owner'}`);
       const left = list.skipped.length ? `\n\nLeft out on the way: ${list.skipped.slice(0, 12).map(s => `${s.agency} (${skipWords[s.reason] ?? s.reason})`).join('; ')}.` : '';
       await notifier.send({ severity: 'info', attention: queued.approve ? 'update' : 'now', subject: `The AI team picked ${name} (${list.people.length} agencies)`,
-        body: `${name}: ${list.people.length} independent agencies, each owned by people (CMS), with one website and one office, never written to before, and an owner or administrator whose address was confirmed. Emails go out ${sendDates.join(', ')}, from 9:00 Eastern, your words exactly.\n\n${lines.join('\n')}${left}\n\nThe Marketing Manager prepares it within five minutes with every check again${queued.approve ? ' and approves it (Settings → Customer growth → Approve the batches the AI team builds)' : '. It waits for you on Growth → Your own sequences'}. Stop anyone there.`,
+        body: `${name}: ${list.people.length} agencies, smaller ones first, never written to before, each with an owner or administrator whose address was confirmed. Emails go out ${sendDates.join(', ')}, from 9:00 Eastern, your words exactly.\n\n${lines.join('\n')}${left}\n\nThe Marketing Manager prepares it within five minutes with every check again${queued.approve ? ' and approves it (Settings → Customer growth → Approve the batches the AI team builds)' : '. It waits for you on Growth → Your own sequences'}. Stop anyone there.`,
         dedupeKey: `owner-sequence:batch:${queued.id}`, agentKey: task?.agentKey ?? null, taskId: task?.id ?? null });
     }
     return { queued: queued.id, people: list.people.length, approve: queued.approve === true };

@@ -73,10 +73,10 @@ each batch itself (`server/growth/sequence-batches.mjs`, `20261127220000_owner_s
 Once a week, on its `growth.sequences` run, it:
 
 1. Asks the database for the agencies ready for a batch (`private.owner_sequence_batch_plan`). These are Pennsylvania roster agencies the
-   roster graduated. Each one must pass every test below:
-   - every roster entry is proprietary (CMS's control type);
-   - it has one office (one street address);
-   - it is outside Cambria County and its seven neighbors;
+   roster graduated, whoever owns them and however many offices they have: the owner decided on November 27, 2026 that no agency is off
+   limits, smaller ones first (`20261127240000_owner_sequence_open.sql`; the first batches took only proprietary, one-office agencies, as
+   batch 1's handoff asked). Each one must pass every test below:
+   - it is outside Cambria County and its seven neighbors (the owner's competitor rule);
    - it has a domain of its own;
    - the Marketing Manager has never written to it;
    - it is not stopped (opted out, do-not-contact, or the guard above);
@@ -85,11 +85,9 @@ Once a week, on its `growth.sequences` run, it:
      registry and the agency's own pages, then checks the address with the mail server or the verification service. Never a guessed
      address.
 
-   The agencies with the most Medicare patients come first.
+   Smaller organizations come first: fewer offices, then fewer Medicare patients.
 2. Leaves out an agency in any of these cases:
-   - any of its CMS owners (Intel's `agency_facts`) is an organization rather than a person, which rules out chains, health systems,
-     holding companies and private equity;
-   - its website is on a page builder's host;
+   - its website is on a page builder's host (it has no mailbox of its own there);
    - its person does not decide. Only an owner, a corporate officer, the president or CEO, the administrator, the executive director or
      a managing employee CMS lists counts. CMS's "managing employee" covers administrators but also directors; the owner chose to include
      them (November 27, 2026). An owner CMS lists is still picked first.
@@ -124,10 +122,9 @@ On each `growth.people` run (every half hour), before its usual work, it:
 1. Asks the database for the agencies the weekly batch would take but for an address. These pass the same tests as a batch and have
    people named, but no confirmed address on their own domain, and nobody asked Hunter about them in the last 180 days. Those with the
    most Medicare patients come first.
-2. Leaves out an agency the batch would leave out, before any lookup is reserved (`20261127233000_growth_hunter_screen.sql`): one whose
-   only website is on a page builder's host, or whose CMS owners (Intel's `agency_facts`) are unknown or include an organization (a chain,
-   a health system, a holding company, private equity). Without the feed nobody is looked up. Hunter's first queue held Crossroads
-   Hospice, a national chain, third.
+2. Skips only an agency whose only website is on a page builder's host: it has no mailbox of its own. Every other agency is looked up,
+   whoever owns it, smallest first (`20261127240000_owner_sequence_open.sql`; between `20261127233000` and that migration, agencies owned
+   by an organization were skipped too).
 3. Picks each agency's person whose role decides most: an owner, officer, president or CEO, the authorized official the NPI registry
    names, the administrator, the executive director, or a managing employee CMS lists (the owner's choice, November 27, 2026).
 4. Reserves one lookup under **Most Hunter lookups a day** (default 5; Hunter charges a credit only when it finds an address, and its free

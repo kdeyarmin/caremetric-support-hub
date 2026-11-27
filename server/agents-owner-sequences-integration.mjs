@@ -32,6 +32,8 @@ const guardOrgs = [];
 // The batches' gate, once its migration is in this checkout (20261127220100_owner_sequence_batches_contract.sql).
 const batchesGate = await readFile(new URL('../supabase/migrations/20261127220100_owner_sequence_batches_contract.sql', import.meta.url), 'utf8').catch(() => null);
 // Hunter's gate, once its migration is in this checkout (20261127230100_growth_hunter_contract.sql).
+// The open screening's gate, once its migration is in this checkout (20261127240100_owner_sequence_open_contract.sql).
+const openGate = await readFile(new URL('../supabase/migrations/20261127240100_owner_sequence_open_contract.sql', import.meta.url), 'utf8').catch(() => null);
 const hunterGate = await readFile(new URL('../supabase/migrations/20261127230100_growth_hunter_contract.sql', import.meta.url), 'utf8').catch(() => null);
 const batchSettings = ['growth.owner_sequence_batches', 'growth.owner_sequence_batch_approve', 'growth.hunter', 'growth.hunter_daily'];
 const batchSeed = batchesGate ? (await admin.query('select key, value from private.hub_settings where key = any($1::text[])', [batchSettings])).rows : [];
@@ -323,7 +325,15 @@ try {
     const plan = await store.batchPlan(200);
     assert.equal(plan.due, true); assert.equal(plan.owner, owner);
     const found = plan.candidates.filter(candidate => [ready, ...left].includes(candidate.id));
-    assert.deepEqual(found.map(candidate => candidate.id), [ready], 'only the proprietary, one-office agency outside the home area, never emailed, with a confirmed address on its domain');
+    // No agency is off limits for its owners or offices, smallest first (20261127240000_owner_sequence_open.sql): the nonprofit and the
+    // two-office agency are taken, after the one-office ones; the home area, a catch-all, an agency already written to and an address on
+    // another domain are still left out.
+    if (openGate) {
+      assert.deepEqual(found.map(candidate => candidate.id), [ready, left[0], left[3]], 'every agency outside the home area, never emailed, with a confirmed address on its domain, smallest first');
+      assert.deepEqual(found.map(candidate => candidate.offices), [1, 1, 2]);
+    } else {
+      assert.deepEqual(found.map(candidate => candidate.id), [ready], 'only the proprietary, one-office agency outside the home area, never emailed, with a confirmed address on its domain');
+    }
     assert.equal(found[0].domain, domainOf('sierra'));
     assert.deepEqual(found[0].people, [{ name: 'JANE DOE', title: '5% OR GREATER DIRECT OWNERSHIP INTEREST', source: 'cms_owners', email: `jane.sierra@${domainOf('sierra')}` }]);
     assert.equal(found[0].targets[0].countyFips, '42079');
@@ -386,6 +396,14 @@ try {
     await assert.rejects(again.query(gate), refused('55000', /not scheduled/));
   } finally { await again.query('rollback'); again.release(); }
 
+  if (openGate) {
+    const drift = await admin.connect();
+    try {
+      await drift.query('begin');
+      await drift.query(await readFile(new URL('../supabase/migrations/20261127220000_owner_sequence_batches.sql', import.meta.url), 'utf8'));
+      await assert.rejects(drift.query(openGate), refused('55000', /off limits/));
+    } finally { await drift.query('rollback'); drift.release(); }
+  }
   if (hunterGate) {
     const drift = await admin.connect();
     try {
