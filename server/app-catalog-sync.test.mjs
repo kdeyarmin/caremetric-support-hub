@@ -36,11 +36,16 @@ const ADDONS = FIXTURE.products.filter(product => product.kind === 'addon').flat
 const PLAN_NAMES = Object.fromEntries(FIXTURE.products.filter(product => product.kind === 'plan').map(product => [product.entitlement_key, product.name]));
 const ADDON_NAMES = Object.fromEntries(FIXTURE.products.filter(product => product.kind === 'addon').map(product => [product.entitlement_key, product.name]));
 const ADDON_PRICES = ADDONS.reduce((count, addon) => count + addon.prices.length, 0);
+const DESCRIPTIONS = Object.fromEntries(FIXTURE.products.map(product => [product.entitlement_key, product.description]));
 
-/** Stripe as it is today (Intel's plans only), or with the add-on products and prices the sync creates. */
-function stripeObjects({ addons = false } = {}) {
-  const products = Object.entries(STRIPE_PLANS).map(([key, plan]) => ({ id: plan.product, object: 'product', active: true, livemode: false, name: key,
-    metadata: { app: 'caremetric-intel', kind: 'plan', entitlement: key } }));
+/**
+ * Stripe with Intel's plans, or with the add-on products and prices the sync creates too. Products carry the catalog's
+ * descriptions unless `described` is false, as Intel's plans were before the sync kept descriptions in step.
+ */
+function stripeObjects({ addons = false, described = true } = {}) {
+  const description = key => (described ? { description: DESCRIPTIONS[key] } : { description: null });
+  const products = Object.entries(STRIPE_PLANS).map(([key, plan]) => ({ id: plan.product, object: 'product', active: true, livemode: false,
+    name: `CareMetric Intel ${PLAN_NAMES[key]}`, ...description(key), metadata: { app: 'caremetric-intel', kind: 'plan', entitlement: key } }));
   const prices = Object.values(STRIPE_PLANS).flatMap(plan => ['month', 'year'].map(interval => ({
     id: plan[interval][0], object: 'price', active: true, product: plan.product, currency: 'usd', unit_amount: plan[interval][1], type: 'recurring',
     recurring: { interval, interval_count: 1 }, metadata: { app: 'caremetric-intel', pricing_model: 'flat' }, livemode: false,
@@ -48,7 +53,7 @@ function stripeObjects({ addons = false } = {}) {
   if (addons) {
     for (const addon of ADDONS) {
       products.push({ id: `prod_${addon.key}`, object: 'product', active: true, livemode: false, name: addon.key, unit_label: addon.unit_label,
-        metadata: { app: 'caremetric-intel', kind: 'addon', entitlement: addon.entitlement, ...(addon.plan ? { [FOR_PLAN_KEY]: addon.plan } : {}) } });
+        ...description(addon.entitlement), metadata: { app: 'caremetric-intel', kind: 'addon', entitlement: addon.entitlement, ...(addon.plan ? { [FOR_PLAN_KEY]: addon.plan } : {}) } });
       for (const price of addon.prices) {
         prices.push({ id: `price_${addon.key}_${price.interval}`, object: 'price', active: true, product: `prod_${addon.key}`, currency: 'usd', unit_amount: price.unit_amount,
           type: 'recurring', recurring: { interval: price.interval, interval_count: 1 }, metadata: { app: 'caremetric-intel', pricing_model: 'per_unit', billing_metric: addon.unit_label },
@@ -101,13 +106,34 @@ describe('reading an application catalog', () => {
 });
 
 describe('planning the Stripe changes', () => {
-  const plan = (amounts, mutate = objects => objects, { addons = true, edit } = {}) => {
-    const { products, prices } = mutate(stripeObjects({ addons }));
+  const plan = (amounts, mutate = objects => objects, { addons = true, described = true, edit } = {}) => {
+    const { products, prices } = mutate(stripeObjects({ addons, described }));
     return planCatalogSync(parseAppCatalog(intelCatalog(amounts, edit), 'caremetric-intel'), products, prices);
   };
 
   it('changes nothing when Stripe already matches, plans and add-ons alike', () => {
-    expect(plan()).toEqual({ productCreates: [], creates: [], changes: [], held: [], missing: [], skipped: [], unchanged: 6 + ADDON_PRICES });
+    expect(plan()).toEqual({ productCreates: [], creates: [], changes: [], descriptions: [], held: [], missing: [], skipped: [], unchanged: 6 + ADDON_PRICES });
+  });
+
+  it('gives each plan and add-on product the catalog\'s description, and never touches a name, a unit label or a price', () => {
+    const result = plan({}, objects => objects, { addons: true, described: false });
+    expect(result.descriptions).toEqual([
+      ...Object.entries(STRIPE_PLANS).map(([key, { product }]) => ({ entitlement_key: key, kind: 'plan', product, from: '', description: DESCRIPTIONS[key] })),
+      ...ADDONS.map(addon => ({ entitlement_key: addon.entitlement, kind: 'addon', ...(addon.plan ? { plan: addon.plan } : {}), product: `prod_${addon.key}`,
+        from: '', description: DESCRIPTIONS[addon.entitlement] })),
+    ]);
+    expect(result).toMatchObject({ productCreates: [], creates: [], changes: [], held: [], unchanged: 6 + ADDON_PRICES });
+    expect(result.descriptions.every(step => !('name' in step) && !('unit_label' in step))).toBe(true);
+  });
+
+  it('replaces an outdated description, reads spacing as the same words, and clears nothing the catalog leaves empty', () => {
+    const result = plan({}, objects => ({ ...objects, products: objects.products.map(product =>
+      product.id === 'prod_extra_branch' ? { ...product, name: 'Extra branch', unit_label: 'branch', description: 'One more branch on any plan.' }
+        : product.id === 'prod_extra_state' ? { ...product, description: 'A state set by hand.' }
+          : product.id === STRIPE_PLANS.growth.product ? { ...product, description: `  ${DESCRIPTIONS.growth.replace(/ /g, '  ')}\n` } : product) }),
+    { edit: body => ({ ...body, products: body.products.map(product => (product.entitlement_key === 'extra_state' ? { ...product, description: '' } : product)) }) });
+    expect(result.descriptions).toEqual([{ entitlement_key: 'extra_branch', kind: 'addon', product: 'prod_extra_branch',
+      from: 'One more branch on any plan.', description: 'One more location on any plan.' }]);
   });
 
   it('creates each add-on product Stripe lacks, one per plan when the price depends on the plan', () => {
@@ -234,6 +260,13 @@ describe('syncing Stripe from Intel\'s catalog', () => {
         stripe.products.push(created);
         return json(created);
       }
+      if (init.method === 'POST' && pathname.startsWith('/v1/products/')) {
+        const form = new URLSearchParams(init.body);
+        posts.push({ path: pathname, key: init.headers['Idempotency-Key'], form });
+        const product = stripe.products.find(item => item.id === pathname.split('/').pop());
+        if (form.has('description')) product.description = form.get('description');
+        return json(product);
+      }
       if (init.method === 'POST' && pathname === '/v1/prices') {
         const form = new URLSearchParams(init.body);
         posts.push({ path: pathname, key: init.headers['Idempotency-Key'], form });
@@ -350,6 +383,34 @@ describe('syncing Stripe from Intel\'s catalog', () => {
     expect(t.posts).toEqual([]);
     expect(t.audits.map(entry => entry.action)).toContain('billing.catalog.held');
     expect(t.log.warn).toHaveBeenCalledWith(expect.stringMatching(/held for an administrator/));
+  });
+
+  it('brings descriptions in step once, leaving names alone, and reuses its request keys if a run is retried', async () => {
+    const outdated = () => {
+      const objects = stripeObjects({ addons: true, described: false });
+      Object.assign(objects.products.find(product => product.id === 'prod_extra_branch'), { name: 'Extra branch', description: 'One more branch on any plan.' });
+      return objects;
+    };
+    const t = harness(outdated());
+    const result = await t.sync();
+    expect(result).toMatchObject({ ok: true, failed: 0, applied: 3 + ADDONS.length, unchanged: 6 + ADDON_PRICES, held: [] });
+    expect(t.posts.every(post => post.path.startsWith('/v1/products/') && [...post.form.keys()].join() === 'description')).toBe(true);
+    const branch = t.posts.find(post => post.path === '/v1/products/prod_extra_branch');
+    expect(branch.form.get('description')).toBe('One more location on any plan.');
+    expect(branch.key).toBe(`hub-catalog-description-${deterministicKey('caremetric-intel', 'prod_extra_branch', 'One more branch on any plan.', 'One more location on any plan.')}`);
+    expect(t.posts.find(post => post.path === `/v1/products/${STRIPE_PLANS.growth.product}`).form.get('description')).toBe(DESCRIPTIONS.growth);
+    expect(t.stripe.products.find(product => product.id === 'prod_extra_branch').name).toBe('Extra branch');
+    expect(t.stripe.products.find(product => product.id === STRIPE_PLANS.growth.product).name).toBe('CareMetric Intel Growth');
+    const described = t.audits.filter(entry => entry.action === 'billing.catalog.description');
+    expect(described).toHaveLength(3 + ADDONS.length);
+    expect(described.find(entry => entry.metadata.product === 'prod_extra_branch').metadata).toEqual({
+      source: 'app_catalog', version: FIXTURE.version, entitlement: 'extra_branch', product: 'prod_extra_branch' });
+    // The next run finds them in step.
+    expect(await t.sync()).toMatchObject({ applied: 0 });
+    expect(t.posts).toHaveLength(3 + ADDONS.length);
+    const retry = harness(outdated());
+    await retry.sync();
+    expect(retry.posts.map(post => post.key)).toEqual(t.posts.map(post => post.key));
   });
 
   it('leaves Stripe and the fact sheet alone when the catalog cannot be read', async () => {

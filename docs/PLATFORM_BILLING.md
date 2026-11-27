@@ -78,6 +78,13 @@ reads that catalog and keeps Stripe in step (`syncAppCatalog` in
   everyone already subscribed keeps their price; new subscriptions get the
   new one. Each change is audited as `billing.price.change` and
   `billing.catalog.sync`.
+- A plan or add-on product's description follows the catalog's: when Stripe's
+  says something else, or nothing, the Hub writes the catalog's description and
+  nothing else (audited as `billing.catalog.description`, with the product and
+  entitlement key only). An item the catalog leaves without a description
+  clears nothing. Names and unit labels are never changed: Intel's plans keep
+  their Stripe names ("CareMetric Intel Starter" and so on), and an
+  administrator renames a product in the Billing page.
 - A change that would cut a price by more than half or more than double it,
   a product with several active published prices for one interval, two active
   Stripe products for one plan or add-on, or a plan with no Stripe product is
