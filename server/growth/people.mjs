@@ -138,7 +138,7 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
     // The owners the weekly batch still needs an address for, looked up with Hunter first (hunter.mjs; Settings → Customer growth → Find
     // owners' addresses with Hunter). Its own reserved, capped lookups; nothing else in this run depends on it.
     let hunter = null;
-    try { hunter = await huntOwners({ store: growth.store, finder: sources.hunter, features, signal }); }
+    try { hunter = await huntOwners({ store: growth.store, finder: sources.hunter, feed, features, signal }); }
     catch (error) { if (signal?.aborted) throw error; hunter = { failed: String(error?.code ?? 'hunter_failed').slice(0, 80) }; }
     const withHunter = result => (hunter ? { ...result, hunter } : result);
     if (!feed?.configured && !registry && !site) return { result: withHunter({ skipped: 'no_source' }) };

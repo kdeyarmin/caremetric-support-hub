@@ -351,6 +351,8 @@ try {
       const named = (await server('select private.growth_hunter_next(25) as r')).filter(item => [ready, ...left].includes(item.id));
       assert.deepEqual(named.map(item => item.id).sort(), [victor, left[5]].sort(), 'the catch-all and off-domain agencies, still missing an address');
       const victorPerson = named.find(item => item.id === victor).people[0];
+      // Each agency carries its roster CCNs, so the server reads its CMS owners before a lookup (20261127233000_growth_hunter_screen.sql).
+      assert.equal(named.find(item => item.id === victor).ccns.length, 1);
       assert.equal(victorPerson.source, 'cms_owners');
       const lookup = await server('select private.growth_hunter_begin($1, $2) as r', [victor, victorPerson.id]);
       assert.ok(lookup);
