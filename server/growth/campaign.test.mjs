@@ -131,8 +131,8 @@ describe('the marketing sections of an email about CareMetric Intel (email revie
       expect(outdatedWords({ product, subject: 'Your market report', body: withCampaign(openingFor(touch, setting, own), touch, links(touch, setting, own)), purpose: 'marketing' }), label).toBeNull();
     }
     // The founder's words are the fact sheet's story: its own agency and need, built for it and used every day, with nothing added.
-    for (const phrase of ['I run a home health and hospice agency and a healthcare consulting company.', 'find every potential referral source in my market', 'So I built CareMetric Intel', 'I use it every day']) expect(founderQuote).toContain(phrase);
-    expect(founder.story.join(' ')).toContain('I run a home health and hospice agency and a healthcare consulting company.');
+    for (const phrase of ['I manage a home health and hospice company, and I run a healthcare consulting company.', 'find every potential referral source in my market', 'So I built CareMetric Intel', 'I use it every day']) expect(founderQuote).toContain(phrase);
+    expect(founder.story.join(' ')).toContain('I manage a home health and hospice company, and I run a healthcare consulting company.');
     // The figures are the ones Intel's own site publishes, and the report card names only what every report holds.
     expect(dataFigures.map(([value]) => value)).toEqual(['150+', 'Every NPI', '3,200+', 'Daily']);
     expect(campaignCopy('hospice').reportTiles).toEqual(['Where you stand', 'Who leads the county', 'Top hospitals', 'Top physicians for outreach']);

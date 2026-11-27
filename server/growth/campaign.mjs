@@ -44,7 +44,7 @@ const trialDays = () => facts.intel.trialDays;
  * The founder's story as a quote: the fact sheet's story (`founder.story`) in three short sentences, with nothing added to it. "Research my
  * competitors" is the fact sheet's own shorter wording (`founder.storyAbout`).
  */
-export const founderQuote = 'I run a home health and hospice agency and a healthcare consulting company. I needed a way to research my competitors and find every potential referral source in my market. So I built CareMetric Intel, and I use it every day.';
+export const founderQuote = 'I manage a home health and hospice company, and I run a healthcare consulting company. I needed a way to research my competitors and find every potential referral source in my market. So I built CareMetric Intel, and I use it every day.';
 
 /** The figures about its data that Intel's own site publishes (its catalog's "By the numbers"), without the word "public". */
 export const dataFigures = Object.freeze([

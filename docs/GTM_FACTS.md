@@ -113,14 +113,14 @@ empty buzzword, a string of one- or two-word fragments or a sentence over 30 wor
   the founder behind CareBase. Source: Advisors `site-content.mjs` (`brand.founder`), CareBase `About.tsx`.
 - **The founder's story** (owner's own words, 2026-11-12; `founder` in `facts.mjs`). Prospect outreach and the founder's partnership
   pitches are written in the founder's first person and told like this:
-  - "I run a home health and hospice agency and a healthcare consulting company."
+  - "I manage a home health and hospice company, and I run a healthcare consulting company."
   - "I needed a way to do business intelligence research on my competitors and to find every potential referral source in my market."
   - "So I built CareMetric Intel. It was custom built by someone who uses it every day, and I still do."
 
   Told about the founder (an ad, a post or an article): CareMetric Intel was custom built by someone who uses it every day: its founder,
-  who runs a home health and hospice agency and a healthcare consulting company, and needed a way to research competitors and find every
-  potential referral source in the market. Rules: tell it only as written and only about Intel; no results from the founder's agency (referrals, admissions, census,
-  revenue or growth), no agency or company name, no number or years, no superlative. Prospect outreach is signed "Dr. Kevin C. Deyarmin, Founder,
+  who manages a home health and hospice company and runs a healthcare consulting company, and needed a way to research competitors and find every
+  potential referral source in the market. Rules: tell it only as written and only about Intel; never say the founder owns an agency (the founder
+  manages one); no results from that company (referrals, admissions, census, revenue or growth), no agency or company name, no number or years, no superlative. Prospect outreach is signed "Dr. Kevin C. Deyarmin, Founder,
   CareMetric".
 - Public addresses: support@caremetric.ai and the central support line (877) 521-2890 (Hub `server/email-layout.mjs`);
   hello@caremetric.ai for founding partners (CareBase `About.tsx`). The help center is **https://help.caremetric.ai**; articles about
@@ -657,6 +657,10 @@ Confirmed by the owner on 2026-11-08 from the review copy of this sheet.
   limit) is a small part of it and never leads.
 - [x] 2026-11-12: the founder's story wording. The owner confirmed: the founder built Intel, and currently runs a home health and
   hospice agency and a consulting company.
+- [x] 2026-11-27: the owner corrected the founder's story: the founder **manages** a home health and hospice company and owns no
+  agency. The story says "I manage a home health and hospice company"; a draft that has the founder own or run an agency of their own
+  is refused (`founder_owns`, `foundersAgency` in `server/growth/draft.mjs`), and a queued email written before the correction is
+  withdrawn when it would be sent and written again.
 - [x] 2026-11-16: the CareBase feature and function reference, rewritten from the redesigned cmcarebase.com/features (112 capabilities
   across 8 areas, each with the plan or add-on the page names) and its "What the team can do" descriptions; and CareBase's "Everything
   it does, by area" summary in the same eight areas, which the AI team reads (`capabilities` in `facts.mjs`), with families' portal
