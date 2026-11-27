@@ -29,6 +29,10 @@ const requests = [];
 // The guard's gate, once its migration is in this checkout (20261127210100_owner_sequence_guard_contract.sql).
 const guardGate = await readFile(new URL('../supabase/migrations/20261127210100_owner_sequence_guard_contract.sql', import.meta.url), 'utf8').catch(() => null);
 const guardOrgs = [];
+// The batches' gate, once its migration is in this checkout (20261127220100_owner_sequence_batches_contract.sql).
+const batchesGate = await readFile(new URL('../supabase/migrations/20261127220100_owner_sequence_batches_contract.sql', import.meta.url), 'utf8').catch(() => null);
+const batchSettings = ['growth.owner_sequence_batches', 'growth.owner_sequence_batch_approve'];
+const batchSeed = batchesGate ? (await admin.query('select key, value from private.hub_settings where key = any($1::text[])', [batchSettings])).rows : [];
 const strangers = [];
 const run = randomUUID().slice(0, 8);
 const owner = randomUUID();
@@ -283,6 +287,56 @@ try {
     await store.requestFinish(stale, null, [], 'test');
   }
 
+  // 9b. The AI team's weekly batch (20261127220000_owner_sequence_batches.sql): only the Hub server plans and queues one; off, none is due;
+  // the candidates are proprietary, one-office agencies outside the owner's home area, never written to, with a person whose address was
+  // confirmed on the agency's own domain; a batch is queued once a week in the owner's name, approved only per the setting.
+  if (batchesGate) {
+    await assert.rejects(admin.query('select private.owner_sequence_batch_plan(5)'), refused('42501'));
+    await assert.rejects(pool.query('select private.owner_sequence_batch_candidates(5)'), refused('42501'));
+    await admin.query("update private.hub_settings set value = 'false'::jsonb where key = 'growth.owner_sequence_batches'");
+    assert.deepEqual(await store.batchPlan(5), { due: false, why: 'off' });
+    await admin.query("update private.hub_settings set value = 'true'::jsonb where key = 'growth.owner_sequence_batches'");
+    await admin.query("update private.hub_settings set value = 'false'::jsonb where key = 'growth.owner_sequence_batch_approve'");
+    const agency = async (label, { control = 'Proprietary', county = '42079', mailbox = 'verified', offices = 1, emailed = false, onDomain = true } = {}) => {
+      const org = (await row('insert into private.growth_organizations(name, domain) values ($1, $2) returning id', [`Batch ${label} ${run}`, domainOf(label)])).id;
+      guardOrgs.push(org);
+      for (let office = 0; office < offices; office += 1) {
+        await admin.query("insert into private.growth_roster_targets(ccn, name, setting, state, period, claim, organization_id, status, county_fips, facts) values ($1, $2, 'home_health', 'PA', '2026Q3', 'Synthetic', $3, 'graduated', $4, $5)",
+          [`Q${run.toUpperCase().slice(0, 6)}${String(guardOrgs.length % 100).padStart(2, '0')}${office}`, `BATCH ${label.toUpperCase()} HOME HEALTH LLC`, org, county,
+            JSON.stringify({ control, address: `${office + 1} Main Street`, patients: 900000 + office })]);
+      }
+      const contact = (await row("insert into private.growth_contacts(organization_id, email, source_kind, mailbox_result, eligibility) values ($1, $2, 'enriched', $3, 'review') returning id",
+        [org, `jane.${label}@${onDomain ? domainOf(label) : 'elsewhere-' + domainOf(label)}`, mailbox])).id;
+      await admin.query("insert into private.growth_people(organization_id, name, title, source, contact_id, address_found) values ($1, 'JANE DOE', '5% OR GREATER DIRECT OWNERSHIP INTEREST', 'cms_owners', $2, 'mail_server')", [org, contact]);
+      if (emailed) {
+        const opportunity = (await row("insert into private.growth_opportunities(organization_id, product, contact_id) values ($1, 'caremetric-intel', $2) returning id", [org, contact])).id;
+        await admin.query("insert into private.growth_messages(opportunity_id,contact_id,purpose,subject,body,opportunity_version,contact_version,policy_version,status,unsubscribe_hash,attempted_at) values($1,$2,'marketing','Synthetic','Synthetic',1,1,1,'delivered',$3,now()-interval '200 days')",
+          [opportunity, contact, digest(`batch-${run}-${label}`)]);
+      }
+      return org;
+    };
+    const ready = await agency('sierra');
+    const left = [await agency('tango', { control: 'Voluntary nonprofit, private' }), await agency('uniform', { county: '42021' }), await agency('victor', { mailbox: 'catch_all' }),
+      await agency('whiskey', { offices: 2 }), await agency('xray', { emailed: true }), await agency('yankee', { onDomain: false })];
+    const plan = await store.batchPlan(200);
+    assert.equal(plan.due, true); assert.equal(plan.owner, owner);
+    const found = plan.candidates.filter(candidate => [ready, ...left].includes(candidate.id));
+    assert.deepEqual(found.map(candidate => candidate.id), [ready], 'only the proprietary, one-office agency outside the home area, never emailed, with a confirmed address on its domain');
+    assert.equal(found[0].domain, domainOf('sierra'));
+    assert.deepEqual(found[0].people, [{ name: 'JANE DOE', title: '5% OR GREATER DIRECT OWNERSHIP INTEREST', source: 'cms_owners', email: `jane.sierra@${domainOf('sierra')}` }]);
+    assert.equal(found[0].targets[0].countyFips, '42079');
+    await assert.rejects(store.batchQueue({ name: 'No list' }), refused('22023'));
+    const queued = await store.batchQueue({ name: `Batch ${run}`, csv: 'ref,email\n' });
+    assert.equal(queued.queued, true); assert.equal(queued.approve, false);
+    requests.push(queued.id);
+    assert.deepEqual(await row('select requested_by, approve, status, payload ->> \'builtBy\' as built from private.owner_sequence_requests where id = $1', [queued.id]),
+      { requested_by: owner, approve: false, status: 'waiting', built: 'growth.sequence_batches' });
+    assert.deepEqual(await store.batchPlan(5), { due: false, why: 'request_waiting' });
+    await admin.query("update private.owner_sequence_requests set status = 'failed', finished_at = now() where id = $1", [queued.id]);
+    assert.deepEqual(await store.batchPlan(5), { due: false, why: 'built_this_week' });
+    assert.deepEqual(await store.batchQueue({ name: 'Again', csv: 'ref,email\n' }), { queued: false, why: 'built_this_week' });
+  }
+
   // 10. The gate refuses drift and declares nothing on a database that no longer keeps its promises.
   const client = await admin.connect();
   try {
@@ -297,6 +351,14 @@ try {
     await assert.rejects(again.query(gate), refused('55000', /not scheduled/));
   } finally { await again.query('rollback'); again.release(); }
 
+  if (batchesGate) {
+    const drift = await admin.connect();
+    try {
+      await drift.query('begin');
+      await drift.query('grant execute on function private.owner_sequence_batch_candidates(integer) to hub_app_server');
+      await assert.rejects(drift.query(batchesGate), refused('55000', /must not be run directly/));
+    } finally { await drift.query('rollback'); drift.release(); }
+  }
   if (guardGate) {
     const drift = await admin.connect();
     try {
@@ -324,6 +386,9 @@ try {
     [hashes.map(h => h.h), `%-${run}.example.org`, hashes.map(h => h.ccn).filter(Boolean)]);
   await admin.query('delete from private.email_suppressions where email_hash = any($1::text[])', [hashes.map(h => h.h)]);
   if (requests.length) await admin.query('delete from private.owner_sequence_requests where id = any($1::uuid[])', [requests]);
+  await admin.query('delete from private.owner_sequence_requests where requested_by = $1', [owner]);
+  for (const seed of batchSeed) await admin.query('update private.hub_settings set value = $1 where key = $2', [seed.value, seed.key]);
+  if (guardOrgs.length) await admin.query('delete from private.growth_people where organization_id = any($1::uuid[])', [guardOrgs]);
   if (guardOrgs.length) {
     await admin.query('delete from private.growth_messages where opportunity_id in (select id from private.growth_opportunities where organization_id = any($1::uuid[]))', [guardOrgs]);
     await admin.query('delete from private.growth_opportunities where organization_id = any($1::uuid[])', [guardOrgs]);

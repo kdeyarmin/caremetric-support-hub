@@ -126,5 +126,7 @@ export function ownerSequenceStore(pool) {
     requestNext:()=>server('private.owner_sequence_request_next'),
     requestCheck:(id,people)=>server('private.owner_sequence_request_check',[id,JSON.stringify(people)]),
     requestFinish:(id,record,problems,error)=>server('private.owner_sequence_request_finish',[id,record?JSON.stringify(record):null,JSON.stringify(problems??[]),error??null]),
+    batchPlan:limit=>server('private.owner_sequence_batch_plan',[limit]),
+    batchQueue:payload=>server('private.owner_sequence_batch_queue',[JSON.stringify(payload)]),
   };
 }

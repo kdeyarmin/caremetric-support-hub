@@ -323,6 +323,15 @@ three-argument `private.creative_data_counties` is executable by `hub_app_server
 out for 56 days after it is pictured and reports the setting it was pictured with last. Each test fails closed. The Hub server picks
 counties from Intel's list of the roster's states only when the feature is declared, and otherwise from the roster's own counties as before.
 
+`20261127220100_owner_sequence_batches_contract.sql` declares `platform.agents.owner-sequence-batches.v1` only after the owner sequence
+requests and guard are declared and the three batch settings exist. It also checks that:
+- the plan and queue functions are executable by `hub_app_server` alone and require the Hub server connection;
+- the due and candidates checks cannot be run directly;
+- the candidates read the guard, the owner sequences, the Marketing Manager's messages, CMS's control type and the owner's home area;
+- a batch is queued as a request, approved only per the setting.
+
+Each test fails closed.
+
 `20261127210100_owner_sequence_guard_contract.sql` declares `platform.agents.owner-sequence-guard.v1` only after owner sequences are declared,
 `private.growth_outreach_stopped` reads the do-not-contact list, the owner sequences' people and the roster's CCNs (so the Marketing Manager's
 cold email leaves a sequence's agency alone by its domain or its CCN), the people check reads the roster's CCNs (so a sequence leaves out an

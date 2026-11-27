@@ -64,6 +64,52 @@ name and approves it when the request asked (the audit says `via: request`). The
 review, with each row left out and why. A request is prepared only for an active CareMetric admin; one the database refuses (a person who
 may not be emailed, a date that passed) fails with the reason and saves nothing.
 
+## The AI team builds the next batch
+
+Owner, November 27, 2026: "train my AI workforce on how to do this". Batch 2 was built by hand; from then on the Marketing Manager builds
+each batch itself (`server/growth/sequence-batches.mjs`, `20261127220000_owner_sequence_batches.sql`, feature
+`platform.agents.owner-sequence-batches.v1`), while Settings → Customer growth → **Build your next sequence batch** is on.
+
+Once a week, on its `growth.sequences` run, it:
+
+1. Asks the database for the agencies ready for a batch (`private.owner_sequence_batch_plan`). These are Pennsylvania roster agencies the
+   roster graduated. Each one must pass every test below:
+   - every roster entry is proprietary (CMS's control type);
+   - it has one office (one street address);
+   - it is outside Cambria County and its seven neighbors;
+   - it has a domain of its own;
+   - the Marketing Manager has never written to it;
+   - it is not stopped (opted out, do-not-contact, or the guard above);
+   - it is in no owner sequence, by domain or CCN;
+   - it has a person whose work address the people step confirmed on that domain. The people step names owners from CMS, the NPI
+     registry and the agency's own pages, then checks the address with the mail server or the verification service. Never a guessed
+     address.
+
+   The agencies with the most Medicare patients come first.
+2. Leaves out an agency in any of these cases:
+   - any of its CMS owners (Intel's `agency_facts`) is an organization rather than a person, which rules out chains, health systems,
+     holding companies and private equity;
+   - its website is on a page builder's host;
+   - its person does not decide. Only an owner, a corporate officer, the president or CEO, the administrator or the executive director
+     counts.
+3. Writes the send list (refs `pa-b<N>-01`, the agency's CCN given so it is used as is). It queues the list as a request in the owner's
+   name, "Pennsylvania cold email, batch N", and sets three dates:
+   - the first Tuesday at least four days out and a week after the previous batch's first email;
+   - that Friday;
+   - the next Wednesday.
+
+   At most 10 emails a day go out from it. The owner is told who is in it.
+4. The request is then prepared within five minutes like any other ([A request instead of the Growth page](#a-request-instead-of-the-growth-page)),
+   with every check again. It is approved only while **Approve the batches the AI team builds** is on; otherwise it waits on Growth.
+
+The builder skips a week in four cases:
+- a request is still waiting;
+- it already built a batch in the last six days;
+- no CareMetric admin has approved a sequence yet (the newest approver is the owner the batch is queued for);
+- fewer than three agencies (or the batch size, if smaller) are ready.
+
+**Agencies in each batch** sets the size (default 8). Building a batch sends nothing: **Send your own email sequences** sends it.
+
 ## The send list
 
 A CSV, one row per person. Columns (header names are read loosely, in any order): `ref` (letters, digits, `-` or `_`; it is the report

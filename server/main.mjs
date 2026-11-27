@@ -32,6 +32,7 @@ import { articleHomeUrl, helpCenterOrigin, servedElsewhere } from './agents/cont
 import { publicArticleFeed, publicArticlesFeature } from './public-articles.mjs';
 import { growthStore, ownerSequenceStore } from './growth/store.mjs';
 import { ownerSequences } from './growth/owner-sequence.mjs';
+import { sequenceBatches } from './growth/sequence-batches.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
@@ -148,7 +149,10 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   // The owner's own email sequences (docs/OWNER_SEQUENCES.md; Settings → Customer growth → Send your own email sequences): the owner's
   // words, sent in the owner's name from the growth sender through SendGrid only (never Amazon SES), replies to the support inbox. Matching
   // an agency to its CCN is the owner's own request, so it does not wait for the roster's switch.
+  // Settings → Customer growth → Build your next sequence batch: the Marketing Manager queues the next week's batch itself (growth/sequence-batches.mjs).
   sequences:({unsubscribeToken,hash})=>ownerSequences({store:ownerSequenceStore(pool),feed:intelFeedReader({features,enabled:true,key:intelFeedSecret}),
+    batches:sequenceBatches({store:ownerSequenceStore(pool),feed:intelFeedReader({features,enabled:true,key:intelFeedSecret}),features,
+      enabled:setting('growth.owner_sequence_batches'),size:setting('growth.owner_sequence_batch_size')}),
     reports:reportLinks({key:intelFeedSecret}),features,enabled:setting('growth.owner_sequences'),publicOrigin,unsubscribeToken,hash,
     mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,category:'hub-owner-sequence',from:()=>growthIdentity().from,fromName:()=>growthIdentity().fromName,
       fromNameLocked:()=>growthIdentity().fromNameSet,replyTo:()=>growthIdentity().replyTo})}),
