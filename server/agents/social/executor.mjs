@@ -18,6 +18,7 @@ import { checkSocialText, adCopyFromCreative, adImagePlacements } from './conten
 import { metaId } from './meta.mjs';
 import { linkedinComment, linkedinPost } from './linkedin.mjs';
 import { publishApprovedVideo } from './video.mjs';
+import { termsHold } from '../creative/compliance.mjs';
 
 const failure = code => Object.assign(new Error('The social action was not carried out.'), { code });
 /**
@@ -54,6 +55,17 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       throw error;
     }
   }
+  /**
+   * A post made from approved creative is read again just before it goes out: if the image or video now states a price, offer or trial
+   * that is no longer true (compliance.mjs, outdatedTerms; Intel's trial and the Founders Sale both changed after creative saying the old
+   * terms was approved), nothing is published. A post without creative, or a store that cannot read creative, is not held here.
+   */
+  const currentCreative = async input => {
+    if (!/^[0-9a-f-]{36}$/.test(input?.creativeAssetId ?? '') || typeof store?.creativeLiveAssets !== 'function') return;
+    const products = typeof input.product === 'string' ? [input.product] : null;
+    const asset = ((await store.creativeLiveAssets(products)) ?? []).find(item => item.id === input.creativeAssetId);
+    if (asset && !termsHold(asset)) throw failure('post_creative_outdated');
+  };
   const ready = part => { if (!meta?.configured?.[part]) throw failure('meta_not_configured'); };
   const readyLinkedIn = part => { if (!li.configured?.[part]) throw failure('linkedin_not_configured'); };
 
@@ -64,6 +76,7 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
       if (onLinkedIn(input)) readyLinkedIn('page'); else ready(input.platform === 'instagram' ? 'instagram' : 'pages');
       const due = Date.parse(input.scheduledFor ?? '');
       if (Number.isFinite(due) && due - now().getTime() > 2 * 60_000) throw deferred();
+      await currentCreative(input);
       // A story: an approved image alone, no text and no link, on Instagram or the Facebook Page.
       if (input.format === 'story') {
         if (input.platform === 'linkedin' || input.message !== '' || input.link || !/^https:\/\//.test(input.imageUrl ?? '') || typeof meta?.publishStory !== 'function') throw failure('invalid_post');
@@ -211,6 +224,8 @@ export function socialExecutors({ meta, linkedin = null, settings = {}, notifier
           || asset.kind !== 'static' || !adImagePlacements[platform].includes(asset.placement) || !/^[0-9a-f]{64}$/.test(asset.token ?? '')
           || !current || Object.keys(current).some(key => current[key] !== input[key]) || !origin || input.imageHash
           || input.imageUrl !== `${origin}/api/creative/a/${asset.token}.png`) throw failure('ad_creative_changed');
+        // Approved under terms that have since changed (a trial length, a sale): never put in an ad (compliance.mjs, outdatedTerms).
+        if (!termsHold(asset)) throw failure('ad_creative_outdated');
       }
       const created = await careful(execution, () => (onLinkedIn(input) ? li : meta).createAd({ adsetId: input.adsetId, name: String(input.name ?? 'CareMetric ad'), message: input.message, headline: input.headline,
         description: input.description, link: input.link, imageHash: typeof input.imageHash === 'string' ? input.imageHash : null,

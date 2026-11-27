@@ -183,7 +183,7 @@ describe('approved creative', () => {
     const meta = metaOf();
     const creative = { live: vi.fn(async () => true) };
     const asset = { id: assetId, token: 'f'.repeat(64), status: 'approved', product: 'caremetric-intel', platform: 'meta', kind: 'static', placement: 'meta.feed_square',
-      primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans', description: 'Free trial', landingUrl: link, cta: 'Start free trial' };
+      primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans', description: 'Free trial', landingUrl: link, cta: 'Start free trial', overlay: {} };
     const store = { creativeLiveAssets: vi.fn(async () => [asset]) };
     const executors = socialExecutors({ meta, settings: {}, now, log: () => {}, creative, store, publicOrigin: 'https://help.caremetric.ai' });
     const input = { adsetId: '120200000000001', name: 'Ad', message: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans',
@@ -209,6 +209,29 @@ describe('approved creative', () => {
     const input = { platform: 'instagram', product: 'caremetric-intel', message, link: null, imageUrl: image, scheduledFor: now().toISOString(), creativeAssetId: assetId };
     expect(await executors['social.post']({ id: 'a1', kind: 'social.post', input, agentKey: 'social_manager' })).toEqual({ published: true, id: '1111_99' });
     expect(creative.live).toHaveBeenCalled();
+  });
+
+  it('publishes nothing from creative whose price, offer or trial wording changed after it was approved', async () => {
+    const meta = metaOf({ publishStory: vi.fn(async () => ({ id: '1790000' })) });
+    const asset = { id: assetId, token: 'f'.repeat(64), status: 'approved', product: 'caremetric-intel', platform: 'meta', kind: 'static', placement: 'meta.feed_square',
+      primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', headline: 'Territory plans', description: 'Free trial', landingUrl: link,
+      cta: 'Start free trial', overlay: { beats: ['Try Intel free for 14 days'] } };
+    const store = { creativeLiveAssets: vi.fn(async () => [asset]) };
+    const executors = socialExecutors({ meta, settings: {}, now, log: () => {}, creative: { live: vi.fn(async () => true) }, store, publicOrigin: 'https://help.caremetric.ai' });
+    const post = { platform: 'instagram', product: 'caremetric-intel', message, link: null, imageUrl: image, scheduledFor: now().toISOString(), creativeAssetId: assetId };
+    await expect(executors['social.post']({ id: 'p1', kind: 'social.post', input: post, agentKey: 'social_manager' })).rejects.toMatchObject({ code: 'post_creative_outdated' });
+    const story = { ...post, pillar: 'story', format: 'story', message: '' };
+    await expect(executors['social.post']({ id: 'p2', kind: 'social.post', input: story, agentKey: 'social_manager' })).rejects.toMatchObject({ code: 'post_creative_outdated' });
+    expect(store.creativeLiveAssets).toHaveBeenCalledWith(['caremetric-intel']);
+    expect(meta.publishPost).not.toHaveBeenCalled();
+    expect(meta.publishStory).not.toHaveBeenCalled();
+    const ad = { adsetId: '120200000000001', name: 'Ad', message: asset.primaryText, headline: 'Territory plans', description: 'Free trial', link, imageHash: null, imageUrl: image,
+      callToAction: 'SIGN_UP', product: 'caremetric-intel', creativeAssetId: assetId };
+    await expect(executors['social.ad_create']({ id: 'a1', kind: 'social.ad_create', input: ad, targetId: '' })).rejects.toMatchObject({ code: 'ad_creative_outdated' });
+    expect(meta.createAd).not.toHaveBeenCalled();
+    // The same creative with the current terms goes out.
+    store.creativeLiveAssets.mockResolvedValue([{ ...asset, overlay: { beats: ['Start your 30-day free trial.'] } }]);
+    expect(await executors['social.post']({ id: 'p3', kind: 'social.post', input: post, agentKey: 'social_manager' })).toEqual({ published: true, id: '1111_99' });
   });
 });
 

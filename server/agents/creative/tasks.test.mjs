@@ -277,7 +277,7 @@ describe('the work', () => {
       current: [{ adId: 'ad1', impressions: 4000, clicks: 120, spendCents: 4000, frequency: 2 }, { adId: 'ad2', impressions: 4000, clicks: 40, spendCents: 6000, frequency: 3.6 }],
       previous: [{ adId: 'ad1', impressions: 4000, clicks: 110, spendCents: 4000, frequency: 1.5 }, { adId: 'ad2', impressions: 4000, clicks: 80, spendCents: 4000, frequency: 2 }],
     })) };
-    const live = [assetId, tired].map(id => ({ id, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static', layout: 'headline', hookType: 'proof', headline: 'H', variantLabel: 'A', status: 'live' }));
+    const live = [assetId, tired].map(id => ({ id, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static', layout: 'headline', hookType: 'proof', headline: 'H', variantLabel: 'A', status: 'live', overlay: {} }));
     const store = harness().store;
     store.creativeLiveAssets.mockResolvedValue(live);
     const handlers = creativeHandlers({ store, notifier: { send: vi.fn(async () => [{ delivery: 'sent' }]) }, meta, settings: {}, log: () => {} });
@@ -285,6 +285,28 @@ describe('the work', () => {
     expect(done.result).toMatchObject({ assets: 2, retired: 1, refreshed: 1 });
     expect(store.proposeAction).toHaveBeenCalledWith(expect.objectContaining({ kind: 'creative.retire', targetId: tired }));
     expect(store.creativeBriefCreate).toHaveBeenCalledWith(expect.objectContaining({ source: 'refresh', parentAssetId: assetId }));
+    expect(store.creativeRetire).not.toHaveBeenCalled();
+  });
+
+  it('proposes retiring creative whose price, offer or trial wording is no longer true, even when the ads cannot be read', async () => {
+    const { store, handlers, task: make } = harness();
+    const row = (id, status, overlay) => ({ id, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static', layout: 'headline',
+      headline: 'Try Intel free', primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', status, overlay });
+    const current = row('11111111-1111-4111-8111-111111111111', 'approved', { beats: ['Start your 30-day free trial.'] });
+    const posted = row('22222222-2222-4222-8222-222222222222', 'live', { beats: ['Try Intel free for 14 days'] });
+    const waiting = row('33333333-3333-4333-8333-333333333333', 'approved', { offerLine: 'Founders Sale: 50% off the first 12 months of paid service.' });
+    const proposedAlready = row('55555555-5555-4555-8555-555555555555', 'approved', { beats: ['Try Intel free for 14 days'] });
+    store.creativeLiveAssets.mockResolvedValue([current, posted, waiting, proposedAlready]);
+    store.creativeOpenTargets.mockResolvedValue([`creative.retire:${proposedAlready.id}`]);
+    const done = await handlers['creative.refresh'](make('creative.refresh'), { now });
+    expect(done.result).toMatchObject({ skipped: 'ads_not_configured', outdated: 2 });
+    const retirements = store.proposeAction.mock.calls.map(([item]) => item).filter(item => item.kind === 'creative.retire');
+    expect(retirements.map(item => item.targetId)).toEqual([posted.id, waiting.id]);
+    expect(retirements[0]).toMatchObject({ targetKind: 'creative_asset', input: { assetId: posted.id } });
+    expect(retirements[0].preview).toMatch(/no longer true/);
+    expect(retirements[0].preview).toMatch(/already posted/);
+    expect(retirements[1].preview).toContain('It says 50% off; billing applies 75%.');
+    expect(retirements[1].preview).not.toMatch(/already posted/);
     expect(store.creativeRetire).not.toHaveBeenCalled();
   });
 
