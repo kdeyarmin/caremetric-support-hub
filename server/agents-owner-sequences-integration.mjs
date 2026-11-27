@@ -26,6 +26,9 @@ const gate = await readFile(new URL('../supabase/migrations/20261127150100_owner
 // The requests' gate, once its migration is in this checkout (20261127200100_owner_sequence_requests_contract.sql).
 const requestsGate = await readFile(new URL('../supabase/migrations/20261127200100_owner_sequence_requests_contract.sql', import.meta.url), 'utf8').catch(() => null);
 const requests = [];
+// The guard's gate, once its migration is in this checkout (20261127210100_owner_sequence_guard_contract.sql).
+const guardGate = await readFile(new URL('../supabase/migrations/20261127210100_owner_sequence_guard_contract.sql', import.meta.url), 'utf8').catch(() => null);
+const guardOrgs = [];
 const strangers = [];
 const run = randomUUID().slice(0, 8);
 const owner = randomUUID();
@@ -206,6 +209,34 @@ try {
   assert.equal(await row('select 1 as ok from private.owner_sequences where id = $1', [third.id]), undefined);
   assert.ok((await ownerCall('hub.owner_sequences_list')).some(item => item.id === second.id));
 
+  // 8b. The guard (20261127210000_owner_sequence_guard.sql): the Marketing Manager's cold email leaves a sequence's agency alone, by its
+  // domain or the CCN the roster tied to it; and a sequence leaves out an agency the Marketing Manager emailed, by its CCN too.
+  if (guardGate) {
+    const guardCcn = `3${run.replace(/[^0-9]/g, '1').slice(0, 5).padEnd(5, '1')}`;
+    const guarded = await create([person('mike', { dates: later, ccn: guardCcn })], later);
+    await ownerCall('hub.owner_sequence_approve', [guarded.id, guarded.version]);
+    const org = async (label, ccn = null) => {
+      const o = (await row('insert into private.growth_organizations(name, domain) values ($1, $2) returning id', [`Guard ${label} ${run}`, domainOf(label)])).id;
+      guardOrgs.push(o);
+      if (ccn) await admin.query("insert into private.growth_roster_targets(ccn, name, setting, state, period, claim, organization_id, status) values ($1, $2, 'home_health', 'PA', '2026Q3', 'Synthetic', $3, 'graduated')", [ccn, `Guard ${label}`, o]);
+      return o;
+    };
+    const stopped = async id => (await row('select private.growth_outreach_stopped($1) as s', [id])).s;
+    assert.equal(await stopped(await org('mike')), true, 'the sequence\'s own domain');
+    assert.equal(await stopped(await org('november', guardCcn)), true, 'another domain the roster tied to the sequence\'s CCN');
+    assert.equal(await stopped(await org('oscar')), false, 'an agency in no sequence');
+    // An agency the Marketing Manager emailed, known to the sequence only by its CCN.
+    const emailedCcn = `3${run.replace(/[^0-9]/g, '2').slice(0, 5).padEnd(5, '2')}`;
+    const emailed = await org('papa', emailedCcn);
+    const contact = (await row("insert into private.growth_contacts(organization_id, email, source_kind) values ($1, $2, 'role_address') returning id", [emailed, `info@${domainOf('papa')}`])).id;
+    const opportunity = (await row("insert into private.growth_opportunities(organization_id, product, contact_id) values ($1, 'caremetric-intel', $2) returning id", [emailed, contact])).id;
+    await admin.query("insert into private.growth_messages(opportunity_id,contact_id,purpose,subject,body,opportunity_version,contact_version,policy_version,status,unsubscribe_hash,attempted_at) values($1,$2,'marketing','Synthetic','Synthetic',1,1,1,'delivered',$3,now()-interval '3 days')",
+      [opportunity, contact, digest(`guard-${run}`)]);
+    const check = await ownerCall('hub.owner_sequence_check', [JSON.stringify([{ ref: 'by-ccn', email: `someone@${domainOf('quebec')}`, domain: domainOf('quebec'), ccn: emailedCcn },
+      { ref: 'clean', email: `someone@${domainOf('romeo')}`, domain: domainOf('romeo') }])]);
+    assert.deepEqual(check, { 'by-ccn': 'growth_contacted' });
+  }
+
   // 9. Requests an operator queued (20261127200000_owner_sequence_requests.sql): the Hub server cannot queue one; one for someone who is not
   // a CareMetric admin fails; one for the owner is prepared, saved in the owner's name and approved when it asked; a draft the database
   // refuses fails the request with the reason; a request is finished once.
@@ -266,6 +297,14 @@ try {
     await assert.rejects(again.query(gate), refused('55000', /not scheduled/));
   } finally { await again.query('rollback'); again.release(); }
 
+  if (guardGate) {
+    const drift = await admin.connect();
+    try {
+      await drift.query('begin');
+      await drift.query("create or replace function private.growth_outreach_stopped(p_org uuid) returns boolean language sql stable set search_path = '' as $$ select false $$");
+      await assert.rejects(drift.query(guardGate), refused('55000', /leave a sequence's agency alone/));
+    } finally { await drift.query('rollback'); drift.release(); }
+  }
   if (requestsGate) {
     const drift = await admin.connect();
     try {
@@ -285,6 +324,13 @@ try {
     [hashes.map(h => h.h), `%-${run}.example.org`, hashes.map(h => h.ccn).filter(Boolean)]);
   await admin.query('delete from private.email_suppressions where email_hash = any($1::text[])', [hashes.map(h => h.h)]);
   if (requests.length) await admin.query('delete from private.owner_sequence_requests where id = any($1::uuid[])', [requests]);
+  if (guardOrgs.length) {
+    await admin.query('delete from private.growth_messages where opportunity_id in (select id from private.growth_opportunities where organization_id = any($1::uuid[]))', [guardOrgs]);
+    await admin.query('delete from private.growth_opportunities where organization_id = any($1::uuid[])', [guardOrgs]);
+    await admin.query('delete from private.growth_contacts where organization_id = any($1::uuid[])', [guardOrgs]);
+    await admin.query('delete from private.growth_roster_targets where organization_id = any($1::uuid[])', [guardOrgs]);
+    await admin.query('delete from private.growth_organizations where id = any($1::uuid[])', [guardOrgs]);
+  }
   await admin.query('delete from private.owner_sequences where id = any($1::uuid[])', [sequences]);
   if (strangers.length) await admin.query('delete from auth.users where id = any($1::uuid[])', [strangers]);
   await removeTestIdentities(admin, [owner], { also: ['delete from private.audit_events where actor_id = any($1::uuid[])'] });
