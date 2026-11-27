@@ -35,6 +35,7 @@ import { marketedNow, markets } from '../marketing.mjs';
 import { validTagValue, sameAdDestination } from '../links.mjs';
 import { live } from '../../live.mjs';
 import { failingPlatforms } from '../ads/index.mjs';
+import { termsHold } from '../creative/compliance.mjs';
 
 /**
  * A post's own utm_content (team review 2026-11-17, stage 6), so a lead can be traced to the post that brought it: the approved creative's
@@ -158,12 +159,20 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
   // 16:9 comes only from the owner's own finished videos (Creative → Add a finished video); Instagram takes Reels, so vertical only.
   const videoPlacements = { facebook: ['meta.video_square', 'meta.video_portrait', 'meta.video_vertical', 'meta.video_landscape'], instagram: ['meta.video_vertical'],
     linkedin: ['linkedin.video_square', 'linkedin.video_portrait', 'linkedin.video_vertical', 'linkedin.video_landscape'] };
+  // Approved creative whose words no longer hold (an old trial length or sale) is left out, and the log says how often.
+  const currentTerms = asset => {
+    if (termsHold(asset)) return true;
+    log(JSON.stringify({ event: 'hub_social_creative_outdated', asset_id: /^[0-9a-f-]{36}$/.test(asset?.id ?? '') ? asset.id : null }));
+    return false;
+  };
   async function approvedImages(product, platform, withVideos = false) {
     if (!creative?.approved || !assetOrigin) return [];
     try {
       return (await creative.approved({ product, platform, limit: 20 })).filter(asset => /^[0-9a-f]{64}$/.test(asset.token ?? '') &&
         ((asset.kind === 'static' && imagePlacements[platform].includes(asset.placement)) ||
           (withVideos && videosOn && asset.kind === 'video' && asset.contentType === 'video/mp4' && (platform === 'meta' ? videoPlacements.facebook : videoPlacements.linkedin).includes(asset.placement))))
+        // Never creative whose price, offer or trial wording stopped being true after it was approved (compliance.mjs, outdatedTerms).
+        .filter(currentTerms)
         .map(asset => ({ ...asset, url: `${assetOrigin}/api/creative/a/${asset.token}.${asset.kind === 'video' ? 'mp4' : 'png'}` }));
     } catch (error) {
       if (error?.transient) throw error;
@@ -177,6 +186,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     if (!creative?.approved || !assetOrigin) return [];
     try {
       return (await creative.approved({ product, platform: 'meta', limit: 20 })).filter(asset => asset.kind === 'static' && asset.placement === 'meta.story' && /^[0-9a-f]{64}$/.test(asset.token ?? ''))
+        .filter(currentTerms)
         .map(asset => ({ ...asset, url: `${assetOrigin}/api/creative/a/${asset.token}.png` }));
     } catch (error) {
       if (error?.transient) throw error;
@@ -691,7 +701,7 @@ export function socialHandlers({ store, notifier, model = null, meta, linkedin =
     const assets = typeof store.creativeLiveAssets === 'function' && assetOrigin
       ? ((await store.creativeLiveAssets([product])) ?? []).filter(asset => asset.status === 'approved' && asset.product === product
         && asset.platform === source.platform && asset.kind === 'static' && imagePlacements[source.platform].includes(asset.placement)
-        && /^[0-9a-f]{64}$/.test(asset.token ?? '')).map(asset => ({ ...asset, url: `${assetOrigin}/api/creative/a/${asset.token}.png` }))
+        && /^[0-9a-f]{64}$/.test(asset.token ?? '')).filter(currentTerms).map(asset => ({ ...asset, url: `${assetOrigin}/api/creative/a/${asset.token}.png` }))
       : await approvedImages(product, source.platform);
     const destination = overview.ads.find(ad => ad.id === rec.basedOn)?.copy?.link;
     const adset = overview.adsets.find(item => item.id === rec.adsetId);

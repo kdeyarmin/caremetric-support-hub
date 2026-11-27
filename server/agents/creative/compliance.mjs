@@ -152,6 +152,73 @@ export function checkData({ copy = {}, facts = null }) {
 export const withoutFigure = (copy, facts = null) => ({ ...copy, ...(facts?.stat && copy.altText === snapshotAltText(facts) ? { altText: '' } : {}),
   overlay: { ...(copy.overlay ?? {}), stat: '', statLabel: '', statSource: '' } });
 
+/** The offer and price rules (`offer_mismatch`) for one asset's words: `raw` as written, `text` after normalizeTerms. */
+function offerFindings({ product, raw, text, offerCode = null }) {
+  const findings = [];
+  const offer = offerCode ? offerFor(offerCode) : null;
+  if (offerCode && !offer) findings.push(block('offer_mismatch', `The brief names the offer ${clipped(offerCode)}, which is not a live offer in billing.`));
+  if (offer && !offer.products.includes(product)) findings.push(block('offer_mismatch', `The ${offer.name} does not apply to this product.`));
+  for (const code of new Set(raw.match(codeWords) ?? [])) {
+    if (!liveOffers[code]) findings.push(block('offer_mismatch', `${clipped(code)} is not a live offer code.`));
+  }
+  if (codeEntry.test(text)) findings.push(block('offer_mismatch', 'It asks people to enter a code, but the Founders Sale is applied automatically when paid service starts.'));
+  if (urgency.test(text)) findings.push(block('offer_mismatch', 'It claims a deadline or limited availability the offer does not have.'));
+  if (offerMention.test(text)) {
+    const named = offer ?? liveOffers.FOUNDERS75;
+    if (!named.products.includes(product)) findings.push(block('offer_mismatch', `The ${named.name} does not apply to this product.`));
+    for (const match of text.matchAll(/(\d{1,3})\s?%\s+off\b/gi)) {
+      if (Number(match[1]) !== named.percentOff) findings.push(block('offer_mismatch', `It says ${match[1]}% off; billing applies ${named.percentOff}%.`));
+    }
+    for (const match of text.matchAll(/\bfirst\s+(\d{1,2})\s+months\b/gi)) {
+      if (Number(match[1]) !== named.months) findings.push(block('offer_mismatch', `It says the first ${match[1]} months; billing applies the first ${named.months}.`));
+    }
+  }
+  const book = playbookFor(product);
+  if (book) {
+    const own = productAmounts(book.factsKey);
+    if ((text.match(/\$\s?(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?/g) ?? []).some(amount => !own.has(Number(amount.replace(/[$,\s]/g, ''))))) {
+      findings.push(block('offer_mismatch', 'It states a price that is not this product\'s listed price.'));
+    }
+  }
+  return findings;
+}
+
+// The fact-sheet rules a change of price, offer or trial can turn after an asset was approved.
+const termCodes = new Set(['unlisted_price', 'unlisted_number', 'trial_terms']);
+
+/**
+ * What an approved asset says that is no longer true of prices, offers or the trial: the asset was checked when it was made, and the
+ * facts may have moved since (Intel's trial went from 14 to 30 days on 2026-11-12 and the Founders Sale from 50% to 75% on 2026-11-24,
+ * and approved creative still saying the old terms was posted after both). The Social Media Manager and the ads read this before an
+ * asset is picked or published (`termsHold`), and the weekly refresh proposes retiring an asset that fails it.
+ *
+ * Every word the asset shows is read, the text on its image or video (`overlay`) included, except a county snapshot's code-printed
+ * figure and its alt text, which are the data's (checkData). An asset row read without its `overlay` (a reader older than
+ * 20261128000000_creative_current_terms.sql) cannot be checked and fails.
+ * @param {object} asset a row of private.creative_approved or private.creative_live_assets
+ * @returns {{ rule: string, level: 'block', message: string }[]}
+ */
+export function outdatedTerms(asset = {}) {
+  if (!asset || typeof asset !== 'object' || !Object.hasOwn(asset, 'overlay')) {
+    return [block('offer_mismatch', 'The text on its image or video could not be read, so it could not be checked against today\'s prices, offers and trial.')];
+  }
+  const snapshot = asset.layout === 'stat';
+  const overlay = asset.overlay && typeof asset.overlay === 'object' ? asset.overlay : {};
+  const copy = { headline: asset.headline, primaryText: asset.primaryText, description: asset.description, cta: asset.cta,
+    altText: snapshot ? '' : asset.altText, overlay: snapshot ? { ...overlay, stat: '', statLabel: '', statSource: '' } : overlay };
+  const raw = copyText(copy);
+  const text = normalizeTerms(raw).text;
+  const book = playbookFor(asset.product);
+  const findings = offerFindings({ product: asset.product, raw, text });
+  for (const code of textProblems(text, { product: book?.factsKey ?? null, numbers: numbersFor(asset.product) })) {
+    if (termCodes.has(code)) findings.push(block('fact_sheet', `It ${factSheetCodes[code]}.`));
+  }
+  return findings;
+}
+
+/** Whether an approved asset's words still hold against today's prices, offers and trial (outdatedTerms). */
+export const termsHold = asset => outdatedTerms(asset).length === 0;
+
 /**
  * @param {object} input
  * @param {'carebase'|'caremetric-intel'} input.product
@@ -195,31 +262,8 @@ export function checkCopy({ product, platform, copy = {}, offerCode = null, bran
   if (government.test(text)) findings.push(block('government_endorsement', 'It says or implies that CMS, Medicare, Medicaid or a government body approves, endorses or partners with CareMetric.'));
 
   // offers and prices, against the billing data
-  const offer = offerCode ? offerFor(offerCode) : null;
-  if (offerCode && !offer) findings.push(block('offer_mismatch', `The brief names the offer ${clipped(offerCode)}, which is not a live offer in billing.`));
-  if (offer && !offer.products.includes(product)) findings.push(block('offer_mismatch', `The ${offer.name} does not apply to this product.`));
-  for (const code of new Set(raw.match(codeWords) ?? [])) {
-    if (!liveOffers[code]) findings.push(block('offer_mismatch', `${clipped(code)} is not a live offer code.`));
-  }
-  if (codeEntry.test(text)) findings.push(block('offer_mismatch', 'It asks people to enter a code, but the Founders Sale is applied automatically when paid service starts.'));
-  if (urgency.test(text)) findings.push(block('offer_mismatch', 'It claims a deadline or limited availability the offer does not have.'));
-  if (offerMention.test(text)) {
-    const named = offer ?? liveOffers.FOUNDERS75;
-    if (!named.products.includes(product)) findings.push(block('offer_mismatch', `The ${named.name} does not apply to this product.`));
-    for (const match of text.matchAll(/(\d{1,3})\s?%\s+off\b/gi)) {
-      if (Number(match[1]) !== named.percentOff) findings.push(block('offer_mismatch', `It says ${match[1]}% off; billing applies ${named.percentOff}%.`));
-    }
-    for (const match of text.matchAll(/\bfirst\s+(\d{1,2})\s+months\b/gi)) {
-      if (Number(match[1]) !== named.months) findings.push(block('offer_mismatch', `It says the first ${match[1]} months; billing applies the first ${named.months}.`));
-    }
-  }
+  findings.push(...offerFindings({ product, raw, text, offerCode }));
   const book = playbookFor(product);
-  if (book) {
-    const own = productAmounts(book.factsKey);
-    if ((text.match(/\$\s?(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?/g) ?? []).some(amount => !own.has(Number(amount.replace(/[$,\s]/g, ''))))) {
-      findings.push(block('offer_mismatch', 'It states a price that is not this product\'s listed price.'));
-    }
-  }
 
   // brand and product names
   for (const match of raw.matchAll(brandVariants)) {

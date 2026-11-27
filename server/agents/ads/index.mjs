@@ -28,6 +28,7 @@ import { linkTags, taggedUrl, sameAdDestination } from '../links.mjs';
 import { playbookFor } from '../../growth/playbook.mjs';
 import { adCopyFromCreative, adImagePlacements } from '../social/content.mjs';
 import { socialExecutors } from '../social/executor.mjs';
+import { termsHold } from '../creative/compliance.mjs';
 import { handoverDeclared, trustedWith } from '../handover.mjs';
 import { delivered } from '../notify.mjs';
 import { checkGooglePlan, editorCsv, googleAdsClient, googlePromptVersion, googleSchema, googleSystem } from './google.mjs';
@@ -279,6 +280,8 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
           return null;
         }
         for (const asset of assets ?? []) {
+          // Never creative whose price, offer or trial wording stopped being true after it was approved (compliance.mjs, outdatedTerms).
+          if (!termsHold(asset)) continue;
           const copy = campaignCreative(asset, product, platform, assetOrigin);
           if (!copy) continue;
           return { ...copy, name: `${campaignName} · creative ${asset.id.slice(0, 8)}` };
@@ -648,6 +651,8 @@ export function adsTeam({ ads = null, features = null, fetchImpl = fetch, google
         const current = campaignCreative(asset, input.product, platform, origin);
         // An old proposal (including its image and CTA) must still be the approved creative. Fail before reserving or writing anything.
         if (!current || Object.keys(current).some(key => current[key] !== ad[key])) throw failure('ad_creative_changed');
+        // Approved under a price, offer or trial that has since changed: fail before reserving or writing anything (compliance.mjs, outdatedTerms).
+        if (!termsHold(asset)) throw failure('ad_creative_outdated');
         if (typeof client.startCampaign !== 'function') return fallback('cannot_start');
         const moment = now();
         // A flight runs its own days (never past the month); any other campaign to the month's end.

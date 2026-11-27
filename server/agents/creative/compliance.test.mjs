@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { badgeText, checkCopy, checkPlatform, checkText, checkVideo, checkVisual, rules, verdictOf } from './compliance.mjs';
+import { badgeText, checkCopy, checkPlatform, checkText, checkVideo, checkVisual, outdatedTerms, rules, termsHold, verdictOf } from './compliance.mjs';
 
 // Copy that passes every rule, for both products: the fact sheet's own words.
 const clean = {
@@ -196,5 +196,41 @@ describe('visual and video compliance', () => {
     expect(blocked.verdict).toBe('block');
     expect(blocked.reasons[0].level).toBe('block');
     expect(badgeText(blocked)).toBe('Blocked: 1 problem');
+  });
+});
+
+describe('approved creative against today\'s terms (outdatedTerms)', () => {
+  // A row of private.creative_approved / creative_live_assets: the asset's words, its layout and the text on its image or video.
+  const approved = (over = {}) => ({ id: '0134bbbb-0000-4000-8000-000000000001', product: 'caremetric-intel', platform: 'meta', layout: 'headline', ...clean,
+    overlay: { beats: ['Start your 30-day free trial.'] }, ...over });
+  const messages = asset => outdatedTerms(asset).map(item => item.message);
+
+  it('holds for creative whose words are still true, the Founders Sale at 75% included', () => {
+    expect(outdatedTerms(approved())).toEqual([]);
+    expect(termsHold(approved({ overlay: { offerLine: 'Founders Sale: 75% off the first 12 months of paid service. Applied automatically. No code needed.' } }))).toBe(true);
+    expect(termsHold(approved({ primaryText: 'Intel Starter is $349 per month.' }))).toBe(true);
+  });
+
+  it('catches creative approved under terms that changed: a 14-day trial, a 50% sale, a card required to start', () => {
+    expect(messages(approved({ primaryText: 'Email campaigns are on Growth and Pro. Try Intel free for 14 days.' }))).toContain('It states a number the fact sheet does not.');
+    expect(messages(approved({ overlay: { beats: ['Try it free for 14 days, no credit card'] } }))).toContain('It states a number the fact sheet does not.');
+    expect(messages(approved({ overlay: { offerLine: 'Founders Sale: 50% off eligible subscription charges for the first 12 months of paid service.' } })))
+      .toContain('It says 50% off; billing applies 75%.');
+    expect(messages(approved({ overlay: { beats: ['Try it free for 30 days.', 'Credit card required to start.'] } })).join(' ')).toMatch(/needs a credit card/);
+    expect(messages(approved({ primaryText: 'Intel Starter is $299 per month.' }))).toContain('It states a price that is not this product\'s listed price.');
+  });
+
+  it('reads the text on the image, but not a county snapshot\'s code-printed figure', () => {
+    const snapshot = approved({ layout: 'stat', altText: '41% of residents used home health in 2023', overlay: { stat: '41%', statLabel: 'of residents', statSource: 'CMS, 2023' } });
+    expect(termsHold(snapshot)).toBe(true);
+    expect(termsHold({ ...snapshot, overlay: { ...snapshot.overlay, kicker: 'Try Intel free for 14 days' } })).toBe(false);
+  });
+
+  it('fails creative read without its image text (a reader older than 20261128000000), and treats an empty one as empty', () => {
+    const { overlay, ...older } = approved();
+    expect(overlay).toBeTruthy();
+    expect(messages(older).join(' ')).toMatch(/could not be read/);
+    expect(termsHold(approved({ overlay: null }))).toBe(true);
+    expect(termsHold(approved({ overlay: {} }))).toBe(true);
   });
 });

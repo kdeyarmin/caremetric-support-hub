@@ -274,6 +274,8 @@ const errorLabels: Record<string, string> = {
   auto_approved_refused: "Replies are never sent without your approval, so nothing was sent.",
   answers_off: "Support answers are no longer handed over to the Concierge (you chose Keep approving, paused it or changed its level after this answer was approved automatically), so nothing was sent.",
   no_executor: "This server cannot carry out that kind of action yet.",
+  post_creative_outdated: "The approved image or video states a price, offer or trial that is no longer true (it changed after you approved it), so the post was not published. The Creative Director proposes retiring it.",
+  ad_creative_outdated: "The approved image states a price, offer or trial that is no longer true (it changed after you approved it), so the ad was not created. The Creative Director proposes retiring it.",
   executor_error: "The action could not be carried out.",
   bridge_unavailable: "The other application did not answer. It is tried again when you press Run what's waiting.",
   rate_limited: "The other application asked to slow down. It is tried again when you press Run what's waiting.",

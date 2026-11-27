@@ -459,7 +459,7 @@ describe('approved creative from the Creative Director', () => {
   const token = 'f'.repeat(64);
   const approvedAsset = (over = {}) => ({ id: '22222222-2222-4222-8222-222222222222', token, product: 'caremetric-intel', platform: 'meta', placement: 'meta.feed_square', kind: 'static',
     headline: 'Territory plans from Medicare data', primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.',
-    description: 'Free trial', cta: 'Start free trial', landingUrl: 'https://www.caremetricintel.com/?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=22222222-2222-4222-8222-222222222222', ...over });
+    description: 'Free trial', cta: 'Start free trial', landingUrl: 'https://www.caremetricintel.com/?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=22222222-2222-4222-8222-222222222222', overlay: {}, ...over });
   const planModel = () => modelReturning({ posts: [{ platform: 'instagram', product: 'caremetric-intel', pillar: 'tip', day: 2, text: 'Which county sends your agency the most referrals? Map it before you plan the week.', linkId: '', hashtags: ['homehealth'] }] });
 
   it.each(['facebook', 'instagram', 'linkedin'])('proposes an approved %s video with its exact URL and captions', async platform => {
@@ -510,6 +510,17 @@ describe('approved creative from the Creative Director', () => {
     expect(post.input.imageUrl).toBe(`https://help.caremetric.ai/api/creative/a/${token}.png`);
     expect(post.input.creativeAssetId).toBe(approvedAsset().id);
     expect(creative.planned).toHaveBeenCalledWith('2026-11-09');
+  });
+
+  it('never uses approved creative whose price, offer or trial wording changed after it was approved', async () => {
+    const outdated = approvedAsset({ id: '33333333-3333-4333-8333-333333333333', overlay: { offerLine: 'Founders Sale: 50% off the first 12 months of paid service.' } });
+    const current = approvedAsset();
+    const creative = { approved: vi.fn(async ({ platform }) => (platform === 'meta' ? [outdated, current] : [])), planned: vi.fn(async () => 'task') };
+    const { store, handlers } = harness({ model: planModel(), imageUrls: [], creative });
+    await handlers['social.plan'](task('social.plan'), { now });
+    const ids = store.proposeAction.mock.calls.map(([input]) => input.input.creativeAssetId).filter(Boolean);
+    expect(ids).toContain(current.id);
+    expect(ids).not.toContain(outdated.id);
   });
 
   it('plans exactly as before without the Creative Director', async () => {
@@ -688,7 +699,7 @@ describe('approved creative from the Creative Director', () => {
 
 describe('event posts, article links and stories', () => {
   const token = 'c'.repeat(64);
-  const storyAsset = { id: '33333333-3333-4333-8333-333333333333', token, product: 'caremetric-intel', platform: 'meta', placement: 'meta.story', kind: 'static' };
+  const storyAsset = { id: '33333333-3333-4333-8333-333333333333', token, product: 'caremetric-intel', platform: 'meta', placement: 'meta.story', kind: 'static', overlay: {} };
   const feed = { configured: true,
     releases: vi.fn(async () => ({ releases: [{ dataset: 'home_health_compare', title: 'Home Health Care Agencies', data_year: '2026', period_start: null, period_end: null, published: '2026-10-28', loaded: '2026-11-02' }] })),
     observances: vi.fn(async () => ({ observances: [{ id: 'np-week', name: 'National Nurse Practitioner Week', category: 'people', audience: 'Nurse practitioners', sponsor: 'AANP', start: '2026-11-15', end: '2026-11-21', idea: 'x' }] })) };
@@ -822,7 +833,7 @@ describe('reach outside cold email (team review 2026-11-17, stage 6)', () => {
   });
 
   it('uses an approved creative\'s id as the post\'s utm_content, so its leads count for the creative', async () => {
-    const asset = { id: '0f8a5b1c-1111-4111-8111-111111111111', kind: 'static', placement: 'meta.feed_square', token: 'a'.repeat(64) };
+    const asset = { id: '0f8a5b1c-1111-4111-8111-111111111111', kind: 'static', placement: 'meta.feed_square', token: 'a'.repeat(64), overlay: {} };
     const creative = { approved: vi.fn(async ({ platform }) => (platform === 'meta' ? [asset] : [])) };
     const h = reachHarness({ model: modelReturning({ posts: [posts[0]] }), creative });
     await h.handlers['social.plan'](task('social.plan'), { now });

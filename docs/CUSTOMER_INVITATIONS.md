@@ -20,8 +20,8 @@ and sign up. At 100% they never see Stripe.
 7. **Preview email** shows the exact email. **Send invitation** creates the invitation and emails it.
 
 Sending is safe to retry: a second click or a retry after an uncertain answer returns the same invitation and never
-emails twice. The invitation's discount takes the place of the Founders Sale (offers are not combined); enter 50% to
-match it.
+emails twice. The invitation's discount takes the place of the Founders Sale (offers are not combined); enter 75% for
+the first 12 months to match it.
 
 ## What the customer sees
 

@@ -215,6 +215,24 @@ be approved automatically (the database refuses one).
 | `vision_note`, `vision_weak`, `vision_unreviewed` | The image review noted a softer problem (crowded, or anything else), scored the image below "Least score from the image review", or could not look at it | warn |
 | `platform` | The specs above: size, type, file size, video length, copy limits | block or warn |
 
+### Checked again before it is used (2026-11-28)
+
+The rules above run when an asset is made, but prices, offers and the trial can change after you approve it: Intel's trial went from 14
+to 30 days on 2026-11-12 and the Founders Sale from 50% to 75% on 2026-11-24, and approved creative still saying "Try Intel free for 14
+days" and "Founders Sale: 50% off" was posted after both. So every approved or live asset is read again against today's prices, offers and
+trial (`outdatedTerms` in `compliance.mjs`: the price and offer rules of `offer_mismatch`, and the fact sheet's unlisted price, unlisted
+number and Intel card rules) wherever it is about to be used. The text on the image or video counts (the two readers,
+`private.creative_approved` and `private.creative_live_assets`, return its `overlay` since `20261128000000_creative_current_terms.sql`);
+a county snapshot's printed figure does not, as it is the data's.
+
+- The Social Media Manager leaves such an asset out of posts, stories, videos and ad refreshes, and the ads leave it out of a campaign's
+  first ad.
+- A post or ad already approved with it is refused when it is due (`post_creative_outdated`, `ad_creative_outdated`), before anything is
+  published or reserved.
+- The weekly creative refresh proposes retiring it, with the reason, whether or not the ads can be read. Retiring a live asset does not
+  take a post down: the proposal says so, and the post is deleted on the platform if it should come down.
+- An asset read without its `overlay` (the migration not applied yet) cannot be checked and is held back the same way.
+
 ## The image review (2026-11-16)
 
 The coded checks above read the words and measure the colors, but nothing looked at the finished picture. With **Settings → Creative →

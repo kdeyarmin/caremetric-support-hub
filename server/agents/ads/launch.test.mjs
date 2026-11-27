@@ -15,7 +15,7 @@ const linkedinAsset = '44444444-4444-4444-8444-444444444444';
 const asset = (platform, over = {}) => ({ id: platform === 'meta' ? metaAsset : linkedinAsset, token, product: 'caremetric-intel', platform,
   placement: platform === 'meta' ? 'meta.feed_square' : 'linkedin.single_image', kind: 'static', headline: 'Territory plans from Medicare data',
   primaryText: 'CareMetric Intel brings targeted marketing and territory analysis into one place for your team.', description: 'Free county report', cta: 'Get your report',
-  landingUrl: `https://www.caremetricintel.com/county-report?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`, ...over });
+  landingUrl: `https://www.caremetricintel.com/county-report?utm_source=meta&utm_medium=paid&utm_campaign=creative-1&utm_content=${metaAsset}`, overlay: {}, ...over });
 const trusted = { autonomy: 'act', config: { auto_approve_kinds: ['social.campaign_create', 'social.google_campaign'] } };
 
 function setup({ values = {}, googleConfigured = false, approved = platform => [asset(platform)], reservation = (id, execution, daily) => ({ reserved: true, dailyBudgetCents: daily }),
@@ -156,6 +156,23 @@ describe('launching a campaign approved under the hand-over', () => {
     changed.store.creativeLiveAssets.mockResolvedValue([{ ...asset('meta'), status: 'approved', landingUrl: 'https://www.caremetricintel.com/' }]);
     await expect(changed.executors['social.campaign_create'](auto(metaInput))).rejects.toMatchObject({ code: 'ad_creative_changed' });
     expect(changed.meta.createCampaign).not.toHaveBeenCalled();
+    // The same approved creative, but the text on its image states a trial length that is no longer true.
+    const outdated = setup();
+    outdated.store.creativeLiveAssets.mockResolvedValue([{ ...asset('meta'), status: 'approved', overlay: { beats: ['Try Intel free for 14 days'] } }]);
+    await expect(outdated.executors['social.campaign_create'](auto(metaInput))).rejects.toMatchObject({ code: 'ad_creative_outdated' });
+    expect(outdated.store.adsLaunchReserve).not.toHaveBeenCalled();
+    expect(outdated.meta.createCampaign).not.toHaveBeenCalled();
+  });
+
+  it('never picks approved creative whose price, offer or trial wording changed after it was approved as a campaign\'s first ad', async () => {
+    const outdated = setup({ approved: platform => [asset(platform, { overlay: { offerLine: 'Founders Sale: 50% off the first 12 months of paid service.' } })] });
+    await outdated.handlers['ads.plan'](task({ agent: trusted }), { now: monday });
+    expect(outdated.store.proposeAction).toHaveBeenCalled();
+    expect(outdated.store.proposeAction.mock.calls.slice(0, 2).every(([item]) => !item.input.firstAd)).toBe(true);
+    // Beside current creative, the outdated one is passed over.
+    const mixed = setup({ approved: platform => [asset(platform, { headline: 'Old terms', overlay: { beats: ['Try Intel free for 14 days'] } }), asset(platform)] });
+    await mixed.handlers['ads.plan'](task({ agent: trusted }), { now: monday });
+    for (const [{ input }] of mixed.store.proposeAction.mock.calls.slice(0, 2)) expect(input.firstAd.headline).toBe(asset(input.platform).headline);
   });
 
   it('launches a Meta campaign live: reserved, created paused to its month\'s end, its first ad put in, then started', async () => {

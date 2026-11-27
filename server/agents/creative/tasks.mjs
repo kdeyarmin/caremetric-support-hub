@@ -25,7 +25,7 @@ import { delivered } from '../notify.mjs';
 import { reviewImage } from './vision.mjs';
 import { dueMoment, permanent, plural, recordRun } from '../tasks/shared.mjs';
 import { catalogBlocks, focusFor } from '../content/features.mjs';
-import { badgeText, checkCopy, checkData, checkPlatform, checkText, checkVideo, checkVisual, verdictOf, withoutFigure } from './compliance.mjs';
+import { badgeText, checkCopy, checkData, checkPlatform, checkText, checkVideo, checkVisual, outdatedTerms, verdictOf, withoutFigure } from './compliance.mjs';
 import { withFacts } from './data.mjs';
 import {
   audienceFor, namedSegment, segmentFor,
@@ -447,6 +447,29 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     return await store.notificationCount({ prefix: key, channel: 'email', since: new Date(0) }) > 0;
   }
 
+  /**
+   * Proposes retiring each approved or live asset whose words state a price, offer or trial that is no longer true (compliance.mjs,
+   * outdatedTerms): the Social Media Manager and the ads already leave such creative out, and retiring it takes it off the approved list
+   * for good. A live asset is already posted; retiring it does not take the post down, so the preview says so. Returns how many it proposed.
+   */
+  async function proposeOutdated(task, assets, open, signal) {
+    let proposed = 0;
+    for (const asset of assets ?? []) {
+      signal?.throwIfAborted();
+      if (!/^[0-9a-f-]{36}$/.test(asset?.id ?? '') || open.has(`creative.retire:${asset.id}`)) continue;
+      const reasons = [...new Set(outdatedTerms(asset).map(finding => finding.message))];
+      if (!reasons.length) continue;
+      const posted = asset.status === 'live' ? ' It is already posted: retiring it does not take the post down, so delete the post on the platform if it should come down.' : '';
+      try {
+        const proposal = await store.proposeAction({ taskId: task.id, kind: 'creative.retire', targetKind: 'creative_asset', targetId: asset.id,
+          preview: `Retire ${productNames[asset.product] ?? asset.product} ${platformNames[asset.platform] ?? asset.platform} creative "${String(asset.headline ?? '').slice(0, 80)}": its words are no longer true (${reasons.join(' ')}).${posted} Retiring stops the Social Media Manager from using it.`,
+          input: { assetId: asset.id, outdated: reasons } });
+        if (proposal) { proposed += 1; open.add(`creative.retire:${asset.id}`); }
+      } catch (error) { if (error?.code !== '42501') throw error; }
+    }
+    return proposed;
+  }
+
   async function refresh(task, { now = () => new Date(), signal } = {}) {
     if (task.agent?.autonomy === 'observe') return { result: { skipped: 'observe_only' } };
     const moment = now();
@@ -455,11 +478,13 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
     if (await weeklyGate(task, key)) return { result: { skipped: 'already_refreshed', week } };
     const offered = await offeredNow();
     const assets = await store.creativeLiveAssets(offered);
+    const open = new Set(await store.creativeOpenTargets());
+    // Creative that states a price, offer or trial that is no longer true is proposed for retirement whether or not the ads can be read.
+    const outdated = await proposeOutdated(task, assets, open, signal);
     const { results, notes, sources } = await readResults(signal, moment);
-    if (!sources) return { result: { skipped: 'ads_not_configured', week } };
+    if (!sources) return { result: { skipped: 'ads_not_configured', week, outdated } };
     const rows = scorecard(assets, results);
     const { retire, winners } = refreshPlan(rows);
-    const open = new Set(await store.creativeOpenTargets());
     let retired = 0;
     for (const row of retire) {
       signal?.throwIfAborted();
@@ -484,16 +509,17 @@ export function creativeHandlers({ store, notifier, model = null, meta = null, l
       }
     }
     await store.creativePerformanceSave(rows.map(row => ({ id: row.id, performance: { week, impressions: row.impressions, clicks: row.clicks, ctr: row.ctr, cpmCents: row.cpmCents, frequency: Number(row.frequency.toFixed(2)), spendCents: row.spendCents, fatigued: row.fatigued, signals: row.signals } })));
-    const body = `${plural(rows.length, 'live asset')} read: ${plural(retired, 'retirement')} proposed for tired creative and ${plural(refreshed, 'new brief')} for variants of the winners.${notes.length ? ` ${notes.join(' ')}` : ''}`;
+    const stale = outdated ? ` ${plural(outdated, 'retirement')} proposed for creative whose price, offer or trial wording is no longer true.` : '';
+    const body = `${plural(rows.length, 'live asset')} read: ${plural(retired, 'retirement')} proposed for tired creative and ${plural(refreshed, 'new brief')} for variants of the winners.${stale}${notes.length ? ` ${notes.join(' ')}` : ''}`;
     // Nothing to retire, nothing to build on and nothing that could not be read: no email (email review 2026-11-17: "Creative refresh: 0
     // assets to retire, 0 winners to build on" arrived every week). A refresh the owner asked for always answers.
-    if (retired || refreshed || notes.length || task.sourceKind === 'owner') {
-      await notifier.send({ severity: 'info', subject: `Creative refresh: ${plural(retired, 'asset')} to retire, ${plural(refreshed, 'winner')} to build on`, body,
+    if (retired || refreshed || outdated || notes.length || task.sourceKind === 'owner') {
+      await notifier.send({ severity: 'info', subject: `Creative refresh: ${plural(retired + outdated, 'asset')} to retire, ${plural(refreshed, 'winner')} to build on`, body,
         dedupeKey: task.sourceKind === 'owner' ? `creative:refresh:run:${task.id}` : key, agentKey: task.agentKey, taskId: task.id,
-        attention: task.sourceKind === 'owner' ? 'now' : retired || refreshed ? 'decision' : 'update' });
+        attention: task.sourceKind === 'owner' ? 'now' : retired || refreshed || outdated ? 'decision' : 'update' });
     }
-    await recordRun({ store, log }, task, { promptVersion: 'creative-refresh.1', summary: body });
-    return { result: { week, assets: rows.length, retired, refreshed } };
+    await recordRun({ store, log }, task, { promptVersion: 'creative-refresh.2', summary: body });
+    return { result: { week, assets: rows.length, retired, refreshed, outdated } };
   }
 
   async function report(task, { now = () => new Date(), signal } = {}) {
