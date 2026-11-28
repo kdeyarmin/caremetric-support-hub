@@ -216,11 +216,11 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
           if(!growth?.appActivity) throw new HttpError(503,'Growth is unavailable.');
           return json(await growth.appActivity(req.headers.authorization,await jsonBody(req,8192)));
         }
-        const appBilling=/^\/api\/apps\/(entitlements|facility-entitlements|usage|trials|portal|billing)$/.exec(path);
+        const appBilling=/^\/api\/apps\/(entitlements|facility-entitlements|usage|trials|portal|billing|addons)$/.exec(path);
         if(appBilling) {
           if(req.method!=='POST' || req.headers.origin || req.headers.cookie || url.search) throw new HttpError(403,'Forbidden.');
           if(!billing) throw new HttpError(503,'Billing is not configured.');
-          const action={entitlements:'entitlements','facility-entitlements':'facilityEntitlements',usage:'usage',trials:'trial',portal:'appPortal',billing:'appPlanChanges'}[appBilling[1]];
+          const action={entitlements:'entitlements','facility-entitlements':'facilityEntitlements',usage:'usage',trials:'trial',portal:'appPortal',billing:'appPlanChanges',addons:'appAddons'}[appBilling[1]];
           return json(await billing[action](req.headers.authorization,await jsonBody(req,['facility-entitlements','billing'].includes(appBilling[1])?262144:8192)));
         }
         // Unsubscribe links in bulk email: the secret token in the path is the only authority,

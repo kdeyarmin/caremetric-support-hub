@@ -390,6 +390,35 @@ subscription pays in Stripe Checkout and returns to `return_url` with `?checkout
 - Every request is recorded as `billing.plan_change.app` with the application, account,
   administrator id, action, outcome and quote — never names or emails.
 
+### `POST /api/apps/addons`
+
+An application sets the quantity of one of its own customers' per-unit add-ons, for that organization's
+administrator (`appAddons` in `server/billing.mjs`; `appAddonApps`: CareMetric Intel only). Intel uses it for an
+additional marketer bought when an administrator invites one past the plan's included seats, and for the AI packs
+added on its Billing page:
+
+```json
+{ "account": "0000000000000000000000a1", "actor": { "id": "42" }, "addon": "extra_seat", "quantity": 2, "request_key": "<uuid>" }
+```
+
+`addon` is the entitlement key; the application decides the quantity (Intel counts its own marketer seats). The Hub,
+under the account's billing lock:
+
+- finds the add-on's price for the subscription's plan and billing cycle: a product made for the plan (`hub_for_plan`,
+  as the extra seat has), else the one product sold to every plan (an AI pack);
+- charges a larger quantity now for the rest of the period (`proration_behavior: always_invoice`) and refuses it with
+  nothing changed when that payment fails (`payment_behavior: error_if_incomplete`, answered 402); during a trial it
+  costs nothing until the trial ends;
+- applies a smaller quantity without a credit (`none`), and removes the item at 0. Intel lowers a quantity only just
+  before renewal, so nothing paid for is taken away early;
+- changes an item already on the subscription at its own price, so a founding member's locked seat price stays;
+- leaves alone a subscription with a scheduled change, a pending payment, a pause or a cancellation (409).
+
+It answers `{ outcome: "updated" | "unchanged", addon, quantity, previous }`. The subscription is mirrored at once,
+so the next entitlements answer counts the new quantity. Every request, applied, unchanged or refused, is recorded as
+`billing.addon.app` with the application, account, administrator id, add-on, quantities and outcome. Key and account
+scope, and refusing browser requests, work as for `/api/apps/billing`.
+
 ### `POST /api/apps/portal`
 
 Opens the Stripe customer portal for one of the application's own linked accounts, so its administrator can

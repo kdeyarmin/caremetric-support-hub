@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { live } from './live.mjs';
 import { HttpError, transaction, withSession } from './sms-auth.mjs';
-import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema, appPortalRequestSchema, appBillingRequestSchema } from '../src/billing/billingProtocol.ts';
+import { billingCommandSchema, localBillingActions, entitlementRequestSchema, usageReportSchema, trialRequestSchema, appPortalRequestSchema, appBillingRequestSchema, appAddonRequestSchema } from '../src/billing/billingProtocol.ts';
+import { customerBillingWorkspace } from '../src/billing/customerBillingProtocol.ts';
 import { stripeClient, StripeError, STRIPE_ACCOUNT_ID, verifyStripeSignature, eventTarget, retrievePaths, normalizers, withAllSubscriptionItems } from './stripe.mjs';
 import { customerBillingService } from './customer-billing.mjs';
 import { FOUNDERS_COUPON, applyFoundersToInvoice, followFoundersReplacements, foundersEligibility, foundersFollowProducts, foundersMetadata } from './founders-sale.mjs';
@@ -53,6 +54,9 @@ function firstIssue(error) {
   const issue = error?.issues?.[0];
   return typeof issue?.message === 'string' && issue.code === 'custom' ? issue.message : 'Check the billing form and try again.';
 }
+/** The applications that set their own add-on quantities through the Hub (appAddons): Intel counts its marketer seats. */
+export const appAddonApps = Object.freeze(['caremetric-intel']);
+
 function asHttpError(error) {
   if (error instanceof HttpError) return error;
   if (error instanceof StripeError) {
@@ -766,6 +770,114 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     }
   }
 
+  /**
+   * An application sets the quantity of one of its own customers' per-unit add-ons (CareMetric Intel: the additional
+   * marketers it counts when an organization administrator invites one past the plan's included seats, and the AI packs
+   * the administrator adds on its Billing page). The application decides the quantity; the Hub finds the add-on's price
+   * for the subscription's plan and billing cycle (a seat priced by plan has a product per plan, marked `hub_for_plan`)
+   * and changes the subscription in Stripe, under the account's billing lock:
+   * - a larger quantity is charged now for the rest of the period (`always_invoice`), and refused with nothing changed
+   *   when that payment fails (`error_if_incomplete`); during a trial it costs nothing until the trial ends;
+   * - a smaller one takes effect without a credit (`none`): the application lowers a quantity just before renewal, so
+   *   nothing paid for is taken away early;
+   * - an item already on the subscription keeps its own price, so a founding member's locked price is never moved.
+   * A subscription with a scheduled change, a pending payment, a pause or a cancellation is left alone (409). Every
+   * request, applied or refused, is audited as `billing.addon.app`.
+   */
+  async function appAddons(authorization, input) {
+    const parsed = appAddonRequestSchema.safeParse(input);
+    if (!parsed.success) throw new HttpError(400, 'Send the application account, the administrator, the add-on, its quantity and a request key.');
+    const body = parsed.data;
+    let app = null, tenant = null;
+    const record = { account: body.account, actor: body.actor.id, addon: body.addon, quantity: body.quantity };
+    try {
+      const live = await stripe();
+      if (!live) throw new HttpError(503, 'Stripe is not configured.');
+      const result = await transaction(pool, async db => {
+        app = await authenticateApp(db, authorization);
+        record.app = app.slug;
+        if (!appAddonApps.includes(app.slug)) throw new HttpError(403, 'This application does not set add-on quantities through the Hub.');
+        tenant = (await one(db, 'select private.app_customer_billing_tenant($1,$2) as t', [app.product_id, body.account])).t;
+        // The lock quantity reports and facility activation take: one change to an account's billing at a time.
+        await db.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`facility-billing:${tenant}:${app.product_id}`]);
+        const workspace = customerBillingWorkspace.parse((await one(db, 'select private.app_customer_billing_context($1,$2,$3::jsonb) as c',
+          [app.product_id, body.account, '[]'])).c);
+        if (!workspace.subscription) throw new HttpError(409, 'This account has no subscription to add to yet.');
+        const current = await withAllSubscriptionItems(live, await live.get(`/v1/subscriptions/${workspace.subscription.id}`));
+        const id = value => (typeof value === 'string' ? value : value?.id ?? null);
+        if (id(current.customer) !== workspace.customer || (current.metadata?.app && current.metadata.app !== app.slug)) {
+          throw new HttpError(409, 'The subscription account changed. Refresh billing and try again.');
+        }
+        if (!['active', 'trialing'].includes(current.status)) throw new HttpError(409, 'The subscription is not active, so nothing can be added to it.');
+        if (current.schedule) throw new HttpError(409, 'This subscription has a scheduled change, so CareMetric changes its add-ons.');
+        if (current.pause_collection || current.cancel_at_period_end || current.cancel_at || current.pending_update) {
+          throw new HttpError(409, 'Resolve the pending payment, cancellation or pause before changing add-ons.');
+        }
+        const catalog = new Map(workspace.catalog.map(price => [price.id, price]));
+        const items = current.items?.data ?? [];
+        const plans = items.filter(item => catalog.get(id(item.price))?.kind === 'plan');
+        if (plans.length !== 1) throw new HttpError(409, 'This subscription needs a single plan before its add-ons can change.');
+        const plan = catalog.get(id(plans[0].price));
+        const interval = plans[0].price?.recurring?.interval ?? plan.interval;
+        const addonProducts = new Set(workspace.catalog.filter(price => price.kind === 'addon' && price.key === body.addon).map(price => price.product));
+        if (!addonProducts.size) throw new HttpError(404, 'This application sells no such add-on.');
+        const existing = items.filter(item => addonProducts.has(id(item.price?.product) ?? catalog.get(id(item.price))?.product));
+        if (existing.length > 1) throw new HttpError(409, 'This add-on is on the subscription more than once; CareMetric needs to reconcile it first.');
+        const item = existing[0] ?? null;
+        const previous = item?.quantity ?? 0;
+        Object.assign(record, { previous, subscription: current.id });
+        if (previous === body.quantity) return { outcome: 'unchanged', addon: body.addon, quantity: body.quantity, previous };
+        let price = null;
+        if (!item) {
+          // The add-on's price for this plan and cycle: a product made for the plan, else the one product sold to every plan.
+          const candidates = workspace.catalog.filter(entry => entry.kind === 'addon' && entry.key === body.addon && entry.active
+            && entry.model === 'per_unit' && entry.interval === interval && entry.interval_count === 1 && entry.currency === plan.currency);
+          const forPlan = [], everyPlan = [];
+          for (const productId of [...new Set(candidates.map(entry => entry.product))]) {
+            const product = await live.get(`/v1/products/${productId}`);
+            const named = product.metadata?.[FOR_PLAN_KEY] ?? '';
+            if (named === plan.key) forPlan.push(productId);
+            else if (!named) everyPlan.push(productId);
+          }
+          const productId = forPlan.length === 1 ? forPlan[0] : !forPlan.length && everyPlan.length === 1 ? everyPlan[0] : null;
+          const prices = candidates.filter(entry => entry.product === productId);
+          if (!productId || prices.length !== 1) throw new HttpError(409, 'This add-on is not sold for this plan and billing cycle.');
+          price = prices[0].id;
+          record.price = price;
+        }
+        const increase = body.quantity > previous;
+        const idempotencyKey = `hub-app-addon-${deterministicKey(app.slug, body.account, body.addon, body.request_key, String(body.quantity))}`;
+        const charge = { proration_behavior: 'always_invoice', payment_behavior: 'error_if_incomplete' };
+        try {
+          if (!item) await live.post('/v1/subscription_items', { subscription: current.id, price, quantity: body.quantity, ...charge }, { idempotencyKey });
+          else if (body.quantity === 0) await live.del(`/v1/subscription_items/${item.id}`, { proration_behavior: 'none' });
+          else await live.post(`/v1/subscription_items/${item.id}`, { quantity: body.quantity, ...(increase ? charge : { proration_behavior: 'none' }) }, { idempotencyKey });
+        } catch (error) {
+          if (error instanceof StripeError && (error.status === 402 || error.type === 'card_error')) {
+            throw new HttpError(402, 'The card on file was declined, so nothing was added. Update the payment method and try again.');
+          }
+          throw error;
+        }
+        await refresh(db, live, 'subscription', current.id);
+        Object.assign(record, { outcome: increase ? 'added' : 'lowered' });
+        await audit(db, null, 'billing.addon.app', tenant, app.product_id, record);
+        return { outcome: 'updated', addon: body.addon, quantity: body.quantity, previous };
+      });
+      if (result.outcome === 'unchanged') {
+        await transaction(pool, db => audit(db, null, 'billing.addon.app', tenant, app.product_id, { ...record, outcome: 'unchanged' }))
+          .catch(() => log.warn('An application add-on request could not be recorded in the audit trail.'));
+      }
+      return result;
+    } catch (error) {
+      const failure = asHttpError(error);
+      if (app) {
+        await transaction(pool, db => audit(db, null, 'billing.addon.app', tenant, app.product_id, { ...record, outcome: 'refused', status: failure.status ?? 500 }))
+          .catch(() => log.warn('An application add-on request could not be recorded in the audit trail.'));
+      }
+      throw failure;
+    }
+  }
+
   async function facilityEntitlements(authorization, input) {
     const parsed = facilityEntitlementRequest.safeParse(input);
     if (!parsed.success) throw new HttpError(400, 'Send the version, application account and unique facility ids.');
@@ -1244,7 +1356,7 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     },
     status: () => ({ configured: !!client, state, mode: client?.mode ?? null, account: state === 'ready' ? accountId : null,
       webhook: webhookSecrets.length > 0, portal_configuration: !!portal() }),
-    webhook, command, customerPortal, appPortal, appPlanChanges, entitlements, facilityEntitlements, usage, trial, agentOffer,
+    webhook, command, customerPortal, appPortal, appPlanChanges, appAddons, entitlements, facilityEntitlements, usage, trial, agentOffer,
     // Stripe for customer invitations (customer-invitations.mjs): the verified client, and the mirror every billing change writes through.
     invitationStripe: { client: stripe, mirror: (db, live, kind, object) => mirror(db, kind, object, new Date(now()), { live }), refresh },
     customer: async (session, input) => { try { return await customerSelfService.handle(session, input); } catch (error) { throw asHttpError(error); } },
