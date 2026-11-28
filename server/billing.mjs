@@ -1191,6 +1191,31 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
         log.warn(`${app} ${step.entitlement_key}${step.plan ? ` (${step.plan})` : ''} description could not be brought in step (${error?.message ?? 'error'}).`);
       }
     }
+    // A rename the owner reviewed (REVIEWED_RENAMES), once, while the product still has the old name. The request key names
+    // both names, so a retried run reuses it and a product renamed by hand meanwhile is left as it is.
+    for (const step of plan.renames) {
+      try {
+        const renamed = await transaction(pool, async db => {
+          const lockKey = `billing_catalog_sync:${app}:${step.product}:name`;
+          if (!(await one(db, 'select pg_try_advisory_xact_lock(hashtextextended($1,0)) as ok', [lockKey])).ok) return false;
+          const product = await live.post(`/v1/products/${step.product}`, { name: step.to },
+            { idempotencyKey: `hub-catalog-rename-${deterministicKey(app, step.product, step.from, step.to)}` });
+          await mirror(db, 'product', product, new Date(now()), { live });
+          await audit(db, null, 'billing.catalog.rename', null, await appId(db, app), {
+            source: 'app_catalog', version: catalog.version, entitlement: step.entitlement_key, ...(step.plan ? { plan: step.plan } : {}), product: step.product,
+            from: step.from, to: step.to,
+          });
+          return true;
+        });
+        if (renamed) applied.push({ ...step, action: 'product.rename' });
+      } catch (error) {
+        failed.push(step);
+        log.warn(`${app} ${step.entitlement_key}${step.plan ? ` (${step.plan})` : ''} could not be renamed to "${step.to}" (${error?.message ?? 'error'}).`);
+      }
+    }
+    for (const named of plan.names) {
+      log.warn(`${app}'s ${named.entitlement_key} plan product ${named.product} is named "${named.name}", but the catalog calls the plan "${named.catalog_name}"; rename it on the Billing page.`);
+    }
     await refreshFounders().catch(() => log.warn('Founders Sale replacements could not be refreshed; they will be on the next run.'));
     for (const held of plan.held) log.warn(`${app} ${held.entitlement_key}${held.plan ? ` (${held.plan})` : ''}${held.interval ? ` ${held.interval}` : ''} price held for an administrator: ${held.reason}.`);
     for (const missing of plan.missing) log.warn(`${app} sells ${missing.entitlement_key}, but ${missing.reason}.`);

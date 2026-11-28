@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { APP_CATALOG_CONTRACT, FOR_PLAN_KEY, REVIEWED_PRICE_MOVES, deterministicKey, migrationFor, parseAppCatalog, planCatalogSync, reviewedMove } from './app-catalog-sync.mjs';
+import { APP_CATALOG_CONTRACT, FOR_PLAN_KEY, REVIEWED_PRICE_MOVES, REVIEWED_RENAMES, deterministicKey, migrationFor, parseAppCatalog, planCatalogSync, reviewedMove } from './app-catalog-sync.mjs';
 import { platformBilling } from './billing.mjs';
 import { FOUNDERS_FOLLOW_APPS, followFoundersReplacements, foundersAmounts, foundersFollowProducts, foundersPrice } from './founders-sale.mjs';
 import { intelFactsFromCatalog, intelReviewedFacts, products as facts, resetAppCatalogFacts } from './agents/content/facts.mjs';
@@ -116,7 +116,7 @@ describe('planning the Stripe changes', () => {
   };
 
   it('changes nothing when Stripe already matches, plans and add-ons alike', () => {
-    expect(plan()).toEqual({ productCreates: [], creates: [], changes: [], descriptions: [], held: [], missing: [], skipped: [], unchanged: 6 + ADDON_PRICES });
+    expect(plan()).toEqual({ productCreates: [], creates: [], changes: [], descriptions: [], renames: [], names: [], held: [], missing: [], skipped: [], unchanged: 6 + ADDON_PRICES });
   });
 
   it('gives each plan and add-on product the catalog\'s description, and never touches a name, a unit label or a price', () => {
@@ -222,6 +222,46 @@ describe('planning the Stripe changes', () => {
     expect(parseAppCatalog(FIXTURE, 'caremetric-intel').founding_offer).toBeNull();
   });
 
+  // Stripe as Intel's products were named before the plans were renamed: the plans by hand, the seats by this sync.
+  const namedAsBefore = () => {
+    const objects = stripeObjects({ addons: true });
+    for (const product of objects.products) {
+      if (product.metadata.entitlement === 'extra_seat') product.name = `Extra seat (${PLAN_NAMES[product.metadata[FOR_PLAN_KEY]]})`;
+    }
+    return objects;
+  };
+
+  it('renames a product the owner reviewed once the catalog uses the new name, and no other name', () => {
+    const current = parseAppCatalog(CURRENT, 'caremetric-intel');
+    const { products, prices } = namedAsBefore();
+    const result = planCatalogSync(current, products, prices);
+    expect(result.renames.map(step => [step.entitlement_key, step.plan ?? '', step.from, step.to])).toEqual([
+      ['starter', '', 'CareMetric Intel Starter', 'CareMetric Intel Local'],
+      ['growth', '', 'CareMetric Intel Growth', 'CareMetric Intel Team'],
+      ['pro', '', 'CareMetric Intel Pro', 'CareMetric Intel Multi-state'],
+      ['extra_seat', 'starter', 'Extra seat (Starter)', 'Additional marketer (Local)'],
+      ['extra_seat', 'growth', 'Extra seat (Growth)', 'Additional marketer (Team)'],
+      ['extra_seat', 'pro', 'Extra seat (Pro)', 'Additional marketer (Multi-state)'],
+    ]);
+    expect(result.renames.find(step => step.entitlement_key === 'growth').product).toBe(STRIPE_PLANS.growth.product);
+    expect(result.names).toEqual([]);
+    // The catalog that still called the plans Starter, Growth and Pro renames nothing.
+    expect(planCatalogSync(parseAppCatalog(FIXTURE, 'caremetric-intel'), products, prices).renames).toEqual([]);
+    // A name an administrator chose is left as it is, and a plan's that doesn't say the plan is pointed out, not changed.
+    const byHand = namedAsBefore();
+    byHand.products.find(product => product.id === STRIPE_PLANS.growth.product).name = 'Intel Growth (custom)';
+    byHand.products.find(product => product.id === STRIPE_PLANS.starter.product).name = 'CareMetric Intel Local';
+    const handled = planCatalogSync(current, byHand.products, byHand.prices);
+    expect(handled.renames.map(step => step.entitlement_key)).toEqual(['pro', 'extra_seat', 'extra_seat', 'extra_seat']);
+    expect(handled.names).toEqual([{ entitlement_key: 'growth', product: STRIPE_PLANS.growth.product, name: 'Intel Growth (custom)', catalog_name: 'Team' }]);
+    // Every reviewed rename names a plan or add-on Intel's current catalog sells under that name.
+    for (const entry of REVIEWED_RENAMES['caremetric-intel']) {
+      const item = current.products.find(product => product.entitlement_key === entry.entitlement_key);
+      expect(item?.name, JSON.stringify(entry)).toBe(entry.catalog_name);
+      if (entry.plan) expect(item.prices.some(price => price.plan === entry.plan), JSON.stringify(entry)).toBe(true);
+    }
+  });
+
   it('leaves one-time fees to an administrator', () => {
     const result = plan({}, objects => objects, { edit: body => ({ ...body, products: [...body.products,
       { entitlement_key: 'onboarding', kind: 'fee', name: 'Onboarding', description: '', self_serve: true, prices: [{ interval: 'once', unit_amount: 50000, plan: 'growth' }] }] }) });
@@ -310,6 +350,7 @@ describe('syncing Stripe from Intel\'s catalog', () => {
         posts.push({ path: pathname, key: init.headers['Idempotency-Key'], form });
         const product = stripe.products.find(item => item.id === pathname.split('/').pop());
         if (form.has('description')) product.description = form.get('description');
+        if (form.has('name')) product.name = form.get('name');
         return json(product);
       }
       if (init.method === 'POST' && pathname === '/v1/prices') {
@@ -438,6 +479,47 @@ describe('syncing Stripe from Intel\'s catalog', () => {
     expect(t.posts).toEqual([]);
     expect(t.audits.map(entry => entry.action)).toContain('billing.catalog.held');
     expect(t.log.warn).toHaveBeenCalledWith(expect.stringMatching(/held for an administrator/));
+  });
+
+  it('renames the reviewed products once, audited, and reuses its request keys if a run is retried', async () => {
+    const stripe = () => {
+      const objects = stripeObjects({ addons: true });
+      for (const product of objects.products) {
+        if (product.metadata.entitlement === 'extra_seat') product.name = `Extra seat (${PLAN_NAMES[product.metadata[FOR_PLAN_KEY]]})`;
+      }
+      return objects;
+    };
+    const run = t => t.billing.syncAppCatalog('caremetric-intel', { fetchCatalog: async () => ({ ok: true, json: async () => structuredClone(CURRENT) }) });
+    const t = harness(stripe());
+    await run(t);
+    const renames = t.posts.filter(post => post.path.startsWith('/v1/products/') && post.form.has('name'));
+    expect(renames.map(post => [...post.form.keys()].join())).toEqual(Array(6).fill('name'));
+    expect(t.stripe.products.find(product => product.id === STRIPE_PLANS.pro.product).name).toBe('CareMetric Intel Multi-state');
+    expect(t.stripe.products.filter(product => product.metadata.entitlement === 'extra_seat').map(product => product.name).sort())
+      .toEqual(['Additional marketer (Local)', 'Additional marketer (Multi-state)', 'Additional marketer (Team)']);
+    const growth = renames.find(post => post.path === `/v1/products/${STRIPE_PLANS.growth.product}`);
+    expect(growth.key).toBe(`hub-catalog-rename-${deterministicKey('caremetric-intel', STRIPE_PLANS.growth.product, 'CareMetric Intel Growth', 'CareMetric Intel Team')}`);
+    const audited = t.audits.filter(entry => entry.action === 'billing.catalog.rename');
+    expect(audited).toHaveLength(6);
+    expect(audited.find(entry => entry.metadata.product === STRIPE_PLANS.growth.product).metadata).toEqual({
+      source: 'app_catalog', version: CURRENT.version, entitlement: 'growth', product: STRIPE_PLANS.growth.product, from: 'CareMetric Intel Growth', to: 'CareMetric Intel Team' });
+    expect(t.log.warn).not.toHaveBeenCalledWith(expect.stringMatching(/rename it on the Billing page/));
+    // The next run finds them renamed; a retried first run sends the same requests.
+    const before = t.posts.length;
+    await run(t);
+    expect(t.posts.slice(before).filter(post => post.form.has('name') && post.path.startsWith('/v1/products/prod_'))).toEqual([]);
+    const retry = harness(stripe());
+    await run(retry);
+    expect(retry.posts.filter(post => post.path.startsWith('/v1/products/') && post.form.has('name')).map(post => post.key)).toEqual(renames.map(post => post.key));
+  });
+
+  it('points an administrator at a plan whose name doesn\'t say the plan, and changes nothing', async () => {
+    const objects = stripeObjects({ addons: true });
+    objects.products.find(product => product.id === STRIPE_PLANS.growth.product).name = 'Intel Growth (custom)';
+    const t = harness(objects);
+    await t.billing.syncAppCatalog('caremetric-intel', { fetchCatalog: async () => ({ ok: true, json: async () => structuredClone(CURRENT) }) });
+    expect(t.stripe.products.find(product => product.id === STRIPE_PLANS.growth.product).name).toBe('Intel Growth (custom)');
+    expect(t.log.warn).toHaveBeenCalledWith(`caremetric-intel's growth plan product ${STRIPE_PLANS.growth.product} is named "Intel Growth (custom)", but the catalog calls the plan "Team"; rename it on the Billing page.`);
   });
 
   it('brings descriptions in step once, leaving names alone, and reuses its request keys if a run is retried', async () => {

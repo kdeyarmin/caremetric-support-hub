@@ -12,7 +12,8 @@ import { maxAmountCents } from '../src/billing/billingProtocol.ts';
  * uses: a lower price reaches everyone already subscribed at their next invoice,
  * and a higher one never does (they are grandfathered: Intel's founding member
  * pricing promises a subscriber's price never goes up), and a product's description
- * follows the catalog's (its name and unit label are left as they are). The
+ * follows the catalog's (its name and unit label are left as they are, but for a rename the owner reviewed,
+ * REVIEWED_RENAMES). The
  * application never talks to Stripe. The same catalog feeds the AI team's fact sheet
  * (server/agents/content/facts.mjs, useAppCatalogFacts).
  *
@@ -55,6 +56,34 @@ export const REVIEWED_PRICE_MOVES = Object.freeze({
     { entitlement_key: 'extra_state', interval: 'year', unit_amount: 99000 },
   ]),
 });
+
+/**
+ * Product renames the owner reviewed. A product's name is an administrator's, and the sync never changes one, except a
+ * rename listed here, for an application's plan or add-on (and, for an add-on priced by plan, that plan): it is applied
+ * once the catalog itself gives the item `catalog_name`, and only while the Stripe product still carries `from` exactly,
+ * so a name an administrator chose is never overwritten. The pull request that adds an entry is the review.
+ * Intel, 2026-11-28 (owner decision): Starter, Growth and Pro became Local, Team and Multi-state, and the extra seat an
+ * additional marketer. Its plan products were named "CareMetric Intel Starter" and so on by hand (docs/PLATFORM_BILLING.md),
+ * its seat products "Extra seat (Starter)" and so on by this sync.
+ */
+const INTEL_PLAN_RENAMES = [['starter', 'Starter', 'Local'], ['growth', 'Growth', 'Team'], ['pro', 'Pro', 'Multi-state']];
+export const REVIEWED_RENAMES = Object.freeze({
+  'caremetric-intel': Object.freeze([
+    ...INTEL_PLAN_RENAMES.flatMap(([key, before, after]) => [
+      { entitlement_key: key, catalog_name: after, from: `CareMetric Intel ${before}`, to: `CareMetric Intel ${after}` },
+      { entitlement_key: key, catalog_name: after, from: before, to: after },
+    ]),
+    ...INTEL_PLAN_RENAMES.map(([key, before, after]) => (
+      { entitlement_key: 'extra_seat', plan: key, catalog_name: 'Additional marketer', from: `Extra seat (${before})`, to: `Additional marketer (${after})` })),
+  ].map(entry => Object.freeze(entry))),
+});
+
+/** The reviewed rename (REVIEWED_RENAMES) a product's current name is due, if any. */
+export function reviewedRename(app, item, forPlan, currentName, renames = REVIEWED_RENAMES) {
+  const name = String(currentName ?? '').trim();
+  return (renames[app] ?? []).find(entry => entry.entitlement_key === item.entitlement_key && (entry.plan ?? '') === (forPlan ?? '')
+    && entry.catalog_name === item.name && entry.from === name) ?? null;
+}
 
 /** Whether a move outside the automatic range is one the owner reviewed (REVIEWED_PRICE_MOVES). */
 export function reviewedMove(app, entry, reviewed = REVIEWED_PRICE_MOVES) {
@@ -143,7 +172,11 @@ const sameDescription = (stripe, catalog) => stripe.replace(/\s+/g, ' ').trim() 
  *   new amount (a lower price, `no_proration`) or keep theirs (a higher one, `grandfather`);
  * - `descriptions`: a plan or add-on product whose description differs from the
  *   catalog's gets the catalog's; a catalog item with no description clears
- *   nothing, and names and unit labels are never changed;
+ *   nothing, and unit labels are never changed;
+ * - `renames`: a product still named what a rename the owner reviewed replaces (REVIEWED_RENAMES) gets the new name;
+ *   no other name is ever changed;
+ * - `names`: a plan product whose name doesn't say the catalog's plan name (after any rename), for an administrator to
+ *   rename on the Billing page; nothing is changed;
  * - `held`: a change outside AUTOMATIC_CHANGE_RANGE that REVIEWED_PRICE_MOVES doesn't list, or a product with several
  *   published prices for one interval, waits for an administrator;
  * - `missing`: a plan the catalog sells that has no Stripe product (plans are
@@ -151,11 +184,11 @@ const sameDescription = (stripe, catalog) => stripe.replace(/\s+/g, ' ').trim() 
  * - `skipped`: one-time fees, which the Hub adds to a first invoice by hand.
  * Products and prices are Stripe objects as the API returns them.
  */
-export function planCatalogSync(catalog, stripeProducts, stripePrices, reviewed = REVIEWED_PRICE_MOVES) {
+export function planCatalogSync(catalog, stripeProducts, stripePrices, reviewed = REVIEWED_PRICE_MOVES, renames = REVIEWED_RENAMES) {
   const products = stripeProducts.map(product => ({ raw: product, view: normalizeProduct(product) }))
     .filter(({ view }) => view.app === catalog.app && view.active && view.entitlement_key);
   const planNames = new Map(catalog.products.filter(item => item.kind === 'plan').map(item => [item.entitlement_key, item.name]));
-  const plan = { productCreates: [], creates: [], changes: [], descriptions: [], held: [], missing: [], skipped: [], unchanged: 0 };
+  const plan = { productCreates: [], creates: [], changes: [], descriptions: [], renames: [], names: [], held: [], missing: [], skipped: [], unchanged: 0 };
   const syncPrices = (item, product, forPlan, targets) => {
     for (const target of targets) {
       const current = stripePrices.filter(price => productOf(price) === product.id && publicRecurring(price) && price.recurring.interval === target.interval);
@@ -204,6 +237,14 @@ export function planCatalogSync(catalog, stripeProducts, stripePrices, reviewed 
         continue;
       }
       const { view } = matches[0];
+      const rename = reviewedRename(catalog.app, item, forPlan, view.name, renames);
+      if (rename) {
+        plan.renames.push({ entitlement_key: item.entitlement_key, kind: item.kind, ...(forPlan ? { plan: forPlan } : {}), product: view.id, from: rename.from, to: rename.to });
+      }
+      const name = rename ? rename.to : String(view.name ?? '');
+      if (item.kind === 'plan' && !name.toLowerCase().includes(item.name.toLowerCase())) {
+        plan.names.push({ entitlement_key: item.entitlement_key, product: view.id, name, catalog_name: item.name });
+      }
       if (item.description && !sameDescription(view.description, item.description)) {
         plan.descriptions.push({ entitlement_key: item.entitlement_key, kind: item.kind, ...(forPlan ? { plan: forPlan } : {}), product: view.id,
           from: view.description, description: item.description });

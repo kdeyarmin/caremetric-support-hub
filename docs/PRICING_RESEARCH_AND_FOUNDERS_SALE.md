@@ -2,6 +2,8 @@
 
 Researched and verified November 8, 2026. All prices are USD, before applicable taxes. PennTrain is the repository name for CareBase and CareMetric Train; Intel means CareMetric Intel.
 
+> **Intel, from 2026-11-28:** Intel's prices and offer below are history. Its plans were repriced to a base plus each additional marketer (Local, Team and Multi-state), and founding member pricing (a subscription keeps the price it started with) replaced the Founders Sale for new Intel subscriptions; one already in its Founders year keeps the discount until the year ends. Intel's current prices are its published catalog (docs/PLATFORM_BILLING.md, docs/GTM_FACTS.md). CareBase and Train are unchanged.
+
 ## Recommendation
 
 Keep the current regular prices for this launch. Use **per-facility subscription pricing for CareBase**, **flat organization pricing for Train**, and **organization tiers with included seats, branches and territories for Intel**. Preserve monthly and annual options, and introduce the Founders Sale — **50% off the first 12 months of paid service** at launch on 2026-11-08, raised by the owner to **75% off** on 2026-11-24.
