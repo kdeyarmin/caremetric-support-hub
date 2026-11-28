@@ -64,7 +64,7 @@ reads that catalog and keeps Stripe in step (`syncAppCatalog` in
 
 - A plan (`starter`, `growth`, `pro`, matched by the Stripe product's `kind`
   and `entitlement` metadata) with no published price for an interval gets one.
-- An add-on (`extra_seat`, `extra_branch`, `extra_state`) is sold per unit. The
+- An add-on (`extra_seat`, `extra_branch`, `extra_state`, and the AI packs `ai_plus` and `ai_max`) is sold per unit. The
   Hub creates its Stripe product when none exists (`kind: addon`, the
   entitlement key, the catalog's `unit_label`, audited as
   `billing.catalog.product`), then its monthly and annual prices
@@ -74,18 +74,30 @@ reads that catalog and keeps Stripe in step (`syncAppCatalog` in
   counts each add-on's quantity through the entitlements answer
   (`addon_seats`, `addon_branches`, `addon_states`).
 - A published price at another amount is replaced through the same
-  **Change price** command an administrator uses, with **grandfather**:
-  everyone already subscribed keeps their price; new subscriptions get the
-  new one. Each change is audited as `billing.price.change` and
+  **Change price** command an administrator uses. A lower price reaches
+  everyone already on the old one at their next invoice (**no proration**); a
+  higher one never does (**grandfather**: they keep their price, which is
+  Intel's founding member pricing promise), and new subscriptions get the new
+  one. Each change is audited as `billing.price.change` and
   `billing.catalog.sync`.
 - A plan or add-on product's description follows the catalog's: when Stripe's
   says something else, or nothing, the Hub writes the catalog's description and
   nothing else (audited as `billing.catalog.description`, with the product and
   entitlement key only). An item the catalog leaves without a description
-  clears nothing. Names and unit labels are never changed: Intel's plans keep
-  their Stripe names ("CareMetric Intel Starter" and so on), and an
-  administrator renames a product in the Billing page.
-- A change that would cut a price by more than half or more than double it,
+  clears nothing. Unit labels are never changed, and neither are names, but for
+  a rename the owner reviewed (`REVIEWED_RENAMES` in
+  `server/app-catalog-sync.mjs`): it is made once the catalog itself uses the
+  new name, and only while the Stripe product still carries the exact old
+  name, so a name an administrator chose is never overwritten (audited as
+  `billing.catalog.rename`). Intel's 2026-11-28 renames: "CareMetric Intel
+  Starter", "Growth" and "Pro" become "CareMetric Intel Local", "Team" and
+  "Multi-state", and "Extra seat (Starter)" and so on become "Additional
+  marketer (Local)" and so on. A plan product whose name doesn't say the
+  catalog's plan name is logged for an administrator, who renames it in the
+  Billing page.
+- A change that would cut a price by more than half or more than double it
+  (unless `REVIEWED_PRICE_MOVES` lists that exact amount: the owner reviewed
+  it, as for Intel's 2026-11-28 repricing),
   a product with several active published prices for one interval, two active
   Stripe products for one plan or add-on, or a plan with no Stripe product is
   **held**: nothing changes, the log names it and `billing.catalog.held` is
@@ -108,8 +120,9 @@ reads that catalog and keeps Stripe in step (`syncAppCatalog` in
   sync logs it and audits `billing.catalog.facts_stale`: update both (the test
   `intelFactsFromCatalog(fixture)` equals `intelReviewedFacts` keeps them
   together, with `server/fixtures/intel-catalog.json` as the reviewed catalog).
-- Replacements of Founders Sale prices keep the offer for Intel and CareBase
-  (Train included). The Hub re-reads the Founders products' prices
+- Replacements of Founders Sale prices keep the offer for CareBase (Train
+  included). Intel stopped enrolling new subscriptions on 2026-11-28
+  (`FOUNDERS_ENROLLING_APPS`); one already in its Founders year keeps it. The Hub re-reads the Founders products' prices
   (`refreshFounders`) after the start, after every catalog run, every 15
   minutes and after an administrator changes a price (see
   `docs/PRICING_RESEARCH_AND_FOUNDERS_SALE.md`).
@@ -377,6 +390,35 @@ subscription pays in Stripe Checkout and returns to `return_url` with `?checkout
 - Every request is recorded as `billing.plan_change.app` with the application, account,
   administrator id, action, outcome and quote — never names or emails.
 
+### `POST /api/apps/addons`
+
+An application sets the quantity of one of its own customers' per-unit add-ons, for that organization's
+administrator (`appAddons` in `server/billing.mjs`; `appAddonApps`: CareMetric Intel only). Intel uses it for an
+additional marketer bought when an administrator invites one past the plan's included seats, and for the AI packs
+added on its Billing page:
+
+```json
+{ "account": "0000000000000000000000a1", "actor": { "id": "42" }, "addon": "extra_seat", "quantity": 2, "request_key": "<uuid>" }
+```
+
+`addon` is the entitlement key; the application decides the quantity (Intel counts its own marketer seats). The Hub,
+under the account's billing lock:
+
+- finds the add-on's price for the subscription's plan and billing cycle: a product made for the plan (`hub_for_plan`,
+  as the extra seat has), else the one product sold to every plan (an AI pack);
+- charges a larger quantity now for the rest of the period (`proration_behavior: always_invoice`) and refuses it with
+  nothing changed when that payment fails (`payment_behavior: error_if_incomplete`, answered 402); during a trial it
+  costs nothing until the trial ends;
+- applies a smaller quantity without a credit (`none`), and removes the item at 0. Intel lowers a quantity only just
+  before renewal, so nothing paid for is taken away early;
+- changes an item already on the subscription at its own price, so a founding member's locked seat price stays;
+- leaves alone a subscription with a scheduled change, a pending payment, a pause or a cancellation (409).
+
+It answers `{ outcome: "updated" | "unchanged", addon, quantity, previous }`. The subscription is mirrored at once,
+so the next entitlements answer counts the new quantity. Every request, applied, unchanged or refused, is recorded as
+`billing.addon.app` with the application, account, administrator id, add-on, quantities and outcome. Key and account
+scope, and refusing browser requests, work as for `/api/apps/billing`.
+
 ### `POST /api/apps/portal`
 
 Opens the Stripe customer portal for one of the application's own linked accounts, so its administrator can
@@ -460,7 +502,9 @@ customer is never billed twice. See [customer invitations](CUSTOMER_INVITATIONS.
 
 ## Current Founders Sale
 
-Eligible new paid CareBase, Train and Intel subscriptions automatically receive **75% off the first 12 paid months**, then regular renewal pricing. No code entry or assisted activation is needed. Checkout verifies the discount in its preview, session and receipt. Hub subscription creation applies it automatically; trial conversions apply it on the first paid invoice so the free trial does not consume the year. Eligibility, no stacking, one introductory year and exact public prices are checked server-side. See [pricing, exclusions and operational details](PRICING_RESEARCH_AND_FOUNDERS_SALE.md). Existing founding agreements retain their terms.
+Eligible new paid CareBase and Train subscriptions automatically receive **75% off the first 12 paid months**, then regular renewal pricing. No code entry or assisted activation is needed. Checkout verifies the discount in its preview, session and receipt. Hub subscription creation applies it automatically; trial conversions apply it on the first paid invoice so the free trial does not consume the year. Eligibility, no stacking, one introductory year and exact public prices are checked server-side. See [pricing, exclusions and operational details](PRICING_RESEARCH_AND_FOUNDERS_SALE.md). Existing founding agreements retain their terms. Intel left the sale on 2026-11-28: its plans were repriced lower and
+founding member pricing (a subscription keeps the price it started with) took the sale's place; an Intel subscription
+already in its Founders year keeps the discount until the year ends.
 
 ## Intel trial signup
 
@@ -518,8 +562,8 @@ never from a success query parameter. The browser can force a fresh check on ret
 Stripe; ordinary entitlement checks retain Intel's five-minute cache limit.
 
 A card added during the trial is charged at trial end for the selected interval
-unless canceled. The existing Founders Sale first-paid-invoice handling continues to
-apply. Legacy Intel trials keep their accepted terms. Validate monthly and annual
+unless canceled, at the plan's published price (Intel has no first-year discount since 2026-11-28; founding member
+pricing keeps the price). Legacy Intel trials keep their accepted terms. Validate monthly and annual
 trial-end invoices and cancellation with an isolated Stripe test clock before
 releasing both applications. This source change does not apply migrations or
 alter live Stripe settings.

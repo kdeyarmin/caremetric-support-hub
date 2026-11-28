@@ -125,6 +125,17 @@ export const appBillingRequestSchema = z.object({
   if (new Set(value.scope.facilities.map(site => site.id)).size !== value.scope.facilities.length) ctx.addIssue({ code: 'custom', message: 'Duplicate facility.' });
 });
 export type AppBillingRequest = z.infer<typeof appBillingRequestSchema>;
+// An application sets the quantity of one of its own customers' per-unit add-ons (CareMetric Intel: its additional
+// marketers and AI packs), for that organization's administrator. The application decides the quantity, by its entitlement
+// key; the Hub prices it for the subscription's plan and billing cycle (server/billing.mjs appAddons).
+export const appAddonRequestSchema = z.object({
+  account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+  actor: z.object({ id: sourceId }).strict(),
+  addon: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+  quantity: z.number().int().min(0).max(1000),
+  request_key: z.guid(),
+}).strict();
+export type AppAddonRequest = z.infer<typeof appAddonRequestSchema>;
 export const trialRequestSchema = z.object({
   account: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/), name: plain(180).trim().min(2), email: z.email().max(320).nullable(),
   plan: z.string().regex(/^[a-z0-9_.-]{1,64}$/).nullable(),
