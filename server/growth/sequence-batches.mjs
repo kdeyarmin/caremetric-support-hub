@@ -122,12 +122,16 @@ const skipWords = { no_roster_entry: 'no roster entry', no_website_of_its_own: '
  * The weekly builder. `build` returns null when the feature is not declared or the setting is off, else what it did: { skipped } or
  * { queued, people, approve }.
  */
-export function sequenceBatches({ store, feed = null, features = null, enabled = false, size = defaultBatchSize, now = () => new Date() }) {
+export function sequenceBatches({ store, feed = null, features = null, enabled = false, size = defaultBatchSize, handedOver = [], now = () => new Date() }) {
   const declared = () => (features instanceof Set ? features.has(ownerSequenceBatchesFeature) : Array.isArray(features) && features.includes(ownerSequenceBatchesFeature))
     && typeof store?.batchPlan === 'function';
   const batchSize = () => { const value = Number(live(size)); return Number.isInteger(value) && value >= 1 && value <= 30 ? value : defaultBatchSize; };
   async function build({ notifier = null, task = null, signal } = {}) {
     if (!declared() || live(enabled) !== true) return null;
+    // Pennsylvania is Instantly's while Settings → Customer growth → States Instantly sends to names it (owner, 2026-11-28; docs/STATE_LAUNCHES.md):
+    // the weekly batches stop, so an agency never gets both.
+    const handed = live(handedOver);
+    if (Array.isArray(handed) && handed.includes('PA')) return { skipped: 'instantly' };
     const wanted = batchSize();
     const plan = await store.batchPlan(Math.min(200, wanted * 5));
     if (plan?.due !== true) return { skipped: plan?.why ?? 'not_due' };

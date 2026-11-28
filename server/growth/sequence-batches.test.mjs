@@ -74,12 +74,12 @@ describe('the send list', () => {
 describe('the weekly builder', () => {
   const ready = [candidate(1), candidate(2), candidate(3), candidate(4)];
   function builder({ plan = { due: true, owner: 'u1', lastFirstDate: '2026-12-08', lastNumber: 2, candidates: ready }, queued = { queued: true, id: 'req-9', approve: true },
-    enabled = true, features = new Set([feature]), size = 3 } = {}) {
+    enabled = true, features = new Set([feature]), size = 3, handedOver = [] } = {}) {
     const store = { batchPlan: vi.fn(async () => plan), batchQueue: vi.fn(async () => queued) };
     const feed = { configured: true, agencyFacts: vi.fn(async ({ ccns }) => ({ agencies: ccns.map(ccn => ownersOf(ready).get(ccn)) })),
       counties: vi.fn(async () => ({ counties: [{ county_fips: '42079', county_name: 'Luzerne County', state: 'PA' }] })) };
     const notifier = { send: vi.fn(async () => []) };
-    return { store, feed, notifier, batches: sequenceBatches({ store, feed, features, enabled, size, now: () => new Date('2026-11-27T20:00:00Z') }) };
+    return { store, feed, notifier, batches: sequenceBatches({ store, feed, features, enabled, size, handedOver, now: () => new Date('2026-11-27T20:00:00Z') }) };
   }
 
   it('queues the next batch in the owner\'s name with next week\'s dates and tells the owner who is in it', async () => {
@@ -96,6 +96,13 @@ describe('the weekly builder', () => {
     expect(told).toMatchObject({ subject: 'The AI team picked Pennsylvania cold email, batch 3 (3 agencies)', attention: 'update', dedupeKey: 'owner-sequence:batch:req-9' });
     expect(told.body).toContain('pa-b3-01: Agency 1 Home Health (Luzerne County, home health)');
     expect(told.body).toContain('approves it');
+  });
+
+  it('stops once Pennsylvania is Instantly\'s (Settings → Customer growth → States Instantly sends to)', async () => {
+    const handed = builder({ handedOver: ['OH', 'PA'] });
+    expect(await handed.batches.build()).toEqual({ skipped: 'instantly' });
+    expect(handed.store.batchPlan).not.toHaveBeenCalled();
+    expect((await builder({ handedOver: ['OH'] }).batches.build()).queued).toBe('req-9');
   });
 
   it('does nothing while off or undeclared, waits when no batch is due or too few agencies are ready, and never builds without the feed', async () => {

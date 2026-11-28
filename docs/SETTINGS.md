@@ -120,6 +120,9 @@ Settings added with the AI workforce build-out (2026-11-13), all settings from t
 | Customer growth | Approve the batches the AI team builds | On: a batch the Marketing Manager builds is approved once prepared and sends on its dates. Off: it waits for you on Growth → Your own sequences |
 | Customer growth | Find owners' addresses with Hunter | For the agencies your next batch would take but for an address, the Marketing Manager asks Hunter for the owner's or administrator's work address, once in 180 days; used for your batches, never by its own cold email ([Finding the owners' addresses with Hunter](OWNER_SEQUENCES.md#finding-the-owners-addresses-with-hunter)) |
 | Customer growth | Most Hunter lookups a day | Hunter lookups per Eastern day (0 to 100, default 5); Hunter charges a credit only when it finds an address |
+| Customer growth | Build state launches in Instantly; Instantly mailboxes for state launches; Most emails a day from each Instantly mailbox | When you choose a state on Growth → State launches, the Marketing Manager builds its draft Instantly campaigns, sent from these mailboxes (default: the four Google mailboxes bought on November 28) at most this many a day each (default 30), after you click Launch ([STATE_LAUNCHES.md](STATE_LAUNCHES.md)) |
+| Customer growth | States Instantly sends to | Your weekly sequence batches, and Hunter's lookups for them, stop for these states (default PA) |
+| Customer growth | Your local counties; Most Hunter searches for one state | Nursing homes in these counties get the local email without "Dr." (default Cambria and the seven around it); the Hunter searches one state launch may use (default 400) |
 | Customer growth | Write an account brief before the first email; Most account briefs a day; Most to spend on one account brief | A brief per Intel agency from Intel's data, its county's figures for its own setting and dated web triggers, written on the top model ([Customer growth](CUSTOMER_GROWTH.md#an-account-brief-before-the-first-email-written-and-reviewed-on-the-top-model)) |
 | Customer growth | Write first emails on the top model; Have a reader review each first email | The first email written from the brief on the top model, and a second model's 1-to-5 review with one rewrite below 4 |
 | Customer growth | Send to the best prospects first | The day's cold emails go to the most promising prospects first; an email over the cap waits for the next day; an opened report brings its follow-up forward ([review](AI_WORKFORCE_REVIEW_2026-11-17.md)) |
@@ -169,7 +172,8 @@ Secrets, which are never shown on screen or stored in the database:
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `HUB_GROWTH_SIGNING_KEY`, `HUB_GROWTH_SEARCH_API_KEY`, `HUB_GROWTH_CAREBASE_EVENT_KEY`, `HUB_GROWTH_INTEL_EVENT_KEY`
 - `BOUNCER_API_KEY` or `ZEROBOUNCE_API_KEY` (only for Settings → Customer growth → Ask a verification service when a mail server won't answer; Bouncer is used when its key is set)
-- `HUNTER_API_KEY` (Settings → Customer growth → Find owners' addresses with Hunter, and the roster's website search when Brave finds no confirmed site)
+- `HUNTER_API_KEY` (Settings → Customer growth → Find owners' addresses with Hunter, the roster's website search when Brave finds no confirmed site, and the people of each state launch)
+- `INSTANTLY_API_KEY` (an Instantly API key with all scopes, from Instantly's Settings → Integrations: state launches build and start their campaigns with it, [STATE_LAUNCHES.md](STATE_LAUNCHES.md)). Instantly's webhook key is made from `HUB_GROWTH_SIGNING_KEY`, so it needs no variable of its own.
 - `HUB_LEAD_SECRET_CAREBASE`, `HUB_LEAD_SECRET_INTEL`, `HUB_LEAD_SECRET_ADVISORS`
 - `HUB_SOCIAL_CREDENTIALS_KEY` (server encryption key for the Meta and LinkedIn connection cards)
 - `HUB_META_ACCESS_TOKEN` (legacy fallback until the Meta card is first saved)

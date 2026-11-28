@@ -142,4 +142,14 @@ describe('a run\'s lookups', () => {
     const out = await handlers['growth.people']({ agent: { autonomy: 'act' } });
     expect(out.result).toEqual({ searched: 0, hunter: { asked: 2, found: 1, notFound: 1, refused: 0, errors: 0, screened: { no_website_of_its_own: 1 } } });
   });
+
+  it('keeps Hunter\'s searches for the state launches once Pennsylvania is Instantly\'s', async () => {
+    const { store, finder } = setup();
+    const growth = { store: { ...store, peopleCandidates: vi.fn(async () => []) }, roster: { feed: feedOf() },
+      people: { mode: 'verify', hunter: finder, handedOver: ['PA'], registry: { officials: vi.fn(async () => []) } } };
+    const handlers = peopleHandlers({ growth, features: new Set(['platform.agents.growth-people.v1', 'platform.agents.growth-people-finder.v1', feature]), marketed: () => ['caremetric-intel'] });
+    const out = await handlers['growth.people']({ agent: { autonomy: 'act' } });
+    expect(out.result).toEqual({ searched: 0, hunter: { skipped: 'instantly' } });
+    expect(store.hunterNext).not.toHaveBeenCalled();
+  });
 });

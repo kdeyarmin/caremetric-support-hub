@@ -28,7 +28,7 @@ const equal=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));retu
 // A failure that must not opt the contact out (a transient or undetermined bounce, a reject) needs the five-argument delivery event
 // (20261113280000_growth_soft_bounce_reporting.sql). Until its contract declares this feature such an event is not recorded, as before.
 export const growthSoftBounceFeature='platform.agents.growth-soft-bounce.v1';
-export function growthService({store,research,sites=null,contacts=null,roster=null,people=null,deepResearch=null,learning=null,briefs=null,views=null,reports=null,priority=null,liveEvaluation=null,sequences:sequenceFactory=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
+export function growthService({store,research,sites=null,contacts=null,roster=null,people=null,deepResearch=null,learning=null,briefs=null,views=null,reports=null,priority=null,liveEvaluation=null,sequences:sequenceFactory=null,launches=null,importKey='',features,enabled=false,signingKey='',eventKeys={},webhookPublicKey='',sesEvents=null,sesEventsReady=()=>false,publicOrigin,postalAddress=''}) {
   // The sending switch and the footer's postal address are Hub settings; either may be a function, read on each use.
   const sending=()=>live(enabled)===true; const postal=()=>String(live(postalAddress)??'');
   // How far the people step goes for an address (Settings → Customer growth → Finding people's addresses), and whether the businesses'
@@ -49,8 +49,15 @@ export function growthService({store,research,sites=null,contacts=null,roster=nu
     if(['22023','P0002'].includes(e?.code)&&typeof e.message==='string'&&e.message.length<=300)throw new HttpError(e.code==='P0002'?404:400,e.message);
     if(e?.code==='40001')throw new HttpError(409,typeof e.message==='string'&&e.message.length<=300?e.message:'This sequence changed. Refresh it.');
     return safe(()=>{throw e;});}};
+  // A state launch's own words for a refusal (a state already open, a launch that changed), else growth's.
+  const launchSafe=async work=>{try{return await work();}catch(e){
+    if(e instanceof HttpError)throw e;
+    if(e?.code==='state')throw new HttpError(400,e.message);
+    if(['22023','P0002'].includes(e?.code)&&typeof e.message==='string'&&e.message.length<=300)throw new HttpError(e.code==='P0002'?404:400,e.message);
+    if(e?.code==='40001')throw new HttpError(409,typeof e.message==='string'&&e.message.length<=300?e.message:'This launch changed. Refresh it.');
+    return safe(()=>{throw e;});}};
   return {
-    ready, store, research, sites, contacts, roster, people, deepResearch, learning, briefs, views, reports, priority, liveEvaluation, sequences, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
+    ready, store, research, sites, contacts, roster, people, deepResearch, learning, briefs, views, reports, priority, liveEvaluation, sequences, launches, get enabled(){return sending();}, unsubscribeToken, hash, signingReady:signingKey.length>=32,
     // Configuration only: no provider request and no credential value leaves this service.
     readiness() {
       let deliveryFeedback = false;
@@ -64,7 +71,7 @@ export function growthService({store,research,sites=null,contacts=null,roster=nu
     configured:()=>sending()&&signingKey.length>=32&&postal().trim().length>0&&/^https:\/\//.test(publicOrigin??''),
     async admin(token,input) {
       ready(); const {operation,data}=parse(z.object({operation:z.string(),data:z.record(z.string(),z.unknown()).default({})}).strict(),input);
-      if(operation==='workspace') {const {offset}=parse(z.object({offset:z.number().int().min(0).default(0)}).strict(),data);return safe(async()=>({...await store.workspace(token,offset),services:{sending:sending(),signing:signingKey.length>=32,postalAddress:Boolean(postal().trim()),research:Boolean(research?.configured),roster:features?.has('platform.agents.growth-roster.v1')===true,people:features?.has('platform.agents.growth-people.v1')===true,learning:features?.has('platform.agents.growth-learning.v1')===true,addressCheck:features?.has('platform.agents.growth-address-check.v1')===true,briefs:features?.has('platform.agents.growth-brief.v1')===true,sequences:sequences?.declared?.()===true}}));}
+      if(operation==='workspace') {const {offset}=parse(z.object({offset:z.number().int().min(0).default(0)}).strict(),data);return safe(async()=>({...await store.workspace(token,offset),services:{sending:sending(),signing:signingKey.length>=32,postalAddress:Boolean(postal().trim()),research:Boolean(research?.configured),roster:features?.has('platform.agents.growth-roster.v1')===true,people:features?.has('platform.agents.growth-people.v1')===true,learning:features?.has('platform.agents.growth-learning.v1')===true,addressCheck:features?.has('platform.agents.growth-address-check.v1')===true,briefs:features?.has('platform.agents.growth-brief.v1')===true,sequences:sequences?.declared?.()===true,launches:launches?.declared?.()===true}}));}
       if(operation==='roster') {
         // The Medicare roster's progress (Settings → Customer growth → Find prospects from the Medicare roster).
         if(!features?.has('platform.agents.growth-roster.v1'))throw new HttpError(503,'Apply the roster database migration first.');
@@ -134,6 +141,17 @@ export function growthService({store,research,sites=null,contacts=null,roster=nu
         if(operation==='sequenceApprove'){const parsed=parse(z.object({id:uuid,version:z.number().int().positive()}).strict(),data);return sequenceSafe(()=>sequences.approve(token,parsed.id,parsed.version));}
         if(operation==='sequenceStop'){const parsed=parse(z.object({id:uuid,recipient:uuid.optional()}).strict(),data);return sequenceSafe(()=>sequences.stop(token,parsed.id,parsed.recipient??null));}
         return sequenceSafe(()=>sequences.discard(token,parse(z.object({id:uuid}).strict(),data).id));
+      }
+      if(['launches','launch','launchRequest','launchApprove','launchMore','launchCancel'].includes(operation)) {
+        // State launches (docs/STATE_LAUNCHES.md): the owner picks a state; the Marketing Manager builds it in Instantly.
+        if(!launches?.declared?.())throw new HttpError(503,'Apply the state launches database migration first.');
+        if(operation==='launches'){parse(z.object({}).strict(),data);return launchSafe(()=>launches.list(token));}
+        if(operation==='launchRequest')return launchSafe(()=>launches.request(token,parse(z.object({state:z.string().regex(/^[A-Z]{2}$/)}).strict(),data).state));
+        const {id}=parse(z.object({id:uuid}).strict(),data);
+        if(operation==='launch')return launchSafe(()=>launches.detail(token,id));
+        if(operation==='launchApprove')return launchSafe(()=>launches.approve(token,id));
+        if(operation==='launchMore')return launchSafe(()=>launches.more(token,id));
+        return launchSafe(()=>launches.cancel(token,id));
       }
       if(!growthSchemas[operation])throw new HttpError(400,'Unsupported growth action.');
       return safe(()=>store.manage(token,operation,parse(growthSchemas[operation],data)));
@@ -209,6 +227,18 @@ export function growthService({store,research,sites=null,contacts=null,roster=nu
       let accepted=0;
       for(const event of sesGrowthEvents(result.notification)){if(!z.uuid().safeParse(event.messageId).success)continue; if(event.suppress===false&&!features?.has(growthSoftBounceFeature))continue; await store.delivery(event.id,event.messageId,event.kind,event.at,event.suppress??true); accepted++;}
       return {accepted};
+    },
+    /** Instantly's webhook for every campaign of the workspace (server/outreach/webhook.mjs): replies, opt-outs and bounces. */
+    async instantlyEvent(raw,headers) {
+      if(!launches?.declared?.())throw new HttpError(503,'State launches are not available yet.');
+      try{return await launches.event(raw,headers);}
+      catch(e){
+        if(e?.code==='unauthorized')throw new HttpError(401,'Invalid webhook key.');
+        if(e?.code==='not_configured'||e?.code==='not_declared')throw new HttpError(503,e.message);
+        if(e?.code==='invalid')throw new HttpError(400,'Invalid event.');
+        if(e?.code==='22023')return {accepted:0};
+        throw e;
+      }
     },
     async unsubscribe(token,confirm) {
       ready(); if(!/^[a-f0-9]{64}$/.test(token))throw new HttpError(400,'Invalid unsubscribe link.');

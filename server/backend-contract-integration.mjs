@@ -99,6 +99,7 @@ const marketingConnectionContracts=await Promise.all([
   ['platform.agents.owner-sequence-batches.v1','20261127220100_owner_sequence_batches_contract.sql'],
   ['platform.agents.growth-hunter.v1','20261127230100_growth_hunter_contract.sql'],
   ['platform.agents.owner-sequence-open.v1','20261127240100_owner_sequence_open_contract.sql'],
+  ['platform.agents.state-launches.v1','20261128100100_state_launches_contract.sql'],
 ].map(async([feature,file])=>({feature,sql:await readFile(new URL(`../supabase/migrations/${file}`,import.meta.url),'utf8')})));
 // The owner's 2026-11-15 hand-over (20261115200000_autonomy_handover.sql) lifted two refusals the founder post and paid ads gates read
 // when they were declared: any automatic approval of those kinds, and any autonomy step naming a founder post. Their replays run against
