@@ -20,7 +20,7 @@ Your rule, November 28: "Finish PA before going to the next state. I want to jus
 state is open at a time: queued, building, ready to launch or starting. The next state can be chosen once that one is launched
 or cancelled.
 
-Pennsylvania is the first launch on the page. It is ready, with the five draft campaigns built by hand (576 people). The
+Pennsylvania is the first launch on the page. It is ready, with the five draft campaigns built by hand (573 people). The
 same-company extras and batch 1's agencies stay in the HOLD campaign, which is never launched. Click **Launch Pennsylvania** when
 the mailboxes are warm. A campaign you already started in Instantly yourself is left as it is. Then choose the next state.
 

@@ -401,15 +401,16 @@ grant execute on function hub.state_launches(), hub.state_launch_detail(uuid), h
 
 -- Pennsylvania, built by hand on 2026-11-27 and 28, is the first launch: ready, with its five draft Instantly campaigns, so it is
 -- launched from Growth → State launches like any other and the next state waits for it. The campaign with the same-company extras
--- and batch 1's agencies ("HOLD – PA same-company extras (do not launch)") is never part of it.
+-- batch 1's agencies and the three addresses whose domains take no mail ("HOLD – PA same-company extras (do not launch)") is never
+-- part of it.
 insert into private.state_launches (state, status, stage, campaigns, summary, ready_at)
 select 'PA', 'ready', 'done',
-  '{"agency": {"id": "f00275f1-631f-4b7f-94e2-c121f78014a8", "name": "PA home health & hospice – owners, wave 1 (draft)", "leads": 268},
-    "snf": {"id": "d1dead79-7e80-44dd-850c-6c06fdb4732a", "name": "PA skilled nursing – administrators (draft)", "leads": 217},
+  '{"agency": {"id": "f00275f1-631f-4b7f-94e2-c121f78014a8", "name": "PA home health & hospice – owners, wave 1 (draft)", "leads": 266},
+    "snf": {"id": "d1dead79-7e80-44dd-850c-6c06fdb4732a", "name": "PA skilled nursing – administrators (draft)", "leads": 216},
     "local": {"id": "57f2418a-c125-4fdb-b26d-a3fd04ff4f38", "name": "PA skilled nursing – local referral sources near Cambria (draft)", "leads": 53},
     "chain": {"id": "f1808c1a-a5c4-4370-b30a-5664c6745233", "name": "PA nursing home chains – corporate (draft)", "leads": 20},
     "regional": {"id": "3843a1e4-ef18-4b57-bdfe-b29b4f1a5e27", "name": "PA nursing home regional groups – leadership (draft)", "leads": 18}}'::jsonb,
-  '{"leads": 576, "builtByHand": true, "pendingLeft": false}'::jsonb, now()
+  '{"leads": 573, "builtByHand": true, "pendingLeft": false}'::jsonb, now()
 where not exists (select 1 from private.state_launches where state = 'PA');
 
 insert into private.agent_schedules (agent_key, task_kind, cadence, every_seconds, at_local, timezone, requires_session, next_run_at)

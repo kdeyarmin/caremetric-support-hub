@@ -21,7 +21,7 @@ select ok(position('owner_sequence_check_people' in pg_get_functiondef('private.
 select ok(exists (select 1 from private.agent_schedules where agent_key = 'marketing_manager' and task_kind = 'outreach.launch'),
   'The Marketing Manager''s state launch task is scheduled');
 select is((select jsonb_build_object('status', status, 'campaigns', (select count(*) from jsonb_object_keys(campaigns)), 'leads', summary -> 'leads')
-  from private.state_launches where state = 'PA'), '{"status": "ready", "campaigns": 5, "leads": 576}'::jsonb,
+  from private.state_launches where state = 'PA'), '{"status": "ready", "campaigns": 5, "leads": 573}'::jsonb,
   'Pennsylvania, built by hand, is the first launch: ready with its five campaigns');
 select throws_ok($$insert into private.state_launches (state) values ('OH')$$, '23505', null,
   'One state at a time: no second launch while Pennsylvania is open');
