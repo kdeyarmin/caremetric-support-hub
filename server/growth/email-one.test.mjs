@@ -18,7 +18,8 @@ describe('the three first-email settings', () => {
   it('writes the P.S. and the walkthrough only when asked, and only for an https link', () => {
     const trial = 'https://www.caremetricintel.com/login?signup=true';
     expect(emailOneNote({})).toBe('');
-    expect(emailOneNote({ oneOffer: true, trialUrl: trial })).toContain('Founders Sale: 75% off the first 12 months.');
+    expect(emailOneNote({ oneOffer: true, trialUrl: trial })).toContain('Founding member pricing: the price you start with never goes up while you stay subscribed.');
+    expect(emailOneNote({ oneOffer: true, trialUrl: trial })).not.toMatch(/Founders Sale|%/);
     expect(emailOneNote({ oneOffer: true, trialUrl: trial })).toContain(trial);
     expect(emailOneNote({ bookingUrl: 'http://cal.example/kevin' })).toBe('');
     expect(emailOneNote({ bookingUrl: 'https://user:pass@cal.example/kevin' })).toBe('');
@@ -29,11 +30,13 @@ describe('the three first-email settings', () => {
     expect(paymentChanged({ hhvbpAdjustmentPct: 2 })).toBe(true);
   });
 
-  it('turns down a draft that still quotes the 50% sale', () => {
+  it('turns down a draft that still quotes the Founders Sale, which ended for Intel', () => {
     const waiting = body => outdatedWords({ product: 'caremetric-intel', subject: 'Your market report', body, purpose: 'marketing' });
     expect(quotesOldSale('Founders Sale: 50% off eligible subscription charges for the first 12 months')).toBe(true);
     expect(waiting('Founders Sale: 50% off the first 12 months.')).toBe('old_offer');
     expect(waiting('50% off your first 12 months')).toBe('old_offer');
-    expect(waiting('Founders Sale: 75% off the first 12 months.')).toBeNull();
+    expect(waiting('Founders Sale: 75% off the first 12 months.')).toBe('old_offer');
+    expect(waiting('75% off your first 12 months')).toBe('old_offer');
+    expect(waiting('Founding member pricing: the price you start with never goes up while you stay subscribed.')).toBeNull();
   });
 });

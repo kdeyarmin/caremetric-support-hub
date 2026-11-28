@@ -3,8 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { LAYOUT_MARKER, escapeHtml } from '../../email-layout.mjs';
 import {
   cardTermsWords, dueTemplates, foundersWords, httpsOrigin, lifecycleEmail, lifecycleInput, lifecyclePreview, lifecycleProducts, lifecycleReadiness, lifecycleTemplates,
-  lifecycleWording, parseLifecycleInput, periodKey, planEmails, renderLifecycleEmail, stillApplies, unsubscribeLabel, wordingHash,
-} from './lifecycle.mjs';
+  lifecycleWording, parseLifecycleInput, periodKey, planEmails, renderLifecycleEmail, stillApplies, unsubscribeLabel, wordingHash, foundingWords } from './lifecycle.mjs';
 import { trialCardTerms } from '../content/facts.mjs';
 import { textProblems } from '../content/validate.mjs';
 
@@ -205,7 +204,9 @@ describe('the emails', () => {
     expect(words('setup_nudge')).toContain('just reply and tell us what you\'d like to get done first');
     expect(words('trial_checkin')).toContain('This is a personal check-in, not a billing notice.');
     expect(words('trial_checkin')).toContain('Is anything getting in the way');
-    expect(words('trial_checkin')).toContain('If you decide to keep CareMetric Intel, the Founders Sale applies on its own: eligible subscription charges are 75% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.');
+    // Intel's check-in names founding member pricing (2026-11-28: it replaced the Founders Sale for Intel); CareBase's the sale.
+    expect(words('trial_checkin')).toContain('If you decide to keep CareMetric Intel, founding member pricing applies: the plan price you start with, and the price of each additional marketer, never goes up for as long as you stay subscribed.');
+    expect(words('trial_checkin')).not.toContain('Founders Sale');
     expect(words('trial_checkin')).not.toContain('https://www.caremetricintel.com/Help');
   });
 
@@ -236,7 +237,8 @@ describe('the emails', () => {
       // The trial check-in's Founders Sale paragraph (owner decision 2026-11-08) is checked word for word elsewhere; everything else holds.
       // CareMetric's own address in the themes' footers (support@caremetric.ai) is an address, not a mention of AI.
       // The card reminder's terms (Intel's own wording) are checked word for word in the trial path's tests.
-      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '').replace(cardTermsWords, '').replace(/\bsupport@caremetric\.ai\b/g, '');
+      const text = lifecyclePreview(input, { postalAddress: postal }).replace(foundersWords(input.productName), '').replace(foundingWords(input.productName), '')
+        .replace(cardTermsWords, '').replace(/\bsupport@caremetric\.ai\b/g, '');
       const label = `${product}/${template}/${link ? 'booking' : 'plain'}`;
       expect(text, label).not.toMatch(/\bAI\b|artificial|assistant|robot|\bbots?\b|automat/i);
       expect(text, label).not.toMatch(/\bcall(?:s|ed|ing)?\b|phone|voicemail|\bdial/i);
@@ -244,7 +246,7 @@ describe('the emails', () => {
       expect(text, label).not.toMatch(/guarantee|promise|within \d|\bhours?\b|\bminutes?\b|by tomorrow|\btoday\b|\bsoon\b|\bwill be\b/i);
       expect(text, label).not.toMatch(/\btrial (?:ends|expires) on\b|\d{1,2}\/\d{1,2}|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/);
       // No digits beyond the numbered first steps and the links and the footer's postal address.
-      const words = lifecycleWording(input).replace(foundersWords(input.productName), '').replace(/https:\/\/\S+/g, '').replace(/^\d\. /gm, '');
+      const words = lifecycleWording(input).replace(foundersWords(input.productName), '').replace(foundingWords(input.productName), '').replace(/https:\/\/\S+/g, '').replace(/^\d\. /gm, '');
       expect(words, label).not.toMatch(/\d/);
     }
   });

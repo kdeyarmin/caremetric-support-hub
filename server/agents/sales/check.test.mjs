@@ -41,11 +41,11 @@ describe('checking a sales reply', () => {
   });
 
   it('refuses the other product\'s prices and pages, and any other link', () => {
-    expect(ok('Extra seats are $59 per month.')).toMatchObject({ ok: false, reason: 'other_product_price' });
+    expect(ok('Additional marketers are $39 per month.')).toMatchObject({ ok: false, reason: 'other_product_price' });
     expect(ok('Start here:\nhttps://www.caremetricintel.com/')).toMatchObject({ ok: false, reason: 'link' });
     expect(ok('Read more at https://example.org/guide')).toMatchObject({ ok: false, reason: 'link' });
     expect(ok('Read more at www.cmcarebase.com')).toMatchObject({ ok: false, reason: 'link' });
-    expect(checkSalesReply({ reply: 'Starter is $349 per month.', product: 'caremetric-intel', route: 'email' })).toMatchObject({ ok: true });
+    expect(checkSalesReply({ reply: 'Local is $99 per month.', product: 'caremetric-intel', route: 'email' })).toMatchObject({ ok: true });
     // A number from the product's own published catalog, for that product only (content/features.mjs).
     const catalogLine = 'CareMetric Intel flags accounts that go 45 days without a visit.';
     expect(checkSalesReply({ reply: catalogLine, product: 'caremetric-intel', route: 'email' })).toMatchObject({ ok: true });

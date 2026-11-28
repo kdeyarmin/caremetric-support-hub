@@ -17,7 +17,7 @@
     "Other products named on the page are written generically: \"connect an AI app that supports MCP to Intel\""
   ],
   "overview": "For home health agencies, hospice agencies, hospitals, nursing homes and personal care homes ready to earn a greater share of referrals. Find the right sources with 150+ healthcare datasets, focus your outreach, and turn consistent follow-up into stronger relationships. Bring market research, daily activity, and referral tracking together in one healthcare CRM.",
-  "legend": "Features without a label are available to every role on every plan, within the plan’s territory and service-line allowance. Labels name additional role or plan requirements. The 30-day trial includes Pro features in one county, with your choice of healthcare service lines.",
+  "legend": "Features without a label are available to every role on every plan, within the plan’s territory and service-line allowance. Labels name additional role or plan requirements. The 30-day trial includes Multi-state features in one county, with your choice of healthcare service lines.",
   "publishedCount": 128,
   "pillars": [
     {
@@ -63,11 +63,11 @@
     {
       "title": "Reach contacts at scale",
       "why": "Send email campaigns to a lead list or the contacts on your book, with your sender details and automatic unsubscribe handling. Track deliveries, opens, clicks, and bounces.",
-      "area": "Email campaigns · Growth & Pro"
+      "area": "Email campaigns · Team & Multi-state"
     },
     {
       "title": "Walk into every visit prepared",
-      "why": "A pre-visit card shows the last visit and notes, referrals for the last 90 days against the 90 before, open tasks and up to four talking points. On Growth and Pro, say what happened afterwards and the AI proposes the visit note and next step for you to check.",
+      "why": "A pre-visit card shows the last visit and notes, referrals for the last 90 days against the 90 before, open tasks and up to four talking points. Say what happened afterwards and the AI proposes the visit note and next step for you to check.",
       "area": "Pre-visit card & spoken debrief"
     },
     {
@@ -95,7 +95,7 @@
         {
           "name": "Lines of business",
           "does": "Organize relationships by healthcare service line, including practices, hospitals, behavioral health, rehabilitation, diagnostics, senior care, home health, hospice, DME, and other healthcare services. One account can have a separate stage and history on each line.",
-          "access": "Starter: one line"
+          "access": "Local: one line"
         },
         {
           "name": "Relationship stages",
@@ -212,11 +212,11 @@
         {
           "name": "Spoken visit debrief",
           "does": "Say or type what happened after a visit and the AI proposes the visit note, the next step and its date. Nothing is saved until you check the form and save the visit. Possible patient details are taken out before the AI reads anything. Each debrief, notes summary or paid voice note uses one of your organization’s daily AI requests (500 a day on Growth, 2,000 on Pro), and the Visit log shows how many are left.",
-          "access": "Growth & Pro"
+          "access": null
         },
         {
           "name": "Business card scan",
-          "does": "Photograph a business card on an account and the phone reads the name, role, phone and email for you to check before the contact is saved. On Growth and Pro a paid reader takes over when the phone finds no name, using one AI request.",
+          "does": "Photograph a business card on an account and the phone reads the name, role, phone and email for you to check before the contact is saved. A paid reader takes over when the phone finds no name, using one AI request.",
           "access": null
         },
         {
@@ -371,7 +371,7 @@
         {
           "name": "Admissions forecast",
           "does": "Estimates how many open referrals will be admitted, from your last 180 days, as a range that stays wide when the history is short.",
-          "access": "Pro"
+          "access": "Multi-state"
         },
         {
           "name": "Availability",
@@ -611,7 +611,7 @@
         {
           "name": "Goals and leaderboard",
           "does": "Monthly visit and referral targets for each marketer, a leaderboard, Met / On pace / Behind for the open month and a six-month trend. Everyone sees their own progress on Today.",
-          "access": "Setting targets: Growth & Pro"
+          "access": "Setting targets: Team & Multi-state"
         },
         {
           "name": "Team review",
@@ -631,12 +631,12 @@
         {
           "name": "Locations",
           "does": "Add locations and assign each person as a marketer or manager. People then see their locations’ accounts, and reports follow the same rule.",
-          "access": "Owners · Growth: 3, Pro: 10"
+          "access": "Owners · Team: 3, Multi-state: 10"
         },
         {
           "name": "Book balance",
           "does": "Proposes a split of accounts across the marketers you choose by referral potential and drive time. Nothing moves until a manager applies it.",
-          "access": "Pro · owners & location managers"
+          "access": "Multi-state · owners & location managers"
         },
         {
           "name": "Account briefs and Ask the book",
@@ -661,7 +661,7 @@
         {
           "name": "AI Assistant",
           "does": "Ask about your market, your book and your day in plain English. It looks answers up in the app’s data inside your plan’s territory, says when a figure is an estimate, and proposes lead lists, visits, tasks, call plans and outreach drafts that are saved only when you confirm. Each question uses one of your organization’s daily AI requests.",
-          "access": "Growth & Pro · organization admins, and the team when turned on"
+          "access": "Team & Multi-state · organization admins, and the team when turned on"
         },
         {
           "name": "AI playbook",
@@ -671,7 +671,7 @@
         {
           "name": "Use your own AI app with Intel",
           "does": "Make a personal token in Account and connect an AI app that supports MCP to Intel. It reads providers, lead scores, county and market facts, your day, account briefs, lead lists and your book as you, with your role and your plan’s places, and can’t change anything. Each question counts toward your organization’s AI requests.",
-          "access": "Growth & Pro · whoever can open the AI Assistant"
+          "access": "Team & Multi-state · whoever can open the AI Assistant"
         },
         {
           "name": "Activity challenges and report card",
@@ -688,22 +688,22 @@
         {
           "name": "Campaigns to lists and contacts",
           "does": "Email a lead list, the contacts on one line of your book, or both. People marked as left are skipped.",
-          "access": "Owners · Growth & Pro"
+          "access": "Owners · Team & Multi-state"
         },
         {
           "name": "Delivery tracking",
           "does": "Track deliveries, opens, clicks and bounces for each campaign, and link campaigns to the accounts they touched.",
-          "access": "Owners · Growth & Pro"
+          "access": "Owners · Team & Multi-state"
         },
         {
           "name": "Sender and unsubscribe",
           "does": "Set the name recipients see, where replies go and your postal address. Every email carries an unsubscribe link that is honored automatically.",
-          "access": "Owners · Growth & Pro"
+          "access": "Owners · Team & Multi-state"
         },
         {
           "name": "Queue contacts from an account",
           "does": "Any marketer can add a contact to a draft campaign from the account page; an owner prepares and sends it.",
-          "access": "Growth & Pro"
+          "access": "Team & Multi-state"
         },
         {
           "name": "Nurture sequences",
@@ -1053,7 +1053,7 @@
     },
     {
       "question": "Can we use the platform across locations?",
-      "answer": "Yes. Growth includes up to three locations, and Pro includes up to ten. Assign people to locations, organize account ownership, and review reports within their access scope. Plan limits and purchased add-ons determine the territory and team size your organization can use."
+      "answer": "Yes. Team includes up to three locations, and Multi-state includes up to ten. Assign people to locations, organize account ownership, and review reports within their access scope. Plan limits and purchased add-ons determine the territory and team size your organization can use."
     },
     {
       "question": "Does CareMetric Intel use patient-level data?",

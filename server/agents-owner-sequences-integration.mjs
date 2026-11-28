@@ -222,7 +222,10 @@ try {
   // 8b. The guard (20261127210000_owner_sequence_guard.sql): the Marketing Manager's cold email leaves a sequence's agency alone, by its
   // domain or the CCN the roster tied to it; and a sequence leaves out an agency the Marketing Manager emailed, by its CCN too.
   if (guardGate) {
-    const guardCcn = `3${run.replace(/[^0-9]/g, '1').slice(0, 5).padEnd(5, '1')}`;
+    // Two CCNs from one stem with different last digits: built from the run's first five characters each, they were the
+    // same whenever those were all digits (about one run in ten), and the second roster row broke the primary key.
+    const ccnStem = run.replace(/[^0-9]/g, '1').slice(0, 4).padEnd(4, '1');
+    const guardCcn = `3${ccnStem}1`;
     const guarded = await create([person('mike', { dates: later, ccn: guardCcn })], later);
     await ownerCall('hub.owner_sequence_approve', [guarded.id, guarded.version]);
     const org = async (label, ccn = null) => {
@@ -236,7 +239,7 @@ try {
     assert.equal(await stopped(await org('november', guardCcn)), true, 'another domain the roster tied to the sequence\'s CCN');
     assert.equal(await stopped(await org('oscar')), false, 'an agency in no sequence');
     // An agency the Marketing Manager emailed, known to the sequence only by its CCN.
-    const emailedCcn = `3${run.replace(/[^0-9]/g, '2').slice(0, 5).padEnd(5, '2')}`;
+    const emailedCcn = `3${ccnStem}2`;
     const emailed = await org('papa', emailedCcn);
     const contact = (await row("insert into private.growth_contacts(organization_id, email, source_kind) values ($1, $2, 'role_address') returning id", [emailed, `info@${domainOf('papa')}`])).id;
     const opportunity = (await row("insert into private.growth_opportunities(organization_id, product, contact_id) values ($1, 'caremetric-intel', $2) returning id", [emailed, contact])).id;

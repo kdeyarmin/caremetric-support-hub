@@ -141,7 +141,7 @@ describe('sales playbook', () => {
       expect(first).not.toMatch(/Founders Sale|risk-free|three questions|two links/);
     }
     // The second email's sections carry the Founders Sale and the trial; the third's, the report and the trial's link.
-    for (const second of [viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle]) expect(second).toMatch(/the Founders Sale, the 30-day free trial button, and a link back to the report/);
+    for (const second of [viewedTouchAngle, unviewedTouchAngle, reviewFollowupAngle]) expect(second).toMatch(/founding member pricing, the 30-day free trial button, and a link back to the report/);
     expect(reportCloseAngle).toMatch(/^Third and last email: a short close\./);
     expect(reportCloseAngle).toMatch(/No link in your words, no new pitch and no question\./);
     // None tells the writer to call or meet, and the words each uses for the report's physicians pass the standing check (standing.mjs).

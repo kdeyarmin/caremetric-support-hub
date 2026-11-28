@@ -361,7 +361,7 @@ it('adds the trial, the sale and one allowed fact only when those settings are o
  expect(quiet.arms.reason).toBe('payment');
  const loud=await draftMessage({opportunity:intel,work,task:{},report,brief,offers:{oneFact:true,oneOffer:true,bookingUrl:'https://cal.example/kevin'}});
  expect(loud.body).toContain('Medicare\'s quality of patient care rating for this agency is 4.5 stars.');
- expect(loud.body).toContain('Founders Sale: 75% off the first 12 months.');
+ expect(loud.body).toContain('Founding member pricing: the price you start with never goes up while you stay subscribed.');
  expect(loud.body).toContain('https://cal.example/kevin');
  expect(loud.body.indexOf('4.5 stars')).toBeLessThan(loud.body.indexOf('Who to call on in your county'));
  const read=readCampaign(loud.body,{reports:{accepts:url=>url===report.url}});
@@ -572,9 +572,9 @@ it('offers the trial in an agency\'s second email and leaves the report with it 
  // It no longer depends on which form the first email took: every second email offers the trial.
  for(const first_form of ['short','standard',undefined]) expect((await later({...intel,touches:1,first_form})).touchPlan).toBe(unviewedTouchAngle);
  for(const plan of [viewedTouchAngle,unviewedTouchAngle,reviewFollowupAngle]) {
-  // The writer writes the opening; the email adds a week of the work, the Founders Sale, the trial and the report's link.
+  // The writer writes the opening; the email adds a week of the work, founding member pricing, the trial and the report's link.
   expect(plan).toMatch(/You write only the opening of this email/);
-  expect(plan).toMatch(/The email adds: three steps for the week in CareMetric Intel, the Founders Sale, the 30-day free trial button, and a link back to the report\./);
+  expect(plan).toMatch(/The email adds: three steps for the week in CareMetric Intel, founding member pricing, the 30-day free trial button, and a link back to the report\./);
   expect(plan).toMatch(/No link in your words, and nothing about the credit card or billing\./);
  }
  expect(viewedTouchAngle).toMatch(/^Second email to an agency whose market report was sent with the first\. Do not say or hint that you know whether anyone opened it\./);

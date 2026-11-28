@@ -12,7 +12,7 @@ describe('checking social text', () => {
 
   it('refuses claims, prices of the other product, unlisted numbers and promises', () => {
     expect(fb('CareBase ensures compliance in every home.')).toMatchObject({ ok: false, reason: 'compliance_assurance' });
-    expect(fb('Seats are $59 a month.')).toMatchObject({ ok: false, reason: 'other_product_price' });
+    expect(fb('Additional marketers are $39 a month.')).toMatchObject({ ok: false, reason: 'other_product_price' });
     expect(fb('Save 40% on training time.')).toMatchObject({ ok: false });
     expect(fb('We will extend your trial if you comment below.')).toMatchObject({ ok: false, reason: 'promise' });
     expect(fb('Better than Yardi.')).toMatchObject({ ok: false, reason: 'competitor_named' });

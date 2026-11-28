@@ -43,7 +43,8 @@ describe('the marketing sections of an email about CareMetric Intel (email revie
     const second = campaignBlock(2, links(2, 'home_health'));
     expect(second).toMatch(/^A week in CareMetric Intel\n\nMonday: Pick who to see\n/);
     expect(copy.weekSteps.map(step => step.tag)).toEqual(['Monday', 'Every day', 'After each visit', 'Friday']);
-    expect(second).toContain('Founders Sale: 75% off your first 12 months\nThree-quarters off your plan\'s price for your first 12 months as a paying customer. It\'s applied on its own when your paid plan starts. No code needed.');
+    expect(second).toContain('Founding member pricing: Your price never goes up\nSubscribe while founding member pricing is offered and the price you start with stays the same for as long as you stay subscribed. You pay for the marketers in the field; organization admins and intake staff are free.');
+    expect(second).not.toMatch(/Founders Sale|75%/);
     expect(second).toContain(`Try it on your county, free for ${products.intel.trialDays} days\nYour own county, your own team. No demo to sit through, and the prices are on our website.\n${trial(2)}`);
     expect(second).toMatch(new RegExp(`Your market report is still here:\\n${report.replace(/[.]/g, '\\.')}$`));
     const third = campaignBlock(3, links(3, 'home_health'));

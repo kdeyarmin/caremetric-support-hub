@@ -1,14 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { APP_CATALOG_CONTRACT, FOR_PLAN_KEY, deterministicKey, parseAppCatalog, planCatalogSync } from './app-catalog-sync.mjs';
+import { APP_CATALOG_CONTRACT, FOR_PLAN_KEY, REVIEWED_PRICE_MOVES, deterministicKey, migrationFor, parseAppCatalog, planCatalogSync, reviewedMove } from './app-catalog-sync.mjs';
 import { platformBilling } from './billing.mjs';
 import { FOUNDERS_FOLLOW_APPS, followFoundersReplacements, foundersAmounts, foundersFollowProducts, foundersPrice } from './founders-sale.mjs';
-import { intelReviewedFacts, products as facts, resetAppCatalogFacts } from './agents/content/facts.mjs';
+import { intelFactsFromCatalog, intelReviewedFacts, products as facts, resetAppCatalogFacts } from './agents/content/facts.mjs';
 import { STRIPE_ACCOUNT_ID } from './stripe.mjs';
 import { billingCommandSchema } from '../src/billing/billingProtocol.ts';
 
-/** What Intel serves at GET /api/billing/catalog (its src/lib/planCatalog.ts), as reviewed for docs/GTM_FACTS.md. */
-const FIXTURE = JSON.parse(readFileSync(new URL('./fixtures/intel-catalog.json', import.meta.url), 'utf8'));
+/**
+ * What Intel served at GET /api/billing/catalog on 2026-11-24 (its src/lib/planCatalog.ts), the prices Stripe holds in STRIPE_PLANS: the
+ * sync's mechanics are tested on it. Intel's current catalog (fixtures/intel-catalog.json) is the reviewed copy facts.test.mjs checks.
+ */
+const CURRENT = JSON.parse(readFileSync(new URL('./fixtures/intel-catalog.json', import.meta.url), 'utf8'));
+const FIXTURE = JSON.parse(readFileSync(new URL('./fixtures/intel-catalog-2026-11-24.json', import.meta.url), 'utf8'));
 
 // Intel's three plans as Stripe holds them today (server/founders-catalog.mjs).
 const STRIPE_PLANS = {
@@ -148,15 +152,15 @@ describe('planning the Stripe changes', () => {
   it('replaces a changed add-on price on the product for its plan', () => {
     expect(plan({ 'extra_seat.month.growth': 5900, 'extra_state.year': 209000 }).changes).toEqual([
       { entitlement_key: 'extra_seat', kind: 'addon', plan: 'growth', product: 'prod_extra_seat_growth', interval: 'month', unit_amount: 5900,
-        price: 'price_extra_seat_growth_month', from: 4900 },
-      { entitlement_key: 'extra_state', kind: 'addon', product: 'prod_extra_state', interval: 'year', unit_amount: 209000, price: 'price_extra_state_year', from: 199000 },
+        price: 'price_extra_seat_growth_month', from: 4900, migrate: 'grandfather' },
+      { entitlement_key: 'extra_state', kind: 'addon', product: 'prod_extra_state', interval: 'year', unit_amount: 209000, price: 'price_extra_state_year', from: 199000, migrate: 'grandfather' },
     ]);
   });
 
   it('replaces a changed plan price, grandfathering, and creates a price an interval lacks', () => {
     const result = plan({ 'growth.year': 958800 }, objects => ({ ...objects, prices: objects.prices.filter(price => price.id !== STRIPE_PLANS.pro.year[0]) }));
     expect(result.changes).toEqual([{ entitlement_key: 'growth', kind: 'plan', product: STRIPE_PLANS.growth.product, interval: 'year', unit_amount: 958800,
-      price: STRIPE_PLANS.growth.year[0], from: 898800 }]);
+      price: STRIPE_PLANS.growth.year[0], from: 898800, migrate: 'grandfather' }]);
     expect(result.creates).toEqual([{ entitlement_key: 'pro', kind: 'plan', product: STRIPE_PLANS.pro.product, interval: 'year', unit_amount: 1998000 }]);
   });
 
@@ -181,6 +185,41 @@ describe('planning the Stripe changes', () => {
     }));
     expect(result.changes).toMatchObject([{ entitlement_key: 'starter', interval: 'month', price: STRIPE_PLANS.starter.month[0], unit_amount: 39900 }]);
     expect(result.missing).toEqual([{ entitlement_key: 'pro', reason: 'no active Stripe product carries this entitlement key' }]);
+  });
+
+  it('moves the people on a price to a lower one, and keeps a higher one off them (the price lock)', () => {
+    expect(migrationFor(34900, 29900)).toBe('no_proration');
+    expect(migrationFor(34900, 39900)).toBe('grandfather');
+    expect(plan({ 'starter.month': 29900 }).changes).toMatchObject([{ entitlement_key: 'starter', interval: 'month', from: 34900, unit_amount: 29900, migrate: 'no_proration' }]);
+  });
+
+  it('applies a move outside the automatic range only when the owner reviewed that exact amount', () => {
+    const reviewed = plan({ 'starter.month': 9900, 'extra_seat.month.starter': 2900, 'extra_state.month': 9900 });
+    expect(reviewed.held).toEqual([]);
+    expect(reviewed.changes).toMatchObject([
+      { entitlement_key: 'starter', interval: 'month', from: 34900, unit_amount: 9900, migrate: 'no_proration', reviewed: true },
+      { entitlement_key: 'extra_seat', plan: 'starter', interval: 'month', from: 5900, unit_amount: 2900, migrate: 'no_proration', reviewed: true },
+      { entitlement_key: 'extra_state', interval: 'month', from: 19900, unit_amount: 9900, migrate: 'no_proration', reviewed: true },
+    ]);
+    // An amount next to the reviewed one, or the reviewed amount on another interval or plan, is still held.
+    expect(plan({ 'starter.month': 9800 }).held).toMatchObject([{ entitlement_key: 'starter', interval: 'month', unit_amount: 9800 }]);
+    expect(plan({ 'extra_seat.month.growth': 2400 }).held).toHaveLength(1);
+    expect(reviewedMove('carebase', { entitlement_key: 'starter', interval: 'month', unit_amount: 9900 })).toBe(false);
+    // Every reviewed move is the amount Intel's current catalog publishes.
+    const current = parseAppCatalog(CURRENT, 'caremetric-intel');
+    for (const move of REVIEWED_PRICE_MOVES['caremetric-intel']) {
+      const product = current.products.find(item => item.entitlement_key === move.entitlement_key);
+      expect(product?.prices.find(price => price.interval === move.interval && (price.plan ?? '') === (move.plan ?? ''))?.unit_amount, JSON.stringify(move)).toBe(move.unit_amount);
+    }
+  });
+
+  it('reads the founding offer and the AI packs Intel publishes now', () => {
+    const current = parseAppCatalog(CURRENT, 'caremetric-intel');
+    expect(current.founding_offer).toMatchObject({ kind: 'price_lock', plans: ['starter', 'growth', 'pro'] });
+    expect(current.founding_offer.terms).toMatch(/never|does not apply/);
+    expect(current.products.filter(item => /^ai_/.test(item.entitlement_key)).map(item => [item.entitlement_key, item.kind, item.unit_label]))
+      .toEqual([['ai_plus', 'addon', 'aiplus'], ['ai_max', 'addon', 'aimax']]);
+    expect(parseAppCatalog(FIXTURE, 'caremetric-intel').founding_offer).toBeNull();
   });
 
   it('leaves one-time fees to an administrator', () => {
@@ -243,6 +282,7 @@ describe('syncing Stripe from Intel\'s catalog', () => {
 
   function harness(stripe = stripeObjects()) {
     const posts = [];
+    const subscriptionLists = [];
     const audits = [];
     const fetchImpl = vi.fn(async (url, init) => {
       const { pathname, searchParams } = new URL(url);
@@ -252,6 +292,11 @@ describe('syncing Stripe from Intel\'s catalog', () => {
       if (init.method === 'GET' && pathname === '/v1/prices') return json({ object: 'list', data: stripe.prices.filter(price => price.product === searchParams.get('product')), has_more: false });
       if (init.method === 'GET' && pathname.startsWith('/v1/prices/')) return json(stripe.prices.find(price => price.id === pathname.split('/').pop()));
       if (init.method === 'GET' && pathname.startsWith('/v1/products/')) return json(stripe.products.find(product => product.id === pathname.split('/').pop()));
+      // Who is on a price, when a lower one moves them (migrateSubscribers): nobody in these tests.
+      if (init.method === 'GET' && pathname === '/v1/subscriptions') {
+        subscriptionLists.push(searchParams.get('price'));
+        return json({ object: 'list', data: [], has_more: false });
+      }
       if (init.method === 'POST' && pathname === '/v1/products') {
         const form = new URLSearchParams(init.body);
         posts.push({ path: pathname, key: init.headers['Idempotency-Key'], form });
@@ -309,13 +354,13 @@ describe('syncing Stripe from Intel\'s catalog', () => {
     const log = { warn: vi.fn(), info: vi.fn() };
     const billing = platformBilling({ pool, secretKey: 'sk_test_synthetic', publicOrigin: 'https://hub.test', fetchImpl, log });
     const sync = amounts => billing.syncAppCatalog('caremetric-intel', { fetchCatalog: async () => ({ ok: true, json: async () => intelCatalog(amounts) }) });
-    return { billing, sync, posts, audits, log, stripe };
+    return { billing, sync, posts, audits, log, stripe, subscriptionLists };
   }
 
   it('sets up the add-ons Stripe lacks, a product per plan for the seat, with monthly and annual prices, once', async () => {
     const t = harness();
     const result = await t.sync();
-    expect(result).toMatchObject({ ok: true, failed: 0, applied: ADDONS.length + ADDON_PRICES, unchanged: 6, held: [], missing: [], facts_stale: [] });
+    expect(result).toMatchObject({ ok: true, failed: 0, applied: ADDONS.length + ADDON_PRICES, unchanged: 6, held: [], missing: [] });
     const products = t.posts.filter(post => post.path === '/v1/products');
     expect(products.map(post => post.form.get('name'))).toEqual(['Extra seat (Starter)', 'Extra seat (Growth)', 'Extra seat (Pro)', 'Extra location', 'Extra state']);
     expect(Object.fromEntries(products[1].form)).toMatchObject({ unit_label: 'seat', 'metadata[app]': 'caremetric-intel', 'metadata[kind]': 'addon',
@@ -332,8 +377,8 @@ describe('syncing Stripe from Intel\'s catalog', () => {
     // The next run finds everything in place.
     expect(await t.sync()).toMatchObject({ applied: 0, unchanged: 6 + ADDON_PRICES });
     expect(t.posts).toHaveLength(ADDONS.length + ADDON_PRICES);
-    // The AI team quotes the catalog, which matches the reviewed copy.
-    expect(facts.intel.pricing).toEqual(intelReviewedFacts.pricing);
+    // The AI team quotes the catalog it read (facts.test.mjs holds Intel's current catalog to the reviewed copy).
+    expect(facts.intel.pricing).toEqual(intelFactsFromCatalog(parseAppCatalog(FIXTURE, 'caremetric-intel')).pricing);
   });
 
   it('replaces a changed plan price in Stripe, keeps subscribers on the old one, keeps the Founders Sale and quotes the new price', async () => {
@@ -351,10 +396,20 @@ describe('syncing Stripe from Intel\'s catalog', () => {
     expect(t.audits.map(entry => entry.action)).toEqual(['billing.price.change', 'billing.catalog.sync', 'billing.catalog.facts_stale']);
     expect(t.audits[1].metadata).toMatchObject({ source: 'app_catalog', entitlement: 'starter', interval: 'month', price_from: STRIPE_PLANS.starter.month[0], unit_amount_to: 39900 });
     expect(foundersPrice('price_new_1')).toMatchObject({ app: 'caremetric-intel', kind: 'plan', amount: 39900 });
-    // The AI team quotes $399 at once (and a quarter of it under the Founders Sale); docs/GTM_FACTS.md is flagged for review.
+    // The AI team quotes $399 at once; docs/GTM_FACTS.md, whose reviewed copy states other prices, is flagged for review.
     expect(facts.intel.pricing[0]).toMatch(/^Starter: \$399 per month/);
-    expect(result.facts_stale).toEqual(['$399', '$99.75']);
-    expect(t.log.warn).toHaveBeenCalledWith(expect.stringMatching(/GTM_FACTS\.md .* do not state \$399, \$99\.75/));
+    expect(result.facts_stale).toEqual(expect.arrayContaining(['$399']));
+    expect(t.log.warn).toHaveBeenCalledWith(expect.stringMatching(/GTM_FACTS\.md .* do not state .*\$399/));
+  });
+
+  it('moves the people on a price onto a lower one after the change, and never onto a higher one', async () => {
+    const t = harness(stripeObjects({ addons: true }));
+    expect(await t.sync({ 'starter.month': 9900 })).toMatchObject({ ok: true, applied: 1, held: [] });
+    expect(t.subscriptionLists).toEqual([STRIPE_PLANS.starter.month[0]]);
+    expect(t.audits.find(entry => entry.action === 'billing.catalog.sync').metadata).toMatchObject({ migrate: 'no_proration', reviewed: 'true', unit_amount_to: 9900 });
+    const higher = harness(stripeObjects({ addons: true }));
+    await higher.sync({ 'starter.month': 39900 });
+    expect(higher.subscriptionLists).toEqual([]);
   });
 
   it('replaces a changed add-on price, priced per unit like the one it replaces', async () => {

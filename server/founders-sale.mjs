@@ -21,6 +21,15 @@ export const foundersPrice = price => foundersCatalog[ref(price)] ?? followed.ge
  */
 export const FOUNDERS_FOLLOW_APPS = Object.freeze(['caremetric-intel', 'carebase']);
 
+/**
+ * Applications that still enroll new subscriptions in the Founders Sale. Intel left it on 2026-11-28 (owner decision:
+ * its prices were lowered and founding member pricing, a price lock, replaced the 75% first year; Intel's catalog says
+ * so in `founding_offer`). An Intel subscription already in its Founders year keeps the discount until the year ends
+ * and is then handled as before (applyFoundersToInvoice removes it), so Intel stays in FOUNDERS_FOLLOW_APPS and in the
+ * coupon's product scope, which verifyFoundersCoupon checks unchanged; only new enrollment stops.
+ */
+export const FOUNDERS_ENROLLING_APPS = Object.freeze(['carebase']);
+
 /** The Stripe products whose prices followFoundersReplacements needs: the Founders products of FOUNDERS_FOLLOW_APPS. */
 export function foundersFollowProducts(apps = FOUNDERS_FOLLOW_APPS) {
   return [...new Set(Object.values(foundersCatalog).filter(entry => apps.includes(entry.app)).map(entry => entry.product))].sort();
@@ -98,6 +107,7 @@ async function selectionEligible(live, app, lines) {
 
 /** Server-owned catalog and complete paid history decide eligibility, never a browser flag or promo code. */
 export async function foundersEligibility(live, { app, customer, lines, ownSubscription, ownQuote, ownInvoice, ownRequest }) {
+  if (!FOUNDERS_ENROLLING_APPS.includes(app)) return false;
   if (!await selectionEligible(live, app, lines)) return false;
   if (customer) {
     const account = await live.get(`/v1/customers/${customer}`);

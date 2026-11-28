@@ -95,7 +95,7 @@ describe('the second email follows whether the report was opened', () => {
     for (const plan of [viewedTouchAngle, unviewedTouchAngle]) {
       expect(plan).toMatch(/^Second email to an agency whose market report was sent with the first\. Do not say or hint that you know whether anyone opened it\./);
       // The writer writes the opening; the email's own sections offer the trial (campaign.mjs).
-      expect(plan).toMatch(/The email adds: three steps for the week in CareMetric Intel, the Founders Sale, the 30-day free trial button, and a link back to the report\./);
+      expect(plan).toMatch(/The email adds: three steps for the week in CareMetric Intel, founding member pricing, the 30-day free trial button, and a link back to the report\./);
       expect(plan).toMatch(/No link in your words, and nothing about the credit card or billing\./);
       expect(plan).not.toMatch(/credit card is required|canceling before it ends|card terms/);
     }

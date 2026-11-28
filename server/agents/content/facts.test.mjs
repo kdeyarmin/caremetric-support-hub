@@ -26,8 +26,10 @@ describe('the fact sheet', () => {
 
   it('uses the live per-facility CareBase price, never the retired flat $499 package', () => {
     expect(allowedAmounts).toContain('$199');
-    expect(allowedAmounts).not.toContain('$499');
-    expect(factSheetText()).not.toContain('$499');
+    // $499 is Intel Multi-state's price since 2026-11-28, never a CareBase package.
+    expect(products.carebase.pricing.join(' ')).not.toContain('$499');
+    expect(products.carebase.offers.join(' ')).not.toContain('$499');
+    expect(factSheetText()).toMatch(/Multi-state: \$499 per month/);
     expect(products.carebase.pricing[0]).toMatch(/^CareBase Core: \$199 per facility per month/);
     expect(doc).toMatch(/CareBase Core is \$199 per facility per month/);
     expect(doc).toMatch(/MARKETING_SITE_REDESIGN_HANDOFF\.md[\s\S]{0,200}\$499/);
@@ -49,8 +51,15 @@ describe('the fact sheet', () => {
     expect(doc).toContain('founding-partner pricing locked for as long as they subscribe');
   });
 
-  it('keeps the sale duration, renewal, exclusions and assisted trial redemption with both products', () => {
-    for (const product of [products.carebase, products.intel]) {
+  it('keeps the sale duration, renewal, exclusions and assisted trial redemption with CareBase, and Intel\'s founding member pricing instead', () => {
+    // The Founders Sale ended for new Intel subscriptions on 2026-11-28 (server/founders-sale.mjs FOUNDERS_ENROLLING_APPS).
+    expect(products.intel.offers.find(line => line.startsWith('Founders Sale:'))).toBeUndefined();
+    const founding = products.intel.offers.find(line => line.startsWith(facts.INTEL_FOUNDING_PREFIX));
+    expect(founding).toContain('keeps the plan price, and the price of each additional marketer');
+    expect(founding).toContain('A later price increase does not apply to it');
+    expect(founding).not.toMatch(/\d+%/);
+    expect(products.intel.offers.join(' ')).toContain('The Founders Sale does not apply to new Intel subscriptions');
+    for (const product of [products.carebase]) {
       const offer = product.offers.find(line => line.startsWith('Founders Sale:'));
       expect(offer).toContain('75% off');
       expect(offer).toContain('first 12 months of paid service');
@@ -250,12 +259,12 @@ describe("Intel's facts from its published catalog", () => {
     const before = facts.factsRevision;
     expect(useAppCatalogFacts('caremetric-intel', repriced)).toEqual(['$949']);
     expect(facts.factsRevision).toBe(before + 1);
-    expect(products.intel.pricing[1]).toMatch(/^Growth: \$949 per month, or \$749 per month billed annually/);
+    expect(products.intel.pricing[1]).toMatch(/^Team: \$949 per month, or \$165\.83 per month billed annually/);
     expect(facts.allowedAmounts).toContain('$949');
     expect(facts.allowedAmounts).not.toContain('$899');
     expect(factSheetText()).toContain('Intel catalog abcdef0123456789');
-    expect(textProblems('Intel Growth is $949 per month.')).toEqual([]);
-    expect(textProblems('Intel Growth is $899 per month.')).toContain('unlisted_price');
+    expect(textProblems('Intel Team is $949 per month.')).toEqual([]);
+    expect(textProblems('Intel Team is $899 per month.')).toContain('unlisted_price');
     expect(allowedNumbers([]).size).toBeGreaterThan(0);
     // The same catalog read again changes nothing.
     useAppCatalogFacts('caremetric-intel', repriced);
@@ -267,7 +276,7 @@ describe("Intel's facts from its published catalog", () => {
     resetAppCatalogFacts();
     expect(products.intel.pricing).toEqual(intelReviewedFacts.pricing);
     expect(facts.allowedAmounts).toEqual(allowedAmounts);
-    expect(textProblems('Intel Growth is $949 per month.')).toContain('unlisted_price');
+    expect(textProblems('Intel Team is $949 per month.')).toContain('unlisted_price');
     expect(useAppCatalogFacts('carebase', repriced)).toEqual([]);
     expect(products.intel.pricing).toEqual(intelReviewedFacts.pricing);
   });
