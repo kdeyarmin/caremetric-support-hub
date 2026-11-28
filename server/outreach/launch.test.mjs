@@ -73,6 +73,8 @@ function instantlyFake() {
     async createCampaign(body) { const id = campaignIds[made++]; this.created.push({ id, ...body }); return { id, name: body.name }; },
     async addLeads(id, leads) { this.leads.push({ id, leads }); return { uploaded: leads.length, skipped: 0, remaining: 300, created: leads.map(lead => lead.email) }; },
     async activate(id) { this.activated.push(id); return {}; },
+    statuses: {},
+    async campaignStatus(id) { return this.statuses[id] ?? 0; },
     async webhooks() { return this.hooks; },
     async createWebhook(body) { this.hooks.push({ ...body, status: 1 }); return {}; },
   };
@@ -129,8 +131,10 @@ describe('a state launch, from the owner\'s choice to Launch', () => {
     // Nothing else happens until the owner clicks Launch.
     expect((await run()).result).toEqual({ idle: true });
     store.launches.get(id).status = 'launching';
+    // The owner already started one in Instantly himself: it is left as it is.
+    instantly.statuses[campaignIds[1]] = 1;
     expect((await run()).result).toMatchObject({ stage: 'launch', launched: 2 });
-    expect(instantly.activated).toEqual([campaignIds[0], campaignIds[1]]);
+    expect(instantly.activated).toEqual([campaignIds[0]]);
     expect(store.launches.get(id).status).toBe('launched');
   });
 

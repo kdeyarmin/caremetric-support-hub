@@ -35,7 +35,6 @@ it('queues the state the owner chooses, and says what is missing first', async (
   const missing = await screen.findByText(/Before a state can be built/);
   expect(missing.textContent).toContain('Build state launches in Instantly');
   expect(missing.textContent).toContain('INSTANTLY_API_KEY');
-  expect(screen.getByText(/Pennsylvania was built by hand/)).toBeTruthy();
   fireEvent.change(screen.getByLabelText('Next state'), { target: { value: 'OH' } });
   fireEvent.click(screen.getByRole('button', { name: 'Build this state' }));
   await waitFor(() => expect(calls.some(c => c.operation === 'launchRequest')).toBe(true));
@@ -57,4 +56,16 @@ it('launches a ready state with one click, and shows who is in it', async () => 
   fireEvent.click(screen.getByRole('button', { name: 'Launch Ohio' }));
   await waitFor(() => expect(calls.find(c => c.operation === 'launchApprove')?.data).toEqual({ id: 'l-1' }));
   expect(await screen.findByText(/Ohio is starting/)).toBeTruthy();
+});
+
+it('lets the owner choose the next state only once the open one is launched or cancelled', async () => {
+  const pa = { ...ready, id: 'l-pa', state: 'PA', summary: { leads: 576, builtByHand: true, pendingLeft: false } };
+  api({ launches: { enabled: true, launches: [pa], services, states }, launch: [] });
+  render(<StateLaunchesPanel revision={0} />);
+  expect((await screen.findByText(/One state at a time/)).textContent).toContain('finish Pennsylvania first');
+  expect(screen.queryByLabelText('Next state')).toBeNull();
+  expect(screen.getByText(/built by hand on November 28/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Launch Pennsylvania' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Facilities' }));
+  expect(await screen.findByText(/This state was built by hand/)).toBeTruthy();
 });

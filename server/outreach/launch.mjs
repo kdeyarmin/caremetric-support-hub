@@ -15,6 +15,8 @@
  *    campaign per segment in Instantly with the owner's copy (copy.mjs) and the people as its leads; the launch is ready and the owner is
  *    told;
  * 4. after the owner clicks Launch: each campaign is started in Instantly.
+ * One state at a time (owner, 2026-11-28: "Finish PA before going to the next state"): the next state can be chosen only once the open
+ * one is launched or cancelled. Pennsylvania, built by hand, is the first launch, ready with its five campaigns.
  * Instantly's replies and opt-outs come back through webhook.mjs, for every campaign of the workspace. Nothing is sent before Launch.
  */
 import { live } from '../live.mjs';
@@ -232,7 +234,9 @@ export function stateLaunches({ store, feed = null, hunter = null, npi = null, i
     for (const segment of segments) {
       const campaign = launch.campaigns?.[segment];
       if (!campaign?.id || campaign.started) continue;
-      await instantly.activate(campaign.id, { signal });
+      // A campaign the owner already started in Instantly himself (or that finished) is left as it is.
+      const status = typeof instantly.campaignStatus === 'function' ? await instantly.campaignStatus(campaign.id, { signal }) : NaN;
+      if (![1, 3].includes(status)) await instantly.activate(campaign.id, { signal });
       launch.campaigns[segment] = { ...campaign, started: true };
       started.push(campaign.name);
       await store.save(launch.id, { campaigns: launch.campaigns });

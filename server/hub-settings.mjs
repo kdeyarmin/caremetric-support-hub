@@ -190,7 +190,9 @@ export const settingsCatalog = Object.freeze([
   // State launches (docs/STATE_LAUNCHES.md): the owner picks a state on Growth → State launches; the AI team builds it in Instantly.
   { key: 'outreach.instantly', group: 'growth', kind: 'flag', input: 'toggle', default: false, env: null,
     label: 'Build state launches in Instantly', help: 'When you choose a state on Growth → State launches, the Marketing Manager finds its nursing homes, home health agencies and hospices, a decision-maker and a checked address at each (Hunter), and builds draft Instantly campaigns with your copy, as Pennsylvania was built. Nothing is sent until you click Launch. Needs INSTANTLY_API_KEY and HUNTER_API_KEY in Railway. Off: launches wait.' },
-  { key: 'outreach.instantly_senders', group: 'growth', kind: 'list', input: 'lines', default: [], env: null, valid: listOf(isEmail, 20),
+  // The four Google mailboxes bought with Instantly on 2026-11-28 (warming since then); the Airmail Rocket inbox is left out, as by hand.
+  { key: 'outreach.instantly_senders', group: 'growth', kind: 'list', input: 'lines', env: null, valid: listOf(isEmail, 20),
+    default: ['kevin@trycaremetricintel.com', 'kevin.deyarmin@trycaremetricintel.com', 'kevin@getcaremetricintel.com', 'kevin.deyarmin@getcaremetricintel.com'],
     label: 'Instantly mailboxes for state launches', help: 'The Instantly mailboxes that send each state\'s campaigns, one address per line, exactly as Instantly lists them. Keep them warmed up in Instantly.' },
   { key: 'outreach.instantly_daily_limit', group: 'growth', kind: 'number', input: 'number', default: 30, min: 1, max: 100, unit: 'emails', env: null, valid: wholeNumber(1, 100),
     label: 'Most emails a day from each Instantly mailbox', help: 'Per mailbox, for each state launch campaign (1 to 100). 30 suits a new mailbox.' },

@@ -78,6 +78,8 @@ export function instantlyClient({ apiKey = '', fetchImpl = globalThis.fetch } = 
         created: Array.isArray(answer?.created_leads) ? answer.created_leads.map(lead => String(lead?.email ?? '').toLowerCase()).filter(Boolean) : null };
     },
     activate: (campaignId, { signal } = {}) => call('POST', `/campaigns/${campaignId}/activate`, {}, { signal }),
+    /** The campaign's status in Instantly: 0 draft, 1 active, 2 paused, 3 completed (or another number Instantly adds). */
+    async campaignStatus(campaignId, { signal } = {}) { const campaign = await call('GET', `/campaigns/${campaignId}`, undefined, { signal }); return Number(campaign?.status); },
     async webhooks({ signal } = {}) { const answer = await call('GET', '/webhooks?limit=100', undefined, { signal }); return Array.isArray(answer?.items) ? answer.items : []; },
     createWebhook: (body, { signal } = {}) => call('POST', '/webhooks', body, { signal }),
   };

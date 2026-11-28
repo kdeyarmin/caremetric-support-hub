@@ -26,11 +26,6 @@ insert into private.hub_settings (key, kind) values
   ('outreach.instantly', 'flag'), ('outreach.instantly_senders', 'list'), ('outreach.instantly_daily_limit', 'number'),
   ('outreach.instantly_states', 'list'), ('outreach.local_counties', 'list'), ('outreach.hunter_per_launch', 'number')
 on conflict (key) do nothing;
--- The four Google mailboxes bought with Instantly on 2026-11-28 (warming since then); the Airmail Rocket inbox is left out, as by hand.
--- Only while the owner has not chosen mailboxes himself.
-update private.hub_settings set value =
-  '["kevin@trycaremetricintel.com","kevin.deyarmin@trycaremetricintel.com","kevin@getcaremetricintel.com","kevin.deyarmin@getcaremetricintel.com"]'::jsonb
-where key = 'outreach.instantly_senders' and value is null;
 
 create table if not exists private.state_launches (
   id uuid primary key default gen_random_uuid(),
@@ -50,8 +45,9 @@ create table if not exists private.state_launches (
   launched_at timestamptz,
   cancelled_at timestamptz
 );
--- One open launch per state.
-create unique index if not exists state_launches_open_idx on private.state_launches (state)
+-- One state at a time (owner, 2026-11-28: "Finish PA before going to the next state. I want to just be able to do 1 state at a
+-- time"): at most one launch is open (queued, building, ready to launch or starting) until it is launched or cancelled.
+create unique index if not exists state_launches_one_open_idx on private.state_launches ((true))
   where status in ('queued', 'building', 'ready', 'launching');
 create index if not exists state_launches_work_idx on private.state_launches (created_at) where status in ('queued', 'building', 'launching');
 
@@ -335,8 +331,11 @@ begin
     'WV','WI','WY']) then
     raise exception 'Choose a state by its two-letter code' using errcode = '22023';
   end if;
-  if exists (select 1 from private.state_launches where state = v_state and status in ('queued', 'building', 'ready', 'launching')) then
-    raise exception 'This state already has a launch open' using errcode = '22023';
+  -- One state at a time: the open one is launched (or cancelled) before the next is chosen.
+  if exists (select 1 from private.state_launches where status in ('queued', 'building', 'ready', 'launching')) then
+    raise exception 'Finish the state already open (%) first: launch it or cancel it',
+      (select l.state from private.state_launches l where l.status in ('queued', 'building', 'ready', 'launching') limit 1)
+      using errcode = '22023';
   end if;
   insert into private.state_launches (state, requested_by) values (v_state, v_actor) returning id into v_id;
   insert into private.audit_events(actor_id, action, entity_type, entity_id, metadata)
@@ -399,6 +398,19 @@ revoke all on function hub.state_launches(), hub.state_launch_detail(uuid), hub.
   hub.state_launch_more(uuid), hub.state_launch_cancel(uuid) from public, anon, authenticated, service_role;
 grant execute on function hub.state_launches(), hub.state_launch_detail(uuid), hub.state_launch_request(text), hub.state_launch_approve(uuid),
   hub.state_launch_more(uuid), hub.state_launch_cancel(uuid) to authenticated, hub_app_server;
+
+-- Pennsylvania, built by hand on 2026-11-27 and 28, is the first launch: ready, with its five draft Instantly campaigns, so it is
+-- launched from Growth → State launches like any other and the next state waits for it. The campaign with the same-company extras
+-- and batch 1's agencies ("HOLD – PA same-company extras (do not launch)") is never part of it.
+insert into private.state_launches (state, status, stage, campaigns, summary, ready_at)
+select 'PA', 'ready', 'done',
+  '{"agency": {"id": "f00275f1-631f-4b7f-94e2-c121f78014a8", "name": "PA home health & hospice – owners, wave 1 (draft)", "leads": 268},
+    "snf": {"id": "d1dead79-7e80-44dd-850c-6c06fdb4732a", "name": "PA skilled nursing – administrators (draft)", "leads": 217},
+    "local": {"id": "57f2418a-c125-4fdb-b26d-a3fd04ff4f38", "name": "PA skilled nursing – local referral sources near Cambria (draft)", "leads": 53},
+    "chain": {"id": "f1808c1a-a5c4-4370-b30a-5664c6745233", "name": "PA nursing home chains – corporate (draft)", "leads": 20},
+    "regional": {"id": "3843a1e4-ef18-4b57-bdfe-b29b4f1a5e27", "name": "PA nursing home regional groups – leadership (draft)", "leads": 18}}'::jsonb,
+  '{"leads": 576, "builtByHand": true, "pendingLeft": false}'::jsonb, now()
+where not exists (select 1 from private.state_launches where state = 'PA');
 
 insert into private.agent_schedules (agent_key, task_kind, cadence, every_seconds, at_local, timezone, requires_session, next_run_at)
 values ('marketing_manager', 'outreach.launch', 'interval', 300, null, 'America/New_York', false, now())

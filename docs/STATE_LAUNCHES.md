@@ -14,6 +14,16 @@ all of this is automatically done". Your choices were:
 - Pennsylvania is Instantly's too.
 - Nothing goes out until you click Launch.
 
+## One state at a time
+
+Your rule, November 28: "Finish PA before going to the next state. I want to just be able to do 1 state at a time". Only one
+state is open at a time: queued, building, ready to launch or starting. The next state can be chosen once that one is launched
+or cancelled.
+
+Pennsylvania is the first launch on the page. It is ready, with the five draft campaigns built by hand (576 people). The
+same-company extras and batch 1's agencies stay in the HOLD campaign, which is never launched. Click **Launch Pennsylvania** when
+the mailboxes are warm. A campaign you already started in Instantly yourself is left as it is. Then choose the next state.
+
 ## Before the first state
 
 1. In Railway, paste an Instantly API key into `INSTANTLY_API_KEY`. Create the key in Instantly under Settings → Integrations →

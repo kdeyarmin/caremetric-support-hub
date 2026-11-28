@@ -34,7 +34,7 @@ function stateOf(l: Launch) {
     if (l.stage === 'contacts') return `Finding people: ${looked} looked up, ${num(p.found)} found, ${num(p.hunterSearches)} Hunter searches`;
     return 'Building the Instantly campaigns';
   }
-  if (l.status === 'ready') return `Ready: ${num((l.summary as Record<string, unknown>).leads)} people in draft campaigns. Nothing is sent until you click Launch.`;
+  if (l.status === 'ready') return `Ready: ${num((l.summary as Record<string, unknown>).leads)} people in draft campaigns${(l.summary as Record<string, unknown>).builtByHand ? ', built by hand on November 28' : ''}. Nothing is sent until you click Launch.`;
   if (l.status === 'launching') return 'Starting the campaigns in Instantly';
   if (l.status === 'launched') return `Sending since ${l.launchedAt ? new Date(l.launchedAt).toLocaleDateString() : 'launch'}`;
   if (l.status === 'failed') return `Stopped: ${l.error ?? 'unknown'}. Nothing was sent.`;
@@ -52,6 +52,7 @@ function LaunchDetail({ id, revision }: { id: string; revision: number }) {
   }, [id, revision]);
   if (failure) return <p role="alert">{failure}</p>;
   if (!rows) return <p role="status">Loading the facilities…</p>;
+  if (!rows.length) return <p>This state was built by hand: its people are in its Instantly campaigns and on your cold email sheet.</p>;
   const shown = (show === 'people' ? rows.filter(r => r.email) : rows).slice(0, 500);
   return <div>
     <p><button className="button" onClick={() => setShow(show === 'people' ? 'all' : 'people')}>{show === 'people' ? `Show all ${rows.length} facilities` : 'Show only the people found'}</button></p>
@@ -84,6 +85,8 @@ export function StateLaunchesPanel({ revision }: { revision: number }) {
   if (!entry) return <section className="panel"><h2>State launches</h2>{failure ? <p role="alert">{failure}</p> : <p role="status">Loading state launches…</p>}</section>;
   const s = entry.services;
   const names = new Map(entry.states.map(x => [x.code, x.name]));
+  // One state at a time: the next one is chosen once the open one is launched or cancelled.
+  const openLaunch = entry.launches.find(l => ['queued', 'building', 'ready', 'launching'].includes(l.status));
   const missing = [!entry.enabled && 'turn on Settings → Customer growth → Build state launches in Instantly',
     !s.instantly && 'paste an Instantly API key (all scopes, from Instantly\'s Settings → Integrations) into Railway as INSTANTLY_API_KEY',
     !s.hunter && 'set HUNTER_API_KEY in Railway so people can be found',
@@ -94,13 +97,14 @@ export function StateLaunchesPanel({ revision }: { revision: number }) {
     <p>Choose the next state. The Marketing Manager finds its nursing homes, home health agencies and hospices, a decision-maker with a checked address at each, and builds draft Instantly campaigns with your copy, the way Pennsylvania was built. You are told when it is ready. Nothing is sent until you click Launch. A "yes" gets its county report; a "no thanks" goes on the do-not-contact list.</p>
     {missing.length > 0 && <p role="status">Before a state can be built: {missing.join('; ')}.</p>}
     {notice && <p role="status">{notice}</p>}{failure && <p role="alert">{failure}</p>}
-    <form onSubmit={e => { e.preventDefault(); if (state) void act('launchRequest', { state }, `${names.get(state) ?? state} is queued. You'll be told when it is ready to launch.`); }}>
-      <label>Next state<select value={state} onChange={e => setState(e.target.value)} required>
-        <option value="">Choose a state…</option>
-        {entry.states.map(x => <option key={x.code} value={x.code}>{x.name}</option>)}
-      </select></label>
-      <button className="button button-primary" disabled={busy || !state}>Build this state</button>
-    </form>
+    {openLaunch ? <p role="status">One state at a time: finish {names.get(openLaunch.state) ?? openLaunch.state} first. Launch it (or cancel it), then choose the next state here.</p>
+      : <form onSubmit={e => { e.preventDefault(); if (state) void act('launchRequest', { state }, `${names.get(state) ?? state} is queued. You'll be told when it is ready to launch.`); }}>
+        <label>Next state<select value={state} onChange={e => setState(e.target.value)} required>
+          <option value="">Choose a state…</option>
+          {entry.states.map(x => <option key={x.code} value={x.code}>{x.name}</option>)}
+        </select></label>
+        <button className="button button-primary" disabled={busy || !state}>Build this state</button>
+      </form>}
     {entry.launches.length > 0 ? <table><thead><tr><th>State</th><th>Where it is</th><th>Campaigns</th><th /></tr></thead><tbody>
       {entry.launches.map(l => {
         const name = names.get(l.state) ?? l.state;
@@ -115,7 +119,7 @@ export function StateLaunchesPanel({ revision }: { revision: number }) {
             <button className="button" onClick={() => setOpen(open === l.id ? null : l.id)}>{open === l.id ? 'Hide facilities' : 'Facilities'}</button>
           </td></tr>;
       })}
-    </tbody></table> : <p>No state launches yet. Pennsylvania was built by hand on November 28.</p>}
+    </tbody></table> : <p>No state launches yet.</p>}
     {open && <LaunchDetail id={open} revision={revision + reload} />}
   </section>;
 }
