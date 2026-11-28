@@ -146,11 +146,11 @@ const shared = {
   closeText: () => `Try CareMetric Intel free for ${trialDays()} days on one county, with your own team. No demo to sit through, and the prices are on our website.`,
   closeNote: 'Have a question first? Just reply. I\'ll answer it.',
   weekHeading: 'A week in CareMetric Intel',
-  offerEyebrow: 'Founders Sale',
-  offerTitle: '75% off your first 12 months',
-  // The sale's terms in everyday words (facts.mjs `foundersSaleTerms`): three-quarters off the plan's own price for the first paid year, applied
-  // by billing with no code. "Your plan's price" leaves out what the terms exclude (setup fees, add-ons, taxes).
-  offerText: 'Three-quarters off your plan\'s price for your first 12 months as a paying customer. It\'s applied on its own when your paid plan starts. No code needed.',
+  offerEyebrow: 'Founding member pricing',
+  offerTitle: 'Your price never goes up',
+  // Intel's founding member pricing in everyday words (facts.mjs `intelFoundingTerms`, 2026-11-28: it replaced the Founders Sale's 75%
+  // first year for Intel): the plan price a subscriber starts with stays while they stay subscribed, and only marketers take a seat.
+  offerText: 'Subscribe while founding member pricing is offered and the price you start with stays the same for as long as you stay subscribed. You pay for the marketers in the field; organization admins and intake staff are free.',
   weekCloseTitle: () => `Try it on your county, free for ${trialDays()} days`,
   weekCloseText: 'Your own county, your own team. No demo to sit through, and the prices are on our website.',
   reportStill: { own: 'Your market report is still here:', page: 'Your free county report is one step away:' },

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FOUNDERS_COUPON, FOUNDERS_OFFER, applyFoundersToInvoice, foundersAmounts, foundersEligibility, foundersWindow, verifyFoundersCoupon } from './founders-sale.mjs';
+import { FOUNDERS_COUPON, FOUNDERS_OFFER, applyFoundersToInvoice, foundersAmounts, foundersEligibility, foundersWindow, verifyFoundersCoupon, FOUNDERS_ENROLLING_APPS } from './founders-sale.mjs';
 import { foundersCatalog } from './founders-catalog.mjs';
 
 const price = 'price_1UUyUyB06O2UFlNzdfXwJUXW';
@@ -57,28 +57,22 @@ describe('automatic Founders Sale', () => {
   it.each([
     ['month', 'price_1URvziB06O2UFlNzzVpLGAIv', 89900, 22475],
     ['year', 'price_1URvziB06O2UFlNzfHPKmesB', 898800, 224700],
-  ])('applies the verified offer to the first paid Intel Growth %s invoice after its full trial', async (cadence, selectedPrice, standard, discounted) => {
+  ])('no longer enrolls an Intel Growth %s trial conversion: founding member pricing replaced the sale for Intel', async (cadence, selectedPrice, standard, discounted) => {
+    expect(FOUNDERS_ENROLLING_APPS).toEqual(['carebase']);
     const t = fixture();
     t.sub.metadata.app = 'caremetric-intel'; t.sub.metadata.hub_source = 'app_trial';
     t.sub.items.data[0].price.id = selectedPrice;
-    t.sub.status = 'trialing'; t.invoice.subtotal = 0;
-    await applyFoundersToInvoice(t.live, t.invoice.id);
-    expect(t.live.post).not.toHaveBeenCalled();
     t.sub.status = 'active'; t.invoice.subtotal = standard; t.invoice.total = standard;
     const end = new Date(start * 1000); end.setUTCMonth(end.getUTCMonth() + (cadence === 'year' ? 12 : 1));
     t.invoiceLines([{ pricing: { price_details: { price: selectedPrice } }, amount: standard,
       period: { start, end: end.getTime() / 1000 } }]);
     await applyFoundersToInvoice(t.live, t.invoice.id);
-    expect(t.live.post).toHaveBeenCalledWith('/v1/subscriptions/sub_trial', {
-      discounts: [{ coupon: FOUNDERS_COUPON }], proration_behavior: 'none',
-      metadata: { hub_founders_sale: FOUNDERS_OFFER, hub_founders_origin: 'paid', hub_founders_start: String(start) },
-    }, { idempotencyKey: 'hub-founders-subscription-sub_trial' });
-    expect(t.live.post).toHaveBeenCalledWith('/v1/invoices/in_first', { discounts: [{ coupon: FOUNDERS_COUPON }] },
-      { idempotencyKey: 'hub-founders-invoice-in_first' });
+    expect(t.live.post).not.toHaveBeenCalled();
+    expect(await foundersEligibility(t.live, { app: 'caremetric-intel', customer: null, lines: [{ price: selectedPrice, quantity: 1 }] })).toBe(false);
+    // An Intel subscription already in its Founders year keeps the verified price's discount until the year ends.
     expect(foundersAmounts([{ price: selectedPrice, quantity: 1 }])).toMatchObject({
       standard_recurring_subtotal: standard, recurring_subtotal: discounted,
     });
-    expect(foundersWindow(t.sub)).toEqual({ start, end: Date.parse('2027-12-08T12:00:00Z') / 1000 });
   });
   it('preserves the original paid year if an administrator later adds a trial, including leap-day anniversaries', () => {
     const paid = Date.parse('2028-02-29T12:00:00Z') / 1000;

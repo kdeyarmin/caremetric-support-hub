@@ -265,7 +265,8 @@ export function outdatedWords({ product, subject, body, purpose = null }) {
   if (foundersAgency.test(words)) return 'founder_owns';
   if (purpose==='marketing'&&namesCard(product,words)) return 'card_terms';
   if (purpose==='marketing'&&callsDataPublic(product,words)) return 'public_data';
-  // A draft written while the Founders Sale was 50% off. The fact sheet is 75%. It is withdrawn and written again.
+  // A draft written while Intel had the Founders Sale (50%, then 75% off): founding member pricing replaced it on 2026-11-28.
+  // It is withdrawn and written again. Every growth draft is an Intel email.
   if (quotesOldSale(words)) return 'old_offer';
   return null;
 }

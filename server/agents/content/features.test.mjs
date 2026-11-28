@@ -47,7 +47,7 @@ describe('CareMetric Intel\'s published feature catalog', () => {
     expect(problems).not.toContain('vocabulary');
     // The prompt carries the features, the data and its sources, and the site's own caveats.
     for (const phrase of ['Stark annual limit tracking', 'Competitor rankings', 'EMR report imports', 'County intelligence', 'NPPES', 'Care Compare', 'American Community Survey',
-      'not a promise of referrals', 'The 30-day trial includes Pro features in one county', 'Site finder', 'Healthcare data library']) expect(text).toContain(phrase);
+      'not a promise of referrals', 'The 30-day trial includes Multi-state features in one county', 'Site finder', 'Healthcare data library']) expect(text).toContain(phrase);
     // The AI apps and CRM Intel connects to are written generically. The count of its datasets is the site's own, which the owner
     // approved on 2026-11-16 (the fact sheet's Intel boundaries).
     expect(text).not.toMatch(/ChatGPT|Claude|HubSpot/);

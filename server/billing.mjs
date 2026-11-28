@@ -1130,6 +1130,9 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
     const byId = new Map(prices.map(price => [price.id, price]));
     for (const step of [...plan.changes.map(change => ({ ...change, action: 'price.change' })), ...plan.creates.map(create => ({ ...create, action: 'price.create' }))]) {
       try {
+        // A lower price moves the people on the old one after the change has committed (migrateSubscribers), as it does
+        // when an administrator changes a price with "no proration".
+        let followUp = null;
         const id = await transaction(pool, async db => {
           const lockKey = `billing_catalog_sync:${app}:${step.product}:${step.interval}`;
           if (!(await one(db, 'select pg_try_advisory_xact_lock(hashtextextended($1,0)) as ok', [lockKey])).ok) return null;
@@ -1139,20 +1142,29 @@ export function platformBilling({ pool, secretKey, webhookSecrets = [], accountI
             // The mirror may trail Stripe; bring this price in before locking it.
             await mirror(db, 'price', byId.get(step.price), new Date(now()), { live });
             const mirrored = await lookup(db, 'price', step.price);
-            request = billingCommandSchema.parse({ action: 'price.change', price: step.price, unit_amount: step.unit_amount, migrate: 'grandfather', expected_version: mirrored.version, request_key });
+            request = billingCommandSchema.parse({ action: 'price.change', price: step.price, unit_amount: step.unit_amount, migrate: step.migrate ?? 'grandfather', expected_version: mirrored.version, request_key });
           } else {
             await mirror(db, 'product', products.find(product => product.id === step.product), new Date(now()), { live });
             request = billingCommandSchema.parse({ action: 'price.create', product: step.product, pricing_model: step.kind === 'addon' ? 'per_unit' : 'flat',
               type: 'recurring', interval: step.interval, unit_amount: step.unit_amount, nickname: '', tenant_id: null, request_key });
           }
           const outcome = await run(db, live, null, request);
+          followUp = outcome.followUp ?? null;
           await audit(db, null, 'billing.catalog.sync', null, await appId(db, app), {
             source: 'app_catalog', version: catalog.version, entitlement: step.entitlement_key, interval: step.interval, ...(step.plan ? { plan: step.plan } : {}),
             ...(step.price ? { price_from: step.price } : {}), price_to: outcome.result.id, unit_amount_to: step.unit_amount,
+            ...(step.migrate ? { migrate: step.migrate } : {}), ...(step.reviewed ? { reviewed: 'true' } : {}),
           });
           return outcome.result.id;
         });
         if (id) applied.push({ ...step, id });
+        if (id && followUp) {
+          const moved = await followUp().catch(error => {
+            log.warn(`${app} ${step.entitlement_key}${step.plan ? ` (${step.plan})` : ''} ${step.interval} subscribers could not all be moved to the lower price (${error?.message ?? 'error'}).`);
+            return null;
+          });
+          if (moved?.failed || moved?.incomplete) log.warn(`${app} ${step.entitlement_key} ${step.interval}: ${moved.failed ?? 0} subscription items were not moved to the lower price${moved.incomplete ? ', and more remain' : ''}.`);
+        }
       } catch (error) {
         failed.push(step);
         log.warn(`${app} ${step.entitlement_key}${step.plan ? ` (${step.plan})` : ''} ${step.interval} price could not be brought to ${step.unit_amount} cents (${error?.message ?? 'error'}).`);

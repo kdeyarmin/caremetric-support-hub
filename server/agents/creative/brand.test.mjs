@@ -36,7 +36,8 @@ describe('brand helpers', () => {
 describe('offers from billing', () => {
   it('reads the Founders Sale from the live coupon', () => {
     expect(FOUNDERS_COUPON).toContain('_75_12m_');
-    expect(liveOffers.FOUNDERS75).toMatchObject({ percentOff: 75, months: 12, automatic: true, products: ['carebase', 'caremetric-intel'] });
+    // CareBase and Train only: the sale ended for new Intel subscriptions on 2026-11-28.
+    expect(liveOffers.FOUNDERS75).toMatchObject({ percentOff: 75, months: 12, automatic: true, products: ['carebase'] });
     expect(offerFor('founders75')?.code).toBe('FOUNDERS75');
     expect(offerFor('SPRING20')).toBeNull();
   });

@@ -44,7 +44,7 @@ CareBase, Intel and Advisors serve different needs. A purchase of one does not i
 This sheet covers these commercial offerings; it is not a feature sheet for the internal Support Hub or Breathe.
 
 **Read by need:** [CareBase and Train](#caremetric-carebase) · [Intel](#caremetric-intel) ·
-[Advisors](#caremetric-healthcare-advisors) · [Founders Sale](#founders-sale--carebase-train-and-intel) ·
+[Advisors](#caremetric-healthcare-advisors) · [Founders Sale](#founders-sale--carebase-and-train) ·
 [Choosing a plan](#choosing-a-plan) · [Getting started](#getting-started) ·
 [Evaluating the business case](#evaluating-the-business-case) · [Data and exports](#data-ownership-and-exports) ·
 [Support and next steps](#support-and-next-steps) ·
@@ -277,13 +277,29 @@ catalog moves on, the Hub logs and audits `billing.catalog.facts_stale` until th
 
 | Plan | Monthly billing | Annual billing | Includes |
 | --- | --- | --- | --- |
-| Starter | $349 per month | $290 per month ($3,480 per year) | One office. 3 marketer seats + 1 manager, 1 location, 1 healthcare service line of your choice, up to 10 counties. Extra seats $59 per month ($590 per year on annual billing). Free onboarding. |
-| Growth | $899 per month | $749 per month ($8,988 per year) | For growing healthcare teams, with campaigns, manager tools and AI field help. 10 seats included, up to 3 locations, up to 2 healthcare service lines of your choice, 1 full state. Extra seats $49 per month ($490 per year on annual billing). Free onboarding. |
-| Pro | $1,999 per month | $1,665 per month ($19,980 per year) | For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 locations, up to 2 healthcare service lines of your choice, up to 3 states. Extra seats $39 per month ($390 per year on annual billing). Free onboarding. |
-| Enterprise | custom | annual only, from about $3,500 per month | larger footprints by agreement |
+Owner decision 2026-11-28: the plans were repriced to a base price that includes the first marketers plus each additional
+marketer, so the product reads as affordable after the first year, and the Founders Sale's 75% first year ended for Intel
+(founding member pricing below). Stripe keeps the plan codes `starter`, `growth` and `pro`; their names are now Local, Team and
+Multi-state. Organization admins (up to two), intake staff and one manager per location need no seat; only marketers do.
 
-Extra locations are $99 per month each ($990 per year on annual billing) and extra states $199 per month each
-($1,990 per year on annual billing).
+| Plan | Monthly billing | Annual billing | Includes |
+| --- | --- | --- | --- |
+| Local | $99 per month | $82.50 per month ($990 per year) | One office, with AI field help for every marketer. 1 marketer included, 1 location, 1 healthcare service line of your choice, up to 10 counties. Each additional marketer $29 per month ($290 per year on annual billing). Free onboarding. |
+| Team | $199 per month | $165.83 per month ($1,990 per year) | For growing healthcare teams, with campaigns, manager tools and the AI Assistant. 1 marketer included, up to 3 locations, up to 2 healthcare service lines of your choice, 1 full state. Each additional marketer $39 per month ($390 per year on annual billing). Free onboarding. |
+| Multi-state | $499 per month | $415.83 per month ($4,990 per year) | For several territories, with forecasting, territory tools and white-label reports. 5 marketers included, up to 10 locations, up to 2 healthcare service lines of your choice, up to 3 states. Each additional marketer $35 per month ($350 per year on annual billing). Free onboarding. |
+| Enterprise | custom | annual only, from about $1,500 per month | larger footprints by agreement |
+
+Extra locations are $49 per month each ($490 per year on annual billing) and extra states $99 per month each
+($990 per year on annual billing). AI packs, on a plan with the AI Assistant: AI Plus $29 per month ($290 per year on annual
+billing) and AI Max $79 per month ($790 per year on annual billing); each adds AI Assistant questions to the month's allowance.
+
+**Founding member pricing (Intel).** A Local, Team or Multi-state subscription started while founding member pricing is
+offered keeps the plan price, and the price of each additional marketer, that it started with for as long as the subscription
+stays active. A later price increase does not apply to it. Changing to another plan takes that plan's published price on the day
+of the change, which is then kept the same way. The price lock ends if the subscription is canceled or ends. Other add-ons, AI
+packs, taxes and custom contracts follow the published prices. Subscriptions that started under the earlier Founders Sale keep
+their discount until it ends, then renew at the current published price. The Hub keeps it by grandfathering every Intel price
+increase and moving subscribers onto any lower price (`server/app-catalog-sync.mjs`).
 
 ### Top reasons a company would choose Intel
 
@@ -320,11 +336,11 @@ CareMetric Intel runs a healthcare organization's whole marketing program in one
 - Healthcare marketing CRM: a marketing book of hospitals, nursing homes, personal care and assisted living homes, physician practices, agencies and other referral sources; separate lines of business, with its own stage and history for an account on each; relationship stages from Target to Active source and Preferred, with the reason when an account is At risk or Lost; contacts by healthcare role, from discharge planner and case manager to director of nursing; each account's full history beside its market position; which members of a physician group certify home health or oversee hospice care, and what the book admitted from them; account tiers with a visit cadence for each, and who is behind on it; calls and texts from an account through the phone's own dialer and messages, logged in a tap, with nothing placed or sent from Intel; a month-end view; duplicate merging and book hygiene; accounts going quiet; side-by-side comparison; handing a whole book to a teammate; and parent organizations.
 - Daily field work: a Today page with tasks, progress on goals and the accounts to visit this week, each with a reason; a weekly schedule and call plan; a suggested route built from due follow-ups, slipping sources and key accounts not visited lately; a visit log built for a phone, with check-in, visit templates and a dated next step; a pre-visit card; directions to each account; business card scanning; county call sheets; follow-up emails that book the next visit; calendar sync; and a weekly digest for each marketer.
 - Expenses, mileage and reimbursement: spend logged against the referral source it was for, receipt capture, per-person value for shared meals, each physician's running total against the Stark nonmonetary-compensation limit, policy totals for discharge planners and other non-physician sources, policy checks and flags, an approval workflow, reimbursement tracking, budgets, register, compliance and payroll exports, and a mileage log built from visit check-ins. These tools support the organization's compliance program; they are not legal advice. A small part of the workspace, never the point of it.
-- Referral and admission tracking: referrals logged on the account they came from, with the service, payer and outcome; response time from arrival to first answer and decision; referral and admission reports imported from EMR exports as CSV files, with patient-identifying columns dropped; a referral funnel by account and marketer; drop-off alerts when a top source slips, and what the book shows about why, with the next step as a task; a quarterly outcomes packet to share with a hospital or facility; a shareable profile page for referral sources with intake details, current availability and CMS ratings; lost reasons; an admissions forecast [Pro]; and dated confirmations of what new referrals the organization can take.
+- Referral and admission tracking: referrals logged on the account they came from, with the service, payer and outcome; response time from arrival to first answer and decision; referral and admission reports imported from EMR exports as CSV files, with patient-identifying columns dropped; a referral funnel by account and marketer; drop-off alerts when a top source slips, and what the book shows about why, with the next step as a task; a quarterly outcomes packet to share with a hospital or facility; a shareable profile page for referral sources with intake details, current availability and CMS ratings; lost reasons; an admissions forecast [Multi-state]; and dated confirmations of what new referrals the organization can take.
 - Competitor intelligence: the home health agencies, hospices and nursing homes in the territory ranked by Medicare share, with star ratings; a watchlist with alerts when a rating, owner or service area changes or a new provider opens nearby; side-by-side comparison and trends; a county roll-up and a scheduled leadership brief; a plain-language card on how the agency compares with the largest in its county; and a free county report anyone can request on Intel's site for any county, emailed as a PDF.
-- Manager and team tools: monthly visit and referral goals with a leaderboard [setting targets: Growth and Pro]; a review of each marketer's week; activity reports and a weekly email; ride-along notes and coaching; locations [Growth and Pro]; book balance across marketers [Pro]; account briefs and decision briefs; Ask the book for supported questions about the book; an AI Assistant that answers typed questions about the market, the book and the day and proposes lists, visits, tasks and drafts that are saved only when someone confirms [Growth and Pro]; an AI playbook of pitch pillars, service lines and words to avoid; connecting an AI app that supports MCP to read Intel [Growth and Pro]; friendly activity challenges and a monthly report card, never on referrals or admissions; a calendar of healthcare observances; and a materials library that shows who opened each file.
+- Manager and team tools: monthly visit and referral goals with a leaderboard [setting targets: Team and Multi-state]; a review of each marketer's week; activity reports and a weekly email; ride-along notes and coaching; locations [Team and Multi-state]; book balance across marketers [Multi-state]; account briefs and decision briefs; Ask the book for supported questions about the book; an AI Assistant that answers typed questions about the market, the book and the day and proposes lists, visits, tasks and drafts that are saved only when someone confirms [Team and Multi-state]; an AI playbook of pitch pillars, service lines and words to avoid; connecting an AI app that supports MCP to read Intel [Team and Multi-state]; friendly activity challenges and a monthly report card, never on referrals or admissions; a calendar of healthcare observances; and a materials library that shows who opened each file.
 - Reports and analytics: results reports (performance scorecard, field activity, follow-up, mileage, referrals and admissions, top sources, why referrals were not admitted, payer mix, source pipeline, account coverage and goal attainment), filtered and grouped by person, location, line of business, county, payer or period, each person seeing their own scope, downloaded as PDF, Excel or CSV; source quality after admission, by referral source, marketer or location (how long patients stay, short stays, hospice live discharges and revocations, home health returns to the hospital, and average daily census against each location's budget) [loading reports: owners]; and a custom report builder with scheduled email.
-- Email campaigns [Growth and Pro]: campaigns to a lead list or the contacts on the book, with delivery tracking, sender settings and automatic unsubscribe handling. Nurture sequences of calls, visits, emails and tasks on an account, which stop on a referral, a contact leaving or a marked reply, are on every plan. One part of the workspace, never the point of it.
+- Email campaigns [Team and Multi-state]: campaigns to a lead list or the contacts on the book, with delivery tracking, sender settings and automatic unsubscribe handling. Nurture sequences of calls, visits, emails and tasks on an account, which stop on a referral, a contact leaving or a marked reply, are on every plan. One part of the workspace, never the point of it.
 - Administration, security and data: roles and seats, text-message sign-in codes for owners and location managers, a record of sign-ins, changes and exports, billing and territory, guided setup and user guides, a service-line menu and search across the app, a nightly export of the organization's own accounts, referrals and visit counts to its server or a supported CRM [setting it: owners], data from CMS, NPPES, the U.S. Census Bureau and state licensing files with each release shown, and patient privacy by design: the research uses no patient-level data, and imports, briefs and exports carry no patient names.
 
 **Who uses it, and for what:**
@@ -333,7 +349,7 @@ CareMetric Intel runs a healthcare organization's whole marketing program in one
 - Directors of business development and marketing managers: territory plans, goals, account ownership across locations, a review of each marketer's week, coaching, expense approval and the reports they bring to leadership.
 - Marketers and community liaisons: a planned day and route, a focused visit list with a reason for each stop, notes, follow-ups and expenses logged from a phone, and the history of every account they own.
 
-**How to present it.** Owner direction: show the bigger picture. Intel runs the whole marketing program, and sending emails to referral sources is not the point of it. Email campaigns are one feature, on the Growth and Pro plans. Never describe Intel as an email tool, never lead with emailing referral sources, and never make email the whole subject of a message, post, ad, article or answer: when email comes up, show it as one part of the workspace, beside the research, relationships, visits, spend and recorded results it serves. Intel is a marketing workspace, not a compliance product: its expense tools keep marketing spend in view of policy and the Stark limit, and they are a small part of the program. Never describe Intel as a compliance tool, and never lead with compliance, the Stark limit or expense tracking: when spend comes up, show it as part of the field work and relationships it serves (owner direction 2026-11-14). Across your work, cover the whole range above rather than one feature again and again, and pick the part that answers the reader. What a feature needs (a plan in brackets) still applies.
+**How to present it.** Owner direction: show the bigger picture. Intel runs the whole marketing program, and sending emails to referral sources is not the point of it. Email campaigns are one feature, on the Team and Multi-state plans. Never describe Intel as an email tool, never lead with emailing referral sources, and never make email the whole subject of a message, post, ad, article or answer: when email comes up, show it as one part of the workspace, beside the research, relationships, visits, spend and recorded results it serves. Intel is a marketing workspace, not a compliance product: its expense tools keep marketing spend in view of policy and the Stark limit, and they are a small part of the program. Never describe Intel as a compliance tool, and never lead with compliance, the Stark limit or expense tracking: when spend comes up, show it as part of the field work and relationships it serves (owner direction 2026-11-14). Across your work, cover the whole range above rather than one feature again and again, and pick the part that answers the reader. What a feature needs (a plan in brackets) still applies.
 
 ### Intel: top 10 industries and their most useful features
 
@@ -382,7 +398,7 @@ The playbook keeps the vendor detail and figures for people, not for prompts.
 - Finding referral sources: which physicians, hospitals and facilities in the territory matter, from Medicare data, with the release behind every figure.
 - Knowing the competition: who serves each county, how they rank on Medicare share and star ratings, and an alert when a competitor's rating, owner or service area changes.
 - One workspace for the whole program: research, accounts, visits, follow-ups and recorded results in one shared record.
-- Walking into every visit prepared: a pre-visit card before each visit, and on Growth and Pro a written visit debrief, where the AI proposes the visit note and next step for the marketer to check.
+- Walking into every visit prepared: a pre-visit card before each visit, and on every plan a written visit debrief, where the AI proposes the visit note and next step for the marketer to check.
 - Showing what the work led to: the referral funnel, response time and a quarterly outcomes packet for a hospital, with hospitals in CMS's TEAM model flagged.
 
 **Why now** (market context; check any rule, model or date on cms.gov before you state it):
@@ -405,7 +421,7 @@ The sales playbook gained matching written answers for EHR connection and securi
 `server/growth/playbook.mjs`), and three outreach angles that follow the lead order: visit preparation, the hospital outcomes packet and
 slipping referral sources (`experimentAngles`).
 
-## Founders Sale — CareBase, Train and Intel
+## Founders Sale — CareBase and Train
 
 Owner-requested 2026-11-08 at 50% off; raised by the owner to 75% off on 2026-11-24. **75% off eligible subscription charges for the first 12 months of paid service.**
 The live coupon is `caremetric_founders_sale_75_12m_20261124`, with promotion code **FOUNDERS75** in CareMetric's
@@ -417,12 +433,11 @@ and [the verified live configuration](evidence/founders-sale-20261108.json) are 
 - Monthly subscriptions receive 75% off the regular monthly rate for the introductory year. Annual subscriptions receive
   75% off the published annual price, paid upfront. Standard pricing resumes after the introductory year.
 - Includes current CareBase Core, Complete, Compliance Suite, Small Home, Small Home Complete, Train, Train Single Facility,
-  and the eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments add-ons; Intel Starter,
-  Growth and Pro. Small Home and single-facility eligibility and all capacity limits still apply.
+  and the eMAR, Staff Training, Workforce, Survey & Compliance and Resident Billing & Payments add-ons. It ended for new Intel
+  subscriptions on 2026-11-28 (Intel's founding member pricing replaced it); an Intel subscription already in its Founders year
+  keeps the discount until the year ends. Small Home and single-facility eligibility and all capacity limits still apply.
 - Core example: **$49.75 per facility per month**, or **$497.50 for the first annual payment**, then the regular rate.
-  Intel Starter example: **$87.25 per organization per month**, or **$870 for the first annual payment**, then the regular rate.
-- Setup fees, Intel extra seats/locations/states, taxes, legacy plans and custom contracts are excluded. Intel onboarding
-  is free on every plan. Other promotional discounts cannot be combined. One introductory year per organization
+- Setup fees, taxes, legacy plans and custom contracts are excluded. Other promotional discounts cannot be combined. One introductory year per organization
   and product; cancellation/restart does not reset it. No enrollment deadline or redemption cap has been set.
 - Checkout, paid subscription creation and eligible trial conversions apply the underlying coupon automatically after
   server-side eligibility checks. Quotes show the saving before payment; existing agreements are preserved.
@@ -474,10 +489,10 @@ This is a guide to the existing packages, not a recommendation to buy features t
 | Training, workforce and survey work without resident-operations Core. | Compliance Suite. | Includes Staff Training, Workforce and Survey & Compliance; does not include Core. |
 | A facility with fewer than 20 licensed beds. | Small Home or Small Home Complete. | Small Home includes Core and eMAR. Eligibility uses licensed beds, not current occupancy; complete native eMAR enrollment and clinical approval before use. |
 | Staff education as a separate purchase. | CareMetric Train or Train Single Facility. | Train is per organization with unlimited learners; Single Facility is for a one-facility organization. It is not the complete resident-operations product. |
-| One office working one line of business in a county-based territory. | Intel Starter. | Select one healthcare service line, within the published seat, location and county limits. Campaigns and other labeled Growth/Pro features are not included. |
-| Two healthcare service lines, such as home health and hospice, more locations, campaigns and manager tools. | Intel Growth. | Check included seats, locations, state coverage and the access labels on each needed feature. |
-| Several territories, admissions forecasting and book balancing. | Intel Pro. | Forecasting and book balance are Pro features. Territory, team capacity and owner/manager permissions still apply. |
-| A larger footprint requiring an individually agreed scope. | Intel Enterprise. | Annual custom agreement; confirm included services and requirements in the contract. Custom contracts are excluded from the Founders Sale. |
+| One office working one line of business in a county-based territory. | Intel Local. | Select one healthcare service line, within the published marketer, location and county limits. Campaigns, the AI Assistant and other labeled Team/Multi-state features are not included. |
+| Two healthcare service lines, such as home health and hospice, more locations, campaigns and manager tools. | Intel Team. | Check included marketers, locations, state coverage and the access labels on each needed feature. |
+| Several territories, admissions forecasting and book balancing. | Intel Multi-state. | Forecasting and book balance are Multi-state features. Territory, team capacity and owner/manager permissions still apply. |
+| A larger footprint requiring an individually agreed scope. | Intel Enterprise. | Annual custom agreement; confirm included services and requirements in the contract. Custom contracts are outside founding member pricing. |
 
 The Intel trial provides broader feature access within a smaller territory than some paid plans.
 Evaluate the intended paid plan before relying on a trial feature for ongoing work.
@@ -527,9 +542,9 @@ Use the company's own labor costs and observations. Include implementation effor
 An exported report or completed task demonstrates a workflow; it does not establish a guaranteed financial return, survey result or referral increase.
 
 **Budget for the ongoing scope:** all published prices here are USD, before applicable taxes. Count billed facilities for CareBase,
-the applicable organization or single-facility basis for Train, and the plan plus needed extra seats, locations and states for Intel.
+the applicable organization or single-facility basis for Train, and the plan plus needed additional marketers, locations, states and AI packs for Intel.
 Compare the actual annual payment with monthly billing; Intel's displayed annual monthly equivalent is not a monthly payment schedule.
-Evaluate the first paid year and the regular renewal price separately. The Founders Sale excludes Intel expansion add-ons and other listed charges.
+Evaluate the first paid year and the regular renewal price separately for CareBase and Train; Intel's founding member pricing keeps a new subscription's plan and marketer prices.
 Intel onboarding is free on every plan; this does not establish free custom migration, integration work or onboarding terms for another product.
 
 ## Data ownership and exports
@@ -929,7 +944,7 @@ The marketing book: the accounts you keep month to month, the people you know th
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
 | Marketing book of accounts | Keep hospitals, nursing homes, personal care and assisted living homes, physician practices, agencies and other referral sources in one book. Each account holds its type, city, phone, website, NPI, CCN, tags and owner. | All plans; subject to scope |
-| Lines of business | Organize relationships by healthcare service line, including practices, hospitals, behavioral health, rehabilitation, diagnostics, senior care, home health, hospice, DME, and other healthcare services. One account can have a separate stage and history on each line. | Starter: one line |
+| Lines of business | Organize relationships by healthcare service line, including practices, hospitals, behavioral health, rehabilitation, diagnostics, senior care, home health, hospice, DME, and other healthcare services. One account can have a separate stage and history on each line. | Local: one line |
 | Relationship stages | Move accounts through Target, Relationship, Active source, Preferred, At risk and Lost. The date of the last change is kept, and At risk or Lost asks why: competitor, service issue, staff turnover, moved or other. | All plans; subject to scope |
 | Contacts by healthcare role | Record the administrator, director of nursing, business office, social services, admissions, discharge planner, case manager, physician liaison, physician, intake, MDS coordinator and executive director. Mark someone as left to keep their history and stop email to them. | All plans; subject to scope |
 | Account page and full history | Notes, the next visit or call, referrals, expenses and campaigns on one page. Search the account’s whole activity history by note, employee or date. Print a one-page account sheet without notes. | All plans; subject to scope |
@@ -958,9 +973,9 @@ The day on the road: what to do today, where to go, and a fast way to record eac
 | Suggested route | Builds a day from follow-ups that are due, sources whose referrals fell, and key accounts with no visit in 45 days, then orders the stops as a route on a map. Order this week’s scheduled visits by drive time too. | All plans; subject to scope |
 | Visit log built for a phone | Check in with the phone’s location, type or dictate the note, and start from an in-service, lunch or discharge-planner drop-in template. A next step with a date schedules the follow-up. A draft survives a refresh and a save can be retried without duplicates. | All plans; subject to scope |
 | Pre-visit card | Before you walk in: the last visit and notes, referrals for 90 days against the 90 before, the oldest open referral, open tasks, the people on the account and what you left last time, with up to four talking points chosen from those figures. On a plan with AI briefs, an AI summary of your last notes. | All plans; subject to scope |
-| Spoken visit debrief | Say or type what happened after a visit and the AI proposes the visit note, the next step and its date. Nothing is saved until you check the form and save the visit. Possible patient details are taken out before the AI reads anything. Each debrief, notes summary or paid voice note uses one of your organization’s daily AI requests (500 a day on Growth, 2,000 on Pro), and the Visit log shows how many are left. | Growth & Pro |
-| Visit debrief (written workflow) | Type what happened after a visit and review the proposed note, next step and date before saving. Possible patient details are removed before AI processing. Debriefs and notes summaries use the organization’s daily AI allowance; the Visit log shows what remains. | Growth & Pro |
-| Business card scan | Photograph a business card on an account and the phone reads the name, role, phone and email for you to check before the contact is saved. On Growth and Pro a paid reader takes over when the phone finds no name, using one AI request. | All plans; subject to scope |
+| Spoken visit debrief | Say or type what happened after a visit and the AI proposes the visit note, the next step and its date. Nothing is saved until you check the form and save the visit. Possible patient details are taken out before the AI reads anything. Each debrief, notes summary or paid voice note uses one of your organization’s daily AI requests (500 a day on Growth, 2,000 on Pro), and the Visit log shows how many are left. | Team & Multi-state |
+| Visit debrief (written workflow) | Type what happened after a visit and review the proposed note, next step and date before saving. Possible patient details are removed before AI processing. Debriefs and notes summaries use the organization’s daily AI allowance; the Visit log shows what remains. | Team & Multi-state |
+| Business card scan | Photograph a business card on an account and the phone reads the name, role, phone and email for you to check before the contact is saved. A paid reader takes over when the phone finds no name, using one AI request. | All plans; subject to scope |
 | County call sheets | A working list for a county: hospitals, home health agencies, hospices, nursing homes, clinicians, DME suppliers, personal care and assisted living homes and dialysis facilities. Mark each Call, Visit or Account and it lands on the marketing book. Print the schedule or the chart of accounts. | All plans; subject to scope |
 | Follow-up emails | Send one email to a contact and book a dated visit in one step. Members schedule the visit and an owner sends the email; every email carries an unsubscribe link and your postal address. | All plans; subject to scope |
 | Calendar sync | Download your scheduled visits and calls, subscribe with a private calendar link, or sync them to Outlook or Google Calendar. Notes are never copied to the calendar. | Outlook and Google sync: where configured |
@@ -1003,7 +1018,7 @@ Your organization’s own results: the referrals each source sends, what became 
 | Referral drop-off alerts | Flags a top source when its last 30 days fall at least 30% below its average month from the 90 days before. An owner can set the drop anywhere from 10% to 90%. | All plans; subject to scope |
 | Outcomes packet | A one-page quarterly PDF for a hospital or facility: the referrals they sent, how many were admitted and how fast they were answered, your organization’s CMS star rating, readmissions and quality scores, and the availability you confirmed. Hospitals in CMS’s TEAM model are flagged, with a list of TEAM hospitals to target. No patient names, notes or clinical detail. | All plans; subject to scope |
 | Lost reasons | Totals the reasons behind every lost and at-risk account, shows how many have no reason recorded, and lists the accounts. | All plans; subject to scope |
-| Admissions forecast | Estimates how many open referrals will be admitted, from your last 180 days, as a range that stays wide when the history is short. | Pro |
+| Admissions forecast | Estimates how many open referrals will be admitted, from your last 180 days, as a range that stays wide when the history is short. | Multi-state |
 | Availability | A dated confirmation of what your organization can take: accepting, limited or closed to new referrals, confirmed openings, earliest start, counties, disciplines, payers, languages and weekend coverage. Expired confirmations read as unconfirmed. | Confirming: owners & location managers |
 | Why a source is slipping | For a source on the drop-off list, see what the book shows over the same months: a contact who left, referrals not admitted, availability you gave, fewer visits, a service ticket, slower responses, a physician who moved and a watched competitor nearby. Add the next step as a task in one tap. | All plans; subject to scope |
 | Shareable profile link | A revocable page for referral sources, by location: intake phone and fax, services, current confirmed availability, CMS ratings and the median first response to referrals, with a QR code and a view count. No patient information. | All plans; subject to scope |
@@ -1079,19 +1094,19 @@ Set expectations, see where the effort goes, and coach the people doing the work
 
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
-| Goals and leaderboard | Monthly visit and referral targets for each marketer, a leaderboard, Met / On pace / Behind for the open month and a six-month trend. Everyone sees their own progress on Today. | Setting targets: Growth & Pro |
+| Goals and leaderboard | Monthly visit and referral targets for each marketer, a leaderboard, Met / On pace / Behind for the open month and a six-month trend. Everyone sees their own progress on Today. | Setting targets: Team & Multi-state |
 | Team review | One marketer’s week in one place: visits and calls with their notes, saved routes, open tasks and assigned accounts. | Owners & location managers |
 | Activity report and weekly email | Visits, calls, tasks done and overdue, referrals and admissions by person and source, new and lost sources, stage changes and accounts not visited. Download a spreadsheet or PDF, or turn on a weekly email. | Weekly email: owners & location managers |
 | Coaching | Ride-along notes, comments on a visit and 1-on-1s for one marketer. | Owners & location managers |
-| Locations | Add locations and assign each person as a marketer or manager. People then see their locations’ accounts, and reports follow the same rule. | Owners · Growth: 3, Pro: 10 |
-| Book balance | Proposes a split of accounts across the marketers you choose by referral potential and drive time. Nothing moves until a manager applies it. | Pro · owners & location managers |
+| Locations | Add locations and assign each person as a marketer or manager. People then see their locations’ accounts, and reports follow the same rule. | Owners · Team: 3, Multi-state: 10 |
+| Book balance | Proposes a split of accounts across the marketers you choose by referral potential and drive time. Nothing moves until a manager applies it. | Multi-state · owners & location managers |
 | Account briefs and Ask the book | A short factual brief on any account (stage, visits, calls and referral outcomes over 90 days, with notes left out), and answers to supported questions about your book, such as the top ten sources last quarter. | All plans; subject to scope |
 | Decision briefs | Prioritized accounts to prepare for, manager exceptions such as overdue tasks and falling referrals, and changes on the accounts you watch. Download a branded PDF or CSV, or have it emailed. | All plans; subject to scope |
 | Materials library | Brochures, physician one-pagers, service-line flyers and video links in one searchable place. New versions replace old ones, marketers note what they left on a visit, and managers see who opened each file. | Adding materials: owners & location managers |
 | Healthcare observances | A calendar of the days, weeks and months that honor the people marketers call on (Doctors’ Day, Nurse Practitioner Week, Case Management Week, Social Work Month, Nurses Week and more), care settings, health awareness months and Medicare enrollment periods, worked out each year from the sponsor’s rule. Today and the Monday digest show what is coming up; Remind me adds a task two weeks ahead, and the calendar downloads for Outlook, Google Calendar or a phone. | Everyone, every plan |
-| AI Assistant | Ask about your market, your book and your day in plain English. It looks answers up in the app’s data inside your plan’s territory, says when a figure is an estimate, and proposes lead lists, visits, tasks, call plans and outreach drafts that are saved only when you confirm. Each question uses one of your organization’s daily AI requests. | Growth & Pro · organization admins, and the team when turned on |
+| AI Assistant | Ask about your market, your book and your day in plain English. It looks answers up in the app’s data inside your plan’s territory, says when a figure is an estimate, and proposes lead lists, visits, tasks, call plans and outreach drafts that are saved only when you confirm. Each question uses one of your organization’s daily AI requests. | Team & Multi-state · organization admins, and the team when turned on |
 | AI playbook | An organization admin sets the pitch pillars, the service lines to mention and the words to avoid. The pre-visit card adds a pillar when it has room, and the notes summary and spoken debrief follow the playbook and flag an avoided word. | Setting it: owners |
-| Use your own AI app with Intel | Make a personal token in Account and connect an AI app that supports MCP to Intel. It reads providers, lead scores, county and market facts, your day, account briefs, lead lists and your book as you, with your role and your plan’s places, and can’t change anything. Each question counts toward your organization’s AI requests. | Growth & Pro · whoever can open the AI Assistant |
+| Use your own AI app with Intel | Make a personal token in Account and connect an AI app that supports MCP to Intel. It reads providers, lead scores, county and market facts, your day, account briefs, lead lists and your book as you, with your role and your plan’s places, and can’t change anything. Each question counts toward your organization’s AI requests. | Team & Multi-state · whoever can open the AI Assistant |
 | Activity challenges and report card | Set a friendly target for visits, calls, accounts touched or tier A visits for a location or the whole organization, with standings for everyone in it. Never referrals or admissions, with a reminder about contractors paid on a 1099. Each person's report card compares their month's activity with the month before. | All plans; subject to scope |
 
 #### Email campaigns
@@ -1100,10 +1115,10 @@ Reach the contacts on a lead list or your book, with sending rules that protect 
 
 | Feature | Function | Plan or role condition |
 | --- | --- | --- |
-| Campaigns to lists and contacts | Email a lead list, the contacts on one line of your book, or both. People marked as left are skipped. | Owners · Growth & Pro |
-| Delivery tracking | Track deliveries, opens, clicks and bounces for each campaign, and link campaigns to the accounts they touched. | Owners · Growth & Pro |
-| Sender and unsubscribe | Set the name recipients see, where replies go and your postal address. Every email carries an unsubscribe link that is honored automatically. | Owners · Growth & Pro |
-| Queue contacts from an account | Any marketer can add a contact to a draft campaign from the account page; an owner prepares and sends it. | Growth & Pro |
+| Campaigns to lists and contacts | Email a lead list, the contacts on one line of your book, or both. People marked as left are skipped. | Owners · Team & Multi-state |
+| Delivery tracking | Track deliveries, opens, clicks and bounces for each campaign, and link campaigns to the accounts they touched. | Owners · Team & Multi-state |
+| Sender and unsubscribe | Set the name recipients see, where replies go and your postal address. Every email carries an unsubscribe link that is honored automatically. | Owners · Team & Multi-state |
+| Queue contacts from an account | Any marketer can add a contact to a draft campaign from the account page; an owner prepares and sends it. | Team & Multi-state |
 | Nurture sequences | Start a sequence of calls, visits, emails and tasks on an account, from four starters (new physician welcome, in-service thank-you, quarterly outcomes packet, re-engage a slipping source) or your own. Email steps carry a draft you send from Follow-up. A sequence stops on its own on a referral, a contact leaving or every contact unsubscribing, or when you mark a reply. | All plans; subject to scope |
 
 #### Reports and analytics

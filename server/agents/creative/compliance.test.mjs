@@ -80,15 +80,18 @@ describe('copy compliance', () => {
   });
 
   it('offer_mismatch: only the live offer, its own terms, for its products, with no code to type and no deadline', () => {
-    expect(intel({ overlay: { offerLine: '75% off your first 12 months' } }, { offerCode: 'FOUNDERS75' })).toEqual([]);
+    expect(carebase({ overlay: { offerLine: '75% off your first 12 months' } }, { offerCode: 'FOUNDERS75' })).toEqual([]);
+    // The Founders Sale ended for new Intel subscriptions (2026-11-28): an Intel ad names no discount.
+    expect(rulesOf(intel({ overlay: { offerLine: '75% off your first 12 months' } }, { offerCode: 'FOUNDERS75' }))).toContain('block:offer_mismatch');
+    expect(rulesOf(intel({ overlay: { offerLine: '75% off your first 12 months' } }))).toContain('block:offer_mismatch');
     expect(rulesOf(intel({}, { offerCode: 'SPRING20' }))).toContain('block:offer_mismatch');
-    expect(rulesOf(intel({ overlay: { offerLine: '40% off your first 12 months' } }, { offerCode: 'FOUNDERS75' }))).toContain('block:offer_mismatch');
-    expect(rulesOf(intel({ overlay: { offerLine: '75% off your first 6 months' } }, { offerCode: 'FOUNDERS75' }))).toContain('block:offer_mismatch');
+    expect(rulesOf(carebase({ overlay: { offerLine: '40% off your first 12 months' } }, { offerCode: 'FOUNDERS75' }))).toContain('block:offer_mismatch');
+    expect(rulesOf(carebase({ overlay: { offerLine: '75% off your first 6 months' } }, { offerCode: 'FOUNDERS75' }))).toContain('block:offer_mismatch');
     expect(rulesOf(intel({ primaryText: 'Use code FOUNDERS75 at checkout.' }))).toContain('block:offer_mismatch');
     expect(rulesOf(intel({ primaryText: 'Take SAVE30 for a discount.' }))).toContain('block:offer_mismatch');
     expect(rulesOf(intel({ headline: 'Founders Sale ends Friday' }))).toContain('block:offer_mismatch');
-    expect(rulesOf(intel({ primaryText: 'Intel Starter is $649 per month.' }))).toContain('block:offer_mismatch');
-    expect(rulesOf(intel({ primaryText: 'Intel Starter is $349 per month.' }))).not.toContain('block:offer_mismatch');
+    expect(rulesOf(intel({ primaryText: 'Intel Local is $649 per month.' }))).toContain('block:offer_mismatch');
+    expect(rulesOf(intel({ primaryText: 'Intel Local is $99 per month.' }))).not.toContain('block:offer_mismatch');
   });
 
   it('brand_name: CareMetric is one word and product names are exact', () => {
@@ -205,10 +208,14 @@ describe('approved creative against today\'s terms (outdatedTerms)', () => {
     overlay: { beats: ['Start your 30-day free trial.'] }, ...over });
   const messages = asset => outdatedTerms(asset).map(item => item.message);
 
-  it('holds for creative whose words are still true, the Founders Sale at 75% included', () => {
+  it('holds for creative whose words are still true, CareBase\'s Founders Sale at 75% included', () => {
     expect(outdatedTerms(approved())).toEqual([]);
-    expect(termsHold(approved({ overlay: { offerLine: 'Founders Sale: 75% off the first 12 months of paid service. Applied automatically. No code needed.' } }))).toBe(true);
-    expect(termsHold(approved({ primaryText: 'Intel Starter is $349 per month.' }))).toBe(true);
+    const sale = { overlay: { offerLine: 'Founders Sale: 75% off the first 12 months of paid service. Applied automatically. No code needed.' } };
+    expect(termsHold(approved({ ...sale, product: 'carebase' }))).toBe(true);
+    // Intel's Founders Sale ended on 2026-11-28 (founding member pricing replaced it): an Intel ad that names it no longer holds.
+    expect(termsHold(approved(sale))).toBe(false);
+    expect(termsHold(approved({ primaryText: 'Intel Local is $99 per month.' }))).toBe(true);
+    expect(termsHold(approved({ primaryText: 'Intel Starter is $349 per month.' }))).toBe(false);
   });
 
   it('catches creative approved under terms that changed: a 14-day trial, a 50% sale, a card required to start', () => {

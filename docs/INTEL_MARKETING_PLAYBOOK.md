@@ -60,14 +60,17 @@ Never add the agency's name, its results, any number or years, or a superlative.
 
 | Plan | Monthly billing | Annual billing | Fits |
 | --- | --- | --- | --- |
-| Starter | $349 per month | $290 per month ($3,480 per year) | One office, one line (home health or hospice), up to 10 counties, 3 marketers + 1 manager |
-| Growth | $899 per month | $749 per month ($8,988 per year) | Home health and hospice, 1 state, 10 seats, 3 branches, campaigns, manager tools, AI field help |
-| Pro | $1,999 per month | $1,665 per month ($19,980 per year) | Up to 3 states, 25 seats, 10 branches, forecasting, book balance, white-label reports |
-| Enterprise | Custom | Annual, from about $3,500 per month | Larger footprints and other care settings by agreement |
+| Local | $99 per month | $82.50 per month ($990 per year) | One office, one line, up to 10 counties, 1 marketer included and $29 per month for each additional marketer, AI field help |
+| Team | $199 per month | $165.83 per month ($1,990 per year) | Two lines, 1 state, 3 locations, 1 marketer included and $39 per month for each additional marketer, campaigns, manager tools, the AI Assistant |
+| Multi-state | $499 per month | $415.83 per month ($4,990 per year) | Up to 3 states, 10 locations, 5 marketers included and $35 per month for each additional marketer, forecasting, book balance, white-label reports |
+| Enterprise | Custom | Annual, from about $1,500 per month | Larger footprints and other care settings by agreement |
 
-- 30-day free trial, one county, 3 marketer seats and 1 manager seat. No credit card is needed to start it (owner decision 2026-11-23). A card added in Billing before it ends keeps the plan chosen at sign-up, which then bills automatically unless canceled; without a card the trial simply ends.
-- Founders Sale: 75% off eligible subscription charges for the first 12 months of paid service, applied automatically. Extra seats,
-  branches, states, taxes and custom contracts are excluded.
+Since 2026-11-28 (owner decision) only marketers take a seat: organization admins (up to two), intake staff and one manager
+per location are free.
+
+- 30-day free trial, one county, 3 marketer seats (organization admins, intake staff and a manager per location free). No credit card is needed to start it (owner decision 2026-11-23). A card added in Billing before it ends keeps the plan chosen at sign-up, which then bills automatically unless canceled; without a card the trial simply ends.
+- Founding member pricing (since 2026-11-28, in place of the Founders Sale for Intel): a subscription started while it is offered
+  keeps its plan price and the price of each additional marketer while it stays active. Never quote a discount for Intel.
 - Free onboarding on every plan. Annual billing saves about 17%.
 
 ## 3. Who buys and why now
@@ -344,8 +347,8 @@ Answer in writing, plainly, and end with one next step. `integration` and `secur
 | "Do you have case studies?" | There are no approved customer results to share yet. The trial lets them judge Intel on their own market. | Trial |
 | "Is it HIPAA compliant? Will you sign a BAA?" | Say only that the research uses no patient-level data, imports drop patient-identifying columns, and notes should never name a patient. Hand security, BAA and contract questions to the owner. | Owner follow-up |
 | "Is there an app?" | Intel works in a phone's browser and can be added to the home screen, where it opens like an app. Do not mention app stores. | Walkthrough |
-| "What does the AI do?" | It drafts, the person decides. The pre-visit card lists facts and talking points before a visit. On Growth and Pro, a written visit debrief drafts the visit note and next step, and possible patient details are removed before the AI reads anything. It is text only. | Pricing |
-| "We only have one marketer." | Starter is built for one office: 3 marketer seats and 1 manager, up to 10 counties, at $349 per month. | Pricing |
+| "What does the AI do?" | It drafts, the person decides. The pre-visit card lists facts and talking points before a visit. On every plan, a written visit debrief drafts the visit note and next step, and possible patient details are removed before the AI reads anything. It is text only. | Pricing |
+| "We only have one marketer." | Local is built for one office: $99 per month with one marketer, up to 10 counties; organization admins and intake staff are free. | Pricing |
 | "What about Medicare Advantage patients?" | County views show Medicare Advantage share and the largest plans. Medicare fee-for-service figures cover traditional Medicare only, and each view says which population it covers. | Data use page |
 | "How current is the data?" | Intel checks the CMS catalogs every day for new releases and shows the release behind every figure. | Free county report |
 | "We're a nursing home or personal care home." | The research tools work for every care setting on every plan. CRM workflows for settings other than home health and hospice are arranged on Enterprise. | Territory analysis guide |
@@ -367,7 +370,7 @@ Most items are already enforced in code; the rest depend on judgment.
   ratings") without the word "public" (owner direction 2026-11-17); code refuses it (`public_data`). Never call it proprietary,
   exclusive or licensed, and answer plainly when a reader asks where it comes from.
 - Label Medicare and Census figures as research signals, and say referrals come from the agency's own records.
-- Carry the plan condition when a feature needs one (Growth and Pro, Pro, agency admins and managers).
+- Carry the plan condition when a feature needs one (Team and Multi-state, Multi-state, agency admins and managers).
 - Point to the trial, the walkthrough, the free county report or a written answer as the next step.
 - Tag every product link with campaign tags; never tag citations or unsubscribe links.
 

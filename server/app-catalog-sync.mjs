@@ -9,7 +9,9 @@ import { maxAmountCents } from '../src/billing/billingProtocol.ts';
  * Hub reads that catalog and keeps Stripe in step: a plan or add-on price that
  * is missing is created (an add-on's product too), and a price whose amount
  * changed is replaced through the same `price.change` command an administrator
- * uses, grandfathering everyone already subscribed, and a product's description
+ * uses: a lower price reaches everyone already subscribed at their next invoice,
+ * and a higher one never does (they are grandfathered: Intel's founding member
+ * pricing promises a subscriber's price never goes up), and a product's description
  * follows the catalog's (its name and unit label are left as they are). The
  * application never talks to Stripe. The same catalog feeds the AI team's fact sheet
  * (server/agents/content/facts.mjs, useAppCatalogFacts).
@@ -29,6 +31,42 @@ export const appCatalogSources = Object.freeze({
  * likely a typo in the catalog than a decision.
  */
 export const AUTOMATIC_CHANGE_RANGE = Object.freeze({ min: 0.5, max: 2 });
+
+/**
+ * Price moves outside AUTOMATIC_CHANGE_RANGE that the owner reviewed: a held change is applied when the catalog's new
+ * amount is listed here for that entitlement key, plan and interval. The pull request that adds an entry is the review.
+ * Intel, 2026-11-28 (owner decision): plans repriced to a base plus each additional marketer (Starter, now Local, $349
+ * to $99; Growth, now Team, $899 to $199; Pro, now Multi-state, $1,999 to $499), Local's additional marketer $59 to $29,
+ * and extra locations and states halved.
+ */
+export const REVIEWED_PRICE_MOVES = Object.freeze({
+  'caremetric-intel': Object.freeze([
+    { entitlement_key: 'starter', interval: 'month', unit_amount: 9900 },
+    { entitlement_key: 'starter', interval: 'year', unit_amount: 99000 },
+    { entitlement_key: 'growth', interval: 'month', unit_amount: 19900 },
+    { entitlement_key: 'growth', interval: 'year', unit_amount: 199000 },
+    { entitlement_key: 'pro', interval: 'month', unit_amount: 49900 },
+    { entitlement_key: 'pro', interval: 'year', unit_amount: 499000 },
+    { entitlement_key: 'extra_seat', plan: 'starter', interval: 'month', unit_amount: 2900 },
+    { entitlement_key: 'extra_seat', plan: 'starter', interval: 'year', unit_amount: 29000 },
+    { entitlement_key: 'extra_branch', interval: 'month', unit_amount: 4900 },
+    { entitlement_key: 'extra_branch', interval: 'year', unit_amount: 49000 },
+    { entitlement_key: 'extra_state', interval: 'month', unit_amount: 9900 },
+    { entitlement_key: 'extra_state', interval: 'year', unit_amount: 99000 },
+  ]),
+});
+
+/** Whether a move outside the automatic range is one the owner reviewed (REVIEWED_PRICE_MOVES). */
+export function reviewedMove(app, entry, reviewed = REVIEWED_PRICE_MOVES) {
+  return (reviewed[app] ?? []).some(move => move.entitlement_key === entry.entitlement_key && (move.plan ?? '') === (entry.plan ?? '')
+    && move.interval === entry.interval && move.unit_amount === entry.unit_amount);
+}
+
+/**
+ * How a replaced price treats the people already on it: a lower price reaches them at their next invoice, with no
+ * proration of the period they paid for; a higher one never does (grandfathered).
+ */
+export const migrationFor = (from, to) => (to < from ? 'no_proration' : 'grandfather');
 
 /** The Stripe product metadata naming the plan an add-on product is priced for (Intel's extra seat costs more on Starter). */
 export const FOR_PLAN_KEY = 'hub_for_plan';
@@ -68,10 +106,15 @@ export function parseAppCatalog(body, app) {
     };
   });
   const trialDays = Number.isInteger(body.trial_days) && body.trial_days >= 1 && body.trial_days <= 90 ? body.trial_days : null;
+  // The application's founding offer (Intel: a price lock), optional: plan keys and its terms in words.
+  const offer = body.founding_offer && typeof body.founding_offer === 'object' && body.founding_offer.kind === 'price_lock'
+    ? { kind: 'price_lock', plans: (Array.isArray(body.founding_offer.plans) ? body.founding_offer.plans : []).filter(key => keyPattern.test(String(key))).slice(0, 10),
+        terms: words(body.founding_offer.terms, 1200) }
+    : null;
   const saving = Number.isInteger(body.annual_saving_percent) && body.annual_saving_percent > 0 && body.annual_saving_percent < 100 ? body.annual_saving_percent : null;
   return {
     app, version: body.version, trial_days: trialDays, trial_includes: words(body.trial?.includes, 200),
-    annual_saving_percent: saving, free_onboarding: body.free_onboarding === true, products,
+    annual_saving_percent: saving, free_onboarding: body.free_onboarding === true, founding_offer: offer, products,
   };
 }
 
@@ -96,18 +139,19 @@ const sameDescription = (stripe, catalog) => stripe.replace(/\s+/g, ' ').trim() 
  * What it takes to make Stripe match the catalog:
  * - `productCreates`: an add-on (per plan, when its price depends on the plan) with no Stripe product yet;
  * - `creates`: a plan or add-on product with no published price for an interval gets one;
- * - `changes`: a published price at another amount is replaced (grandfathered);
+ * - `changes`: a published price at another amount is replaced; `migrate` says whether the people on it move to the
+ *   new amount (a lower price, `no_proration`) or keep theirs (a higher one, `grandfather`);
  * - `descriptions`: a plan or add-on product whose description differs from the
  *   catalog's gets the catalog's; a catalog item with no description clears
  *   nothing, and names and unit labels are never changed;
- * - `held`: a change outside AUTOMATIC_CHANGE_RANGE, or a product with several
+ * - `held`: a change outside AUTOMATIC_CHANGE_RANGE that REVIEWED_PRICE_MOVES doesn't list, or a product with several
  *   published prices for one interval, waits for an administrator;
  * - `missing`: a plan the catalog sells that has no Stripe product (plans are
  *   created by an administrator, because they decide entitlements and offers);
  * - `skipped`: one-time fees, which the Hub adds to a first invoice by hand.
  * Products and prices are Stripe objects as the API returns them.
  */
-export function planCatalogSync(catalog, stripeProducts, stripePrices) {
+export function planCatalogSync(catalog, stripeProducts, stripePrices, reviewed = REVIEWED_PRICE_MOVES) {
   const products = stripeProducts.map(product => ({ raw: product, view: normalizeProduct(product) }))
     .filter(({ view }) => view.app === catalog.app && view.active && view.entitlement_key);
   const planNames = new Map(catalog.products.filter(item => item.kind === 'plan').map(item => [item.entitlement_key, item.name]));
@@ -125,11 +169,12 @@ export function planCatalogSync(catalog, stripeProducts, stripePrices) {
       if (current.length > 1) { plan.held.push({ ...entry, reason: `${current.length} published ${target.interval} prices, none at the catalog amount` }); continue; }
       const from = current[0].unit_amount;
       const ratio = target.unit_amount / from;
-      if (ratio < AUTOMATIC_CHANGE_RANGE.min || ratio > AUTOMATIC_CHANGE_RANGE.max) {
+      const outside = ratio < AUTOMATIC_CHANGE_RANGE.min || ratio > AUTOMATIC_CHANGE_RANGE.max;
+      if (outside && !reviewedMove(catalog.app, entry, reviewed)) {
         plan.held.push({ ...entry, price: current[0].id, from, reason: `a change from ${from} to ${target.unit_amount} cents is outside the automatic range` });
         continue;
       }
-      plan.changes.push({ ...entry, price: current[0].id, from });
+      plan.changes.push({ ...entry, price: current[0].id, from, migrate: migrationFor(from, target.unit_amount), ...(outside ? { reviewed: true } : {}) });
     }
   };
   for (const item of catalog.products) {

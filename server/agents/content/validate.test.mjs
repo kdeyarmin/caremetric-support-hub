@@ -150,8 +150,10 @@ describe('each check that rejects a draft', () => {
     expect(reasons(withSentence('CareBase Core is $199.99 per facility per month.'))).toEqual(['unlisted_price']);
     expect(reasons(withSentence('CareBase Core is $199.00 per facility per month.'))).toEqual([]);
     expect(reasons(withSentence('A yearly plan costs $1,299.50.'))).toEqual(['unlisted_price']);
-    expect(reasons(withSentence('Intel Starter is $349.50 per month.', referral), referral)).toEqual(['unlisted_price']);
-    expect(reasons(withSentence('Intel Starter is $349 per month.', referral), referral)).toEqual([]);
+    expect(reasons(withSentence('Intel Local is $99.50 per month.', referral), referral)).toEqual(['unlisted_price']);
+    expect(reasons(withSentence('Intel Local is $99 per month.', referral), referral)).toEqual([]);
+    // Intel's old prices are no longer listed (repriced 2026-11-28).
+    expect(reasons(withSentence('Intel Starter is $349 per month.', referral), referral)).toEqual(['unlisted_price']);
     expect(reasons(withSentence('A CareBase trial lasts 30.9 days.'))).toEqual(['unlisted_number']);
     expect(reasons(withSentence('A CareBase trial lasts 30 days.'))).toEqual([]);
     expect(reasons(withSentence('A yearly plan costs $1,990.00 per facility.'))).toEqual([]);

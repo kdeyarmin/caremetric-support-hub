@@ -1,4 +1,4 @@
-import { founder, products } from '../agents/content/facts.mjs';
+import { founder, INTEL_FOUNDING_PREFIX, products } from '../agents/content/facts.mjs';
 import { untaggedUrl } from '../agents/links.mjs';
 
 const intelHome = 'https://www.caremetricintel.com/';
@@ -104,14 +104,13 @@ export function agencyReportSubject(value) {
   return shortName ? `Your ${shortName} market report` : 'Your agency market report';
 }
 
-const offerDetail = 'The discount applies automatically to eligible new subscriptions when paid service starts.';
+const offerDetail = 'Subscribe while it is offered and the price you start with stays the same for as long as you stay subscribed.';
 const trialDetail = 'Try it with your team in one county.';
 
 function content(touch, { setting, trialUrl, reportUrl, ownReport, angle = null }) {
   const words = copy[setting];
   const trialDays = products.intel.trialDays;
-  const offer = products.intel.offers.find((item) => item.startsWith('Founders Sale: '));
-  const offerTitle = offer?.match(/^Founders Sale: (\d+% off) eligible subscription charges for the first (\d+ months)/);
+  const founding = products.intel.offers.some((item) => item.startsWith(INTEL_FOUNDING_PREFIX));
   const trial = { label: `Start your ${trialDays}-day free trial`, url: trialUrl };
   // Without a report of its own, the agency is offered Intel's free county report (2026-11-19): a state, a county and an email address.
   const report = { label: ownReport ? 'Open your market report' : 'Get your free county report', url: reportUrl };
@@ -128,7 +127,7 @@ function content(touch, { setting, trialUrl, reportUrl, ownReport, angle = null 
   if (touch === 2) return {
     heading: 'A week of outreach',
     points: [['Start of week', words.market], ['After each visit', words.field], ['Weekly review', words.results]],
-    offerTitle: offerTitle ? `Founders Sale: ${offerTitle[1]} the first ${offerTitle[2]}` : undefined, trial, report, note,
+    offerTitle: founding ? 'Founding member pricing: your price never goes up' : undefined, trial, report, note,
   };
   return { points: [], trial, report, note };
 }

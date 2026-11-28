@@ -5,10 +5,10 @@
  *
  * - One fact: a quality-of-patient-care rating of 4 stars or higher, or a rise in Medicare fee-for-service patients. Never a rank,
  *   a share, a drop, or a rating under 4.
- * - A short P.S.: the free trial and the Founders Sale, in the fact sheet's own words.
+ * - A short P.S.: the free trial and founding member pricing, in the fact sheet's own words.
  * - A walkthrough link: only when a booking address is saved. Blank means the line is not written.
  */
-import { products } from '../agents/content/facts.mjs';
+import { INTEL_FOUNDING_PREFIX, products } from '../agents/content/facts.mjs';
 
 const starSentence = /^Medicare's quality of patient care rating for this agency is (?:4(?:\.\d)?|5) stars\.$/;
 const trendSentence = /^Medicare fee-for-service patients rose from (\d{1,6}) to (\d{1,6})\.$/;
@@ -63,11 +63,10 @@ export function paymentChanged(facts) {
   return Number.isFinite(value) && value !== 0 && value >= -100 && value <= 100;
 }
 
-const saleLine = () => {
-  const offer = products.intel.offers.find(item => item.startsWith('Founders Sale: '));
-  const match = offer?.match(/^Founders Sale: (\d+% off) eligible subscription charges for the first (\d+ months)/);
-  return match ? `Founders Sale: ${match[1]} the first ${match[2]}. It is applied on its own when a paid plan starts.` : null;
-};
+/** Intel's offer in one sentence, while the fact sheet states it (facts.mjs INTEL_FOUNDING_PREFIX). */
+const saleLine = () => (products.intel.offers.some(item => item.startsWith(INTEL_FOUNDING_PREFIX))
+  ? 'Founding member pricing: the price you start with never goes up while you stay subscribed.'
+  : null);
 
 /**
  * The lines code adds under the writer's opening on a first Intel email, or ''. `oneFact` / `oneOffer` are the settings.
@@ -92,8 +91,11 @@ export function isBookingUrl(value) {
   } catch { return false; }
 }
 
-/** A draft still quoting the Founders Sale at 50% off, which the fact sheet no longer says. */
+/**
+ * A draft quoting an Intel offer the fact sheet no longer says: the Founders Sale at 50% off, or, since 2026-11-28, the
+ * Founders Sale at all (founding member pricing replaced it for Intel; facts.mjs INTEL_FOUNDING_PREFIX).
+ */
 export function quotesOldSale(text) {
   const words = String(text ?? '');
-  return /founders sale:\s*50%\s*off/i.test(words) || /50%\s*off your first 12 months/i.test(words) || /50%\s*off eligible/i.test(words);
+  return /founders sale/i.test(words) || /\b(?:50|75)%\s*off (?:your first|the first|eligible)/i.test(words);
 }

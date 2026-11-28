@@ -256,6 +256,17 @@ export const cardTermsWords = 'Add a card in Billing before the trial ends to ke
 export const foundersWords = productName => `If you decide to keep ${productName}, the Founders Sale applies on its own: eligible subscription charges are 75% off for the first 12 months of paid service, starting when your trial ends, with no code needed. Standard pricing resumes after that year.`;
 
 /**
+ * Intel's offer as the trial check-in states it (2026-11-28: founding member pricing replaced the Founders Sale for
+ * Intel; server/founders-sale.mjs FOUNDERS_ENROLLING_APPS): the price lock in words, no price.
+ */
+export const foundingWords = productName => `If you decide to keep ${productName}, founding member pricing applies: the plan price you start with, and the price of each additional marketer, never goes up for as long as you stay subscribed.`;
+
+/** The trial check-in's offer callout for a product: Intel's founding member pricing, the Founders Sale for the others. */
+export const offerCallout = (product, productName) => (product === 'caremetric-intel'
+  ? { type: 'callout', tone: 'success', title: 'Founding member pricing.', text: foundingWords(productName) }
+  : { type: 'callout', tone: 'success', title: 'The Founders Sale.', text: foundersWords(productName) });
+
+/**
  * One customer email, from the facts kept on its action: the subject, the inbox preview, the headline, the message blocks and the
  * sign-off. It is sent in the branded layout under the product's own name, and greets "Hello," before the blocks.
  */
@@ -350,8 +361,9 @@ export function lifecycleEmail({ template, tenantName, productName, product, hel
         { type: 'paragraph', text: `Your ${productName} trial for ${tenantName} is almost over, and we wanted to ask how it's going. Is anything getting in the way? A step that's unclear, something you expected to find and didn't, or a question from your team?` },
         { type: 'paragraph', text: 'Just reply and let us know. We\'ll answer here.' },
         { type: 'paragraph', text: `Everything you've built stays in place when your plan starts: ${words.kept}.` },
-        // Owner decision 2026-11-08: the trial check-in names the Founders Sale, in its exact terms (docs/GTM_FACTS.md).
-        { type: 'callout', tone: 'success', title: 'The Founders Sale.', text: foundersWords(productName) },
+        // Owner decision 2026-11-08: the trial check-in names the Founders Sale, in its exact terms (docs/GTM_FACTS.md); Intel's
+        // names founding member pricing instead (2026-11-28).
+        offerCallout(product, productName),
       ],
       signature,
     };

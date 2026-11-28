@@ -1,131 +1,31 @@
 {
   "contract": "caremetric.app-catalog.v1",
   "app": "caremetric-intel",
-  "version": "ef09de6bc8bc97bd",
+  "version": "0f1ee3056c0fa9bf",
   "currency": "usd",
   "trial_days": 30,
   "trial": {
     "days": 30,
-    "includes": "3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your choice, 1 county"
+    "includes": "3 marketers included, 1 location, up to 2 healthcare service lines of your choice, 1 county"
   },
   "annual_saving_percent": 17,
   "free_onboarding": true,
+  "founding_offer": {
+    "kind": "price_lock",
+    "plans": [
+      "starter",
+      "growth",
+      "pro"
+    ],
+    "terms": "A Local, Team or Multi-state subscription started while founding member pricing is offered keeps the plan price, and the price of each additional marketer, that it started with for as long as the subscription stays active. A later price increase does not apply to it. Changing to another plan takes that plan's published price on the day of the change, which is then kept the same way. The price lock ends if the subscription is canceled or ends; a subscription started again later takes the prices published then. Other add-ons, AI packs, taxes and custom contracts follow the published prices. Subscriptions that started under the earlier Founders Sale keep their discount until it ends, then renew at the current published price, which is then kept the same way. One price lock per organization."
+  },
   "products": [
     {
       "entitlement_key": "starter",
       "kind": "plan",
-      "name": "Starter",
-      "description": "One office. 3 marketer seats + 1 manager, 1 location, 1 healthcare service line of your choice, up to 10 counties.",
+      "name": "Local",
+      "description": "One office, with AI field help for every marketer. 1 marketer included, 1 location, 1 healthcare service line of your choice, up to 10 counties.",
       "unit_label": "",
-      "self_serve": true,
-      "founders_eligible": true,
-      "prices": [
-        {
-          "interval": "month",
-          "unit_amount": 34900
-        },
-        {
-          "interval": "year",
-          "unit_amount": 348000
-        }
-      ]
-    },
-    {
-      "entitlement_key": "growth",
-      "kind": "plan",
-      "name": "Growth",
-      "description": "For growing healthcare teams, with campaigns, manager tools and AI field help. 10 seats included, up to 3 locations, up to 2 healthcare service lines of your choice, 1 full state.",
-      "unit_label": "",
-      "self_serve": true,
-      "founders_eligible": true,
-      "prices": [
-        {
-          "interval": "month",
-          "unit_amount": 89900
-        },
-        {
-          "interval": "year",
-          "unit_amount": 898800
-        }
-      ]
-    },
-    {
-      "entitlement_key": "pro",
-      "kind": "plan",
-      "name": "Pro",
-      "description": "For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 locations, up to 2 healthcare service lines of your choice, up to 3 states.",
-      "unit_label": "",
-      "self_serve": true,
-      "founders_eligible": true,
-      "prices": [
-        {
-          "interval": "month",
-          "unit_amount": 199900
-        },
-        {
-          "interval": "year",
-          "unit_amount": 1998000
-        }
-      ]
-    },
-    {
-      "entitlement_key": "enterprise",
-      "kind": "plan",
-      "name": "Enterprise",
-      "description": "Custom, from about $3,500 a month, annual only. Unlimited seats and locations, every state, SSO, custom integrations and a dedicated success manager.",
-      "unit_label": "",
-      "self_serve": false,
-      "founders_eligible": false,
-      "prices": [],
-      "from_unit_amount": 350000
-    },
-    {
-      "entitlement_key": "extra_seat",
-      "kind": "addon",
-      "name": "Extra seat",
-      "description": "One more person on the organization's plan, priced by plan.",
-      "unit_label": "seat",
-      "self_serve": true,
-      "founders_eligible": false,
-      "prices": [
-        {
-          "interval": "month",
-          "unit_amount": 5900,
-          "plan": "starter"
-        },
-        {
-          "interval": "year",
-          "unit_amount": 59000,
-          "plan": "starter"
-        },
-        {
-          "interval": "month",
-          "unit_amount": 4900,
-          "plan": "growth"
-        },
-        {
-          "interval": "year",
-          "unit_amount": 49000,
-          "plan": "growth"
-        },
-        {
-          "interval": "month",
-          "unit_amount": 3900,
-          "plan": "pro"
-        },
-        {
-          "interval": "year",
-          "unit_amount": 39000,
-          "plan": "pro"
-        }
-      ]
-    },
-    {
-      "entitlement_key": "extra_branch",
-      "kind": "addon",
-      "name": "Extra location",
-      "description": "One more location on any plan.",
-      "unit_label": "branch",
       "self_serve": true,
       "founders_eligible": false,
       "prices": [
@@ -140,11 +40,11 @@
       ]
     },
     {
-      "entitlement_key": "extra_state",
-      "kind": "addon",
-      "name": "Extra state",
-      "description": "One more state on a state plan.",
-      "unit_label": "state",
+      "entitlement_key": "growth",
+      "kind": "plan",
+      "name": "Team",
+      "description": "For growing healthcare teams, with campaigns, manager tools and the AI Assistant. 1 marketer included, up to 3 locations, up to 2 healthcare service lines of your choice, 1 full state.",
+      "unit_label": "",
       "self_serve": true,
       "founders_eligible": false,
       "prices": [
@@ -155,6 +55,153 @@
         {
           "interval": "year",
           "unit_amount": 199000
+        }
+      ]
+    },
+    {
+      "entitlement_key": "pro",
+      "kind": "plan",
+      "name": "Multi-state",
+      "description": "For several territories, with forecasting, territory tools and white-label reports. 5 marketers included, up to 10 locations, up to 2 healthcare service lines of your choice, up to 3 states.",
+      "unit_label": "",
+      "self_serve": true,
+      "founders_eligible": false,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 49900
+        },
+        {
+          "interval": "year",
+          "unit_amount": 499000
+        }
+      ]
+    },
+    {
+      "entitlement_key": "enterprise",
+      "kind": "plan",
+      "name": "Enterprise",
+      "description": "Custom, from about $1,500 a month, annual only. Unlimited seats and locations, every state, SSO, custom integrations and a dedicated success manager.",
+      "unit_label": "",
+      "self_serve": false,
+      "founders_eligible": false,
+      "prices": [],
+      "from_unit_amount": 150000
+    },
+    {
+      "entitlement_key": "extra_seat",
+      "kind": "addon",
+      "name": "Additional marketer",
+      "description": "One more marketer on the organization's plan, priced by plan. Organization admins, intake staff and one manager per location need no seat.",
+      "unit_label": "seat",
+      "self_serve": true,
+      "founders_eligible": false,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 2900,
+          "plan": "starter"
+        },
+        {
+          "interval": "year",
+          "unit_amount": 29000,
+          "plan": "starter"
+        },
+        {
+          "interval": "month",
+          "unit_amount": 3900,
+          "plan": "growth"
+        },
+        {
+          "interval": "year",
+          "unit_amount": 39000,
+          "plan": "growth"
+        },
+        {
+          "interval": "month",
+          "unit_amount": 3500,
+          "plan": "pro"
+        },
+        {
+          "interval": "year",
+          "unit_amount": 35000,
+          "plan": "pro"
+        }
+      ]
+    },
+    {
+      "entitlement_key": "extra_branch",
+      "kind": "addon",
+      "name": "Extra location",
+      "description": "One more location on any plan.",
+      "unit_label": "location",
+      "self_serve": true,
+      "founders_eligible": false,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 4900
+        },
+        {
+          "interval": "year",
+          "unit_amount": 49000
+        }
+      ]
+    },
+    {
+      "entitlement_key": "extra_state",
+      "kind": "addon",
+      "name": "Extra state",
+      "description": "One more state on a state plan.",
+      "unit_label": "state",
+      "self_serve": true,
+      "founders_eligible": false,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 9900
+        },
+        {
+          "interval": "year",
+          "unit_amount": 99000
+        }
+      ]
+    },
+    {
+      "entitlement_key": "ai_plus",
+      "kind": "addon",
+      "name": "AI Plus",
+      "description": "More AI Assistant questions each month on a plan with the AI Assistant (about 200 more).",
+      "unit_label": "aiplus",
+      "self_serve": true,
+      "founders_eligible": false,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 2900
+        },
+        {
+          "interval": "year",
+          "unit_amount": 29000
+        }
+      ]
+    },
+    {
+      "entitlement_key": "ai_max",
+      "kind": "addon",
+      "name": "AI Max",
+      "description": "More AI Assistant questions each month on a plan with the AI Assistant (about 600 more).",
+      "unit_label": "aimax",
+      "self_serve": true,
+      "founders_eligible": false,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 7900
+        },
+        {
+          "interval": "year",
+          "unit_amount": 79000
         }
       ]
     }

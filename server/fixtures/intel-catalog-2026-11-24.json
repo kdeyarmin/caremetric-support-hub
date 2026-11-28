@@ -1,0 +1,162 @@
+{
+  "contract": "caremetric.app-catalog.v1",
+  "app": "caremetric-intel",
+  "version": "ef09de6bc8bc97bd",
+  "currency": "usd",
+  "trial_days": 30,
+  "trial": {
+    "days": 30,
+    "includes": "3 marketer seats + 1 manager, 1 location, up to 2 healthcare service lines of your choice, 1 county"
+  },
+  "annual_saving_percent": 17,
+  "free_onboarding": true,
+  "products": [
+    {
+      "entitlement_key": "starter",
+      "kind": "plan",
+      "name": "Starter",
+      "description": "One office. 3 marketer seats + 1 manager, 1 location, 1 healthcare service line of your choice, up to 10 counties.",
+      "unit_label": "",
+      "self_serve": true,
+      "founders_eligible": true,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 34900
+        },
+        {
+          "interval": "year",
+          "unit_amount": 348000
+        }
+      ]
+    },
+    {
+      "entitlement_key": "growth",
+      "kind": "plan",
+      "name": "Growth",
+      "description": "For growing healthcare teams, with campaigns, manager tools and AI field help. 10 seats included, up to 3 locations, up to 2 healthcare service lines of your choice, 1 full state.",
+      "unit_label": "",
+      "self_serve": true,
+      "founders_eligible": true,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 89900
+        },
+        {
+          "interval": "year",
+          "unit_amount": 898800
+        }
+      ]
+    },
+    {
+      "entitlement_key": "pro",
+      "kind": "plan",
+      "name": "Pro",
+      "description": "For several territories, with forecasting, territory tools and white-label reports. 25 seats included, up to 10 locations, up to 2 healthcare service lines of your choice, up to 3 states.",
+      "unit_label": "",
+      "self_serve": true,
+      "founders_eligible": true,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 199900
+        },
+        {
+          "interval": "year",
+          "unit_amount": 1998000
+        }
+      ]
+    },
+    {
+      "entitlement_key": "enterprise",
+      "kind": "plan",
+      "name": "Enterprise",
+      "description": "Custom, from about $3,500 a month, annual only. Unlimited seats and locations, every state, SSO, custom integrations and a dedicated success manager.",
+      "unit_label": "",
+      "self_serve": false,
+      "founders_eligible": false,
+      "prices": [],
+      "from_unit_amount": 350000
+    },
+    {
+      "entitlement_key": "extra_seat",
+      "kind": "addon",
+      "name": "Extra seat",
+      "description": "One more person on the organization's plan, priced by plan.",
+      "unit_label": "seat",
+      "self_serve": true,
+      "founders_eligible": false,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 5900,
+          "plan": "starter"
+        },
+        {
+          "interval": "year",
+          "unit_amount": 59000,
+          "plan": "starter"
+        },
+        {
+          "interval": "month",
+          "unit_amount": 4900,
+          "plan": "growth"
+        },
+        {
+          "interval": "year",
+          "unit_amount": 49000,
+          "plan": "growth"
+        },
+        {
+          "interval": "month",
+          "unit_amount": 3900,
+          "plan": "pro"
+        },
+        {
+          "interval": "year",
+          "unit_amount": 39000,
+          "plan": "pro"
+        }
+      ]
+    },
+    {
+      "entitlement_key": "extra_branch",
+      "kind": "addon",
+      "name": "Extra location",
+      "description": "One more location on any plan.",
+      "unit_label": "branch",
+      "self_serve": true,
+      "founders_eligible": false,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 9900
+        },
+        {
+          "interval": "year",
+          "unit_amount": 99000
+        }
+      ]
+    },
+    {
+      "entitlement_key": "extra_state",
+      "kind": "addon",
+      "name": "Extra state",
+      "description": "One more state on a state plan.",
+      "unit_label": "state",
+      "self_serve": true,
+      "founders_eligible": false,
+      "prices": [
+        {
+          "interval": "month",
+          "unit_amount": 19900
+        },
+        {
+          "interval": "year",
+          "unit_amount": 199000
+        }
+      ]
+    }
+  ]
+}
