@@ -70,6 +70,10 @@ Owner, November 27, 2026: "train my AI workforce on how to do this". Batch 2 was
 each batch itself (`server/growth/sequence-batches.mjs`, `20261127220000_owner_sequence_batches.sql`, feature
 `platform.agents.owner-sequence-batches.v1`), while Settings → Customer growth → **Build your next sequence batch** is on.
 
+Since November 28, 2026, Pennsylvania is Instantly's ([State launches](STATE_LAUNCHES.md)). While Settings → Customer growth →
+**States Instantly sends to** lists Pennsylvania, no new batch is built and Hunter looks up no owners for batches. Approved
+sequences, batch 1 included, still go out on their dates.
+
 Once a week, on its `growth.sequences` run, it:
 
 1. Asks the database for the agencies ready for a batch (`private.owner_sequence_batch_plan`). These are Pennsylvania roster agencies the

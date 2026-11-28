@@ -138,8 +138,14 @@ export function peopleHandlers({ growth, features = null, marketed = null, clock
     // The owners the weekly batch still needs an address for, looked up with Hunter first (hunter.mjs; Settings → Customer growth → Find
     // owners' addresses with Hunter). Its own reserved, capped lookups; nothing else in this run depends on it.
     let hunter = null;
-    try { hunter = await huntOwners({ store: growth.store, finder: sources.hunter, features, signal }); }
-    catch (error) { if (signal?.aborted) throw error; hunter = { failed: String(error?.code ?? 'hunter_failed').slice(0, 80) }; }
+    // Pennsylvania handed to Instantly (Settings → Customer growth → States Instantly sends to; docs/STATE_LAUNCHES.md): the weekly batches
+    // stop, so Hunter's searches are kept for the state launches.
+    const handed = live(sources.handedOver);
+    if (Array.isArray(handed) && handed.includes('PA')) hunter = { skipped: 'instantly' };
+    else {
+      try { hunter = await huntOwners({ store: growth.store, finder: sources.hunter, features, signal }); }
+      catch (error) { if (signal?.aborted) throw error; hunter = { failed: String(error?.code ?? 'hunter_failed').slice(0, 80) }; }
+    }
     const withHunter = result => (hunter ? { ...result, hunter } : result);
     if (!feed?.configured && !registry && !site) return { result: withHunter({ skipped: 'no_source' }) };
     const list = await marketedNow(marketed);

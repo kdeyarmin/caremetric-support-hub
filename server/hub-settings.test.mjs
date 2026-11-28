@@ -55,7 +55,8 @@ describe('the settings catalog', () => {
     expect(databaseMax).toBe(60);
     // One item each list setting accepts. A new list setting must add its own here, so its limit is checked too.
     const samples = { 'growth.roster_states': 'PA', 'social.image_urls': 'https://example.com/ad.png', 'seo.search_console_sites': 'sc-domain:example.com',
-      'learning.media_import_hosts': 'files.heygen.ai' };
+      'learning.media_import_hosts': 'files.heygen.ai', 'outreach.instantly_senders': 'kevin@trycaremetricintel.com', 'outreach.instantly_states': 'PA',
+      'outreach.local_counties': '42021' };
     const lists = settingsCatalog.filter(item => item.kind === 'list');
     expect(lists.map(item => item.key).sort()).toEqual(Object.keys(samples).sort());
     for (const item of lists) {

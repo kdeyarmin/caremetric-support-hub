@@ -163,6 +163,12 @@ export function appServer({auth,password,gateway,delegations,publications,aiCase
         }
         const growthEvent=/^\/api\/growth\/events\/(carebase|caremetric-intel)$/.exec(path);
         // A list built elsewhere, signed with HUB_GROWTH_IMPORT_SECRET like the lead forms (docs/CUSTOMER_GROWTH.md, "Importing a list").
+        // Instantly's webhook (docs/STATE_LAUNCHES.md): replies, opt-outs and bounces from every campaign, with the key the Hub gave Instantly.
+        if(path==='/api/growth/instantly') {
+          if(req.method!=='POST'||req.headers.origin||req.headers.cookie||url.search) throw new HttpError(403,'Forbidden.');
+          if(!growth) throw new HttpError(503,'Growth is unavailable.');
+          return json(await growth.instantlyEvent(await rawBody(req,262144),req.headers));
+        }
         if(path==='/api/growth/import') {
           if(req.method!=='POST'||req.headers.origin||req.headers.cookie||url.search) throw new HttpError(403,'Forbidden.');
           if(!growth) throw new HttpError(503,'Growth is unavailable.');

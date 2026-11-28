@@ -34,6 +34,10 @@ import { growthStore, ownerSequenceStore } from './growth/store.mjs';
 import { ownerSequences } from './growth/owner-sequence.mjs';
 import { sequenceBatches } from './growth/sequence-batches.mjs';
 import { hunterCompanyFinder, hunterFinder } from './growth/hunter.mjs';
+import { stateLaunches } from './outreach/launch.mjs';
+import { stateLaunchStore } from './outreach/store.mjs';
+import { hunterSearch, npiOfficials } from './outreach/people.mjs';
+import { instantlyClient } from './outreach/instantly.mjs';
 import { growthService } from './growth/service.mjs';
 import { growthResearch } from './growth/research.mjs';
 import { growthContactFinder } from './growth/contacts.mjs';
@@ -125,7 +129,8 @@ const roster={feed:intelFeedReader({features,enabled:setting('growth.roster'),ke
 // won't answer"; Bouncer when BOUNCER_API_KEY is set, otherwise ZeroBounce with ZEROBOUNCE_API_KEY: the one secret it needs).
 const verificationService=String(process.env.BOUNCER_API_KEY??'').trim()?bouncer({apiKey:process.env.BOUNCER_API_KEY}):zeroBounce({apiKey:process.env.ZEROBOUNCE_API_KEY});
 // Hunter's Email Finder for the owners the weekly batch still needs an address for (growth/hunter.mjs; HUNTER_API_KEY, the one secret it needs).
-const people={mode:setting('growth.enrichment_provider'),registry:npiRegistry(),hunter:hunterFinder({apiKey:process.env.HUNTER_API_KEY}),
+// Pennsylvania is Instantly's (Settings → Customer growth → States Instantly sends to): its batches stop, so Hunter stops looking up for them.
+const people={mode:setting('growth.enrichment_provider'),registry:npiRegistry(),hunter:hunterFinder({apiKey:process.env.HUNTER_API_KEY}),handedOver:setting('outreach.instantly_states'),
   mailbox:withAddressService({mailbox:mailboxChecker({heloName:(()=>{try{return new URL(publicOrigin).hostname;}catch{return '';}})()}),
     service:verificationService,enabled:setting('growth.address_service'),
     declared:()=>features.has(growthAddressServiceFeature),reserve:checks=>growthStore(pool).addressServiceReserve(checks)})};
@@ -155,10 +160,17 @@ const growth=growthService({store:growthStore(pool),research:growthResearch({api
   // Settings → Customer growth → Build your next sequence batch: the Marketing Manager queues the next week's batch itself (growth/sequence-batches.mjs).
   sequences:({unsubscribeToken,hash})=>ownerSequences({store:ownerSequenceStore(pool),feed:intelFeedReader({features,enabled:true,key:intelFeedSecret}),
     batches:sequenceBatches({store:ownerSequenceStore(pool),feed:intelFeedReader({features,enabled:true,key:intelFeedSecret}),features,
-      enabled:setting('growth.owner_sequence_batches'),size:setting('growth.owner_sequence_batch_size')}),
+      enabled:setting('growth.owner_sequence_batches'),size:setting('growth.owner_sequence_batch_size'),handedOver:setting('outreach.instantly_states')}),
     reports:reportLinks({key:intelFeedSecret}),features,enabled:setting('growth.owner_sequences'),publicOrigin,unsubscribeToken,hash,
     mail:sendgridBulkMail({apiKey:process.env.HUB_SENDGRID_API_KEY,category:'hub-owner-sequence',from:()=>growthIdentity().from,fromName:()=>growthIdentity().fromName,
       fromNameLocked:()=>growthIdentity().fromNameSet,replyTo:()=>growthIdentity().replyTo})}),
+  // State launches (docs/STATE_LAUNCHES.md; Settings → Customer growth → Build state launches in Instantly): the owner picks a state and
+  // the Marketing Manager builds its Instantly campaigns. INSTANTLY_API_KEY and HUNTER_API_KEY are the secrets it needs; Instantly's
+  // webhook key is made from HUB_GROWTH_SIGNING_KEY.
+  launches:stateLaunches({store:stateLaunchStore(pool),feed:intelFeedReader({features,enabled:true,key:intelFeedSecret}),
+    hunter:hunterSearch({apiKey:process.env.HUNTER_API_KEY}),npi:npiOfficials(),instantly:instantlyClient({apiKey:process.env.INSTANTLY_API_KEY}),features,
+    senders:setting('outreach.instantly_senders'),dailyLimit:setting('outreach.instantly_daily_limit'),localCounties:setting('outreach.local_counties'),
+    hunterPerLaunch:setting('outreach.hunter_per_launch'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY??'',publicOrigin}),
   importKey:process.env.HUB_GROWTH_IMPORT_SECRET,features:new Set(contract.features),enabled:setting('growth.send'),signingKey:process.env.HUB_GROWTH_SIGNING_KEY,eventKeys:{carebase:process.env.HUB_GROWTH_CAREBASE_EVENT_KEY,'caremetric-intel':process.env.HUB_GROWTH_INTEL_EVENT_KEY},webhookPublicKey:process.env.HUB_SENDGRID_EVENT_PUBLIC_KEY,
   sesEvents:snsReceiver({topicArn:setting('email.ses_events_topic')}),sesEventsReady:()=>snsTopicPattern.test(settings.get('email.ses_events_topic')??''),publicOrigin,postalAddress});
 // Cold email and sales follow-ups may come from their own address (Settings → Email → Growth email sender, normally on a subdomain), so

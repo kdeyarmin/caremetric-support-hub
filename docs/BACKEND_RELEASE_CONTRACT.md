@@ -363,6 +363,15 @@ do-not-contact list, the Support Concierge's answer and acknowledgment gates lea
 Manager's `growth.sequences` task is scheduled. Each test fails closed. The Hub server registers the task and the Growth panel only when the
 feature is declared ([Your own email sequences](OWNER_SEQUENCES.md)).
 
+`20261128100100_state_launches_contract.sql` declares `platform.agents.state-launches.v1` only after the owner sequence guard
+and growth people features are declared, the six `outreach.*` settings exist, the launches and their facilities have row level
+security and are closed to every role, the claim, save, facility, lead, mark, event and report functions are executable by
+`hub_app_server` alone and require the Hub server connection, the owner's commands need an owner session, a launch is claimed
+only while `outreach.instantly` is on, every lead is checked with the owner sequences' do-not-contact check, an opt-out Instantly
+reports reaches the do-not-contact and suppression lists (never a free mail domain), and the Marketing Manager's
+`outreach.launch` task is scheduled. Each test fails closed. The Hub server registers the task, the webhook and the Growth panel
+only when the feature is declared ([State launches](STATE_LAUNCHES.md)).
+
 `20261116120100_growth_report_views_contract.sql` declares `platform.agents.growth-report-views.v1` only after the settings, growth autonomy
 and roster features are declared, the `growth.report_views` setting exists, an activity event may be `report_viewed`, the read cursor has row
 level security and is closed to every role, `private.growth_report_views_cursor` and `private.growth_report_views_record` are executable by
