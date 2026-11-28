@@ -156,10 +156,12 @@ try {
 
   // ---- Authentication failures --------------------------------------------------------------------------------------
   const unauthorized = { status: 401, body: { error: 'unauthorized' } };
+  // Ten seconds past the five-minute window: one second past it was accepted when the request crossed a second boundary
+  // (the server compares whole seconds), which failed main's database check on 2026-11-28.
   const forged = await send('carebase', lead('carebase', 'demo_request', external('forged')), { secret: secrets.intel });
   assert.deepEqual(forged, unauthorized, 'a signature made with another product\'s secret');
-  assert.deepEqual(await send('carebase', lead('carebase', 'demo_request', external('old')), { timestamp: Math.floor(Date.now() / 1000) - 301 }), unauthorized, 'an old timestamp');
-  assert.deepEqual(await send('carebase', lead('carebase', 'demo_request', external('early')), { timestamp: Math.floor(Date.now() / 1000) + 301 }), unauthorized, 'a timestamp from the future');
+  assert.deepEqual(await send('carebase', lead('carebase', 'demo_request', external('old')), { timestamp: Math.floor(Date.now() / 1000) - 310 }), unauthorized, 'an old timestamp');
+  assert.deepEqual(await send('carebase', lead('carebase', 'demo_request', external('early')), { timestamp: Math.floor(Date.now() / 1000) + 310 }), unauthorized, 'a timestamp from the future');
   const tampered = await fetch(`${base}/api/leads`, { method: 'POST', body: JSON.stringify(lead('carebase', 'demo_request', external('tampered'))), headers: {
     'Content-Type': 'application/json', 'X-CareMetric-Source': 'carebase', 'X-CareMetric-Timestamp': String(Math.floor(Date.now() / 1000)), 'X-CareMetric-Signature': `v1=${'0'.repeat(64)}` } });
   assert.deepEqual([tampered.status, await tampered.json()], [401, { error: 'unauthorized' }], 'a bad signature');
